@@ -1,56 +1,76 @@
-<img src="https://raw.githubusercontent.com/opensearch-project/project-website/refs/heads/main/assets/brand/SVG/Logo/opensearch_dashboards_logo_darkmode.svg" height="64px"/>
+# Atlas Dashboards
 
-- [Welcome!](#welcome)
-- [Project Resources](#project-resources)
-- [Code of Conduct](#code-of-conduct)
-- [License](#license)
-- [Copyright](#copyright)
+Atlas Dashboards is a distribution of
+[OpenSearch Dashboards](https://github.com/opensearch-project/OpenSearch-Dashboards) 3.9.0 with
+the Atlas design applied to its interface. The server, the plugins and the saved objects are the
+ones of OpenSearch Dashboards 3.9.0, so it stands in front of an OpenSearch 3.9.0 cluster the same
+way: nothing changes in the cluster, people sign in as they do today, and the dashboards they have
+saved open as they are.
 
-## Welcome
+"Atlas Dashboards" is a working name. It is one line of
+[`distribution/branding/brand.json`](distribution/branding/brand.json).
 
-OpenSearch Dashboards is an open-source data visualization tool designed to work with OpenSearch. OpenSearch Dashboards gives you data visualization tools to improve and automate business intelligence and support data-driven decision-making and strategic planning.
+## What is in this repository
 
-We aim to be an exceptional community-driven platform and to foster open participation and collective contribution with all contributors. Stay up to date on what's happening with the OpenSearch Project by tracking GitHub [issues](https://github.com/opensearch-project/OpenSearch-Dashboards/issues) and [pull requests](https://github.com/opensearch-project/OpenSearch-Dashboards/pulls). 
+- **The OpenSearch Dashboards source**, forked at the `3.9.0` tag with its history. The fork
+  changes as few of those files as it can; [`distribution/UPSTREAM.md`](distribution/UPSTREAM.md)
+  lists each one and says how to take a new upstream release.
+- **[`distribution/`](distribution/README.md)**, which holds everything that makes this a product
+  of its own: the name and logo, the list of the 16 plugins that ship with it, the build, the
+  container image and the Helm chart.
 
-You can [contribute to this project](https://github.com/opensearch-project/OpenSearch-Dashboards/blob/main/CONTRIBUTING.md) by [opening issues](https://github.com/opensearch-project/OpenSearch-Dashboards/issues/new/choose) to give feedback, share ideas, identify bugs, and contribute code.
+## Run it from source
 
-Set up your [OpenSearch Dashboards development environment](https://github.com/opensearch-project/OpenSearch-Dashboards/blob/main/DEVELOPER_GUIDE.md#getting-started-guide) today! The project team looks forward to your contributions.
+You need Node.js 22 (see `.nvmrc`), Yarn 1.22 and Docker.
 
-## Code Summary
+```bash
+yarn osd bootstrap
 
-[![Build and Test][build-and-test-badge]][build-and-test-link]
-[![Unit Test Code Coverage][codecov-badge]][codecov-link]
-[![Link Checker][link-checker-badge]][link-checker-link]
+# an OpenSearch 3.9.0 for development, without the security plugin
+docker compose -f distribution/docker/dev/docker-compose.yml up -d
 
-## Project Resources
+yarn start --config distribution/config/dev.yml
+```
 
-* [Project Website](https://opensearch.org/)
-* [Downloads](https://opensearch.org/downloads.html)
-* [Documentation](https://opensearch.org/docs/)
-* Need help? See the [communication guide](COMMUNICATIONS.md) for various options
-* [Project Principles](https://opensearch.org/#principles)
-* [Developer Guide](DEVELOPER_GUIDE.md)
-* [Contributing to OpenSearch](CONTRIBUTING.md)
-* [Maintainer Responsibilities](MAINTAINERS.md)
-* [Release Management](RELEASING.md)
-* [Testing](TESTING.md)
-* [Security](SECURITY.md)
+Then open <http://localhost:5601>. The first start compiles the interface and takes a while.
 
-## Code of Conduct
+## Build what ships
 
-This project has adopted the [Amazon Open Source Code of Conduct](CODE_OF_CONDUCT.md). For more information see the [Code of Conduct FAQ](https://aws.github.io/code-of-conduct-faq), or contact [opensource-codeofconduct@amazon.com](mailto:opensource-codeofconduct@amazon.com) with any additional questions or comments.
+```bash
+distribution/scripts/build.sh all
+```
+
+builds the platform, each plugin at the commit pinned in
+[`distribution/plugins.json`](distribution/plugins.json), and puts them together as
+`target/atlas-dashboards-3.9.0-linux-x64.tar.gz`. The
+[Distribution workflow](.github/workflows/distribution.yml) runs the same script, with the plugins
+in parallel, and keeps the tarball as an artifact of the run.
+
+To try the result with a secured OpenSearch 3.9.0:
+
+```bash
+export OPENSEARCH_INITIAL_ADMIN_PASSWORD='<a strong password>'
+docker compose -f distribution/docker/docker-compose.yml up --build
+node distribution/scripts/smoke_test.js      # or open http://localhost:5601 and sign in as admin
+```
+
+## Deploy
+
+The image keeps the layout of the OpenSearch Dashboards image (home directory, user, port,
+entrypoint and environment variables), so it replaces that image in a deployment that already
+runs it. For Kubernetes there is a chart in
+[`distribution/helm/atlas-dashboards`](distribution/helm/atlas-dashboards).
+
+## Tests
+
+The upstream test suites run on every pull request, unchanged
+([Build and test](.github/workflows/build_and_test_workflow.yml),
+[Cypress](.github/workflows/cypress_workflow.yml)): they are how we know a change to the look has
+not changed what the product does. [TESTING.md](TESTING.md) and
+[DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) are upstream's and still apply.
 
 ## License
 
-This project is licensed under the [Apache v2.0 License](LICENSE.txt).
-
-## Copyright
-
-Copyright OpenSearch Contributors. See [NOTICE](NOTICE.txt) for details.
-
-[build-and-test-badge]: https://github.com/opensearch-project/OpenSearch-Dashboards/actions/workflows/build_and_test_workflow.yml/badge.svg
-[build-and-test-link]: https://github.com/opensearch-project/OpenSearch-Dashboards/actions/workflows/build_and_test_workflow.yml
-[codecov-badge]: https://codecov.io/gh/opensearch-project/OpenSearch-Dashboards/branch/main/graphs/badge.svg
-[codecov-link]: https://app.codecov.io/gh/opensearch-project/OpenSearch-Dashboards
-[link-checker-badge]: https://github.com/opensearch-project/OpenSearch-Dashboards/actions/workflows/links_checker.yml/badge.svg
-[link-checker-link]: https://github.com/opensearch-project/OpenSearch-Dashboards/actions/workflows/links_checker.yml
+Apache License 2.0, as upstream: see [LICENSE.txt](LICENSE.txt) and [NOTICE.txt](NOTICE.txt).
+OpenSearch is a trademark of its owner; this distribution is not affiliated with or endorsed by
+the OpenSearch project.
