@@ -1,0 +1,35 @@
+# every optional part of the chart on, for `helm lint` and `helm template` in CI
+image:
+  registry: registry.example.com/platform
+imagePullSecrets: [registry-credentials]
+opensearch:
+  hosts: [https://opensearch-a:9200, https://opensearch-b:9200]
+  credentialsSecret: { name: dashboards-server-user, usernameKey: username, passwordKey: password }
+  caSecret: { name: opensearch-ca, key: ca.crt }
+config:
+  server.basePath: /dashboards
+  server.rewriteBasePath: true
+  opensearch_security.cookie.password: ${COOKIE_PASSWORD}
+secrets:
+  env:
+    - { name: COOKIE_PASSWORD, secretName: atlas-dashboards, key: cookie-password }
+  envFrom: [atlas-dashboards-extra]
+env:
+  - { name: TZ, value: UTC }
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: dashboards.example.com
+      paths:
+        - { path: /dashboards, pathType: Prefix }
+  tls:
+    - { secretName: dashboards-tls, hosts: [dashboards.example.com] }
+podAnnotations:
+  example.com/team: platform
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels: { app.kubernetes.io/name: atlas-dashboards }

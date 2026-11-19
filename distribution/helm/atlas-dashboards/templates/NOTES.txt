@@ -1,0 +1,24 @@
+Atlas Dashboards {{ .Chart.AppVersion }} is starting as {{ include "atlas-dashboards.fullname" . }}.
+
+{{- if .Values.ingress.enabled }}
+
+Open it at:
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+{{- else }}
+
+To open it from your machine:
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "atlas-dashboards.fullname" . }} 5601:{{ .Values.service.port }}
+  then http://localhost:5601
+{{- end }}
+
+Sign in with an OpenSearch user, as before. It talks to:
+{{- range .Values.opensearch.hosts }}
+  {{ . }}
+{{- end }}
+{{- if not .Values.opensearch.credentialsSecret.name }}
+
+opensearch.credentialsSecret names no Secret: the server connects to OpenSearch without a user of
+its own, which only a cluster without the security plugin accepts.
+{{- end }}
