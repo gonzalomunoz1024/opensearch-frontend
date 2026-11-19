@@ -1,0 +1,15 @@
+# The settings the Atlas Dashboards image starts with. They are the ones the OpenSearch
+# Dashboards 3.x image ships, so a deployment that mounts its own opensearch_dashboards.yml over
+# this file, or sets the same environment variables, behaves as it did before.
+
+opensearch.hosts: [https://localhost:9200]
+opensearch.ssl.verificationMode: none
+opensearch.username: kibanaserver
+opensearch.password: kibanaserver
+opensearch.requestHeadersAllowlist: [authorization, securitytenant]
+
+opensearch_security.multitenancy.enabled: true
+opensearch_security.multitenancy.tenants.preferred: [Private, Global]
+opensearch_security.readonly_mode.roles: [kibana_read_only]
+# Use this setting if you are running opensearch-dashboards without https
+opensearch_security.cookie.secure: false
