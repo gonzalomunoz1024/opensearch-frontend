@@ -27,12 +27,18 @@ drawn as a flat glyph in the accent colour like the other Atlas marks.
 ```bash
 node distribution/branding/render_assets.js          # the SVGs
 node distribution/branding/render_assets.js --png    # and the favicons, which need a Chromium
+node distribution/branding/render_assets.js --check  # fail if a committed file is not what it draws
 ```
 
 The script writes over the upstream asset files under `src/core/server/core_app/assets`, keeping
 their names, so nothing that refers to them has to change. Edit `brand.json` or the script, never
-the generated files. The `--png` step uses the repository's Puppeteer; point
-`PUPPETEER_EXECUTABLE_PATH` at a Chromium if Puppeteer has none of its own.
+the generated files; the Distribution workflow runs `--check`. The `--png` step uses the
+repository's Puppeteer; point `PUPPETEER_EXECUTABLE_PATH` at a Chromium if Puppeteer has none of
+its own.
+
+The name is set at two sizes: beside the mark in the header, and as a title in the wide logo the
+sign-in page shows. The wide logo is drawn as wide as the name, so a longer or shorter name needs
+no other change.
 
 The name also appears as the default page title in three source files, listed in `UPSTREAM.md`,
 and as the title of the sign-in page, which is a setting of the security plugin in

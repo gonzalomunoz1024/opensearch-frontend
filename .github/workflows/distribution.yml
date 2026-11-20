@@ -11,6 +11,7 @@ on:
   pull_request:
     paths:
       - 'distribution/**'
+      - 'src/core/server/core_app/assets/**'
       - '.github/workflows/distribution.yml'
       - 'package.json'
       - 'yarn.lock'
@@ -147,6 +148,19 @@ jobs:
       - name: Container logs
         if: failure()
         run: docker compose -f distribution/docker/docker-compose.yml logs --no-color --tail 300
+
+  branding:
+    name: Check the logos against brand.json
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          sparse-checkout: |
+            distribution
+            src/core/server/core_app/assets
+      - name: Draw and compare
+        run: node distribution/branding/render_assets.js --check
 
   helm:
     name: Render the Helm chart
