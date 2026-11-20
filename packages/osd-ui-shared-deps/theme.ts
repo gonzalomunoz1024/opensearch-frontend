@@ -39,7 +39,9 @@ export type Theme = typeof LightTheme;
 // some cases (like jest) the global is undefined
 export const tag: string = globals.__osdThemeTag__;
 const themeVersion = tag?.replace(/(light|dark)$/, '') || 'v8';
-export const version = parseInt(themeVersion.replace(/[^\d]+/g, ''), 10) || 8;
+// Atlas is built on v9, so it answers 9
+export const version =
+  themeVersion === 'atlas' ? 9 : parseInt(themeVersion.replace(/[^\d]+/g, ''), 10) || 8;
 export const darkMode = tag?.endsWith?.('dark');
 
 export let euiLightVars: Theme;
@@ -50,6 +52,9 @@ if (themeVersion === 'v7') {
 } else if (themeVersion === 'v9') {
   euiLightVars = require('@elastic/eui/dist/eui_theme_v9_light.json');
   euiDarkVars = require('@elastic/eui/dist/eui_theme_v9_dark.json');
+} else if (themeVersion === 'atlas') {
+  euiLightVars = require('@osd/atlas-theme/target/atlas_theme_light.json');
+  euiDarkVars = require('@osd/atlas-theme/target/atlas_theme_dark.json');
 } else {
   euiLightVars = require('@elastic/eui/dist/eui_theme_next_light.json');
   euiDarkVars = require('@elastic/eui/dist/eui_theme_next_dark.json');

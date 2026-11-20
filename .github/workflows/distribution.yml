@@ -11,6 +11,7 @@ on:
   pull_request:
     paths:
       - 'distribution/**'
+      - 'packages/osd-atlas-theme/**'
       - 'src/core/server/core_app/assets/**'
       - '.github/workflows/distribution.yml'
       - 'package.json'
