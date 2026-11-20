@@ -52,6 +52,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
       "opensearch_security.multitenancy.tenants.preferred" (list "Private" "Global")
       "opensearch_security.readonly_mode.roles" (list "kibana_read_only")
       "opensearch_security.ui.basicauth.login.title" "Log in to InfraDashboard"
+      "opensearchDashboards.branding.useExpandedHeader" false
       "opensearch_security.cookie.secure" (and .Values.ingress.enabled (not (empty .Values.ingress.tls))) -}}
 {{- if $os.caSecret.name -}}
 {{- $_ := set $settings "opensearch.ssl.certificateAuthorities" (list "/etc/infradashboard/opensearch-ca/ca.crt") -}}

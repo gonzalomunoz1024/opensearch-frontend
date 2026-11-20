@@ -313,10 +313,13 @@ export class DiscoverHistogram extends Component<DiscoverHistogramProps, Discove
       type: TooltipType.VerticalCursor,
     };
 
-    // These styles override the chartsTheme so that the correct base chart colors are used
-    delete chartsTheme.axes?.gridLine?.horizontal?.stroke;
-    delete chartsTheme.axes?.gridLine?.vertical?.stroke;
-    delete chartsTheme.axes?.axisLine;
+    // The default chart theme is the light one whatever the mode, so the lines take the colour
+    // the page's theme gives chart lines (dropping them, as before, left the base theme's light
+    // grey, which glares on a dark page)
+    const lineColor = { stroke: euiThemeVars.euiColorChartLines };
+    Object.assign(chartsTheme.axes?.gridLine?.horizontal ?? {}, lineColor);
+    Object.assign(chartsTheme.axes?.gridLine?.vertical ?? {}, lineColor);
+    chartsTheme.axes!.axisLine = lineColor;
     chartsTheme.axes!.axisTitle = {
       fill: euiThemeVars.euiTextColor,
     };

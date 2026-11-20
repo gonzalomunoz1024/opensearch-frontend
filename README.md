@@ -18,6 +18,10 @@ The name, the colours and the logo come from one file,
 - **[`distribution/`](distribution/README.md)**, which holds everything that makes this a product
   of its own: the name and logo, the list of the 16 plugins that ship with it, the build, the
   container image and the Helm chart.
+- **[`packages/osd-atlas-theme/`](packages/osd-atlas-theme/README.md)**, the Atlas theme: one
+  stylesheet for light and one for dark that give every component of the interface the Atlas
+  look. It is the default theme; the themes of OpenSearch Dashboards are still there, under
+  Advanced settings.
 
 ## Run it from source
 
@@ -63,10 +67,12 @@ runs it. For Kubernetes there is a chart in
 
 ## Tests
 
-The upstream test suites run on every pull request, with their tests unchanged
+The upstream test suites run on every pull request
 ([Build and test](.github/workflows/build_and_test_workflow.yml),
 [Cypress](.github/workflows/cypress_workflow.yml)): they are how we know a change to the look has
-not changed what the product does. [TESTING.md](TESTING.md) and
+not changed what the product does. The few expectations the fork had to regenerate, because they
+record the product's name or list the themes, are in
+[`distribution/UPSTREAM.md`](distribution/UPSTREAM.md). [TESTING.md](TESTING.md) and
 [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) are upstream's and still apply.
 
 ## License

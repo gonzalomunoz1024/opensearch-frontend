@@ -97,6 +97,12 @@ listens on 5601, and its entrypoint is that image's, which turns environment var
 `config/opensearch_dashboards.yml` or sets those variables keeps working when the image name is
 swapped. No registry is set up yet: the build leaves the image on the machine that built it.
 
+The image's own `opensearch_dashboards.yml` adds two settings to the ones that image ships: the
+title of the sign-in page, and `opensearchDashboards.branding.useExpandedHeader: false`, which
+gives the product one header bar instead of two. The Atlas theme is drawn for the one bar. A
+deployment that mounts its own file should carry both settings over; without the second the
+product works as before, with a dark upper bar. The Helm chart sets both.
+
 ## Helm chart
 
 ```bash

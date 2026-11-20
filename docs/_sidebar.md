@@ -131,6 +131,7 @@
     - [Osd agents](../packages/osd-agents/README.md)
     - [Osd apm config loader](../packages/osd-apm-config-loader/README.md)
     - [Osd apm topology](../packages/osd-apm-topology/README.md)
+    - [Osd atlas theme](../packages/osd-atlas-theme/README.md)
     - [Osd babel preset](../packages/osd-babel-preset/README.md)
     - [Osd config](../packages/osd-config/README.md)
     - [Osd config schema](../packages/osd-config-schema/README.md)
