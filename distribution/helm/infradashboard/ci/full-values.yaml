@@ -12,8 +12,8 @@ config:
   opensearch_security.cookie.password: ${COOKIE_PASSWORD}
 secrets:
   env:
-    - { name: COOKIE_PASSWORD, secretName: atlas-dashboards, key: cookie-password }
-  envFrom: [atlas-dashboards-extra]
+    - { name: COOKIE_PASSWORD, secretName: infradashboard, key: cookie-password }
+  envFrom: [infradashboard-extra]
 env:
   - { name: TZ, value: UTC }
 ingress:
@@ -32,4 +32,4 @@ topologySpreadConstraints:
     topologyKey: topology.kubernetes.io/zone
     whenUnsatisfiable: ScheduleAnyway
     labelSelector:
-      matchLabels: { app.kubernetes.io/name: atlas-dashboards }
+      matchLabels: { app.kubernetes.io/name: infradashboard }

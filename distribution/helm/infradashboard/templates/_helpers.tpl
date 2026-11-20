@@ -1,5 +1,5 @@
 {{/* The release's name for the chart's objects, at most 63 characters. */}}
-{{- define "atlas-dashboards.fullname" -}}
+{{- define "infradashboard.fullname" -}}
 {{- if contains .Chart.Name .Release.Name -}}
 {{- .Release.Name | trunc 63 | trimSuffix "-" -}}
 {{- else -}}
@@ -7,28 +7,28 @@
 {{- end -}}
 {{- end -}}
 
-{{- define "atlas-dashboards.labels" -}}
+{{- define "infradashboard.labels" -}}
 helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
-{{ include "atlas-dashboards.selector" . }}
+{{ include "infradashboard.selector" . }}
 {{- end -}}
 
-{{- define "atlas-dashboards.selector" -}}
+{{- define "infradashboard.selector" -}}
 app.kubernetes.io/name: {{ .Chart.Name }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
-{{- define "atlas-dashboards.serviceAccountName" -}}
+{{- define "infradashboard.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create -}}
-{{- default (include "atlas-dashboards.fullname" .) .Values.serviceAccount.name -}}
+{{- default (include "infradashboard.fullname" .) .Values.serviceAccount.name -}}
 {{- else -}}
 {{- default "default" .Values.serviceAccount.name -}}
 {{- end -}}
 {{- end -}}
 
 {{/* The image reference; image.registry prefixes a bare repository name. */}}
-{{- define "atlas-dashboards.image" -}}
+{{- define "infradashboard.image" -}}
 {{- $repo := .Values.image.repository -}}
 {{- if and .Values.image.registry (not (contains "/" $repo)) -}}
 {{- $repo = printf "%s/%s" (trimSuffix "/" .Values.image.registry) $repo -}}
@@ -37,7 +37,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
 {{/* opensearch_dashboards.yml: the chart's settings with .Values.config merged over them. A value that looks like a password fails the render. */}}
-{{- define "atlas-dashboards.config" -}}
+{{- define "infradashboard.config" -}}
 {{- $os := .Values.opensearch -}}
 {{- if not (has (toString $os.sslVerificationMode) (list "full" "certificate" "none")) -}}
 {{- fail "opensearch.sslVerificationMode is full, certificate or none" -}}
@@ -51,10 +51,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
       "opensearch_security.multitenancy.enabled" true
       "opensearch_security.multitenancy.tenants.preferred" (list "Private" "Global")
       "opensearch_security.readonly_mode.roles" (list "kibana_read_only")
-      "opensearch_security.ui.basicauth.login.title" "Log in to Atlas Dashboards"
+      "opensearch_security.ui.basicauth.login.title" "Log in to InfraDashboard"
       "opensearch_security.cookie.secure" (and .Values.ingress.enabled (not (empty .Values.ingress.tls))) -}}
 {{- if $os.caSecret.name -}}
-{{- $_ := set $settings "opensearch.ssl.certificateAuthorities" (list "/etc/atlas-dashboards/opensearch-ca/ca.crt") -}}
+{{- $_ := set $settings "opensearch.ssl.certificateAuthorities" (list "/etc/infradashboard/opensearch-ca/ca.crt") -}}
 {{- end -}}
 {{- range $key, $value := .Values.config -}}
 {{- if and (regexMatch "(?i)(password|secret|token|apikey|api_key)$" $key) (kindIs "string" $value) (not (regexMatch "^\\$\\{[A-Za-z_][A-Za-z0-9_]*\\}$" $value)) -}}

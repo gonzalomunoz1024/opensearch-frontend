@@ -1,6 +1,6 @@
 {
-    "name": "Atlas Dashboards",
-    "short_name": "Atlas",
+    "name": "InfraDashboard",
+    "short_name": "InfraDashboard",
     "icons": [
         {
             "src": "android-chrome-192x192.png",

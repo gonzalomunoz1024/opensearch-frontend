@@ -1,9 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: {{ include "atlas-dashboards.fullname" . }}
-  labels:
-    {{- include "atlas-dashboards.labels" . | nindent 4 }}
-data:
-  opensearch_dashboards.yml: |
-    {{- include "atlas-dashboards.config" . | nindent 4 }}

@@ -1,4 +1,4 @@
-# Builds Atlas Dashboards the way it ships: the Dashboards platform from this repository, each
+# Builds InfraDashboard the way it ships: the Dashboards platform from this repository, each
 # plugin of distribution/plugins.json at its pinned commit, the two put together, the container
 # image, and a sign-in against a secured OpenSearch. Every step is distribution/scripts/build.sh,
 # so the same build runs on a laptop.
@@ -132,8 +132,8 @@ jobs:
         run: distribution/scripts/build.sh assemble
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: atlas-dashboards-${{ env.VERSION }}-linux-x64
-          path: target/atlas-dashboards-*-linux-x64.tar.gz
+          name: infradashboard-${{ env.VERSION }}-linux-x64
+          path: target/infradashboard-*-linux-x64.tar.gz
           retention-days: 14
           if-no-files-found: error
       - name: Start OpenSearch and the image
@@ -171,7 +171,7 @@ jobs:
         with:
           sparse-checkout: distribution
       - name: Lint and render
-        working-directory: distribution/helm/atlas-dashboards
+        working-directory: distribution/helm/infradashboard
         run: |
           helm lint .
           helm template release . > /dev/null

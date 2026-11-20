@@ -7,7 +7,7 @@
 #   distribution/scripts/build.sh platform          target/opensearch-dashboards-<version>-linux-<arch>.tar.gz
 #   distribution/scripts/build.sh plugin <name>     target/plugins/<name>-<version>.zip
 #   distribution/scripts/build.sh plugins           every plugin, one after another
-#   distribution/scripts/build.sh assemble          target/atlas-dashboards-<version>-linux-<arch>.tar.gz
+#   distribution/scripts/build.sh assemble          target/infradashboard-<version>-linux-<arch>.tar.gz
 #   distribution/scripts/build.sh all               platform, plugins, assemble
 #
 # Build the platform first: its build clears target/. ARCH is x64 (default) or arm64. Set
@@ -25,7 +25,7 @@ VERSION="$(node -p "require('./package.json').version")"
 ARCH="${ARCH:-x64}"
 TARGET="$ROOT/target"
 PLATFORM_TARBALL="$TARGET/opensearch-dashboards-$VERSION-linux-$ARCH.tar.gz"
-DIST_NAME="atlas-dashboards-$VERSION-linux-$ARCH"
+DIST_NAME="infradashboard-$VERSION-linux-$ARCH"
 
 case "$ARCH" in
   x64) PLATFORM_FLAG=--linux ;;

@@ -1,6 +1,6 @@
 # The distribution
 
-Everything that turns the OpenSearch Dashboards source in this repository into Atlas Dashboards
+Everything that turns the OpenSearch Dashboards source in this repository into InfraDashboard
 lives here, so the upstream tree stays close to what upstream ships.
 
 | Path | What it is |
@@ -16,7 +16,7 @@ lives here, so the upstream tree stays close to what upstream ships.
 | `docker/Dockerfile`, `docker/entrypoint.sh` | The image. |
 | `docker/docker-compose.yml` | The image with a secured OpenSearch 3.9.0, to try it. |
 | `docker/dev/docker-compose.yml` | An OpenSearch 3.9.0 without security, for `yarn start`. |
-| `helm/atlas-dashboards` | The Kubernetes chart. |
+| `helm/infradashboard` | The Kubernetes chart. |
 | `UPSTREAM.md` | Which upstream files the fork changes, and how to take an upstream release. |
 
 ## Name and logo
@@ -69,7 +69,7 @@ picks it up and stops if the plugin has not been bootstrapped.
 distribution/scripts/build.sh platform        # target/opensearch-dashboards-3.9.0-linux-x64.tar.gz
 distribution/scripts/build.sh plugin <name>   # target/plugins/<name>-3.9.0.zip
 distribution/scripts/build.sh plugins         # every plugin, one after another
-distribution/scripts/build.sh assemble        # target/atlas-dashboards-3.9.0-linux-x64.tar.gz
+distribution/scripts/build.sh assemble        # target/infradashboard-3.9.0-linux-x64.tar.gz
 distribution/scripts/build.sh all
 ```
 
@@ -82,7 +82,7 @@ cannot all be installed side by side. `ARCH=arm64` builds for arm64.
 ```bash
 docker build -f distribution/docker/Dockerfile \
   --build-context dist=target --build-arg VERSION=3.9.0 \
-  -t atlas-dashboards:3.9.0 distribution/docker
+  -t infradashboard:3.9.0 distribution/docker
 ```
 
 The image is laid out like the OpenSearch Dashboards image: the product is in
@@ -95,7 +95,7 @@ swapped. No registry is set up yet: the build leaves the image on the machine th
 ## Helm chart
 
 ```bash
-helm install dashboards distribution/helm/atlas-dashboards \
+helm install dashboards distribution/helm/infradashboard \
   --set image.registry=registry.example.com/platform \
   --set opensearch.hosts[0]=https://opensearch:9200 \
   --set opensearch.credentialsSecret.name=dashboards-server-user

@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "atlas-dashboards.fullname" . }}
+  name: {{ include "infradashboard.fullname" . }}
   labels:
-    {{- include "atlas-dashboards.labels" . | nindent 4 }}
+    {{- include "infradashboard.labels" . | nindent 4 }}
   {{- with .Values.service.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -11,6 +11,6 @@ metadata:
 spec:
   type: {{ .Values.service.type }}
   selector:
-    {{- include "atlas-dashboards.selector" . | nindent 4 }}
+    {{- include "infradashboard.selector" . | nindent 4 }}
   ports:
     - { name: http, port: {{ .Values.service.port }}, targetPort: http, protocol: TCP }

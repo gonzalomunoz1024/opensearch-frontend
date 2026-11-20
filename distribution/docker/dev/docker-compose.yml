@@ -4,7 +4,7 @@
 #
 #   docker compose -f distribution/docker/dev/docker-compose.yml up -d
 #   yarn start --config distribution/config/dev.yml
-name: atlas-dashboards-dev
+name: infradashboard-dev
 
 services:
   opensearch:

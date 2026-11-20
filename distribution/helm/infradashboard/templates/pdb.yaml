@@ -2,12 +2,12 @@
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: {{ include "atlas-dashboards.fullname" . }}
+  name: {{ include "infradashboard.fullname" . }}
   labels:
-    {{- include "atlas-dashboards.labels" . | nindent 4 }}
+    {{- include "infradashboard.labels" . | nindent 4 }}
 spec:
   minAvailable: {{ .Values.pdb.minAvailable }}
   selector:
     matchLabels:
-      {{- include "atlas-dashboards.selector" . | nindent 6 }}
+      {{- include "infradashboard.selector" . | nindent 6 }}
 {{- end }}

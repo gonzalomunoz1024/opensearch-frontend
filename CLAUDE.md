@@ -8,7 +8,7 @@ OpenSearch Dashboards is a browser-based data visualization and exploration tool
 
 ## This Repository Is a Fork
 
-This is **Atlas Dashboards**, a fork of OpenSearch Dashboards 3.9.0 (`main` started at the upstream tag `3.9.0`) that gives the product the Atlas design while keeping its behaviour, its server and its saved objects. Everything below about OpenSearch Dashboards still applies. On top of it:
+This is **InfraDashboard**, a fork of OpenSearch Dashboards 3.9.0 (`main` started at the upstream tag `3.9.0`) that gives the product the Atlas design while keeping its behaviour, its server and its saved objects. Everything below about OpenSearch Dashboards still applies. On top of it:
 
 - **Keep the fork thin.** New files of ours go under `distribution/` (build, image, Helm chart, name and logo). A change to an upstream file must be as small as possible and listed in `distribution/UPSTREAM.md`; prefer an extension point (a setting, a registry, a theme, a plugin) over an edit.
 - **Behaviour must not change.** The goal is the same functionality with a different look. Existing dashboards, sign-in and APIs keep working as in OpenSearch Dashboards 3.9.0.

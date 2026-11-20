@@ -1,4 +1,4 @@
-Atlas Dashboards {{ .Chart.AppVersion }} is starting as {{ include "atlas-dashboards.fullname" . }}.
+InfraDashboard {{ .Chart.AppVersion }} is starting as {{ include "infradashboard.fullname" . }}.
 
 {{- if .Values.ingress.enabled }}
 
@@ -9,7 +9,7 @@ Open it at:
 {{- else }}
 
 To open it from your machine:
-  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "atlas-dashboards.fullname" . }} 5601:{{ .Values.service.port }}
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "infradashboard.fullname" . }} 5601:{{ .Values.service.port }}
   then http://localhost:5601
 {{- end }}
 

@@ -1,4 +1,4 @@
-# Atlas Dashboards and an OpenSearch 3.9.0 to try it against, with the security plugin on, so
+# InfraDashboard and an OpenSearch 3.9.0 to try it against, with the security plugin on, so
 # sign-in, roles and tenants behave as in a real deployment.
 #
 #   distribution/scripts/build.sh all        # or download the tarball a CI run built into target/
@@ -6,7 +6,7 @@
 #   docker compose -f distribution/docker/docker-compose.yml up --build
 #
 # Then open http://localhost:5601 and sign in as admin with that password.
-name: atlas-dashboards
+name: infradashboard
 
 services:
   opensearch:
@@ -28,7 +28,7 @@ services:
       retries: 30
 
   dashboards:
-    image: atlas-dashboards:${VERSION:-3.9.0}
+    image: infradashboard:${VERSION:-3.9.0}
     build:
       context: .
       additional_contexts:

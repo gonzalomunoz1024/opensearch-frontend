@@ -1,13 +1,13 @@
-# Atlas Dashboards
+# InfraDashboard
 
-Atlas Dashboards is a distribution of
+InfraDashboard is a distribution of
 [OpenSearch Dashboards](https://github.com/opensearch-project/OpenSearch-Dashboards) 3.9.0 with
 the Atlas design applied to its interface. The server, the plugins and the saved objects are the
 ones of OpenSearch Dashboards 3.9.0, so it stands in front of an OpenSearch 3.9.0 cluster the same
 way: nothing changes in the cluster, people sign in as they do today, and the dashboards they have
 saved open as they are.
 
-"Atlas Dashboards" is a working name. It is one line of
+The name, the colours and the logo come from one file,
 [`distribution/branding/brand.json`](distribution/branding/brand.json).
 
 ## What is in this repository
@@ -42,7 +42,7 @@ distribution/scripts/build.sh all
 
 builds the platform, each plugin at the commit pinned in
 [`distribution/plugins.json`](distribution/plugins.json), and puts them together as
-`target/atlas-dashboards-3.9.0-linux-x64.tar.gz`. The
+`target/infradashboard-3.9.0-linux-x64.tar.gz`. The
 [Distribution workflow](.github/workflows/distribution.yml) runs the same script, with the plugins
 in parallel, and keeps the tarball as an artifact of the run.
 
@@ -59,7 +59,7 @@ node distribution/scripts/smoke_test.js      # or open http://localhost:5601 and
 The image keeps the layout of the OpenSearch Dashboards image (home directory, user, port,
 entrypoint and environment variables), so it replaces that image in a deployment that already
 runs it. For Kubernetes there is a chart in
-[`distribution/helm/atlas-dashboards`](distribution/helm/atlas-dashboards).
+[`distribution/helm/infradashboard`](distribution/helm/infradashboard).
 
 ## Tests
 

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
 /**
- * Checks a running Atlas Dashboards the way a person would meet it: the server is up and green,
+ * Checks a running InfraDashboard the way a person would meet it: the server is up and green,
  * every plugin of distribution/plugins.json is loaded, the sign-in page carries our name, and a
  * user can sign in and read saved objects.
  *

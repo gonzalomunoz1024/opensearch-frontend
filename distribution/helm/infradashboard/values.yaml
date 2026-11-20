@@ -1,11 +1,11 @@
-# Atlas Dashboards on Kubernetes: the web app and the server behind it. OpenSearch runs elsewhere;
+# InfraDashboard on Kubernetes: the web app and the server behind it. OpenSearch runs elsewhere;
 # point at it below. Secrets are only referenced (names of existing Secrets): the chart never holds
 # a value.
 
 image:
   # prefix for a repository given as a bare name, like registry.example.com/platform
   registry: ""
-  repository: atlas-dashboards
+  repository: infradashboard
   tag: ""                        # the chart's appVersion when empty
   pullPolicy: IfNotPresent
 
@@ -61,7 +61,7 @@ opensearch:
 #     opensearch_security.cookie.password: ${COOKIE_PASSWORD}
 #   secrets:
 #     env:
-#       - { name: COOKIE_PASSWORD, secretName: atlas-dashboards, key: cookie-password }
+#       - { name: COOKIE_PASSWORD, secretName: infradashboard, key: cookie-password }
 # With more than one replica set that cookie password, so a session one pod started is read by
 # the others.
 config: {}

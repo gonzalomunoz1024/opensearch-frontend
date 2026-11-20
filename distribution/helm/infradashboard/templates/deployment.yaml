@@ -2,28 +2,28 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "atlas-dashboards.fullname" . }}
+  name: {{ include "infradashboard.fullname" . }}
   labels:
-    {{- include "atlas-dashboards.labels" . | nindent 4 }}
+    {{- include "infradashboard.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicas }}
   selector:
     matchLabels:
-      {{- include "atlas-dashboards.selector" . | nindent 6 }}
+      {{- include "infradashboard.selector" . | nindent 6 }}
   strategy:
     type: RollingUpdate
     rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
   template:
     metadata:
       labels:
-        {{- include "atlas-dashboards.labels" . | nindent 8 }}
+        {{- include "infradashboard.labels" . | nindent 8 }}
       annotations:
-        checksum/config: {{ include "atlas-dashboards.config" . | sha256sum }}
+        checksum/config: {{ include "infradashboard.config" . | sha256sum }}
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
-      serviceAccountName: {{ include "atlas-dashboards.serviceAccountName" . }}
+      serviceAccountName: {{ include "infradashboard.serviceAccountName" . }}
       automountServiceAccountToken: false
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -36,7 +36,7 @@ spec:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: dashboards
-          image: {{ include "atlas-dashboards.image" . }}
+          image: {{ include "infradashboard.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
@@ -91,12 +91,12 @@ spec:
             - { name: data, mountPath: /usr/share/opensearch-dashboards/data }
             - { name: tmp, mountPath: /tmp }
             {{- if $os.caSecret.name }}
-            - { name: opensearch-ca, mountPath: /etc/atlas-dashboards/opensearch-ca, readOnly: true }
+            - { name: opensearch-ca, mountPath: /etc/infradashboard/opensearch-ca, readOnly: true }
             {{- end }}
       volumes:
         - name: config
           configMap:
-            name: {{ include "atlas-dashboards.fullname" . }}
+            name: {{ include "infradashboard.fullname" . }}
         - name: data
           emptyDir: {}
         - name: tmp
