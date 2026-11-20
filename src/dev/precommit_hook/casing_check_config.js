@@ -45,6 +45,8 @@ export const IGNORE_FILE_GLOBS = [
   '**/LICENSE',
   '**/*.txt',
   '**/{Dockerfile,docker-compose.yml}',
+  // a Helm chart's file names are Helm's, and its directory carries the chart's name
+  'distribution/helm/**/*',
   '**/.*',
   '**/__mocks__/**/*',
   'src/core/server/core_app/assets/fonts/**/*',

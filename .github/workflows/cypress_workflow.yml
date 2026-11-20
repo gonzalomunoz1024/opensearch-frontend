@@ -27,7 +27,10 @@ on:
 env:
   OSD_OPTIMIZER_THEMES: v8light
   TEST_REPO: ${{ inputs.test_repo != '' && inputs.test_repo || 'opensearch-project/opensearch-dashboards-functional-test' }}
-  TEST_BRANCH: "${{ inputs.test_branch != '' && inputs.test_branch || github.base_ref }}"
+  # The branch of the test repository for the OpenSearch Dashboards release this is built from.
+  # Upstream uses the name of the pull request's base branch, which there is a release line such
+  # as `3.9`; here it is `main` or a branch of ours.
+  TEST_BRANCH: "${{ inputs.test_branch != '' && inputs.test_branch || '3.9' }}"
   FTR_PATH: 'ftr'
   CYPRESS_BROWSER: 'chromium'
   CYPRESS_VISBUILDER_ENABLED: true
@@ -425,7 +428,7 @@ jobs:
       # Run tests based on configuration
       - name: Run FT repo tests
         if: matrix.test_location == 'ftr'
-        uses: cypress-io/github-action@f790eee7a50d9505912f50c2095510be7de06aa7 # v6
+        uses: cypress-io/github-action@0ed14f5d30c4ad6e5e8ffb6f57dbb69150137a3f # v7.4.10
         with:
           working-directory: ${{ env.FTR_PATH }}
           start: ${{ env.OPENSEARCH_SNAPSHOT_CMD }}, ${{ env.START_CMD }}
@@ -503,7 +506,7 @@ jobs:
       # Run OSD Cypress tests within the source repo
       - name: Run OSD Cypress tests with query enhancements
         if: matrix.test_location == 'source' && (matrix.config == 'query_enhanced' || matrix.config == 'explore')
-        uses: cypress-io/github-action@f790eee7a50d9505912f50c2095510be7de06aa7 # v6
+        uses: cypress-io/github-action@0ed14f5d30c4ad6e5e8ffb6f57dbb69150137a3f # v7.4.10
         with:
           install-command: npx cypress install --force
           start: ${{ env.START_CMD }}
@@ -517,7 +520,7 @@ jobs:
 
       - name: Run OSD Cypress observability tests (traces)
         if: matrix.test_location == 'source' && matrix.config == 'observability' && matrix.group == '1Observability'
-        uses: cypress-io/github-action@f790eee7a50d9505912f50c2095510be7de06aa7 # v6
+        uses: cypress-io/github-action@0ed14f5d30c4ad6e5e8ffb6f57dbb69150137a3f # v7.4.10
         with:
           install-command: npx cypress install --force
           start: ${{ env.START_CMD }}
@@ -526,7 +529,7 @@ jobs:
 
       - name: Run OSD Cypress observability tests (metrics with Prometheus)
         if: matrix.test_location == 'source' && matrix.config == 'observability' && matrix.group == '2Observability'
-        uses: cypress-io/github-action@f790eee7a50d9505912f50c2095510be7de06aa7 # v6
+        uses: cypress-io/github-action@0ed14f5d30c4ad6e5e8ffb6f57dbb69150137a3f # v7.4.10
         with:
           install-command: npx cypress install --force
           start: ${{ env.START_CMD }}
@@ -537,7 +540,7 @@ jobs:
 
       - name: Run OSD Cypress tests without query enhancements
         if: matrix.test_location == 'source' && (matrix.config == 'dashboard' || matrix.config == 'dashboard_sections')
-        uses: cypress-io/github-action@f790eee7a50d9505912f50c2095510be7de06aa7 # v6
+        uses: cypress-io/github-action@0ed14f5d30c4ad6e5e8ffb6f57dbb69150137a3f # v7.4.10
         with:
           install-command: npx cypress install --force
           start: ${{ env.OPENSEARCH_SNAPSHOT_CMD }}, ${{ env.START_CMD }}

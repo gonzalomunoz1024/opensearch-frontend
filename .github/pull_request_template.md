@@ -1,29 +1,25 @@
 ### Description
 
-<!-- Describe what this change achieves-->
+<!-- What this change achieves, and why. -->
 
-### Issues Resolved
+### Screenshot
 
-<!-- List any issues this PR will resolve. Prefix the issue with the keyword closes, fixes, fix -->
-<!-- Example: closes #1234 or fixes <Issue_URL> -->
+<!-- Any change to the interface needs a screenshot, in light and in dark mode. -->
 
-## Screenshot
+### Testing the changes
 
-<!-- Attach any relevant screenshots. Any change to the UI requires an attached screenshot in the PR Description -->
+<!-- The commands to run, the pages to visit and what to look for. -->
 
-## Testing the changes
+### Upstream files
 
 <!--
-  Please provide detailed steps for validating your changes. This could involve specific commands to run,
-  pages to visit, scenarios to try or any other information that would help reviewers verify
-  the functionality of your change
+  Does this change a file that comes from OpenSearch Dashboards? If so, say which and why it could
+  not be done from distribution/ or an extension point, and add it to distribution/UPSTREAM.md.
 -->
 
-### Check List
+### Check list
 
-- [ ] All tests pass
-  - [ ] `yarn test:jest`
-  - [ ] `yarn test:jest_integration`
-- [ ] New functionality includes testing.
-- [ ] New functionality has been documented.
-- [ ] Commits are signed per the DCO using --signoff
+- [ ] Tests pass (`yarn test:jest` for what changed)
+- [ ] New behaviour has tests
+- [ ] `distribution/UPSTREAM.md` lists any upstream file this changes for the first time
+- [ ] Commits are signed off (`git commit -s`)
