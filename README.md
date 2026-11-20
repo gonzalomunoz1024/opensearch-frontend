@@ -63,7 +63,7 @@ runs it. For Kubernetes there is a chart in
 
 ## Tests
 
-The upstream test suites run on every pull request, unchanged
+The upstream test suites run on every pull request, with their tests unchanged
 ([Build and test](.github/workflows/build_and_test_workflow.yml),
 [Cypress](.github/workflows/cypress_workflow.yml)): they are how we know a change to the look has
 not changed what the product does. [TESTING.md](TESTING.md) and

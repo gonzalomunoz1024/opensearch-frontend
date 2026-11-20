@@ -29,6 +29,7 @@ A change goes where it will not collide with upstream:
 | `src/dev/precommit_hook/casing_check_config.js` | One ignore pattern, `distribution/helm/**/*` | Helm decides the names of a chart's files. |
 | `README.md`, `CLAUDE.md` | Rewritten or extended | They describe this distribution. |
 | `.github/pull_request_template.md` | Rewritten | Ours. |
+| `.github/workflows/cypress_workflow.yml` | `cypress-io/github-action` pinned to v7.4.10 instead of v6.10.9 | The pinned release fails on today's runners while it waits for the servers ("Socket closed before the connection was established"), before any test runs. |
 
 ## Upstream files the fork removes
 
@@ -39,7 +40,7 @@ tracker): `.github/CODEOWNERS`, `.github/doc_issue_template.md`, and the workflo
 `links_checker`, `post_merge_test`, `pr_review`, `release_cypress_workflow` and `version-increment`.
 
 The upstream test workflows `build_and_test_workflow`, `cypress_workflow`, `dependency_review` and
-`post_ci_results` are kept as they are.
+`post_ci_results` are kept; the one change to them is in the table above.
 
 ## Taking an upstream release
 

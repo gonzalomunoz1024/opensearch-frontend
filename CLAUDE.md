@@ -29,7 +29,7 @@ distribution/scripts/build.sh all
 node distribution/scripts/smoke_test.js
 ```
 
-CI: `.github/workflows/distribution.yml` builds and smoke-tests the distribution; upstream's `build_and_test_workflow.yml` and `cypress_workflow.yml` run unchanged on every pull request.
+CI: `.github/workflows/distribution.yml` builds and smoke-tests the distribution; upstream's `build_and_test_workflow.yml` and `cypress_workflow.yml` run on every pull request, with their tests unchanged.
 
 ## Common Commands
 
