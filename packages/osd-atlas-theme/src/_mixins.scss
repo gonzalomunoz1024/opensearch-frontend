@@ -78,22 +78,38 @@
 }
 
 // What dims the page behind a dialog or a drawer (.material-scrim). The dimming and the blur
-// are a layer behind what the mask holds, not the mask itself: an element that filters its
+// are layers behind what the mask holds, not the mask itself: an element that filters its
 // backdrop becomes the containing block of the fixed-position elements inside it, and a mask
 // holds flyouts and the navigation drawer, which would move. The mask must be positioned.
+// The dimming is there at once. The blur is a layer of its own that stays hidden until what the
+// mask holds is up (the keyframes are in refinements/_overlay.scss): blurring the whole page
+// costs a browser that draws without a graphics card a frame of 75ms or more, and in the mask's
+// first frame that holds back the dialog itself and the focus a confirmation gives its default
+// button one frame after it opens. The wait is an animation's delay because that is what the
+// "Disable animations" setting leaves alone.
 @mixin atlasScrim {
   background: transparent;
 
-  &::before {
+  &::before,
+  &::after {
     content: "";
     position: absolute;
     inset: 0;
     z-index: -1;
+    pointer-events: none;
+  }
+
+  &::before {
     background: $atlasScrim;
+  }
+
+  &::after {
     // stylelint-disable-next-line property-no-vendor-prefix
     -webkit-backdrop-filter: blur(4px);
     backdrop-filter: blur(4px);
-    pointer-events: none;
+    animation:
+      atlasScrimBlurShow 0s linear $ouiAnimSpeedFast backwards,
+      atlasScrimBlurIn $ouiAnimSpeedNormal $atlasEaseOutQuint $ouiAnimSpeedFast backwards;
   }
 }
 

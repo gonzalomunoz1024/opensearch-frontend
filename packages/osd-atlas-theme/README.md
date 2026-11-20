@@ -82,6 +82,12 @@ against OpenSearch Dashboards carries no styles for `atlas`.
 - Do not give `backdrop-filter` to an element that holds fixed-position children: the filter
   makes it their containing block, and they move. The mask behind dialogs holds flyouts and the
   navigation drawer, which is why `atlasScrim` blurs on a layer behind the mask's content.
+- Keep a blur of the whole window out of the first frame of anything that takes focus. A browser
+  that draws without a graphics card (the ones the tests run in, and some remote desktops) needs
+  75ms or more for such a frame, and focus that is given a frame after opening arrives that much
+  later. `atlasScrim` keeps its blur hidden until the dialog is up.
+- Do not move a panel with a `transform` while something inside it may open a list or a popover:
+  the list is placed where the panel is at that moment. Menu panels fade for that reason.
 - `node scripts/stylelint` checks the theme with the repository's rules, except the four that
   keep a plugin from restyling OUI and from naming colours (`.stylelintrc.yml`).
 - The optimizer's integration test (`basic_optimization.test.ts`) records the theme the test

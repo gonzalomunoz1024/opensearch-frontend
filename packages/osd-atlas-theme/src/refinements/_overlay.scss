@@ -11,6 +11,22 @@ $atlasRowHover: lightOrDarkTheme($atlasSurfaceSecondary, $atlasSurfaceTertiary);
   @include atlasScrim;
 }
 
+// The blur behind what a mask holds: hidden while the mask comes up, then from nothing to the
+// blur atlasScrim sets
+@keyframes atlasScrimBlurShow {
+  from {
+    visibility: hidden;
+  }
+}
+
+@keyframes atlasScrimBlurIn {
+  from {
+    // stylelint-disable-next-line property-no-vendor-prefix
+    -webkit-backdrop-filter: blur(0);
+    backdrop-filter: blur(0);
+  }
+}
+
 .ouiModal {
   border: 1px solid $atlasBorderLight;
   border-radius: $atlasRadiusXl;
