@@ -27,7 +27,10 @@ on:
 env:
   OSD_OPTIMIZER_THEMES: atlaslight
   TEST_REPO: ${{ inputs.test_repo != '' && inputs.test_repo || 'opensearch-project/opensearch-dashboards-functional-test' }}
-  TEST_BRANCH: "${{ inputs.test_branch != '' && inputs.test_branch || github.base_ref }}"
+  # The branch of the test repository for the OpenSearch Dashboards release this is built from.
+  # Upstream uses the name of the pull request's base branch, which there is a release line such
+  # as `3.9`; here it is `main` or a branch of ours.
+  TEST_BRANCH: "${{ inputs.test_branch != '' && inputs.test_branch || '3.9' }}"
   FTR_PATH: 'ftr'
   CYPRESS_BROWSER: 'chromium'
   CYPRESS_VISBUILDER_ENABLED: true
