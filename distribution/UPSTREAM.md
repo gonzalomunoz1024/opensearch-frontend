@@ -30,6 +30,7 @@ A change goes where it will not collide with upstream:
 | `README.md`, `CLAUDE.md` | Rewritten or extended | They describe this distribution. |
 | `.github/pull_request_template.md` | Rewritten | Ours. |
 | `.github/workflows/cypress_workflow.yml` | `cypress-io/github-action` pinned to v7.4.10 instead of v6.10.9 | The pinned release fails on today's runners while it waits for the servers ("Socket closed before the connection was established"), before any test runs. |
+| `.github/workflows/cypress_workflow.yml` | The functional tests come from the `3.9` branch of `opensearch-dashboards-functional-test` instead of the branch named like the pull request's base | Upstream's base branches are release lines, and the test repository has a branch for each. Ours are `main` and branches of our own: `main` there holds the tests of upstream's next release, and a branch of ours does not exist there, so the nine groups would fail at checkout. |
 
 ## Upstream files the fork removes
 
@@ -62,8 +63,9 @@ Then:
    commit each tag points at, and set `dashboardsVersion`. The upstream release's
    [manifest](https://github.com/opensearch-project/opensearch-build/tree/main/manifests) lists
    the plugins of a release.
-4. Change the OpenSearch version in `distribution/docker/*.yml`, the chart's `appVersion`, and
-   the version in this file and the READMEs.
+4. Change the OpenSearch version in `distribution/docker/*.yml`, the chart's `appVersion`, the
+   version in this file and the READMEs, and the branch the functional tests come from
+   (`TEST_BRANCH` in `.github/workflows/cypress_workflow.yml`, `3.10` for 3.10.0).
 5. Open a pull request. The upstream test suites and the Distribution workflow run on it.
 
 Dashboards and OpenSearch are released together; run a Dashboards release against the OpenSearch
