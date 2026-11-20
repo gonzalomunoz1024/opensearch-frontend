@@ -107,6 +107,43 @@ $atlasRowHover: lightOrDarkTheme($atlasSurfaceSecondary, $atlasSurfaceTertiary);
   border-radius: $atlasRadiusLg;
 }
 
+// A panel that takes another's place in a menu (a filter's menu giving way to its editor) fades
+// in where it will stand. OUI slides it in from 256px to the right, and what the panel opens
+// while it travels is placed by where the panel is at that moment: the filter editor focuses its
+// field, whose list then stays 256px right of the field, over Cancel and Save. The kit keeps
+// transforms off whatever holds a positioned overlay for the same reason (its Portal).
+.ouiContextMenuPanel {
+  &.ouiContextMenuPanel-txInLeft,
+  &.ouiContextMenuPanel-txInRight {
+    animation-name: atlasMenuPanelIn;
+  }
+
+  &.ouiContextMenuPanel-txOutLeft,
+  &.ouiContextMenuPanel-txOutRight {
+    animation-name: atlasMenuPanelOut;
+  }
+}
+
+@keyframes atlasMenuPanelIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes atlasMenuPanelOut {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
 .ouiContextMenuPanelTitle {
   font-weight: $ouiFontWeightSemiBold;
 
