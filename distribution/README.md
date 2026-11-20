@@ -60,6 +60,11 @@ node distribution/scripts/fetch_plugins.js securityDashboards
 A fetch fails if the tag no longer points at the pinned commit. To move a plugin to another
 version, change its tag and commit together.
 
+A plugin is installed with the defaults its authors gave it. One of them,
+`investigationDashboards`, ships switched off, as it does in OpenSearch Dashboards 3.9.0: the
+server leaves it out until a deployment sets `investigation.enabled: true`. `plugins.json` names
+that setting as the plugin's `enabledBy`, and the smoke test accepts the plugin being off.
+
 Do not leave a fetched plugin under `plugins/` while `yarn start` runs: the development server
 picks it up and stops if the plugin has not been bootstrapped.
 

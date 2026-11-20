@@ -1,5 +1,5 @@
 {
-  "_comment": "The plugins the OpenSearch Dashboards 3.9.0 distribution bundles (opensearch-build manifests/3.9.0/opensearch-dashboards-3.9.0.yml). Each is pinned to its release tag and to the commit that tag pointed at when it was added here.",
+  "_comment": "The plugins the OpenSearch Dashboards 3.9.0 distribution bundles (opensearch-build manifests/3.9.0/opensearch-dashboards-3.9.0.yml). Each is pinned to its release tag and to the commit that tag pointed at when it was added here. `enabledBy` names the setting that turns on a plugin which ships switched off.",
   "dashboardsVersion": "3.9.0",
   "plugins": [
     {
@@ -96,7 +96,8 @@
       "name": "investigationDashboards",
       "repository": "https://github.com/opensearch-project/dashboards-investigation",
       "tag": "3.9.0.0",
-      "commit": "5bbb029f284e42295732759119fc645601a4f68a"
+      "commit": "5bbb029f284e42295732759119fc645601a4f68a",
+      "enabledBy": "investigation.enabled"
     }
   ]
 }

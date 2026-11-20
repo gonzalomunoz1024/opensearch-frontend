@@ -2,8 +2,8 @@
 
 /**
  * Checks a running InfraDashboard the way a person would meet it: the server is up and green,
- * every plugin of distribution/plugins.json is loaded, the sign-in page carries our name, and a
- * user can sign in and read saved objects.
+ * every plugin of distribution/plugins.json is loaded (one that ships switched off may be off),
+ * the sign-in page carries our name, and a user can sign in and read saved objects.
  *
  *   node distribution/scripts/smoke_test.js [--url http://localhost:5601] [--user admin]
  *                                           [--no-security] [--core-only] [--timeout 300]
@@ -88,8 +88,13 @@ async function main() {
     const states = new Map(
       status.status.statuses.map(({ id, state }) => [id.replace(/^plugin:|@.*$/g, ''), state])
     );
-    for (const { name } of manifest.plugins) {
+    for (const { name, enabledBy } of manifest.plugins) {
       if (!secured && name === 'securityDashboards') continue;
+      // the server reports only the plugins that are on
+      if (enabledBy && !states.has(name)) {
+        check(true, `plugin ${name} is off, as it ships (${enabledBy} turns it on)`);
+        continue;
+      }
       check(
         states.get(name) === 'green',
         `plugin ${name} is loaded`,
