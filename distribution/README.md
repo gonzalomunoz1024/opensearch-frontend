@@ -17,6 +17,7 @@ lives here, so the upstream tree stays close to what upstream ships.
 | `docker/docker-compose.yml` | The image with a secured OpenSearch 3.9.0, to try it. |
 | `docker/dev/docker-compose.yml` | An OpenSearch 3.9.0 without security, for `yarn start`. |
 | `helm/infradashboard` | The Kubernetes chart. |
+| `screenshots/` | What the release image looks like, for this page and for pull requests. Not part of the build. |
 | `UPSTREAM.md` | Which upstream files the fork changes, and how to take an upstream release. |
 
 ## Name and logo
@@ -45,6 +46,28 @@ and as the title of the sign-in page, which is a setting of the security plugin 
 `config/opensearch_dashboards.yml` and in the Helm chart's defaults.
 A deployment can still set its own name and logos with the `opensearchDashboards.branding`
 settings, as in OpenSearch Dashboards.
+
+## The look
+
+The product opens in the Atlas theme, in light or in dark. The theme is a package of its own,
+`packages/osd-atlas-theme`; its README says how it is built and how to change it.
+
+| Light | Dark |
+| --- | --- |
+| ![The sign-in page in light](screenshots/sign_in_light.png) | ![The sign-in page in dark](screenshots/sign_in_dark.png) |
+| ![A dashboard in light](screenshots/dashboard_light.png) | ![A dashboard in dark](screenshots/dashboard_dark.png) |
+| ![Discover in light](screenshots/discover_light.png) | ![Discover in dark](screenshots/discover_dark.png) |
+
+These are the release image with the sample data, behind the security plugin's sign-in.
+
+A person switches to dark in Advanced settings (`theme:darkMode`). The sign-in page is drawn
+before anyone is known, so it follows the default, which is light. To make dark the default, for
+the sign-in page and for everyone who has not chosen, add to `opensearch_dashboards.yml`:
+
+```yaml
+uiSettings.defaults:
+  'theme:darkMode': true
+```
 
 ## Plugins
 
