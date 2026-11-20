@@ -68,7 +68,7 @@ OptimizerConfig {
   "profileRspack": false,
   "repoRoot": <absolute path>/packages/osd-optimizer/src/__fixtures__/__tmp__/mock_repo,
   "themeTags": Array [
-    "v8light",
+    "atlaslight",
   ],
   "watch": false,
 }

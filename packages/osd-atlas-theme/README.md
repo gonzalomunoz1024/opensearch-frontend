@@ -84,6 +84,8 @@ against OpenSearch Dashboards carries no styles for `atlas`.
   navigation drawer, which is why `atlasScrim` blurs on a layer behind the mask's content.
 - `node scripts/stylelint` checks the theme with the repository's rules, except the four that
   keep a plugin from restyling OUI and from naming colours (`.stylelintrc.yml`).
+- The optimizer's integration test (`basic_optimization.test.ts`) records the theme the test
+  workflows compile. Run it with `OSD_OPTIMIZER_THEMES=atlaslight`, as they do.
 - Look at the result in both modes in the running product (`theme:darkMode` in Advanced
   settings). To compile only this theme while developing:
   `OSD_OPTIMIZER_THEMES=atlaslight,atlasdark yarn start --config distribution/config/dev.yml`.
