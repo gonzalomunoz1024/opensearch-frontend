@@ -23,10 +23,9 @@ ARG UID=1000
 ARG GID=1000
 ENV OPENSEARCH_DASHBOARDS_HOME=/usr/share/opensearch-dashboards
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates curl && \
-    rm -rf /var/lib/apt/lists/* && \
-    groupadd -g "${GID}" opensearch-dashboards && \
+# Nothing is installed from a package mirror: Dashboards brings its own Node.js, so the image
+# builds without network access beyond the base image.
+RUN groupadd -g "${GID}" opensearch-dashboards && \
     useradd -u "${UID}" -g "${GID}" -d "${OPENSEARCH_DASHBOARDS_HOME}" opensearch-dashboards
 
 COPY --from=unpack --chown=${UID}:${GID} /usr/share/opensearch-dashboards ${OPENSEARCH_DASHBOARDS_HOME}

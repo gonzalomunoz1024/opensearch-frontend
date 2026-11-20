@@ -44,7 +44,16 @@ services:
     ports:
       - '5601:5601'
     healthcheck:
-      test: ['CMD-SHELL', 'curl -fs -o /dev/null http://localhost:5601/api/status || exit 1']
+      # With the security plugin on, the status endpoint answers 401 to a caller that has not
+      # signed in. Either answer means the server is up. The image has no curl, so Node.js asks.
+      test:
+        - CMD
+        - /usr/share/opensearch-dashboards/node/bin/node
+        - -e
+        - >-
+          require('http').get('http://localhost:5601/api/status',
+          (r) => process.exit(r.statusCode === 200 || r.statusCode === 401 ? 0 : 1))
+          .on('error', () => process.exit(1))
       interval: 10s
       timeout: 5s
       retries: 30

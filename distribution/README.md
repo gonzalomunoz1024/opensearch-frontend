@@ -34,7 +34,9 @@ their names, so nothing that refers to them has to change. Edit `brand.json` or 
 the generated files. The `--png` step uses the repository's Puppeteer; point
 `PUPPETEER_EXECUTABLE_PATH` at a Chromium if Puppeteer has none of its own.
 
-The name also appears as the default page title in three source files, listed in `UPSTREAM.md`.
+The name also appears as the default page title in three source files, listed in `UPSTREAM.md`,
+and as the title of the sign-in page, which is a setting of the security plugin in
+`config/opensearch_dashboards.yml` and in the Helm chart's defaults.
 A deployment can still set its own name and logos with the `opensearchDashboards.branding`
 settings, as in OpenSearch Dashboards.
 
