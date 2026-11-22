@@ -9,6 +9,22 @@
 
 type Scope = Record<string, unknown>;
 
+/**
+ * Why a text could not be filled in: it is not well formed ('parse'), it names a value there is
+ * none of ('unknown', in strict mode, with the last part of the name), or it uses a block this
+ * text cannot ('helper')
+ */
+export class TemplateError extends Error {
+  constructor(
+    message: string,
+    readonly kind: 'parse' | 'unknown' | 'helper',
+    readonly variable?: string
+  ) {
+    super(message);
+    this.name = 'TemplateError';
+  }
+}
+
 interface Frame {
   value: unknown;
   key?: string | number;
@@ -41,7 +57,7 @@ const truthy = (value: unknown) => (Array.isArray(value) ? value.length > 0 : Bo
 
 const text = (value: unknown): string => (value === undefined || value === null ? '' : typeof value === 'object' ? JSON.stringify(value) : String(value));
 
-function render(template: string, frame: Frame): string {
+function render(template: string, frame: Frame, strict: boolean): string {
   let output = '';
   let at = 0;
   const tag = /\{\{\{?\s*([#/]?)\s*([^}]*?)\s*\}?\}\}/g;
@@ -65,7 +81,7 @@ function render(template: string, frame: Frame): string {
           break;
         }
       }
-      if (end === -1) throw new Error(`{{#${helper}}} is never closed`);
+      if (end === -1) throw new TemplateError(`{{#${helper}}} is never closed`, 'parse');
       const block = template.slice(at, end);
       const [whenTrue, whenFalse = ''] = block.split(/\{\{\s*else\s*\}\}/);
       const subject = lookup(args.join(' '), frame);
@@ -75,25 +91,32 @@ function render(template: string, frame: Frame): string {
           : subject && typeof subject === 'object'
             ? Object.entries(subject as Scope)
             : [];
-        if (entries.length === 0) output += render(whenFalse, frame);
+        if (entries.length === 0) output += render(whenFalse, frame, strict);
         entries.forEach(([key, value], index) => {
-          output += render(whenTrue, { value, key, index, parent: frame });
+          output += render(whenTrue, { value, key, index, parent: frame }, strict);
         });
-      } else if (helper === 'if') output += render(truthy(subject) ? whenTrue : whenFalse, frame);
-      else if (helper === 'unless') output += render(truthy(subject) ? whenFalse : whenTrue, frame);
-      else if (helper === 'with') output += render(whenTrue, { value: subject, parent: frame });
-      else throw new Error(`{{#${helper}}} is not something this text can use`);
+      } else if (helper === 'if') output += render(truthy(subject) ? whenTrue : whenFalse, frame, strict);
+      else if (helper === 'unless') output += render(truthy(subject) ? whenFalse : whenTrue, frame, strict);
+      else if (helper === 'with') output += render(whenTrue, { value: subject, parent: frame }, strict);
+      else throw new TemplateError(`{{#${helper}}} is not something this text can use`, 'helper');
       at = end + endLength;
       tag.lastIndex = at;
     } else if (kind === '/') {
-      throw new Error(`{{/${body}}} closes nothing`);
+      throw new TemplateError(`{{/${body}}} closes nothing`, 'parse');
     } else if (body !== 'else' && !body.startsWith('!')) {
-      output += text(lookup(body, frame));
+      const value = lookup(body, frame);
+      // In strict mode, as Handlebars', a value named but found nowhere stops the text
+      if (strict && value === undefined && !/^(@|this$|\.$)/.test(body.trim())) {
+        const variable = body.trim().split('.').pop()?.replace(/^\[|\]$/g, '') ?? body;
+        throw new TemplateError(`"${variable}" not defined`, 'unknown', variable);
+      }
+      output += text(value);
     }
   }
   return output + template.slice(at);
 }
 
-export function renderTemplate(template: string, scope: Scope): string {
-  return render(template, { value: scope });
+/** The text filled in from the scope; in strict mode a name found nowhere is an error */
+export function renderTemplate(template: string, scope: Scope, options: { strict?: boolean } = {}): string {
+  return render(template, { value: scope }, Boolean(options.strict));
 }

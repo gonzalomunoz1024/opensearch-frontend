@@ -107,7 +107,8 @@ export interface XYChartProps {
   /** A line at the present moment on a time axis */
   nowMarker?: boolean;
   /** Moments marked on a time axis */
-  annotations?: Array<{ x: number; color?: string; label: string }>;
+  /** Lines across the plot at given times, each marked under it with a dot or an icon of the 16 pixel grid */
+  annotations?: Array<{ x: number; color?: string; label: string; icon?: { d: string; filled?: boolean } }>;
   tooltip?: boolean;
   onPointClick?: (series: XYSeries, point: XYPoint) => void;
   /** Called with the stretch of the category axis that was dragged over */
@@ -932,7 +933,15 @@ export function XYChart({
                   <g key={`${mark.x}-${index}`} className="chtMarkLine" style={{ color: mark.color ?? 'var(--color-critical)' }}>
                     <title>{mark.label}</title>
                     <line x1={at} x2={at} y1={0} y2={plot.height} />
-                    <circle cx={at} cy={plot.height} r={4} />
+                    {mark.icon ? (
+                      <path
+                        className={mark.icon.filled ? 'chtMarkLine__icon chtMarkLine__icon--filled' : 'chtMarkLine__icon'}
+                        transform={`translate(${at - 8} ${plot.height + 2})`}
+                        d={mark.icon.d}
+                      />
+                    ) : (
+                      <circle cx={at} cy={plot.height} r={4} />
+                    )}
                   </g>
                 );
               })}

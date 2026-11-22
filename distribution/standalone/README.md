@@ -89,7 +89,7 @@ The last two lines only give back what this server does not need: it holds about
 | Dashboards: list, view, edit (move, resize, add, replace, rename), save, clone, share, full screen | done |
 | Visualizations drawn: area, line, bar, horizontal bar, pie, metric, gauge, goal, heat map, tag cloud, data table, markdown, controls, TSVB | done |
 | Inspect (requests, responses, the table behind a chart) | done |
-| Visualize: the list, the kinds to choose from, and the editor (metrics and buckets, the options of each kind, save, share, inspect) | done for the kinds above; TSVB is edited as JSON; clicking the "Other" slice adds no filter; "Show values on chart" and "Order buckets by sum" are not offered |
+| Visualize: the list, the kinds to choose from, and the editor (metrics and buckets, the options of each kind, save, share, inspect) | done for the kinds above; TSVB has its own editor (the panel types, their data, options and annotations, markdown and its CSS); clicking the "Other" slice adds no filter; "Show values on chart" and "Order buckets by sum" are not offered |
 | Management: index patterns (create, fields, formats, scripted fields, source filters), saved objects (export, import, relationships, inspect), advanced settings | done |
 | Dev Tools: the console (several requests, send, auto indent, copy as cURL, paste cURL, history, settings, import, export) and the Grok debugger | done; suggestions cover methods, paths, index names and the body of a search, not every API; no folding of a body |
 | Query Workbench: SQL and PPL, the list of indices, results a page at a time with rows that open, search, downloads (JDBC, CSV, text), Explain, full screen; the plugin's `/api/sql_console` routes | done; the "Output" tab also says why a query failed, where the plugin leaves that out; `pplcsv` and `ppltext` answer the text, where the plugin answers 400 with the text as its message; no Spark or S3 data sources |
@@ -110,8 +110,8 @@ web/       the browser side
   shell/       the page frame, search bar, filter bar, time picker   (shl)
   charts/      SVG charts: axes, scales, legends, tooltips           (cht)
   vis/         one file per kind of visualization, and TSVB          (vis)
-  apps/        home, discover (dsc), dashboard (dsh), visualize (vze), management (mgt),
-               dev_tools (dvt), query_workbench (qwb), index_management (ism)
+  apps/        home, discover (dsc), dashboard (dsh), visualize (vze; its TSVB editor tvb),
+               management (mgt), dev_tools (dvt), query_workbench (qwb), index_management (ism)
   lib/         DQL, rison, date math, number and date formats, aggregations, markdown,
                the syntax of a search box
 scripts/   build.mjs (TypeScript compiler and a small bundler), the two registry checks

@@ -26,6 +26,9 @@ import {
   type Series,
 } from '../../web/apps/visualize/tsvb/model';
 import { colorOutput, cssColor, parseColor, toHex } from '../../web/components/color_picker';
+import { compileLess } from '../../web/apps/visualize/tsvb/less';
+import { renderTemplate, TemplateError } from '../../web/lib/template';
+import { convertSeriesToVars, getLastValue, snakeCase } from '../../web/vis/tsvb/markdown_vars';
 
 const UUID_V1 = /^[0-9a-f]{8}-[0-9a-f]{4}-1[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -252,5 +255,109 @@ describe('the metrics of a TSVB series', () => {
     assert.equal(supportedFieldKinds('cardinality').includes('histogram'), false);
     assert.equal(supportedFieldKinds('cardinality').includes('string'), true);
     assert.equal(supportedFieldKinds('value_count').includes('histogram'), true);
+  });
+});
+
+describe('the custom CSS of a TSVB markdown panel', () => {
+  // The CSS the product saved for each of these, read from its editor
+  const panel = '#markdown-61ca57f0-469d-11e7-af02-69e470af7417';
+  const css = (less: string) => compileLess(`\n  ${less}\n`, panel);
+
+  it('nests the Less under the panel and writes it compressed', () => {
+    assert.equal(css('p { color: red; }'), `${panel} p{color:red}`);
+    assert.equal(
+      css('color: #FFFFFF; margin: 0px 0.5em;\np, h1 { font-family: Arial, sans-serif; }\na { &:hover { color: blue !important; } > span { padding: 0 } }'),
+      `${panel}{color:#FFFFFF;margin:0 .5em}${panel} p,${panel} h1{font-family:Arial,sans-serif}${panel} a:hover{color:blue !important}${panel} a>span{padding:0}`
+    );
+    assert.equal(
+      css('// a comment\n/* block */ h2 { font-size: 1.5em }\nh3 + p ~ ul { margin: 0 auto 10% }'),
+      `${panel} h2{font-size:1.5em}${panel} h3+p~ul{margin:0 auto 10%}`
+    );
+    assert.equal(
+      css('.a { .b { .c { width: calc(100% - 10px); } } &-x { top: 0.25rem } }'),
+      `${panel} .a .b .c{width:calc(100% - 10px)}${panel} .a-x{top:.25rem}`
+    );
+  });
+
+  it('writes variables in, and an @media inside a rule around the rule', () => {
+    assert.equal(
+      css('@c: red;\n.x { color: @c; @media (max-width: 600px) { color: blue; } }'),
+      `${panel} .x{color:red}@media (max-width:600px){${panel} .x{color:blue}}`
+    );
+    assert.equal(css('@w: 2px; @s: @w; .y { border-width: @s }'), `${panel} .y{border-width:2px}`);
+  });
+
+  it('gives no CSS for what Less would not compile', () => {
+    assert.equal(css('p { color: @undefinedvar; }'), undefined);
+    assert.equal(css('p { color: red;'), undefined);
+    assert.equal(css('p { color: red; } }'), undefined);
+    assert.equal(css('@import "theme.less";'), undefined);
+    assert.equal(css('p { just words }'), undefined);
+  });
+});
+
+describe('the variables of a TSVB markdown panel', () => {
+  it('names them in snake case as lodash does', () => {
+    assert.equal(snakeCase('Average of bytes'), 'average_of_bytes');
+    assert.equal(snakeCase('Percentile of bytes (95.0)'), 'percentile_of_bytes_95_0');
+    assert.equal(snakeCase('XMLHttpRequest'), 'xml_http_request');
+    assert.equal(snakeCase('version2'), 'version_2');
+    assert.equal(snakeCase("Don't stop"), 'dont_stop');
+    assert.equal(snakeCase('Zürich'), 'zurich');
+    assert.equal(snakeCase('Straße'), 'strasse');
+    assert.equal(snakeCase('Москва'), 'москва');
+    assert.equal(snakeCase('北京市 Beijing'), '北京市_beijing');
+    assert.equal(snakeCase('95th percentile'), '95th_percentile');
+    assert.equal(snakeCase(undefined), '');
+  });
+
+  it('takes the last value as the product does, a 0 or a gap as 0', () => {
+    assert.equal(getLastValue([[1, 3], [2, 4]]), 4);
+    assert.equal(getLastValue([[1, 3], [2, null]]), 0);
+    assert.equal(getLastValue([]), 0);
+  });
+
+  it('makes a variable of each series, under its variable name when it has one', () => {
+    const day = 86400000;
+    const row = (id: string, label: string, data: Array<[number, number | null]>) => ({
+      id,
+      seriesId: id.split(':')[0],
+      label,
+      color: '#000',
+      data,
+      last: null,
+      series: { id: id.split(':')[0] },
+      format: (value: number | null) => (value === null ? 'none' : value.toFixed(1)),
+    });
+    const params = { series: [{ id: 's1' }, { id: 's2', var_name: 'Rate' }] };
+    const variables = convertSeriesToVars(
+      [row('s1', 'Average of bytes', [[0, 1], [day, 2.5]]), row('s2:a', 'Zürich', [[0, null]]), row('s2:b', 'b', [])],
+      params,
+      'YYYY-MM-DD',
+      'UTC'
+    );
+    assert.deepEqual(variables, {
+      average_of_bytes: {
+        last: { raw: 2.5, formatted: '2.5' },
+        data: { raw: [[0, 1], [day, 2.5]], formatted: [['1970-01-01', '1.0'], ['1970-01-02', '2.5']] },
+        label: 'Average of bytes',
+      },
+      zurich: { rate: { last: { raw: 0, formatted: '0.0' }, data: { raw: [[0, null]], formatted: [['1970-01-01', '']] } }, label: 'Zürich' },
+      b: { rate: { last: { raw: 0, formatted: '0.0' }, data: { raw: [], formatted: [] } }, label: 'b' },
+    });
+  });
+
+  it('stops at a name it has no value for, in strict mode, and says which', () => {
+    const scope = { count: { label: 'Count' } };
+    assert.equal(renderTemplate('{{ count.label }}', scope, { strict: true }), 'Count');
+    assert.equal(renderTemplate('{{ count.nope }}', scope), '');
+    assert.throws(
+      () => renderTemplate('{{ count.nope }}', scope, { strict: true }),
+      (error: unknown) => error instanceof TemplateError && error.kind === 'unknown' && error.variable === 'nope'
+    );
+    assert.throws(
+      () => renderTemplate('{{#each count}}x', scope, { strict: true }),
+      (error: unknown) => error instanceof TemplateError && error.kind === 'parse'
+    );
   });
 });

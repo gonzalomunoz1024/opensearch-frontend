@@ -238,6 +238,82 @@
   overflow: auto;
 }
 
+/*
+ * The frame the product draws a TSVB markdown panel and a failed panel in: the visualization's
+ * padding, then a transparent border that leaves the panel's background colour inside it
+ */
+.visTsvbFrame {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  margin: var(--space-2);
+  border: var(--space-2) solid transparent;
+}
+
+/* What a TSVB panel shows when its request failed: an alert, a title and the reason under it */
+.visTsvbError {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  text-align: center;
+}
+
+.visTsvbError__icon {
+  color: var(--color-critical);
+  vertical-align: middle;
+}
+
+.visTsvbError__spacer {
+  height: var(--space-2);
+}
+
+.visTsvbError__additional,
+.visTsvbError__stack {
+  margin-top: var(--space-2);
+}
+
+.visTsvbError__stack {
+  padding: var(--space-2);
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-code);
+  white-space: pre-wrap;
+}
+
+/* A TSVB markdown panel: its text at the top, middle or bottom, scrolling only when asked to */
+.visTsvbMarkdown {
+  position: relative;
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+}
+
+.visTsvbMarkdown__content {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.visTsvbMarkdown__content--middle {
+  justify-content: center;
+}
+
+.visTsvbMarkdown__content--bottom {
+  justify-content: flex-end;
+}
+
+.visTsvbMarkdown__content--scroll {
+  overflow: auto;
+}
+
 /* Controls */
 
 .visControls {

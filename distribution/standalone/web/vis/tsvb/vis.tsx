@@ -8,7 +8,7 @@ import { XYChart, type XYAxis, type XYSeries } from '../../charts/xy';
 import { Icon } from '../../components/icon';
 import { formatDate, scaledDateFormat, type TimeRange } from '../../lib/dates';
 import { Markdown } from '../../lib/markdown';
-import { renderTemplate } from '../../lib/template';
+import { renderTemplate, TemplateError } from '../../lib/template';
 import type { Vis } from '../../lib/vis';
 import { services } from '../../services';
 import { errorMessage } from '../../services/http';
@@ -23,6 +23,9 @@ import {
   type TsvbParams,
   type TsvbTableData,
 } from './data';
+import { TsvbError, type TsvbPanelError } from './error';
+import { annotationIcon } from './icons';
+import { convertSeriesToVars } from './markdown_vars';
 
 const number = (value: unknown, fallback: number): number => {
   const parsed = typeof value === 'string' && value.trim() !== '' ? Number(value) : value;
@@ -142,7 +145,12 @@ function TimeSeries({ params, data, onTimeChange }: { params: TsvbParams; data: 
       legendValues={Object.fromEntries(data.series.map((item) => [item.id, lastText(item, data.series)]))}
       grid={{ value: params.show_grid !== 0, category: false }}
       annotations={data.annotations.flatMap(({ annotation, marks }) =>
-        marks.map((mark) => ({ x: mark.time, color: annotation.color, label: mark.text || formatDate(new Date(mark.time), 'MMM D, YYYY @ HH:mm:ss', zone) }))
+        marks.map((mark) => ({
+          x: mark.time,
+          color: annotation.color,
+          label: mark.text || formatDate(new Date(mark.time), 'MMM D, YYYY @ HH:mm:ss', zone),
+          icon: annotationIcon(annotation.icon),
+        }))
       )}
       onBrush={onTimeChange ? (from, to) => onTimeChange({ from: new Date(from).toISOString(), to: new Date(to).toISOString() }) : undefined}
       testId="tsvbChart"
@@ -245,32 +253,53 @@ function Gauge({ params, data }: { params: TsvbParams; data: TsvbData }) {
   );
 }
 
-const snake = (text: string) =>
-  text
-    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
+const MARKDOWN_ERROR = 'Error processing your markdown';
+
+/**
+ * The text of a markdown panel filled in as the product fills it, in strict mode: while it is not
+ * well formed (being typed) it shows as written, and a name it has no variable for, or a block it
+ * cannot use, is an error the panel shows instead of the text
+ */
+function fillMarkdown(markdown: string, variables: Record<string, unknown>): { text?: string; error?: TsvbPanelError } {
+  try {
+    return { text: renderTemplate(markdown, { _all: variables, ...variables, args: {} }, { strict: true }) };
+  } catch (failure) {
+    if (failure instanceof TemplateError && failure.kind === 'parse') return { text: markdown };
+    const reason =
+      failure instanceof TemplateError && failure.kind === 'unknown'
+        ? `{{${failure.variable}}} is an unknown variable`
+        : 'Please verify you are only using markdown, known variables, and built-in Handlebars expressions';
+    return { error: { error: { caused_by: { title: MARKDOWN_ERROR, reason } } } };
+  }
+}
 
 function MarkdownPanel({ params, data }: { params: TsvbParams; data: TsvbData }) {
-  const variables: Record<string, unknown> = {};
-  for (const series of data.series) {
-    const entry = {
-      label: series.label,
-      last: { raw: series.last, formatted: series.format(series.last) },
-      data: { raw: series.data, formatted: series.data.map(([time, value]) => [time, series.format(value)]) },
-    };
-    variables[series.series.var_name || snake(series.label)] = entry;
-  }
-  let text: string;
-  try {
-    text = renderTemplate(params.markdown ?? '', { ...variables, _all: variables });
-  } catch (failure) {
-    text = `The text of this panel could not be filled in: ${(failure as Error).message}`;
-  }
+  // The panel's custom CSS names it by its id; each drawing of it gets an id of its own instead
+  const [elementId] = useState(() => `markdown-${Math.random().toString(36).slice(2)}`);
+  const background = params.background_color || undefined;
+  if (!params.markdown) return <div className="visTsvbFrame" style={{ background }} />;
+  const dateFormat = services.uiSettings.get<string>('dateFormat', 'MMM D, YYYY @ HH:mm:ss.SSS');
+  const variables = convertSeriesToVars(data.series, params, dateFormat, services.timeZone());
+  const { text, error } = fillMarkdown(params.markdown, variables);
+  const css = params.markdown_css ? params.markdown_css.split(`markdown-${params.id}`).join(elementId) : '';
+  const align = params.markdown_vertical_align;
   return (
-    <div className="visMarkdown" style={{ background: params.background_color }} data-test-subj="tsvbMarkdown">
-      <Markdown text={text} openLinksInNewTab />
+    <div className="visTsvbFrame" style={{ background }}>
+      <div className="visTsvbMarkdown" data-test-subj="tsvbMarkdown">
+        {error && <TsvbError error={error} />}
+        <style>{css}</style>
+        <div
+          className={[
+            'visTsvbMarkdown__content',
+            align === 'middle' || align === 'bottom' ? `visTsvbMarkdown__content--${align}` : '',
+            params.markdown_scrollbars ? 'visTsvbMarkdown__content--scroll' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+        >
+          <div id={elementId}>{text !== undefined && <Markdown text={text} openLinksInNewTab={Boolean(params.markdown_openLinksInNewTab)} />}</div>
+        </div>
+      </div>
     </div>
   );
 }

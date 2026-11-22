@@ -29,7 +29,6 @@ import {
 } from './controls';
 import {
   collection,
-  inputValue,
   isBasicAgg,
   list,
   newMetric,
@@ -158,6 +157,7 @@ function StandardAgg(props: AggProps) {
 }
 
 const PERCENTILE_FIELDS = ['number', 'histogram'];
+const NUMBER_FIELDS = ['number'];
 const PERCENTILE_MODES = [choice('Line', 'line'), choice('Band', 'band')];
 
 /** The percentiles of a percentile aggregation: a value each, drawn as a line or as a band */
@@ -432,7 +432,7 @@ function MathAgg(props: AggProps) {
           help={
             <>
               This field uses basic math expressions (see{' '}
-              <a className="atlLink" href="https://mathjs.org/docs/reference/functions.html" target="_blank" rel="noreferrer">
+              <a href="https://mathjs.org/docs/reference/functions.html" target="_blank" rel="noreferrer">
                 Math.js
                 <Icon name="external" className="tvbLinkIcon" />
               </a>
@@ -524,9 +524,148 @@ function StaticAgg(props: AggProps) {
   );
 }
 
-/** A metric this editor has no form for yet: its aggregation can still be changed */
-function OtherAgg(props: AggProps) {
-  const { model, panel, siblings } = props;
+const STD_MODES = [choice('Raw', 'raw'), choice('Upper Bound', 'upper'), choice('Lower Bound', 'lower')];
+const BAND_MODE = choice('Bounds Band', 'band');
+
+function StandardDeviationAgg(props: AggProps) {
+  const { panel, series, fields, siblings } = props;
+  const model: Metric = { sigma: '', ...props.model };
+  const change = changer(props.onChange, model);
+  // A table shows one number per column: no band
+  const modes = panel.type === 'table' ? STD_MODES : [...STD_MODES, BAND_MODE];
+  return (
+    <AggRow {...props}>
+      <Row gap="s">
+        <Item>
+          <AggSelect panelType={panel.type} siblings={siblings} value={model.type} onChange={(type) => change({ type })} />
+        </Item>
+        <Item>
+          <Field label="Field">
+            <FieldSelect
+              fields={fields}
+              type={model.type}
+              restrict={NUMBER_FIELDS}
+              indexPattern={seriesIndexPattern(series, panel)}
+              value={model.field}
+              onChange={(field) => change({ field })}
+            />
+          </Field>
+        </Item>
+        <Item grow={false}>
+          <Field label="Sigma">
+            <TextInput value={model.sigma} label="Sigma" onChange={(sigma) => change({ sigma })} />
+          </Field>
+        </Item>
+        <Item>
+          <Field label="Mode">
+            <Combo options={modes} value={model.mode} onChange={(mode) => change({ mode })} />
+          </Field>
+        </Item>
+      </Row>
+    </AggRow>
+  );
+}
+
+/** Overall average, max, min, sum and the others: one number over all the buckets of a metric */
+function StandardSiblingAgg(props: AggProps) {
+  const { panel, siblings } = props;
+  const model: Metric = { sigma: '', ...props.model };
+  const change = changer(props.onChange, model);
+  const deviation = model.type === 'std_deviation_bucket';
+  return (
+    <AggRow {...props}>
+      <Row gap="s">
+        <Item>
+          <AggSelect panelType={panel.type} siblings={siblings} value={model.type} onChange={(type) => change({ type })} />
+        </Item>
+        <Item>
+          <Field label="Metric">
+            <MetricSelect metrics={siblings} metric={model} exclude={['percentile']} value={model.field} onChange={(field) => change({ field })} />
+          </Field>
+        </Item>
+        {deviation && (
+          <>
+            <Item grow={false}>
+              <Field label="Sigma">
+                <TextInput value={model.sigma} label="Sigma" onChange={(sigma) => change({ sigma })} />
+              </Field>
+            </Item>
+            <Item>
+              <Field label="Mode">
+                <Combo options={[...STD_MODES, BAND_MODE]} value={model.mode} onChange={(mode) => change({ mode })} />
+              </Field>
+            </Item>
+          </>
+        )}
+      </Row>
+    </AggRow>
+  );
+}
+
+/** A metric computed from another by name only: cumulative sum, positive only */
+function PipelineAgg(props: AggProps & { defaults?: Doc }) {
+  const { panel, siblings, defaults } = props;
+  const model: Metric = { ...defaults, ...props.model };
+  const change = changer(props.onChange, model);
+  return (
+    <AggRow {...props}>
+      <Row gap="s">
+        <Item>
+          <AggSelect panelType={panel.type} siblings={siblings} value={model.type} onChange={(type) => change({ type })} />
+        </Item>
+        <Item>
+          <Field label="Metric">
+            <MetricSelect metrics={siblings} metric={model} value={model.field} onChange={(field) => change({ field })} />
+          </Field>
+        </Item>
+      </Row>
+    </AggRow>
+  );
+}
+
+const CumulativeSumAgg = (props: AggProps) => <PipelineAgg {...props} />;
+
+// A positive only keeps the units of a derivative it never uses, as the product's does
+const PositiveOnlyAgg = (props: AggProps) => <PipelineAgg {...props} defaults={{ unit: '' }} />;
+
+function SerialDiffAgg(props: AggProps) {
+  const { panel, siblings } = props;
+  const model: Metric = { lag: '', ...props.model };
+  const change = changer(props.onChange, model);
+  return (
+    <AggRow {...props}>
+      <Row gap="s">
+        <Item>
+          <AggSelect panelType={panel.type} siblings={siblings} value={model.type} onChange={(type) => change({ type })} />
+        </Item>
+        <Item>
+          <Field label="Metric">
+            <MetricSelect metrics={siblings} metric={model} value={model.field} onChange={(field) => change({ field })} />
+          </Field>
+        </Item>
+        <Item>
+          <Field label="Lag">
+            {/* The lag is typed as text and kept as a number, as the product keeps it */}
+            <TextInput value={model.lag} label="Lag" onChange={(lag) => change({ lag: Number(lag) })} />
+          </Field>
+        </Item>
+      </Row>
+    </AggRow>
+  );
+}
+
+const RATE_UNITS = [
+  choice('auto', ''),
+  choice('per millisecond', '1ms'),
+  choice('per second', '1s'),
+  choice('per minute', '1m'),
+  choice('per hour', '1h'),
+  choice('per day', '1d'),
+];
+
+function PositiveRateAgg(props: AggProps) {
+  const { panel, series, fields, siblings } = props;
+  const model: Metric = { unit: '', ...props.model };
   const change = changer(props.onChange, model);
   return (
     <AggRow {...props}>
@@ -536,10 +675,248 @@ function OtherAgg(props: AggProps) {
         </Item>
         <Item>
           <Field label="Field" full>
-            <TextInput value={inputValue(model.field)} label="Field" disabled onChange={() => undefined} />
+            <FieldSelect
+              fields={fields}
+              type={model.type}
+              restrict={NUMBER_FIELDS}
+              indexPattern={seriesIndexPattern(series, panel)}
+              value={model.field}
+              onChange={(field) => change({ field })}
+            />
+          </Field>
+        </Item>
+        <Item>
+          <Field label="Scale" full>
+            <Combo options={RATE_UNITS} value={model.unit} placeholder="Select scale..." onChange={(unit) => change({ unit })} />
           </Field>
         </Item>
       </Row>
+      <Spacer size="s" />
+      <p className="tvbText tvbText--xs tvbText--subdued tvbText--wrap">
+        This aggregation should only be applied to{' '}
+        <a href="https://en.wikipedia.org/wiki/Monotonic_function" target="_blank" rel="noreferrer">
+          monotonically increasing numbers
+        </a>
+        , it is a shortcut for applying max, derivative and positive only to a field.
+      </p>
+    </AggRow>
+  );
+}
+
+const SERIES_FUNCTIONS = [
+  choice('Sum', 'sum'),
+  choice('Max', 'max'),
+  choice('Min', 'min'),
+  choice('Avg', 'mean'),
+  choice('Overall Sum', 'overall_sum'),
+  choice('Overall Max', 'overall_max'),
+  choice('Overall Min', 'overall_min'),
+  choice('Overall Avg', 'overall_avg'),
+  choice('Cumulative Sum', 'cumulative_sum'),
+];
+
+/** A message in place of a metric's settings */
+function Unavailable({ children }: { children: ReactNode }) {
+  return <h6 className="tvbTitle--xxxs tvbAggRow__unavailable">{children}</h6>;
+}
+
+function SeriesAgg(props: AggProps) {
+  const { model, panel, siblings } = props;
+  const change = changer(props.onChange, model);
+  if (panel.type === 'table') {
+    return (
+      <AggRow {...props}>
+        <Unavailable>Series Agg is not compatible with the table visualization.</Unavailable>
+      </AggRow>
+    );
+  }
+  return (
+    <AggRow {...props}>
+      <Row gap="s">
+        <Item>
+          <AggSelect panelType={panel.type} siblings={siblings} value={model.type} onChange={(type) => change({ type })} />
+        </Item>
+        <Item>
+          <Field label="Function">
+            <Combo options={SERIES_FUNCTIONS} value={model.function} onChange={(value) => change({ function: value })} />
+          </Field>
+        </Item>
+      </Row>
+    </AggRow>
+  );
+}
+
+const ORDERS = [choice('Asc', 'asc'), choice('Desc', 'desc')];
+const DATE_FIELDS = ['date'];
+
+/** How the values of the latest documents are made one: by the kind of the field */
+function aggWithOptions(kind: string | undefined, allowed: string[]) {
+  if (!kind || !allowed.includes(kind)) return [];
+  if (kind === 'number') return [choice('Avg', 'avg'), choice('Max', 'max'), choice('Min', 'min'), choice('Sum', 'sum')];
+  if (kind === 'string') return [choice('Concatenate', 'concat')];
+  return [];
+}
+
+function TopHitAgg(props: AggProps) {
+  const { fields, series, panel, siblings } = props;
+  const model: Metric = { size: 1, agg_with: 'noop', order: 'desc', ...props.model };
+  const change = changer(props.onChange, model);
+  const indexPattern = seriesIndexPattern(series, panel);
+  // Panels that show one value as text can join strings too
+  const kinds = ['table', 'metric', 'markdown'].includes(str(panel, 'type')) ? ['number', 'string'] : ['number'];
+  const field = (fields[indexPattern] ?? []).find((item) => item.name === model.field);
+  return (
+    <AggRow {...props}>
+      <Row gap="s">
+        <Item>
+          <AggSelect panelType={panel.type} siblings={siblings} value={model.type} onChange={(type) => change({ type })} />
+        </Item>
+        <Item>
+          <Field label="Field">
+            <FieldSelect fields={fields} type={model.type} restrict={kinds} indexPattern={indexPattern} value={model.field} onChange={(value) => change({ field: value })} />
+          </Field>
+        </Item>
+      </Row>
+      <Spacer size="m" />
+      <Row gap="s">
+        <Item grow={false}>
+          <Field label="Size">
+            <TextInput value={model.size} label="Size" onChange={(size) => change({ size })} />
+          </Field>
+        </Item>
+        <Item>
+          <Field label="Aggregate with">
+            <Combo
+              options={aggWithOptions(field?.type, kinds)}
+              value={model.agg_with}
+              placeholder="Select..."
+              clearable={false}
+              onChange={(value) => change({ agg_with: value })}
+            />
+          </Field>
+        </Item>
+        <Item>
+          <Field label="Order by">
+            <FieldSelect fields={fields} restrict={DATE_FIELDS} indexPattern={indexPattern} value={model.order_by} onChange={(value) => change({ order_by: value })} />
+          </Field>
+        </Item>
+        <Item>
+          <Field label="Order">
+            <Combo options={ORDERS} value={model.order} placeholder="Select..." clearable={false} onChange={(order) => change({ order })} />
+          </Field>
+        </Item>
+      </Row>
+    </AggRow>
+  );
+}
+
+const PERCENTILE_RANK_FIELDS = ['number', 'histogram'];
+
+/** The values a percentile rank is asked of: one a row, each kept as it was typed */
+function PercentileRankValues({ values, table, onChange }: { values: unknown[]; table: boolean; onChange: (values: unknown[]) => void }) {
+  const renderRow = (index: number, value: unknown, disableAdd: boolean, disableDelete: boolean) => (
+    <div className="tvbAggRow__multiValueRow" key={`percentileRankValue__item${index}`}>
+      <Row gap="l" center>
+        <Item grow={false}>
+          <span className="tvbLabel">Value:</span>
+        </Item>
+        <Item grow={false}>
+          <TextInput
+            type="number"
+            placeholder="0"
+            label="Value"
+            value={value === '' || value === null || value === undefined ? '' : Number(value)}
+            onChange={(text) => onChange(values.map((item, at) => (at === index ? text : item)))}
+          />
+        </Item>
+        <Item grow={false}>
+          <AddDeleteButtons
+            onAdd={() => onChange([...values, ''])}
+            onDelete={() => onChange(values.filter((_, at) => at !== index))}
+            disableAdd={disableAdd}
+            disableDelete={disableDelete}
+          />
+        </Item>
+      </Row>
+      <Spacer />
+    </div>
+  );
+  // A table shows one number per column: only the last value, which stays
+  if (table) return <div className="tvbColumn tvbColumn--xs">{renderRow(values.length - 1, values[values.length - 1] ?? '', true, true)}</div>;
+  return <div className="tvbColumn tvbColumn--xs">{values.map((value, index) => renderRow(index, value ?? '', false, values.length < 2))}</div>;
+}
+
+function PercentileRankAgg(props: AggProps) {
+  const { series, panel, fields, siblings } = props;
+  const model: Metric = { values: [''], ...props.model };
+  const change = changer(props.onChange, model);
+  const values = Array.isArray(model.values) ? (model.values as unknown[]) : undefined;
+  return (
+    <AggRow {...props}>
+      <Row gap="s">
+        <Item>
+          <AggSelect panelType={panel.type} siblings={siblings} value={model.type} onChange={(type) => change({ type })} />
+        </Item>
+        <Item>
+          <Field label="Field">
+            <FieldSelect
+              fields={fields}
+              type={model.type}
+              restrict={PERCENTILE_RANK_FIELDS}
+              indexPattern={seriesIndexPattern(series, panel)}
+              value={model.field}
+              onChange={(field) => change({ field })}
+            />
+          </Field>
+        </Item>
+      </Row>
+      <Spacer />
+      {values && <PercentileRankValues values={values} table={panel.type === 'table'} onChange={(next) => change({ values: next })} />}
+    </AggRow>
+  );
+}
+
+/** A metric of an aggregation the product no longer has: it can only be deleted */
+function UnsupportedAgg(props: AggProps) {
+  return (
+    <AggRow {...props}>
+      <Unavailable>
+        The {code(props.model.type)} aggregation is no longer supported.
+      </Unavailable>
+    </AggRow>
+  );
+}
+
+function CalculationAgg(props: AggProps) {
+  const { model, panel, siblings } = props;
+  const change = changer(props.onChange, model);
+  // A metric that has just become a bucket script starts with one variable and no script
+  const missing = !Array.isArray(model.variables) || model.script === undefined;
+  const latest = useRef(change);
+  latest.current = change;
+  useEffect(() => {
+    if (missing) latest.current({ variables: [newVariable()], script: '' });
+  }, [missing]);
+  return (
+    <AggRow {...props}>
+      <div className="tvbColumn">
+        <AggSelect panelType={panel.type} siblings={siblings} value={model.type} onChange={(type) => change({ type })} />
+        <Field label="Variables" full>
+          <CalculationVars model={model} metrics={siblings} onChange={change} />
+        </Field>
+        <Field
+          label="Painless Script"
+          full
+          help={
+            <>
+              Variables are keys on the {code('params')} object, i.e. {code('params.<name>')}. To access the bucket interval (in milliseconds)
+              use {code('params._interval')}.
+            </>
+          }
+        >
+          <TextArea value={str(model, 'script')} onChange={(script) => change({ script })} />
+        </Field>
+      </div>
     </AggRow>
   );
 }
@@ -550,16 +927,32 @@ const AGGS: Record<string, (props: AggProps) => ReactNode> = {
   max: StandardAgg,
   min: StandardAgg,
   sum: StandardAgg,
+  std_deviation: StandardDeviationAgg,
   sum_of_squares: StandardAgg,
   variance: StandardAgg,
+  avg_bucket: StandardSiblingAgg,
+  max_bucket: StandardSiblingAgg,
+  min_bucket: StandardSiblingAgg,
+  sum_bucket: StandardSiblingAgg,
+  variance_bucket: StandardSiblingAgg,
+  sum_of_squares_bucket: StandardSiblingAgg,
+  std_deviation_bucket: StandardSiblingAgg,
+  percentile: PercentileAgg,
+  percentile_rank: PercentileRankAgg,
   cardinality: StandardAgg,
   value_count: StandardAgg,
-  percentile: PercentileAgg,
-  derivative: DerivativeAgg,
+  calculation: CalculationAgg,
+  cumulative_sum: CumulativeSumAgg,
   moving_average: MovingAverageAgg,
-  math: MathAgg,
+  derivative: DerivativeAgg,
+  series_agg: SeriesAgg,
+  serial_diff: SerialDiffAgg,
   filter_ratio: FilterRatioAgg,
+  positive_only: PositiveOnlyAgg,
   static: StaticAgg,
+  math: MathAgg,
+  top_hit: TopHitAgg,
+  positive_rate: PositiveRateAgg,
 };
 
 /**
@@ -583,7 +976,7 @@ export function Aggs({ panel, series, fields, onChange }: { panel: Panel; series
   return (
     <div className="tvbAggList">
       {metrics.map((metric) => {
-        const Component = AGGS[metric.type] ?? OtherAgg;
+        const Component = AGGS[metric.type] ?? UnsupportedAgg;
         return (
           <div key={metric.id} ref={sortable.row(metric.id)} style={sortable.style(metric.id)} className={cx('tvbAggList__item', sortable.dragging(metric.id) && 'tvbDragging')}>
             <Component

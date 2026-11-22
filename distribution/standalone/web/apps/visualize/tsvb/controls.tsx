@@ -191,6 +191,8 @@ export interface Choice {
   label: string;
   disabled?: boolean;
   group?: string;
+  /** Drawn before the label in the list, as an icon is */
+  prepend?: ReactNode;
 }
 
 /** A list to pick one of: what it hands back is the value picked, or null when it was cleared */

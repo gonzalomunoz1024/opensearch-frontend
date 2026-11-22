@@ -138,6 +138,10 @@ export interface TsvbParams {
   markdown?: string;
   markdown_vertical_align?: string;
   markdown_scrollbars?: number;
+  markdown_openLinksInNewTab?: number;
+  /** The panel's custom style, as written in Less and as the CSS it compiled to */
+  markdown_less?: string;
+  markdown_css?: string;
   pivot_id?: string;
   pivot_label?: string;
   pivot_rows?: number | string;

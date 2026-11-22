@@ -8,6 +8,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { choice } from './agg_lists';
+import { AnnotationsEditor } from './annotations';
 import {
   ColorRules,
   Combo,
@@ -28,6 +29,7 @@ import {
   YesNo,
   type TabSpec,
 } from './controls';
+import { MarkdownCssEditor, MarkdownEditor } from './markdown';
 import { SERIES_LIMIT, panelAdditions, str, type Fields, type OnChange, type Panel } from './model';
 import { SeriesEditor, type PanelData } from './series';
 
@@ -86,7 +88,7 @@ function TimeseriesPanel(props: PanelProps) {
   const model: Panel = { axis_max: '', axis_min: '', legend_position: 'right', show_grid: 1, tooltip_mode: 'show_all', ...props.model };
   let view: ReactNode;
   if (tab === 'data') view = <SeriesEditor {...props} />;
-  else if (tab === 'annotations') view = <Pending what="annotations" />;
+  else if (tab === 'annotations') view = <AnnotationsEditor model={props.model} fields={props.fields} onChange={onChange} />;
   else {
     view = (
       <div className="tvbPanelConfig__container">
@@ -322,7 +324,7 @@ function MarkdownPanel(props: PanelProps) {
   const { onChange, model } = props;
   const [tab, setTab] = useState('markdown');
   let view: ReactNode;
-  if (tab === 'markdown') view = <Pending what="markdown" />;
+  if (tab === 'markdown') view = <MarkdownEditor model={model} visData={props.visData} onChange={onChange} />;
   else if (tab === 'data') view = <SeriesEditor {...props} colorPicker={false} />;
   else {
     view = (
@@ -365,7 +367,7 @@ function MarkdownPanel(props: PanelProps) {
           <Rule />
           <h4 className="tvbTitle--xxs">Custom CSS (supports Less)</h4>
           <Spacer size="s" />
-          <Pending what="css" />
+          <MarkdownCssEditor model={model} onChange={onChange} />
         </OptionsPanel>
       </div>
     );
@@ -439,10 +441,6 @@ function TablePanel(props: PanelProps) {
       {view}
     </Tabbed>
   );
-}
-
-function Pending({ what }: { what: string }) {
-  return <div className="tvbPanelConfig__container" data-pending={what} />;
 }
 
 const PANELS: Record<string, (props: PanelProps) => ReactNode> = {

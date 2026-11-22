@@ -146,7 +146,7 @@ function DataFormatPicker({ value: given, onChange, label = 'Data Formatter' }: 
             help={
               <span>
                 See{' '}
-                <a className="atlLink" href="http://numeraljs.com/#format" target="_BLANK" rel="noreferrer">
+                <a href="http://numeraljs.com/#format" target="_BLANK" rel="noreferrer">
                   Numeral.js
                 </a>
               </span>

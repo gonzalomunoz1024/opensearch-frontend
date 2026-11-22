@@ -143,12 +143,16 @@
   color: var(--color-text-secondary);
 }
 
+/* Code in a help text: a chip with an outline, as the product draws it */
 .tvbCode {
+  display: inline-block;
   padding: 0 var(--space-1);
+  border: 1px solid var(--color-border-light);
   border-radius: var(--radius-xs);
-  background: var(--color-surface-secondary);
+  background: var(--color-surface);
   font-family: var(--font-family-code);
   font-size: 11px;
+  line-height: 16px;
 }
 
 /* --- The panel's settings ----------------------------------------------------------------------- */
@@ -177,6 +181,13 @@
   font-size: var(--font-size-s);
   font-weight: var(--font-weight-semibold);
   line-height: 20px;
+}
+
+.tvbTitle--xxxs {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: 18px;
 }
 
 .tvbRule {
@@ -459,6 +470,19 @@
   gap: var(--space-6);
 }
 
+.tvbColumn--xs {
+  gap: var(--space-1);
+}
+
+/* A metric that cannot be set up says so where its settings would be */
+.tvbAggRow__unavailable {
+  margin-top: calc(var(--space-1) * -1);
+}
+
+.tvbText--wrap {
+  white-space: normal;
+}
+
 .tvbVars .tvbRow + .tvbRow,
 .tvbPercentiles .tvbRow + .tvbRow {
   margin-top: var(--space-2);
@@ -506,6 +530,108 @@
 .tvbDragging > .tvbSeriesEditor,
 .tvbDragging > .tvbAggRow {
   box-shadow: var(--shadow-card);
+}
+
+/* --- Annotations --------------------------------------------------------------------------- */
+
+.tvbAnnotationsEditor__container {
+  padding: var(--space-4);
+  background: var(--color-surface-secondary);
+}
+
+.tvbAnnotationsEditor {
+  margin-bottom: var(--space-4);
+  padding: var(--space-2);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.tvbAnnotationsEditor__empty {
+  margin: 0 0 var(--space-3);
+}
+
+.tvbText--center {
+  text-align: center;
+}
+
+.tvbTitle--s {
+  margin: 0;
+  font-size: var(--font-size-l);
+  font-weight: var(--font-weight-semibold);
+  line-height: 24px;
+}
+
+/* --- Markdown ------------------------------------------------------------------------------ */
+
+.tvbMarkdownEditor {
+  display: flex;
+  height: 500px;
+  background: var(--color-surface);
+}
+
+.tvbMarkdownEditor__editor,
+.tvbMarkdownEditor__variables {
+  flex: 1 0 auto;
+  width: 50%;
+  min-width: 0;
+}
+
+.tvbMarkdownEditor__editor {
+  border-right: 2px solid var(--color-surface-secondary);
+}
+
+.tvbMarkdownEditor__code.atlCodeEditor {
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+}
+
+.tvbMarkdownEditor__variables {
+  padding: var(--space-2);
+  overflow: auto;
+}
+
+.tvbMarkdownEditor__table {
+  width: 100%;
+  margin: var(--space-2) 0 var(--space-5);
+  border-collapse: collapse;
+  font-size: var(--font-size-xs);
+}
+
+.tvbMarkdownEditor__table th {
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--color-border-light);
+  font-weight: var(--font-weight-semibold);
+}
+
+.tvbMarkdownEditor__table td {
+  padding: var(--space-2);
+  border-top: 1px solid var(--color-border-light);
+  vertical-align: top;
+}
+
+.tvbMarkdownEditor__table code {
+  font-family: var(--font-family-code);
+}
+
+.tvbMarkdownEditor__variable {
+  text-align: left;
+}
+
+.tvbMarkdownEditor__noVariables {
+  display: block;
+  padding: var(--space-4) 0 calc(var(--space-8) + var(--space-2));
+  border-bottom: 1px solid var(--color-border-light);
+  text-align: center;
+}
+
+.tvbMarkdownEditor__example {
+  white-space: pre;
+}
+
+.tvbMarkdownEditor__css.atlCodeEditor {
+  border-radius: 0;
 }
 
 @media (max-width: 767px) {
