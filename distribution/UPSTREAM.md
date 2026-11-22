@@ -76,13 +76,14 @@ Then:
    build the theme (it fails if OUI gained a variable the theme leaves undefined) and look at
    the product in both modes: a new or changed component may need a refinement.
 4. Move `distribution/plugins.json` to the plugin tags of the same release (`3.10.0.0`), with the
-   commit each tag points at, and set `dashboardsVersion`. The upstream release's
+   commit each tag points at, in both of its lists, and set `dashboardsVersion`. The upstream release's
    [manifest](https://github.com/opensearch-project/opensearch-build/tree/main/manifests) lists
    the plugins of a release.
-5. Change the OpenSearch version in `distribution/docker/*.yml`, the chart's `appVersion`, the
+5. Change the OpenSearch version in `distribution/docker/**/*.yml`, the chart's `appVersion`, the
    version in this file and the READMEs, and the branch the functional tests come from
    (`TEST_BRANCH` in `.github/workflows/cypress_workflow.yml`, `3.10` for 3.10.0).
 6. Open a pull request. The upstream test suites and the Distribution workflow run on it.
 
 Dashboards and OpenSearch are released together; run a Dashboards release against the OpenSearch
-of the same version.
+of the same version. The lite backend (`gonzalomunoz1024/opensearch-backend`) moves to the same
+release, with the backend plugins the shipped Dashboards plugins need.

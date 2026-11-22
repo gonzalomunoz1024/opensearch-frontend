@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
 #
-# Builds the distribution: the Dashboards platform, the plugins pinned in
-# distribution/plugins.json, and the two put together as one tarball.
+# Builds the distribution: the Dashboards platform, the plugins that distribution/plugins.json
+# ships, and the two put together as one tarball.
 #
 #   distribution/scripts/build.sh platform          target/opensearch-dashboards-<version>-linux-<arch>.tar.gz
 #   distribution/scripts/build.sh plugin <name>     target/plugins/<name>-<version>.zip
@@ -78,15 +78,17 @@ build_plugins() {
 
 assemble() {
   [ -f "$PLATFORM_TARBALL" ] || { echo "Missing $PLATFORM_TARBALL: run '$0 platform' first." >&2; exit 1; }
-  ls "$TARGET"/plugins/*.zip >/dev/null 2>&1 || { echo "No plugin zips in target/plugins: run '$0 plugins' first." >&2; exit 1; }
 
   local dist="$TARGET/$DIST_NAME"
   rm -rf "$dist"
   mkdir -p "$dist"
   tar -xzf "$PLATFORM_TARBALL" -C "$dist" --strip-components=1
 
-  local zip
-  for zip in "$TARGET"/plugins/*.zip; do
+  # Only the plugins the manifest ships: a zip an earlier build left in target/plugins stays out.
+  local name zip
+  for name in $(node distribution/scripts/fetch_plugins.js --list); do
+    zip="$(ls "$TARGET/plugins/$name"-*.zip 2>/dev/null | head -n 1)"
+    [ -n "$zip" ] || { echo "No zip for $name in target/plugins: run '$0 plugin $name' first." >&2; exit 1; }
     echo "Installing $(basename "$zip")"
     "$dist/bin/opensearch-dashboards-plugin" install "file://$zip" ${ALLOW_ROOT:+--allow-root}
   done
