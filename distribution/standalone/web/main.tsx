@@ -28,6 +28,7 @@ function readBootData(): BootData {
     settingsDefaults: {},
     settingsOverrides: {},
     map: { tileUrl: '', attribution: '' },
+    libraries: { vega: '', vegaLite: '' },
   };
   if (!element?.textContent) return fallback;
   try {

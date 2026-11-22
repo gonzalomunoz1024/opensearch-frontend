@@ -13,6 +13,7 @@ import { FormRow, NumberField, RangeField, Select, Switch, TextArea, TextField, 
 import { aggLabel, type AggConfig, type AggContext } from '../../lib/aggs';
 import { ControlsOptions, ControlsTab } from './controls_editor';
 import { axisName, nextAxisId, oppositeSide } from './defaults';
+import { VegaSpecEditor } from './vega_editor';
 
 export interface OptionsProps {
   type: string;
@@ -738,6 +739,7 @@ const TABS: Record<string, OptionTab[]> = {
     { id: 'controls', label: 'Controls', render: (props) => <ControlsTab {...props} /> },
     { id: 'options', label: 'Options', render: (props) => <ControlsOptions {...props} /> },
   ],
+  vega: [{ id: 'options', label: 'Options', render: (props) => <VegaSpecEditor {...props} /> }],
 };
 
 /** The tabs of a kind's settings, after "Data" when it is drawn from aggregations */

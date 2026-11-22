@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, EmptyPrompt, IconButton, Link, Loading, Tabs, cx } from '../../components/basic';
 import { Popover } from '../../components/overlay';
-import type { AggConfig, AggContext, Table } from '../../lib/aggs';
+import type { AggConfig, AggContext } from '../../lib/aggs';
 import type { TimeRange } from '../../lib/dates';
 import { mergeFilters } from '../../lib/query';
 import type { Filter, IndexPattern, Query } from '../../lib/types';
@@ -20,7 +20,6 @@ import { href, navigate, setHashParams, setLeaveGuard, useLocation } from '../..
 import { services } from '../../services';
 import { errorMessage } from '../../services/http';
 import { patternName } from '../../services/index_patterns';
-import type { RequestRecord } from '../../services/search';
 import { TopNav, type TopNavItem } from '../../shell/chrome';
 import { isPinned, splitFilters } from '../../shell/filter_bar';
 import { Inspector } from '../../shell/inspect';
@@ -29,12 +28,16 @@ import { SaveModal, ShareModal, type SaveResult } from '../../shell/saved_object
 import { SearchBar } from '../../shell/search_bar';
 import { addRecentlyAccessed, currentGlobalParam, useAutoRefresh, useBreadcrumbs, useGlobalState } from '../../shell/state';
 import { resolveVisSource, visContext, type VisInput } from '../../vis/request';
-import { Visualization, canDraw } from '../../vis/visualization';
+import { specIndexPatterns } from '../../vis/vega/index_patterns';
+import { Visualization, canDraw, type VisInspectData } from '../../vis/visualization';
 import { DataTab } from './data_tab';
 import { defaultParams, newVis, syncParams, visProblems } from './defaults';
 import { optionTabs } from './options';
 
 export const VISUALIZE = '/app/visualize';
+
+// The kinds whose changes can be applied as they are made
+const AUTO_APPLY = new Set(['markdown', 'vega']);
 
 // The same text for the same state, whatever order its keys came in: the address sorts them
 const stable = (value: unknown): string =>
@@ -95,7 +98,10 @@ export function VisEditor({ savedId }: { savedId?: string }) {
   const [tick, setTick] = useState(0);
   const [tried, setTried] = useState(false);
   const [dialog, setDialog] = useState<'save' | 'share' | 'inspect' | 'link'>();
-  const lastData = useRef<{ requests: RequestRecord[]; table?: Table }>();
+  const lastData = useRef<VisInspectData>();
+  const [autoApply, setAutoApply] = useState(false);
+  // The index patterns of the page's filters, for a kind that names them in its own settings
+  const [usedPatterns, setUsedPatterns] = useState<IndexPattern[]>([]);
 
   const createType = location.hashParams.type;
   const createPattern = location.hashParams.indexPattern;
@@ -144,6 +150,24 @@ export function VisEditor({ savedId }: { savedId?: string }) {
   useEffect(() => {
     if (appliedKey) setDraft(JSON.parse(appliedKey) as Draft);
   }, [appliedKey]);
+
+  // A Vega spec names the indices it searches: the filter bar offers their fields, or else the default pattern's
+  const vegaSpec = saved?.type === 'vega' ? applied?.params.spec : undefined;
+  useEffect(() => {
+    if (saved?.type !== 'vega') return undefined;
+    let live = true;
+    (async () => {
+      let patterns = await specIndexPatterns(vegaSpec);
+      if (!patterns.length) {
+        const fallback = await services.indexPatterns.defaultId();
+        patterns = fallback ? [await services.indexPatterns.get(fallback)] : [];
+      }
+      if (live && patterns.length) setUsedPatterns(patterns);
+    })().catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [saved?.type, vegaSpec]);
 
   const query: Query = useMemo(
     () => urlState.query ?? saved?.source.query ?? { query: '', language: defaultQueryLanguage() },
@@ -222,6 +246,13 @@ export function VisEditor({ savedId }: { savedId?: string }) {
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, []);
+
+  // With auto apply on, a change is applied once nothing has changed for 300 ms
+  useEffect(() => {
+    if (!autoApply || !dirty) return undefined;
+    const timer = setTimeout(() => updateRef.current(), 300);
+    return () => clearTimeout(timer);
+  }, [autoApply, dirty, draftKey]);
 
   const title = saved?.title ?? '';
   useBreadcrumbs([{ text: 'Visualize', to: appUrl(VISUALIZE, '/') }, { text: saved?.id ? title || 'Visualization' : 'Create' }]);
@@ -303,7 +334,7 @@ export function VisEditor({ savedId }: { savedId?: string }) {
     }
   };
 
-  const hasRequests = aggBased || saved.type === 'metrics';
+  const hasRequests = aggBased || saved.type === 'metrics' || saved.type === 'vega';
   const navItems: TopNavItem[] = [
     {
       id: 'inspect',
@@ -338,7 +369,7 @@ export function VisEditor({ savedId }: { savedId?: string }) {
       <TopNav items={navItems} />
       {showBar && (
         <SearchBar
-          indexPatterns={indexPattern ? [indexPattern] : []}
+          indexPatterns={indexPattern ? [indexPattern] : saved.type === 'vega' ? usedPatterns : []}
           query={query}
           onQuerySubmit={(next) => writeApp({ query: next })}
           filters={filters}
@@ -348,7 +379,7 @@ export function VisEditor({ savedId }: { savedId?: string }) {
           onTimeChange={setTime}
           onRefreshChange={(refreshInterval) => setGlobal({ refreshInterval })}
           onRefresh={refresh}
-          showQuery={aggBased || saved.type === 'metrics'}
+          showQuery={aggBased || saved.type === 'metrics' || saved.type === 'vega'}
         />
       )}
       <div className="vzeEditor">
@@ -385,6 +416,7 @@ export function VisEditor({ savedId }: { savedId?: string }) {
           />
           {!collapsed && (
             <>
+              {saved.type === 'vega' && !linked && <div className="vzeSide__title vzeSide__title--placeholder" />}
               {(indexPattern || linked) && (
                 <div className="vzeSide__title">
                   {linked ? (
@@ -418,7 +450,7 @@ export function VisEditor({ savedId }: { savedId?: string }) {
                 </div>
               )}
               {tabs.length > 1 && <Tabs tabs={tabs} selected={selected} onSelect={setTab} />}
-              <div className="vzeSide__body">
+              <div className={cx('vzeSide__body', saved.type === 'vega' && 'vzeSide__body--flush')}>
                 {selected === 'data' && aggBased ? (
                   <DataTab
                     type={saved.type}
@@ -435,22 +467,38 @@ export function VisEditor({ savedId }: { savedId?: string }) {
               </div>
               <div className="vzeSide__footer">
                 {tried && hasProblems && <span className="atlFormRow__error">Errors in the highlighted fields need to be resolved.</span>}
-                <div className="vzeSide__buttons">
-                  <Button
-                    variant="empty"
-                    icon="cross"
-                    disabled={!dirty}
-                    onClick={() => {
-                      setDraft(applied);
-                      setTried(false);
-                    }}
-                    testId="visualizeEditorResetButton"
-                  >
-                    Discard
-                  </Button>
-                  <Button variant="primary" icon="play" disabled={!dirty} onClick={update} testId="visualizeEditorRenderButton">
-                    Update
-                  </Button>
+                <div className={cx('vzeSide__buttons', AUTO_APPLY.has(saved.type) && 'vzeSide__buttons--auto')}>
+                  {!autoApply && (
+                    <>
+                      <Button
+                        variant="empty"
+                        icon="cross"
+                        disabled={!dirty}
+                        onClick={() => {
+                          setDraft(applied);
+                          setTried(false);
+                        }}
+                        testId="visualizeEditorResetButton"
+                      >
+                        Discard
+                      </Button>
+                      <Button variant="primary" icon="refresh" disabled={!dirty} onClick={update} testId="visualizeEditorRenderButton">
+                        Update
+                      </Button>
+                    </>
+                  )}
+                  {AUTO_APPLY.has(saved.type) && (
+                    <Button
+                      className="vzeSide__autoApply"
+                      variant={autoApply ? 'primary' : 'default'}
+                      icon="refresh"
+                      aria-label="Auto apply editor changes"
+                      aria-pressed={autoApply}
+                      title={`${autoApply ? 'Auto apply is on' : 'Auto apply is off'}\nAuto updates the visualization on every change.`}
+                      onClick={() => setAutoApply(!autoApply)}
+                      testId="visualizeEditorAutoButton"
+                    />
+                  )}
                 </div>
               </div>
             </>
@@ -481,6 +529,7 @@ export function VisEditor({ savedId }: { savedId?: string }) {
           title={saved.title || 'Visualization'}
           requests={lastData.current?.requests ?? []}
           table={lastData.current?.table}
+          vega={lastData.current?.vega}
           onClose={() => setDialog(undefined)}
         />
       )}

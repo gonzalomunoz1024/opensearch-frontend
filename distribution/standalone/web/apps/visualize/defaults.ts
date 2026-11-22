@@ -11,6 +11,7 @@
 import { METRIC_TYPES, BUCKET_TYPES, aggLabel, type AggConfig, type AggContext } from '../../lib/aggs';
 import type { Field, IndexPattern } from '../../lib/types';
 import { visType, type Vis, type VisType } from '../../lib/vis';
+import { DEFAULT_VEGA_SPEC } from '../../vis/vega/default_spec';
 
 export type Schema = NonNullable<VisType['schemas']>[number];
 
@@ -194,6 +195,7 @@ const DEFAULT_PARAMS: Record<string, () => Record<string, unknown>> = {
   }),
   markdown: () => ({ fontSize: 12, openLinksInNewTab: false, markdown: '' }),
   input_control_vis: () => ({ controls: [], updateFiltersOnChange: false, useTimeFilter: false, pinFilters: false }),
+  vega: () => ({ spec: DEFAULT_VEGA_SPEC }),
 };
 
 export const defaultParams = (type: string): Record<string, unknown> => DEFAULT_PARAMS[type]?.() ?? {};

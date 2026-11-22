@@ -413,6 +413,10 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
           settingsDefaults: config.uiSettings.defaults,
           settingsOverrides: config.uiSettings.overrides,
           map: config.map,
+          libraries: {
+            vega: `${config.server.basePath}/${build.assets.vega ?? ''}`,
+            vegaLite: `${config.server.basePath}/${build.assets.vegaLite ?? ''}`,
+          },
         },
       }),
     };

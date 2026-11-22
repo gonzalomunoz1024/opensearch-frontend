@@ -20,6 +20,8 @@ export interface BootData {
   settingsDefaults: Record<string, unknown>;
   settingsOverrides: Record<string, unknown>;
   map: { tileUrl: string; attribution: string };
+  /** Where the browser builds of Vega and Vega-Lite are, loaded when a Vega visualization is drawn */
+  libraries: { vega: string; vegaLite: string };
 }
 
 export interface Services {

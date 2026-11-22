@@ -19,6 +19,7 @@ import type { SavedObject } from '../../services/saved_objects';
 import { totalOf, type RequestRecord } from '../../services/search';
 import type { VisInput } from '../../vis/request';
 import type { Turn } from '../../vis/turns';
+import type { VegaDebugValues } from '../../vis/vega/debug_view';
 import { Visualization, takesTurn } from '../../vis/visualization';
 import { DocTable, type SortPair } from '../discover/doc_table';
 import { DocDetails } from '../discover/doc_viewer';
@@ -34,6 +35,7 @@ export interface LoadedObject {
 export interface PanelData {
   requests: RequestRecord[];
   table?: Table;
+  vega?: VegaDebugValues;
 }
 
 interface SearchAttributes {

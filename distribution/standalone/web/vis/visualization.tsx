@@ -25,9 +25,18 @@ import { TableVis } from './table_vis';
 import { TagCloudVis } from './tag_cloud_vis';
 import { splitTables, type VisRenderProps } from './types';
 import { TsvbVis } from './tsvb/vis';
+import type { VegaDebugValues } from './vega/debug_view';
+import { VegaVis } from './vega/vega_vis';
 import { XYVis } from './xy_vis';
 import { waitTurn, type Turn } from './turns';
 import '../styles/vis.css';
+
+/** What Inspect shows of a visualization */
+export interface VisInspectData {
+  requests: RequestRecord[];
+  table?: Table;
+  vega?: VegaDebugValues;
+}
 
 export interface VisualizationProps {
   vis: Vis;
@@ -41,8 +50,8 @@ export interface VisualizationProps {
   /** Controls replace their own among the page's filters */
   onFiltersChange?: (filters: Filter[]) => void;
   onTimeChange?: (range: TimeRange) => void;
-  /** What Inspect shows: the requests made and the table drawn */
-  onData?: (data: { requests: RequestRecord[]; table?: Table }) => void;
+  /** What Inspect shows: the requests made, and the table drawn or the Vega view */
+  onData?: (data: VisInspectData) => void;
   /** This chart's place among the charts of the page, when the page keeps one */
   turn?: Turn;
 }
@@ -65,7 +74,8 @@ const DRAWN: Record<string, (props: VisRenderProps) => ReactNode> = {
 const LEGEND_KINDS = new Set(['area', 'line', 'histogram', 'horizontal_bar', 'pie', 'heatmap']);
 
 /** Whether this product draws a kind of visualization */
-export const canDraw = (type: string) => type in DRAWN || type === 'markdown' || type === 'input_control_vis' || type === 'metrics';
+export const canDraw = (type: string) =>
+  type in DRAWN || type === 'markdown' || type === 'input_control_vis' || type === 'metrics' || type === 'vega';
 
 /** Whether a kind of visualization takes colours from the page's memory, and so a turn */
 export const takesTurn = (type: string) => type in DRAWN;
@@ -153,6 +163,18 @@ export function Visualization(props: VisualizationProps) {
     body = <ControlsVis vis={vis} input={props.input} onFiltersChange={props.onFiltersChange} tick={props.tick} />;
   } else if (vis.type === 'metrics') {
     body = <TsvbVis vis={vis} input={props.input} tick={props.tick} onTimeChange={props.onTimeChange} onData={props.onData} />;
+  } else if (vis.type === 'vega') {
+    body = (
+      <VegaVis
+        vis={vis}
+        input={props.input}
+        tick={props.tick}
+        onFilter={props.onFilter}
+        onFiltersChange={props.onFiltersChange}
+        onTimeChange={props.onTimeChange}
+        onData={props.onData}
+      />
+    );
   } else if (vis.type in DRAWN) body = <AggVisualization {...props} />;
   else {
     body = (

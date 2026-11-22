@@ -159,6 +159,8 @@ export interface MenuItem {
   icon?: IconName;
   onClick?: () => void;
   to?: string;
+  /** A page elsewhere, opened in a new tab */
+  href?: string;
   danger?: boolean;
   disabled?: boolean;
   selected?: boolean;
@@ -184,23 +186,42 @@ export function Menu({
       {items.map((item, index) => (
         <div key={item.id ?? index}>
           {item.separated && <div className="atlMenu__separator" />}
-          <button
-            type="button"
-            role="menuitem"
-            className={cx('atlMenu__item', item.danger && 'atlMenu__item--danger')}
-            aria-selected={item.selected}
-            disabled={item.disabled}
-            title={item.title}
-            data-test-subj={item.testId}
-            onClick={() => {
-              item.onClick?.();
-              onDone?.();
-            }}
-          >
-            {item.icon && <Icon name={item.icon} />}
-            <span className="atlGrow atlTruncate">{item.label}</span>
-            {item.selected && <Icon name="check" />}
-          </button>
+          {item.href !== undefined ? (
+            <a
+              role="menuitem"
+              className="atlMenu__item"
+              href={item.href}
+              target="_blank"
+              rel="noreferrer"
+              title={item.title}
+              data-test-subj={item.testId}
+              onClick={() => {
+                item.onClick?.();
+                onDone?.();
+              }}
+            >
+              {item.icon && <Icon name={item.icon} />}
+              <span className="atlGrow atlTruncate">{item.label}</span>
+            </a>
+          ) : (
+            <button
+              type="button"
+              role="menuitem"
+              className={cx('atlMenu__item', item.danger && 'atlMenu__item--danger')}
+              aria-selected={item.selected}
+              disabled={item.disabled}
+              title={item.title}
+              data-test-subj={item.testId}
+              onClick={() => {
+                item.onClick?.();
+                onDone?.();
+              }}
+            >
+              {item.icon && <Icon name={item.icon} />}
+              <span className="atlGrow atlTruncate">{item.label}</span>
+              {item.selected && <Icon name="check" />}
+            </button>
+          )}
         </div>
       ))}
     </div>
