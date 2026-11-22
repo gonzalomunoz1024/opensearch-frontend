@@ -414,6 +414,24 @@
   padding: 0;
 }
 
+/* The short URL switch of the share dialog, its tip, and why a short URL could not be made */
+.shlShortUrl {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.shlShortUrl__switch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.shlShortUrl__tip {
+  display: inline-flex;
+  color: var(--color-text-secondary);
+}
+
 /* The form that saves a query */
 .shlSaveQuery__errors {
   margin: 0;
