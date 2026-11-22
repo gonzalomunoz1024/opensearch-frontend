@@ -1280,3 +1280,112 @@ mark,
   color: var(--color-text-tertiary);
   pointer-events: none;
 }
+
+/* Text written in Markdown */
+
+.atlMarkdown {
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.atlMarkdown > :first-child {
+  margin-top: 0;
+}
+
+.atlMarkdown > :last-child {
+  margin-bottom: 0;
+}
+
+.atlMarkdown h1,
+.atlMarkdown h2,
+.atlMarkdown h3,
+.atlMarkdown h4,
+.atlMarkdown h5,
+.atlMarkdown h6 {
+  margin: 1em 0 0.5em;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.25;
+}
+
+.atlMarkdown h1 {
+  font-size: 1.6em;
+}
+
+.atlMarkdown h2 {
+  font-size: 1.4em;
+}
+
+.atlMarkdown h3 {
+  font-size: 1.2em;
+}
+
+.atlMarkdown h4,
+.atlMarkdown h5,
+.atlMarkdown h6 {
+  font-size: 1em;
+}
+
+.atlMarkdown p,
+.atlMarkdown ul,
+.atlMarkdown ol,
+.atlMarkdown blockquote,
+.atlMarkdown pre,
+.atlMarkdown table {
+  margin: 0 0 0.75em;
+}
+
+.atlMarkdown ul,
+.atlMarkdown ol {
+  padding-left: 1.5em;
+}
+
+.atlMarkdown a {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+
+.atlMarkdown blockquote {
+  padding-left: var(--space-3);
+  border-left: 3px solid var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+.atlMarkdown code {
+  padding: 0.1em 0.3em;
+  border-radius: var(--radius-xs);
+  background: var(--color-surface-secondary);
+  font-family: var(--font-family-code);
+  font-size: 0.9em;
+}
+
+.atlMarkdown pre {
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-secondary);
+  overflow: auto;
+}
+
+.atlMarkdown pre code {
+  padding: 0;
+  background: none;
+}
+
+.atlMarkdown img {
+  max-width: 100%;
+}
+
+.atlMarkdown hr {
+  margin: 1em 0;
+  border: 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.atlMarkdown table {
+  border-collapse: collapse;
+}
+
+.atlMarkdown th,
+.atlMarkdown td {
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border-light);
+}

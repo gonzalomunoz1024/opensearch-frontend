@@ -7,6 +7,8 @@ import './styles/tokens.css';
 import './styles/base.css';
 import './styles/components.css';
 import { App, registerRoute } from './app';
+import { setColorMapping } from './charts/core';
+import { Dashboards } from './apps/dashboard';
 import { Discover } from './apps/discover';
 import { startRouter } from './router';
 import { createServices, type BootData } from './services';
@@ -32,6 +34,7 @@ function readBootData(): BootData {
 
 const boot = readBootData();
 const services = createServices(boot);
+setColorMapping(services.uiSettings.get<Record<string, string>>('visualization:colorMapping', {}));
 startRouter(boot.basePath);
 
 // The theme is a class on the page; the server wrote the one the setting names
@@ -48,6 +51,7 @@ applyTheme();
 services.uiSettings.subscribe(applyTheme);
 
 registerRoute({ paths: ['/app/data-explorer/discover', '/app/data-explorer'], render: () => <Discover basePath="/app/data-explorer/discover" /> });
+registerRoute({ paths: ['/app/dashboards', '/app/dashboard'], render: () => <Dashboards /> });
 registerRoute({ paths: ['/app/discover'], render: () => <Discover basePath="/app/discover" /> });
 
 const root = document.getElementById('root');

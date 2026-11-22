@@ -1,0 +1,462 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/* Visualizations: what each kind needs beyond the charts' own styles. */
+
+.visRoot {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.visRoot__progress {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 1;
+}
+
+.visError {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: var(--space-3);
+  color: var(--color-critical-text);
+  font-size: var(--font-size-xs);
+  text-align: center;
+  overflow: auto;
+}
+
+.visError span {
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+/* A chart split into several */
+
+.visSplit {
+  display: flex;
+  flex: 1 1 auto;
+  gap: var(--space-2);
+  min-width: 0;
+  min-height: 0;
+}
+
+.visSplit--rows {
+  flex-direction: column;
+}
+
+.visSplit__part {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.visSplit__title {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-align: center;
+}
+
+.visSplit__body {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Pie */
+
+.chtPieLabel text {
+  fill: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+/* Metric */
+
+.visMetric {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: space-around;
+  min-height: 0;
+  padding: var(--space-2);
+  overflow: auto;
+}
+
+.visMetric__item {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+
+.visMetric__value {
+  max-width: 100%;
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.visMetric__label {
+  font-size: var(--font-size-m);
+  line-height: 1.3;
+}
+
+/* Gauge and goal */
+
+.visGauge {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.visGauge svg {
+  display: block;
+  flex: none;
+}
+
+.visGauge text {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tag cloud */
+
+.visTagCloud {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.visTagCloud__label {
+  height: 22px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-align: center;
+}
+
+/* Data table */
+
+.visTable {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.visTable__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.visTable .atlTable__numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.visTable th.atlTable__numeric .atlTable__sort {
+  justify-content: flex-end;
+  width: 100%;
+}
+
+.visTable tfoot th {
+  border-top: 1px solid var(--color-border);
+  font-weight: var(--font-weight-semibold);
+}
+
+.visTable__cell {
+  display: inline-flex;
+  gap: var(--space-1);
+  align-items: center;
+  min-height: 22px;
+}
+
+.visTable__actions {
+  display: inline-flex;
+  visibility: hidden;
+}
+
+.visTable__actions .atlButton {
+  width: 20px;
+  height: 20px;
+}
+
+.visTable tr:hover .visTable__actions,
+.visTable__cell:focus-within .visTable__actions {
+  visibility: visible;
+}
+
+/* Markdown */
+
+.visMarkdown {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--space-2) var(--space-4);
+  overflow: auto;
+}
+
+/* Controls */
+
+.visControls {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+  padding: var(--space-3) var(--space-4);
+  overflow: auto;
+}
+
+.visControls__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+}
+
+.visControls__control {
+  display: flex;
+  flex: 1 1 200px;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.visControls__label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.visControls__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.visControls__range {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.visControls__range > .atlField {
+  flex: none;
+  width: 68px;
+}
+
+.visControls__dual {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 60px;
+  height: 40px;
+}
+
+.visControls__track {
+  position: absolute;
+  top: 11px;
+  right: 0;
+  left: 0;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--chart-band);
+}
+
+.visControls__track span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 2px;
+  background: var(--color-accent);
+}
+
+.visControls__dual input[type='range'] {
+  position: absolute;
+  top: 3px;
+  left: 0;
+  width: 100%;
+  height: 20px;
+  margin: 0;
+  background: none;
+  pointer-events: none;
+  appearance: none;
+}
+
+.visControls__dual input[type='range']::-webkit-slider-runnable-track {
+  background: none;
+}
+
+.visControls__dual input[type='range']::-moz-range-track {
+  background: none;
+}
+
+.visControls__dual input[type='range']::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  pointer-events: auto;
+  appearance: none;
+}
+
+.visControls__dual input[type='range']::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.visControls__dual input[type='range']:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
+}
+
+.visControls__dual input[type='range']:disabled::-webkit-slider-thumb {
+  cursor: not-allowed;
+}
+
+.visControls__ends {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  justify-content: space-between;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* TSVB */
+
+.visTsvbMetric {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--space-1);
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  text-align: center;
+}
+
+.visTsvbMetric__label {
+  font-size: var(--font-size-m);
+  opacity: 0.8;
+}
+
+.visTsvbMetric__value {
+  font-size: 44px;
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.1;
+}
+
+.visTsvbMetric__secondary {
+  font-size: var(--font-size-s);
+}
+
+.visTsvbTopN {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--space-2);
+  overflow: auto;
+}
+
+.visTsvbTopN table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-xs);
+}
+
+.visTsvbTopN td {
+  padding: var(--space-1) var(--space-2);
+  vertical-align: middle;
+}
+
+.visTsvbTopN__label {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.visTsvbTopN__bar {
+  width: 60%;
+}
+
+.visTsvbTopN__bar span {
+  display: block;
+  height: 14px;
+  border-radius: 0 4px 4px 0;
+}
+
+.visTsvbTopN__value {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-medium);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.visTsvbGauge {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.visTsvbGauge text {
+  font-variant-numeric: tabular-nums;
+}
+
+.visTsvbTable__trend {
+  display: inline-block;
+  width: 1.4em;
+  color: var(--color-text-secondary);
+  text-align: right;
+}

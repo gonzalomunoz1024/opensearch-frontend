@@ -143,7 +143,9 @@ const fieldOf = (agg: AggConfig, context: AggContext): Field | undefined => {
 function fieldClause(agg: AggConfig, context: AggContext): Dsl {
   const field = fieldOf(agg, context);
   if (field?.scripted && field.script) {
-    return { script: { source: field.script, lang: field.lang ?? 'painless' } };
+    // Without the type the values of a script come back as text, and sort as text
+    const valueType = field.type === 'number' ? 'float' : field.type === 'date' ? 'date' : field.type === 'boolean' ? 'boolean' : undefined;
+    return { script: { source: field.script, lang: field.lang ?? 'painless' }, ...(valueType ? { value_type: valueType } : {}) };
   }
   return { field: fieldNameOf(agg) };
 }

@@ -14,13 +14,16 @@ export const HISTOGRAM_AGG_ID = '2';
 
 export interface DiscoverRequest {
   indexPattern: IndexPattern;
-  query: Query;
+  /** One query, or several that must all hold: a dashboard's and a saved search's */
+  query: Query | Query[];
   filters: Filter[];
   range?: AbsoluteRange;
   sort: SortPair[];
   size: number;
   /** What the histogram is asked in: auto, or a unit */
   interval?: string;
+  /** Leave the histogram out: a saved search on a dashboard shows only its documents */
+  documentsOnly?: boolean;
 }
 
 export function histogramAgg(indexPattern: IndexPattern, interval: string | undefined): AggConfig | undefined {
@@ -90,7 +93,7 @@ export function sortClause(indexPattern: IndexPattern, sort: SortPair[]): Array<
 
 export function buildDiscoverRequest(request: DiscoverRequest): Record<string, unknown> {
   const { indexPattern, range } = request;
-  const query = buildQuery(indexPattern, [request.query], request.filters, services.queryConfig());
+  const query = buildQuery(indexPattern, request.query, request.filters, services.queryConfig());
   const timeFilter = timeRangeFilter(indexPattern, range);
   if (timeFilter) query.bool.filter.push(timeFilter);
   const body: Record<string, unknown> = {
@@ -107,7 +110,7 @@ export function buildDiscoverRequest(request: DiscoverRequest): Record<string, u
         }
       : undefined,
   };
-  const histogram = histogramAgg(indexPattern, request.interval);
+  const histogram = request.documentsOnly ? undefined : histogramAgg(indexPattern, request.interval);
   if (histogram && range) body.aggs = buildAggsDsl([histogram], aggContext(indexPattern, range));
   return body;
 }

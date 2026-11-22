@@ -20,8 +20,7 @@ import { createPortal } from 'react-dom';
 /*
  * The series colours of OpenSearch Dashboards (its component library's palette), so that a
  * dashboard keeps the colours it was built with and a colour someone picked for a series still
- * sits beside its neighbours. A label keeps its colour everywhere: the same country is the same
- * colour in every panel of a dashboard.
+ * sits beside its neighbours.
  */
 export const SERIES_COLORS = [
   '#54B399',
@@ -36,7 +35,6 @@ export const SERIES_COLORS = [
   '#E7664C',
 ];
 
-const assigned = new Map<string, string>();
 let configured: Record<string, string> = {};
 
 /** The setting visualization:colorMapping: labels with a colour of their own */
@@ -44,20 +42,87 @@ export function setColorMapping(mapping: Record<string, string>) {
   configured = mapping ?? {};
 }
 
-/** The colour of a series by its label; `overrides` are the colours picked in one visualization */
-export function colorFor(label: string, overrides?: Record<string, string>): string {
-  if (overrides?.[label]) return overrides[label];
-  if (configured[label]) return configured[label];
-  let color = assigned.get(label);
-  if (!color) {
-    // Past the palette the colours come round again, lighter or darker by turns
-    const index = assigned.size;
-    const base = SERIES_COLORS[index % SERIES_COLORS.length];
-    const round = Math.floor(index / SERIES_COLORS.length);
-    color = round === 0 ? base : shade(base, round % 2 === 1 ? 0.25 * Math.ceil(round / 2) : -0.2 * (round / 2));
-    assigned.set(label, color);
+const mix = (from: string, to: string, share: number): string => {
+  const a = parseColor(from);
+  const b = parseColor(to);
+  return `#${a.map((channel, index) => Math.round(channel + (b[index] - channel) * share).toString(16).padStart(2, '0')).join('')}`;
+};
+
+/*
+ * The palette for a number of labels: the ten colours, and past ten the same colours again in
+ * lighter and darker turns ("rotations"), in the order OpenSearch Dashboards hands them out.
+ */
+function rotatedPalette(rotations: number): string[] {
+  if (rotations <= 1) return SERIES_COLORS;
+  const turns = SERIES_COLORS.map((color) => {
+    const dark = mix(color, '#000000', 0.5);
+    const light = mix(color, '#ffffff', 0.5);
+    const stops = rotations === 2 ? [color, light] : [dark, color, light];
+    return Array.from({ length: rotations }, (_, index) => {
+      const at = (index / (rotations - 1)) * (stops.length - 1);
+      const low = Math.min(stops.length - 2, Math.floor(at));
+      return mix(stops[low], stops[low + 1], at - low);
+    });
+  });
+  const order: number[] = [];
+  if (rotations === 2) order.push(0, 1);
+  else {
+    // From the colour itself outward, lighter and darker by turns
+    const middle = Math.floor(rotations / 2);
+    order.push(middle);
+    for (let step = 1; step <= middle; step += 1) {
+      if (middle + step < rotations) order.push(middle + step);
+      if (middle - step >= 0) order.push(middle - step);
+    }
   }
-  return color;
+  return order.flatMap((turn) => turns.map((colors) => colors[turn]));
+}
+
+// Which colour a label has been given, for as long as the page lives
+const mapped = new Map<string, string>();
+
+/**
+ * The colours of a chart's series, by label, as OpenSearch Dashboards gives them: a label keeps
+ * the colour it first got, on every chart of the page, and the labels a chart brings that have
+ * none yet take the palette from its start, in the order they come. A colour picked in the
+ * visualization (`overrides`) or set for the label in visualization:colorMapping comes first.
+ */
+export function assignColors(labels: string[], overrides?: Record<string, string>): Map<string, string> {
+  const keys = [...new Set(labels)];
+  const taken: string[] = [];
+  const fresh: string[] = [];
+  const configuredColors = Object.values(configured).map((color) => color.toLowerCase());
+  for (const key of keys) {
+    if (configured[key]) {
+      mapped.delete(key);
+      taken.push(configured[key].toLowerCase());
+      continue;
+    }
+    // A label whose colour has since been set aside for another in the setting takes a new one.
+    // The setting's colours are kept in lower case and the palette is written in upper case, so
+    // this never holds for a colour of the palette; OpenSearch Dashboards compares them the same way.
+    const current = mapped.get(key);
+    if (current === undefined || configuredColors.includes(current)) fresh.push(key);
+  }
+  const palette = rotatedPalette(Math.ceil(keys.length / 10)).filter((color) => !taken.includes(color.toLowerCase()));
+  fresh.forEach((key, index) => {
+    if (palette[index]) mapped.set(key, palette[index]);
+  });
+  return new Map(keys.map((key) => [key, overrides?.[key] ?? configured[key] ?? mapped.get(key) ?? SERIES_COLORS[0]]));
+}
+
+/** The palette dealt out in order, round and round, with no memory: the words of a tag cloud */
+export function ordinalColors(labels: string[], overrides?: Record<string, string>): Map<string, string> {
+  const colors = new Map<string, string>();
+  for (const label of labels) {
+    if (!colors.has(label)) colors.set(label, overrides?.[label] ?? SERIES_COLORS[colors.size % SERIES_COLORS.length]);
+  }
+  return colors;
+}
+
+/** The colour of one label on its own */
+export function colorFor(label: string, overrides?: Record<string, string>): string {
+  return assignColors([label], overrides).get(label) ?? SERIES_COLORS[0];
 }
 
 /** A colour moved toward white (above zero) or black (below) */
@@ -88,17 +153,26 @@ export function readableOn(color: string): string {
 
 // --- Colour ramps for magnitudes: heat maps, gauges, maps ---------------------------------------
 
-const RAMPS: Record<string, string[]> = {
-  Blues: ['#f7fbff', '#c6dbef', '#6baed6', '#2171b5', '#08306b'],
-  Greens: ['#f7fcf5', '#c7e9c0', '#74c476', '#238b45', '#00441b'],
-  Greys: ['#ffffff', '#d9d9d9', '#969696', '#525252', '#000000'],
-  Reds: ['#fff5f0', '#fcbba1', '#fb6a4a', '#cb181d', '#67000d'],
-  'Yellow to Red': ['#ffffcc', '#fed976', '#fd8d3c', '#e31a1c', '#800026'],
-  'Green to Red': ['#006837', '#86cb66', '#ffffbf', '#f88d52', '#a50026'],
+// The status colours of the theme, which two of the ramps run between
+function token(name: string, fallback: string): string {
+  if (typeof document === 'undefined') return fallback;
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
+}
+
+// As OpenSearch Dashboards builds them: white to one colour of the palette, or between status colours
+const RAMPS: Record<string, () => string[]> = {
+  Blues: () => ['#ffffff', '#6092C0'],
+  Greens: () => ['#ffffff', '#54B399'],
+  Greys: () => ['#ffffff', '#d3dae6', '#98a2b3', '#69707d', '#343741'],
+  Reds: () => ['#ffffff', '#E7664C'],
+  'Yellow to Red': () => [token('--color-warning', '#ff9500'), token('--color-critical', '#ff3b30')],
+  'Green to Red': () => [token('--color-healthy', '#34c759'), token('--color-warning', '#ff9500'), token('--color-critical', '#ff3b30')],
 };
 
 function interpolate(stops: string[], at: number): string {
   const clamped = Math.max(0, Math.min(1, at));
+  if (stops.length === 1) return stops[0];
   const scaled = clamped * (stops.length - 1);
   const index = Math.min(stops.length - 2, Math.floor(scaled));
   const fraction = scaled - index;
@@ -110,7 +184,7 @@ function interpolate(stops: string[], at: number): string {
 
 /** The colour at a place between 0 and 1 on a named ramp of OpenSearch Dashboards */
 export function rampColor(schema: string, at: number, inverted = false): string {
-  const stops = RAMPS[schema] ?? RAMPS.Greens;
+  const stops = (RAMPS[schema] ?? RAMPS.Greens)();
   return interpolate(stops, inverted ? 1 - at : at);
 }
 
@@ -126,7 +200,8 @@ export function niceTicks(min: number, max: number, count = 5): number[] {
   const raw = span / Math.max(1, count);
   const magnitude = 10 ** Math.floor(Math.log10(raw));
   const fraction = raw / magnitude;
-  const step = (fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10) * magnitude;
+  // The round step nearest the one asked for, as charts usually choose it
+  const step = (fraction >= 7.07 ? 10 : fraction >= 3.16 ? 5 : fraction >= 1.41 ? 2 : 1) * magnitude;
   const ticks: number[] = [];
   const first = Math.ceil(min / step - 1e-9) * step;
   for (let value = first; value <= max + step * 1e-9; value += step) {
@@ -142,6 +217,48 @@ export function niceDomain(min: number, max: number, count = 5): [number, number
   if (ticks.length < 2) return [min, max];
   const step = ticks[1] - ticks[0];
   return [Math.floor(min / step + 1e-9) * step, Math.ceil(max / step - 1e-9) * step];
+}
+
+/*
+ * The classic charts of OpenSearch Dashboards choose their value axes in a way of their own: so
+ * many ticks for the length of the axis, steps by an older rounding rule, and a range widened to
+ * the step that ten ticks would have. The visualizations saved there look as they did only when
+ * the same choices are made here.
+ */
+function classicStep(span: number, count: number): number {
+  const raw = span / Math.max(1, count);
+  let step = 10 ** Math.floor(Math.log10(raw));
+  const error = step / raw;
+  if (error <= 0.15) step *= 10;
+  else if (error <= 0.35) step *= 5;
+  else if (error <= 0.75) step *= 2;
+  return step;
+}
+
+export function classicTickCount(length: number): number {
+  const at = Math.max(20, Math.min(1000, length));
+  return Math.ceil(at <= 40 ? ((at - 20) / 20) * 3 : 3 + ((at - 40) / 960) * 8);
+}
+
+export function classicTicks(min: number, max: number, count: number): number[] {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || count < 1) return [];
+  if (min === max) return [min];
+  const step = classicStep(max - min, count);
+  const ticks: number[] = [];
+  for (let value = Math.ceil(min / step - 1e-9) * step; value <= max + step * 1e-9; value += step) {
+    ticks.push(Math.abs(value) < step * 1e-9 ? 0 : Number(value.toPrecision(12)));
+  }
+  return ticks;
+}
+
+export function classicDomain(min: number, max: number): [number, number] {
+  let domain: [number, number] = [min, max];
+  if (!(max > min)) return min === 0 ? [0, 1] : domain;
+  for (let pass = 0; pass < 2; pass += 1) {
+    const step = classicStep(domain[1] - domain[0], 10);
+    domain = [Math.floor(domain[0] / step + 1e-9) * step, Math.ceil(domain[1] / step - 1e-9) * step];
+  }
+  return [Number(domain[0].toPrecision(12)), Number(domain[1].toPrecision(12))];
 }
 
 const TIME_STEPS = [
@@ -315,6 +432,8 @@ export interface LegendItem {
   label: string;
   color: string;
   hidden?: boolean;
+  /** A figure shown beside the name: the latest value of the series */
+  value?: string;
 }
 
 export type LegendPosition = 'right' | 'left' | 'top' | 'bottom';
@@ -346,6 +465,7 @@ export function Legend({
           >
             <span className="chtSwatch" style={{ background: item.hidden ? 'transparent' : item.color, boxShadow: `inset 0 0 0 2px ${item.color}` }} />
             <span className="atlTruncate">{item.label}</span>
+            {item.value !== undefined && <span className="chtLegend__value">{item.value}</span>}
           </button>
         </li>
       ))}

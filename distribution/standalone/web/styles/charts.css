@@ -200,3 +200,28 @@
   color: var(--color-text-secondary);
   text-align: center;
 }
+
+.chtMarkLine line {
+  stroke: currentcolor;
+  stroke-dasharray: 3 3;
+  stroke-width: 1;
+}
+
+.chtMarkLine circle {
+  fill: currentcolor;
+  stroke: var(--color-surface);
+  stroke-width: 2;
+}
+
+/* The latest value of a series, at the far end of its line in the legend */
+.chtLegend__value {
+  margin-left: auto;
+  padding-left: var(--space-3, 12px);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+.chtLegend--top .chtLegend__value,
+.chtLegend--bottom .chtLegend__value {
+  margin-left: 0;
+}

@@ -29,8 +29,9 @@ import { addRecentlyAccessed, currentGlobalParam, useAutoRefresh, useBreadcrumbs
 import { DocDetails } from './doc_viewer';
 import { DocTable, type SortPair } from './doc_table';
 import { DocPage, ContextPage } from './doc_pages';
-import { HISTOGRAM_AGG_ID, aggContext, buildDiscoverRequest, histogramAgg } from './search';
+import { aggContext, buildDiscoverRequest, histogramAgg } from './search';
 import { Sidebar } from './sidebar';
+import { normalizeSort } from './sort';
 import '../../styles/discover.css';
 
 interface SavedSearchAttributes {
@@ -58,17 +59,6 @@ interface UrlAppState {
 interface UrlQueryState {
   query?: Query;
   filters?: Filter[];
-}
-
-/** A sort as pairs, from any of the forms it has been saved in */
-export function normalizeSort(sort: unknown): SortPair[] {
-  if (!Array.isArray(sort) || sort.length === 0) return [];
-  if (typeof sort[0] === 'string') {
-    return sort.length >= 2 ? [[sort[0], sort[1] === 'asc' ? 'asc' : 'desc']] : [];
-  }
-  return (sort as unknown[])
-    .filter((pair): pair is [string, string] => Array.isArray(pair) && typeof pair[0] === 'string')
-    .map(([field, direction]) => [field, direction === 'asc' ? 'asc' : 'desc']);
 }
 
 const INTERVALS = [
@@ -663,4 +653,3 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
   );
 }
 
-export { HISTOGRAM_AGG_ID };
