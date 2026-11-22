@@ -1,0 +1,411 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/* Visualize: the editor (chart at the left, data and settings at the right) and the dialog a
+   new visualization starts from. Class prefix: vze. */
+
+.vzePage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  height: calc(100vh - var(--header-height));
+  min-height: 420px;
+  padding: var(--space-2);
+}
+
+.vzeEditor {
+  display: flex;
+  flex: 1 1 auto;
+  gap: var(--space-2);
+  min-height: 0;
+}
+
+.vzeChart {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.vzeChart > .atlEmpty {
+  margin: auto;
+}
+
+/* --- The sidebar --------------------------------------------------------------------------- */
+
+.vzeSide {
+  position: relative;
+  display: flex;
+  flex: 0 0 412px;
+  flex-direction: column;
+  width: 412px;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-secondary);
+}
+
+.vzeSide--collapsed {
+  flex-basis: 36px;
+  width: 36px;
+}
+
+.vzeSide__collapse {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: 1;
+}
+
+.vzeSide--collapsed .vzeSide__collapse {
+  right: 3px;
+}
+
+.vzeSide__title {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-8) var(--space-2) var(--space-3);
+  font-size: var(--font-size-m);
+}
+
+.vzeSide__title > * {
+  min-width: 0;
+}
+
+.vzeSide__link {
+  display: flex;
+  max-width: 100%;
+  color: var(--color-accent);
+}
+
+.vzeSide > .atlTabs {
+  flex: 0 0 auto;
+  padding: 0 var(--space-3);
+}
+
+.vzeSide__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 0;
+  padding: var(--space-2);
+  overflow-y: auto;
+}
+
+.vzeSide__footer {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border-top: 1px solid var(--color-border-light);
+}
+
+.vzeSide__buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+
+/* --- A panel of the sidebar, and the fields in it ------------------------------------------- */
+
+.vzePanel {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.vzePanel--fill {
+  flex: 1 1 auto;
+  min-height: 240px;
+}
+
+.vzePanel__title {
+  margin: 0;
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-semibold);
+}
+
+.vzePanel__add {
+  display: flex;
+  justify-content: center;
+}
+
+.vzeFields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.vzeFields .atlFormRow {
+  max-width: none;
+}
+
+.vzePair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+
+.vzePair > * {
+  min-width: 0;
+}
+
+.vzeSub {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) 0 var(--space-2) var(--space-3);
+  border-left: 2px solid var(--color-border-light);
+}
+
+.vzeSub__title {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: none;
+}
+
+.vzeRanges {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.vzeRanges__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.vzeRanges__row > .atlField {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.vzeRanges__sign {
+  flex: 0 0 auto;
+  min-width: 14px;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  text-align: center;
+}
+
+.vzeColor {
+  width: 56px;
+  height: var(--control-height-s);
+  padding: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+.vzeMarkdown {
+  flex: 1 1 auto;
+  min-height: 200px;
+  resize: vertical;
+}
+
+/* --- An aggregation ------------------------------------------------------------------------- */
+
+.vzeAgg {
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-secondary);
+}
+
+.vzeAgg--error {
+  border-color: var(--color-critical);
+}
+
+.vzeAgg__head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px var(--space-1) 2px 0;
+}
+
+.vzeAgg__toggle {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-2) var(--space-1) var(--space-2) var(--space-2);
+  border: 0;
+  background: none;
+  font-size: var(--font-size-s);
+  text-align: left;
+  cursor: pointer;
+}
+
+.vzeAgg__toggle strong {
+  flex: 0 0 auto;
+  font-weight: var(--font-weight-semibold);
+}
+
+.vzeAgg__label {
+  flex: 1 1 auto;
+  color: var(--color-text-secondary);
+}
+
+.vzeAgg--off .vzeAgg__toggle {
+  color: var(--color-text-tertiary);
+}
+
+.vzeAgg--off .vzeAgg__label {
+  color: var(--color-text-tertiary);
+  text-decoration: line-through;
+}
+
+.vzeAgg__warn {
+  display: inline-flex;
+  color: var(--color-critical-text);
+}
+
+.vzeAgg__remove:hover:not(:disabled) {
+  color: var(--color-critical-text);
+}
+
+.vzeAgg__body {
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  border-top: 1px solid var(--color-border-light);
+  background: var(--color-surface);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+}
+
+.vzeAgg > .atlFormRow__error {
+  padding: 0 var(--space-3) var(--space-2);
+}
+
+/* --- "New Visualization" -------------------------------------------------------------------- */
+
+.vzeNew {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: var(--space-4);
+  min-height: 380px;
+}
+
+.vzeNew__types {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.vzeNew__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vzeNew__type {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  height: 84px;
+  padding: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  text-align: center;
+  cursor: pointer;
+  transition: background var(--duration-fast), border-color var(--duration-fast);
+}
+
+.vzeNew__type:hover,
+.vzeNew__type:focus-visible {
+  border-color: var(--color-border);
+  background: var(--color-hover);
+}
+
+.vzeNew__type .atlIcon {
+  color: var(--color-accent);
+}
+
+.vzeNew__type--off,
+.vzeNew__type--off .atlIcon {
+  color: var(--color-text-tertiary);
+  cursor: default;
+}
+
+.vzeNew__mark {
+  position: absolute;
+  top: var(--space-1);
+  right: var(--space-1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--color-surface-tertiary);
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.vzeNew__about {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  font-size: var(--font-size-s);
+}
+
+.vzeNew__about p {
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  .vzePage {
+    height: auto;
+  }
+
+  .vzeEditor {
+    flex-direction: column;
+  }
+
+  .vzeChart {
+    height: 360px;
+    flex: 0 0 auto;
+  }
+
+  .vzeSide {
+    flex: 0 0 auto;
+    width: auto;
+  }
+
+  .vzeNew {
+    grid-template-columns: 1fr;
+  }
+}

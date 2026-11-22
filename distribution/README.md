@@ -19,6 +19,7 @@ lives here, so the upstream tree stays close to what upstream ships.
 | `helm/infradashboard` | The Kubernetes chart. |
 | `screenshots/` | What the release image looks like, for this page and for pull requests. Not part of the build. |
 | `UPSTREAM.md` | Which upstream files the fork changes, and how to take an upstream release. |
+| `standalone/` | The same product re-created with two npm packages, for where the fork's 2,360 cannot be fetched. A project of its own: see its README. |
 
 ## No sign-in, no permissions
 

@@ -1,0 +1,187 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/* Dashboards: the grid, its panels, and what editing adds to them. */
+
+.dshPage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 100%;
+  padding: var(--space-2);
+}
+
+.dshPage--fullScreen {
+  padding: var(--space-2);
+}
+
+.dshGrid {
+  position: relative;
+  width: 100%;
+}
+
+.dshGrid__item {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.dshGrid__item--settling {
+  transition:
+    transform var(--duration-fast) var(--ease-out-quint),
+    width var(--duration-fast) var(--ease-out-quint),
+    height var(--duration-fast) var(--ease-out-quint);
+}
+
+.dshGrid__item--active {
+  z-index: 2;
+  transition: none;
+}
+
+.dshGrid--stacked {
+  display: flex;
+  flex-direction: column;
+}
+
+.dshGrid--expanded {
+  height: calc(100vh - var(--header-height) - 120px);
+  min-height: 320px;
+}
+
+.dshGrid--flush .dshPanel {
+  border-radius: 0;
+}
+
+body.dshDragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.dshPanel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.dshPanel--dragging {
+  box-shadow: var(--shadow-lg);
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.dshPanel__header {
+  display: flex;
+  flex: none;
+  gap: var(--space-1);
+  align-items: center;
+  min-height: 28px;
+  padding: var(--space-1) var(--space-1) 0 var(--space-2);
+}
+
+.dshPanel__header--floating {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 1;
+  min-height: 0;
+  padding: var(--space-1);
+}
+
+.dshPanel--editing .dshPanel__header {
+  cursor: grab;
+}
+
+.dshPanel__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+.dshPanel__menu {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  opacity: 0;
+}
+
+.dshPanel:hover .dshPanel__menu,
+.dshPanel:focus-within .dshPanel__menu,
+.dshPanel--editing .dshPanel__menu {
+  opacity: 1;
+}
+
+.dshPanel__body {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: var(--space-1) var(--space-2) var(--space-2);
+}
+
+.dshPanel__resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 18px;
+  height: 18px;
+  cursor: se-resize;
+}
+
+.dshPanel__resize::after {
+  content: "";
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--color-text-tertiary);
+  border-bottom: 2px solid var(--color-text-tertiary);
+}
+
+.dshSearch {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.dshEmpty {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  min-height: 320px;
+}
+
+.dshExitFullScreen {
+  position: fixed;
+  bottom: var(--space-3);
+  left: var(--space-3);
+  z-index: 50;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dshGrid__item--settling {
+    transition: none;
+  }
+}
+
+/* On a dashboard the button that opens a chart's legend shows when the panel is pointed at */
+.dshPanel .chtLegendToggle {
+  opacity: 0;
+  transition: opacity var(--duration-fast);
+}
+
+.dshPanel:hover .chtLegendToggle,
+.dshPanel .chtLegendToggle:focus-visible,
+.dshPanel .chtLegendToggle--open {
+  opacity: 1;
+}

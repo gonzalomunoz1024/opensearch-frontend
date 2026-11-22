@@ -1,0 +1,25 @@
+InfraDashboard
+
+This product is a re-creation of OpenSearch Dashboards (https://opensearch.org/), written to be
+built from two npm packages. It contains no code of the OpenSearch Dashboards packages, but it
+follows that product closely so that what was saved with it keeps working, and parts of it are
+derived from it under the Apache License, Version 2.0:
+
+  - the mappings of the saved objects index (server/saved_objects_mappings.json),
+  - the names, defaults and descriptions of the advanced settings (web/lib/settings_catalogue.json),
+  - the rules by which a saved visualization is drawn: its axes, ticks, ranges, measures and the
+    order in which the colours of the palette are given out,
+  - the palette of chart colours, which is that of the OpenSearch UI framework.
+
+OpenSearch Dashboards
+Copyright OpenSearch Contributors
+
+OpenSearch Dashboards includes software, including Kibana source code, developed by
+Elasticsearch (http://www.elastic.co).
+Copyright 2009-2021 Elasticsearch B.V.
+
+The browser script bundles React, React DOM and Scheduler, under the MIT License,
+Copyright (c) Facebook, Inc. and its affiliates. Their licence texts are in dist/licenses of a
+build.
+
+"OpenSearch" is a trademark of its owner. InfraDashboard is not an OpenSearch project.

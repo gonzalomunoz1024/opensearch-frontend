@@ -1,0 +1,1503 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/* The controls every page is built from, drawn the way the Atlas kit draws them. */
+
+/* --- Icons --------------------------------------------------------------------------------- */
+
+.atlIcon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.atlIcon--l {
+  width: 20px;
+  height: 20px;
+}
+
+.atlIcon--xl {
+  width: 32px;
+  height: 32px;
+}
+
+/* --- Buttons ------------------------------------------------------------------------------- */
+
+.atlButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: var(--control-height);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out-quint),
+    transform var(--duration-fast) var(--ease-out-quint);
+  user-select: none;
+}
+
+.atlButton:hover {
+  background: color-mix(in srgb, var(--color-text-primary) 8%, var(--color-surface-secondary));
+  text-decoration: none;
+}
+
+.atlButton:active {
+  transform: scale(0.97);
+}
+
+.atlButton--primary {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.atlButton--primary:hover {
+  background: color-mix(in srgb, var(--color-accent) 88%, #000000);
+}
+
+.atlButton--tint {
+  background: var(--color-accent-tint);
+  color: var(--color-accent);
+}
+
+.atlButton--tint:hover {
+  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+}
+
+.atlButton--danger {
+  background: var(--color-critical-tint);
+  color: var(--color-critical-text);
+}
+
+.atlButton--danger:hover {
+  background: color-mix(in srgb, var(--color-critical) 18%, transparent);
+}
+
+.atlButton--dangerFill {
+  background: var(--color-critical);
+  color: var(--color-on-accent);
+}
+
+.atlButton--dangerFill:hover {
+  background: color-mix(in srgb, var(--color-critical) 88%, #000000);
+}
+
+.atlButton--empty {
+  background: transparent;
+  color: var(--color-accent);
+  padding: 0 var(--space-2);
+}
+
+.atlButton--empty:hover {
+  background: var(--color-accent-tint);
+}
+
+.atlButton--ghost {
+  background: transparent;
+  color: var(--color-text-primary);
+  padding: 0 var(--space-2);
+}
+
+.atlButton--ghost:hover {
+  background: var(--color-hover);
+}
+
+.atlButton--s {
+  height: var(--control-height-s);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+}
+
+.atlButton--icon {
+  width: var(--control-height);
+  padding: 0;
+}
+
+.atlButton--icon.atlButton--s {
+  width: var(--control-height-s);
+}
+
+.atlButton--full {
+  width: 100%;
+}
+
+.atlButton:disabled,
+.atlButton[aria-disabled="true"] {
+  background: var(--color-surface-secondary);
+  color: var(--color-text-tertiary);
+  cursor: not-allowed;
+  transform: none;
+}
+
+.atlButton--empty:disabled,
+.atlButton--ghost:disabled {
+  background: transparent;
+}
+
+/* --- Fields -------------------------------------------------------------------------------- */
+
+.atlField {
+  display: block;
+  width: 100%;
+  height: var(--control-height);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  transition:
+    border-color var(--duration-fast) var(--ease-out-quint),
+    box-shadow var(--duration-fast) var(--ease-out-quint);
+}
+
+.atlField::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.atlField:focus,
+.atlField:focus-within {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
+  outline: none;
+}
+
+.atlField:disabled {
+  color: var(--color-text-tertiary);
+  cursor: not-allowed;
+}
+
+.atlField--invalid {
+  border-color: var(--color-critical);
+}
+
+.atlField--s {
+  height: var(--control-height-s);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+}
+
+textarea.atlField {
+  height: auto;
+  min-height: 72px;
+  padding: var(--space-2) var(--space-3);
+  resize: vertical;
+  line-height: 1.43;
+}
+
+select.atlField {
+  padding-right: 28px;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%2386868b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 16px;
+  cursor: pointer;
+}
+
+/* A field with something before or after the text: an icon, a button */
+.atlFieldGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-2);
+  cursor: text;
+}
+
+.atlFieldGroup > input {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  outline: none;
+}
+
+.atlFieldGroup > .atlIcon {
+  color: var(--color-text-tertiary);
+}
+
+.atlFormRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 400px;
+}
+
+.atlFormRow--full {
+  max-width: none;
+}
+
+.atlFormRow__label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.atlFormRow__help {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.atlFormRow__error {
+  font-size: var(--font-size-xs);
+  color: var(--color-critical-text);
+}
+
+.atlCheckbox,
+.atlRadio {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  user-select: none;
+}
+
+.atlCheckbox input,
+.atlRadio input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
+.atlSwitch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  user-select: none;
+}
+
+.atlSwitch__track {
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--color-border);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out-quint);
+}
+
+.atlSwitch__track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--duration-normal) var(--ease-out-quint);
+}
+
+.atlSwitch__track[aria-checked="true"] {
+  background: var(--color-healthy);
+}
+
+.atlSwitch__track[aria-checked="true"]::after {
+  transform: translateX(16px);
+}
+
+.atlSwitch__track:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* --- Surfaces ------------------------------------------------------------------------------ */
+
+.atlPanel {
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-4);
+}
+
+.atlPanel--flush {
+  padding: 0;
+}
+
+.atlPanel--subdued {
+  background: var(--color-surface-secondary);
+  box-shadow: none;
+}
+
+.atlPanel--plain {
+  box-shadow: none;
+}
+
+.atlDivider {
+  height: 1px;
+  border: 0;
+  margin: var(--space-4) 0;
+  background: var(--color-border-light);
+}
+
+.atlMaterial {
+  background-color: var(--color-surface);
+  box-shadow:
+    inset 0 0.5px 0 0 var(--material-highlight),
+    0 0 0 1px var(--material-keyline),
+    var(--shadow-lg);
+}
+
+@supports (backdrop-filter: blur(1px)) {
+  .atlMaterial {
+    background-color: var(--material-background);
+    backdrop-filter: saturate(180%) blur(24px);
+  }
+}
+
+.atlBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: 100%;
+  height: 20px;
+  padding: 0 var(--space-2);
+  border-radius: 10px;
+  background: var(--color-surface-secondary);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+}
+
+.atlBadge--accent {
+  background: var(--color-accent-tint);
+  color: var(--color-accent);
+}
+
+.atlBadge--healthy {
+  background: var(--color-healthy-tint);
+  color: var(--color-healthy-text);
+}
+
+.atlBadge--warning {
+  background: var(--color-warning-tint);
+  color: var(--color-warning-text);
+}
+
+.atlBadge--critical {
+  background: var(--color-critical-tint);
+  color: var(--color-critical-text);
+}
+
+.atlHealth {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.atlHealth::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-text-tertiary);
+}
+
+.atlHealth--healthy::before {
+  background: var(--color-healthy);
+}
+
+.atlHealth--warning::before {
+  background: var(--color-warning);
+}
+
+.atlHealth--critical::before {
+  background: var(--color-critical);
+}
+
+.atlCallOut {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-accent-tint);
+  color: var(--color-text-primary);
+}
+
+.atlCallOut > .atlIcon {
+  margin-top: 2px;
+  color: var(--color-accent);
+}
+
+.atlCallOut__title {
+  font-weight: var(--font-weight-semibold);
+}
+
+.atlCallOut--healthy {
+  background: var(--color-healthy-tint);
+}
+
+.atlCallOut--healthy > .atlIcon {
+  color: var(--color-healthy-text);
+}
+
+.atlCallOut--warning {
+  background: var(--color-warning-tint);
+}
+
+.atlCallOut--warning > .atlIcon {
+  color: var(--color-warning-text);
+}
+
+.atlCallOut--critical {
+  background: var(--color-critical-tint);
+}
+
+.atlCallOut--critical > .atlIcon {
+  color: var(--color-critical-text);
+}
+
+.atlEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-8) var(--space-4);
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.atlEmpty > .atlIcon {
+  color: var(--color-text-tertiary);
+}
+
+.atlEmpty__title {
+  color: var(--color-text-primary);
+}
+
+.atlEmpty__body {
+  max-width: 480px;
+}
+
+.atlSpinner {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--color-border-light);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: atlSpin 0.8s linear infinite;
+}
+
+.atlSpinner--l {
+  width: 32px;
+  height: 32px;
+  border-width: 3px;
+}
+
+@keyframes atlSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.atlLoading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  color: var(--color-text-secondary);
+}
+
+.atlProgress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  overflow: hidden;
+  z-index: 2;
+}
+
+.atlProgress::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: var(--color-accent);
+  animation: atlProgress 1.2s var(--ease-out-quint) infinite;
+}
+
+@keyframes atlProgress {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(250%);
+  }
+}
+
+/* --- Tabs ---------------------------------------------------------------------------------- */
+
+.atlTabs {
+  display: flex;
+  gap: var(--space-4);
+  border-bottom: 1px solid var(--color-border-light);
+  overflow-x: auto;
+}
+
+.atlTab {
+  position: relative;
+  padding: var(--space-2) 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.atlTab:hover {
+  color: var(--color-text-primary);
+  text-decoration: none;
+}
+
+.atlTab[aria-selected="true"] {
+  color: var(--color-accent);
+}
+
+.atlTab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--color-accent);
+}
+
+/* A segmented control: the kit's way to pick one of a few */
+.atlSegments {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-secondary);
+}
+
+.atlSegment {
+  height: 24px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+.atlSegment[aria-pressed="true"] {
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+/* --- Tables -------------------------------------------------------------------------------- */
+
+.atlTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-s);
+}
+
+.atlTable th {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border-light);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.atlTable td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border-light);
+  vertical-align: middle;
+}
+
+.atlTable tbody tr:hover {
+  background: var(--color-surface-tertiary);
+}
+
+.atlTable tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.atlTable__sort {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.atlTable__sort:hover {
+  color: var(--color-text-primary);
+}
+
+.atlTable__check {
+  width: 32px;
+}
+
+.atlTable__actions {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.atlTable--compact th,
+.atlTable--compact td {
+  padding: 6px var(--space-2);
+  font-size: var(--font-size-xs);
+}
+
+.atlTableWrap {
+  overflow-x: auto;
+}
+
+.atlPagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-1);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.atlPagination__pages {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.atlPagination__page {
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+}
+
+.atlPagination__page:hover:not(:disabled) {
+  background: var(--color-hover);
+}
+
+.atlPagination__page[aria-current="true"] {
+  color: var(--color-accent);
+  font-weight: var(--font-weight-semibold);
+}
+
+.atlPagination__page:disabled {
+  color: var(--color-text-tertiary);
+  cursor: default;
+}
+
+/* --- What floats: popovers, menus, dialogs, flyouts, toasts ---------------------------------- */
+
+.atlPopover {
+  position: fixed;
+  z-index: 3000;
+  min-width: 160px;
+  max-width: min(480px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+  border-radius: var(--radius-md);
+  animation: atlPop var(--duration-fast) var(--ease-out-quint);
+}
+
+.atlPopover--padded {
+  padding: var(--space-3);
+}
+
+@keyframes atlPop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+.atlMenu {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-1);
+  margin: 0;
+  list-style: none;
+}
+
+.atlMenu__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 30px;
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  text-align: left;
+  cursor: pointer;
+}
+
+.atlMenu__item:hover,
+.atlMenu__item[aria-selected="true"],
+.atlMenu__item--active {
+  background: var(--color-hover);
+  text-decoration: none;
+}
+
+.atlMenu__item--danger {
+  color: var(--color-critical-text);
+}
+
+.atlMenu__item:disabled {
+  color: var(--color-text-tertiary);
+  cursor: not-allowed;
+  background: none;
+}
+
+.atlMenu__title {
+  padding: var(--space-2) var(--space-2) var(--space-1);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.atlMenu__separator {
+  height: 1px;
+  margin: var(--space-1) 0;
+  background: var(--color-border-light);
+}
+
+.atlScrim {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: var(--scrim);
+  animation: atlFade var(--duration-fast) linear;
+}
+
+@keyframes atlFade {
+  from {
+    opacity: 0;
+  }
+}
+
+.atlModal {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 480px;
+  max-height: calc(100vh - 32px);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+  animation: atlRise var(--duration-normal) var(--ease-out-quint);
+}
+
+.atlModal--wide {
+  max-width: 800px;
+}
+
+@keyframes atlRise {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+.atlModal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-6) var(--space-2);
+}
+
+.atlModal__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--space-2) var(--space-6);
+  overflow: auto;
+}
+
+.atlModal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-6) var(--space-5);
+}
+
+.atlFlyout {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3500;
+  display: flex;
+  flex-direction: column;
+  width: min(560px, 100vw);
+  border-left: 1px solid var(--color-border-light);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+  animation: atlSlide var(--duration-normal) var(--ease-out-quint);
+}
+
+.atlFlyout--wide {
+  width: min(840px, 100vw);
+}
+
+@keyframes atlSlide {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+}
+
+.atlFlyout__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.atlFlyout__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--space-4) var(--space-5);
+  overflow: auto;
+}
+
+.atlFlyout__footer {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--color-border-light);
+}
+
+.atlToasts {
+  position: fixed;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  z-index: 5000;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: min(360px, calc(100vw - 32px));
+}
+
+.atlToast {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  animation: atlRise var(--duration-normal) var(--ease-out-quint);
+}
+
+.atlToast__body {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.atlToast__title {
+  font-weight: var(--font-weight-semibold);
+}
+
+.atlToast__text {
+  margin-top: 2px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  white-space: pre-wrap;
+}
+
+.atlToast > .atlIcon {
+  margin-top: 2px;
+}
+
+.atlToast--healthy > .atlIcon {
+  color: var(--color-healthy);
+}
+
+.atlToast--warning > .atlIcon {
+  color: var(--color-warning);
+}
+
+.atlToast--critical > .atlIcon {
+  color: var(--color-critical);
+}
+
+.atlTooltip {
+  position: fixed;
+  z-index: 6000;
+  max-width: 320px;
+  padding: 6px var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xs);
+  pointer-events: none;
+}
+
+/* --- Code ---------------------------------------------------------------------------------- */
+
+.atlCode {
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  font-family: var(--font-family-code);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow: auto;
+}
+
+.atlCode--inline {
+  display: inline;
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+}
+
+.atlCodeEditor {
+  --code-gutter: 44px;
+  position: relative;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-code);
+  font-size: var(--font-size-xs);
+  font-variant-ligatures: none;
+  line-height: 18px;
+  overflow: auto;
+}
+
+.atlCodeEditor:focus-within,
+.atlCodeEditor--readOnly:focus-visible {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
+  outline: none;
+}
+
+/* The drawing sets the size; the text area lies over it and scrolls with it */
+.atlCodeEditor__body {
+  position: relative;
+  width: max-content;
+  min-width: 100%;
+  min-height: 100%;
+  counter-reset: code-line;
+}
+
+.atlCodeEditor--wrap .atlCodeEditor__body {
+  width: 100%;
+}
+
+.atlCodeEditor__paint {
+  margin: 0;
+  padding: var(--space-2) 0;
+  font: inherit;
+  white-space: pre;
+  tab-size: 2;
+  pointer-events: none;
+  user-select: none;
+}
+
+.atlCodeEditor--readOnly .atlCodeEditor__paint {
+  pointer-events: auto;
+  user-select: text;
+}
+
+.atlCodeEditor--wrap .atlCodeEditor__paint,
+.atlCodeEditor--wrap .atlCodeEditor__input {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.atlCodeEditor__line {
+  min-height: 1lh;
+  padding: 0 var(--space-3) 0 var(--code-gutter);
+  background: var(--color-surface-secondary);
+  counter-increment: code-line;
+}
+
+/* The number of a line stays at the left when a long line is scrolled to its end */
+.atlCodeEditor__line::before {
+  content: counter(code-line);
+  position: sticky;
+  left: 0;
+  display: inline-block;
+  width: calc(var(--code-gutter) - var(--space-2));
+  margin: 0 var(--space-2) 0 calc(-1 * var(--code-gutter));
+  background: inherit;
+  color: var(--color-text-tertiary);
+  text-align: right;
+  user-select: none;
+}
+
+.atlCodeEditor__line--marked {
+  background: color-mix(in srgb, var(--color-text-primary) 7%, var(--color-surface-secondary));
+}
+
+.atlCodeEditor__input {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--code-gutter);
+  border: 0;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--color-text-primary);
+  font: inherit;
+  letter-spacing: inherit;
+  white-space: pre;
+  tab-size: 2;
+  resize: none;
+  outline: none;
+  overflow: hidden;
+}
+
+.atlCodeEditor__input::selection {
+  background: color-mix(in srgb, var(--color-accent) 28%, transparent);
+  color: transparent;
+}
+
+.atlCodeEditor__input::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.atlCodeEditor--noGutter {
+  --code-gutter: var(--space-3);
+}
+
+.atlCodeEditor--noGutter .atlCodeEditor__line::before {
+  content: none;
+}
+
+/* --- What could be typed next -------------------------------------------------------------- */
+
+.atlSuggest {
+  position: fixed;
+  z-index: 3000;
+  min-width: 220px;
+  max-width: 420px;
+  max-height: 240px;
+  margin: 0;
+  padding: var(--space-1);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+  font-family: var(--font-family-code);
+  font-size: var(--font-size-xs);
+  list-style: none;
+  overflow-y: auto;
+}
+
+.atlSuggest__item {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+
+.atlSuggest__item--active {
+  background: var(--color-accent-tint);
+}
+
+.atlSuggest__meta {
+  color: var(--color-text-tertiary);
+}
+
+.atlKey {
+  display: inline-block;
+  padding: 0 5px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-family-code);
+  font-size: var(--font-size-xs);
+}
+
+.tokComment {
+  color: var(--code-comment);
+}
+
+.tokString {
+  color: var(--code-string);
+}
+
+.tokKey {
+  color: var(--code-name);
+}
+
+.tokNumber {
+  color: var(--code-number);
+}
+
+.tokKeyword {
+  color: var(--code-keyword);
+}
+
+/* --- Combo box ----------------------------------------------------------------------------- */
+
+.atlCombo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--control-height);
+  height: auto;
+  padding: 3px var(--space-2);
+  cursor: text;
+}
+
+.atlCombo > input {
+  flex: 1 1 60px;
+  min-width: 60px;
+  height: 24px;
+  border: 0;
+  background: transparent;
+  outline: none;
+}
+
+.atlCombo__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  height: 22px;
+  padding: 0 2px 0 var(--space-2);
+  border-radius: 6px;
+  background: var(--color-surface);
+  box-shadow: 0 0 0 1px var(--color-border-light);
+  font-size: var(--font-size-xs);
+}
+
+.atlCombo__pill button {
+  display: inline-flex;
+  padding: 2px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+}
+
+.atlCombo__pill button:hover {
+  color: var(--color-text-primary);
+}
+
+.atlCombo__list {
+  max-height: 280px;
+  overflow: auto;
+}
+
+.atlCombo__empty {
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+/* --- Field kind tokens ---------------------------------------------------------------------- */
+
+.atlToken {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: var(--color-surface-secondary);
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-code);
+  font-size: 10px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+}
+
+.atlToken--number {
+  background: var(--color-healthy-tint);
+  color: var(--color-healthy-text);
+}
+
+.atlToken--date {
+  background: var(--color-accent-tint);
+  color: var(--color-accent);
+}
+
+.atlToken--geo_point,
+.atlToken--geo_shape,
+.atlToken--ip {
+  background: var(--color-warning-tint);
+  color: var(--color-warning-text);
+}
+
+.atlToken--conflict {
+  background: var(--color-critical-tint);
+  color: var(--color-critical-text);
+}
+
+.atlDescriptionList {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+}
+
+.atlDescriptionList dt {
+  color: var(--color-text-secondary);
+}
+
+.atlDescriptionList dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.atlAccordion__button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  width: 100%;
+  padding: var(--space-2) 0;
+  border: 0;
+  background: none;
+  font-weight: var(--font-weight-semibold);
+  text-align: left;
+  cursor: pointer;
+}
+
+.atlLinkButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.atlLinkButton:hover {
+  text-decoration: underline;
+}
+
+mark,
+.atlMark {
+  border-radius: 2px;
+  background: var(--color-highlight);
+  color: inherit;
+}
+
+/* --- Page furniture ------------------------------------------------------------------------- */
+
+.atlPageHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.atlPageHeader__description {
+  margin-top: var(--space-1);
+  max-width: 720px;
+}
+
+.atlXs {
+  font-size: var(--font-size-xs);
+}
+
+.atlRange {
+  width: 100%;
+  accent-color: var(--color-accent);
+}
+
+.atlCombo--s {
+  min-height: var(--control-height-s);
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+}
+
+.atlCombo--disabled {
+  color: var(--color-text-tertiary);
+  cursor: not-allowed;
+}
+
+.atlCombo__clear {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+}
+
+.atlCombo__clear:hover {
+  color: var(--color-text-primary);
+}
+
+.atlCombo__caret {
+  color: var(--color-text-tertiary);
+  pointer-events: none;
+}
+
+/* Text written in Markdown */
+
+.atlMarkdown {
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.atlMarkdown > :first-child {
+  margin-top: 0;
+}
+
+.atlMarkdown > :last-child {
+  margin-bottom: 0;
+}
+
+.atlMarkdown h1,
+.atlMarkdown h2,
+.atlMarkdown h3,
+.atlMarkdown h4,
+.atlMarkdown h5,
+.atlMarkdown h6 {
+  margin: 1em 0 0.5em;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.25;
+}
+
+.atlMarkdown h1 {
+  font-size: 1.6em;
+}
+
+.atlMarkdown h2 {
+  font-size: 1.4em;
+}
+
+.atlMarkdown h3 {
+  font-size: 1.2em;
+}
+
+.atlMarkdown h4,
+.atlMarkdown h5,
+.atlMarkdown h6 {
+  font-size: 1em;
+}
+
+.atlMarkdown p,
+.atlMarkdown ul,
+.atlMarkdown ol,
+.atlMarkdown blockquote,
+.atlMarkdown pre,
+.atlMarkdown table {
+  margin: 0 0 0.75em;
+}
+
+.atlMarkdown ul,
+.atlMarkdown ol {
+  padding-left: 1.5em;
+}
+
+.atlMarkdown a {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+
+.atlMarkdown blockquote {
+  padding-left: var(--space-3);
+  border-left: 3px solid var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+.atlMarkdown code {
+  padding: 0.1em 0.3em;
+  border-radius: var(--radius-xs);
+  background: var(--color-surface-secondary);
+  font-family: var(--font-family-code);
+  font-size: 0.9em;
+}
+
+.atlMarkdown pre {
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-secondary);
+  overflow: auto;
+}
+
+.atlMarkdown pre code {
+  padding: 0;
+  background: none;
+}
+
+.atlMarkdown img {
+  max-width: 100%;
+}
+
+.atlMarkdown hr {
+  margin: 1em 0;
+  border: 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.atlMarkdown table {
+  border-collapse: collapse;
+}
+
+.atlMarkdown th,
+.atlMarkdown td {
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border-light);
+}

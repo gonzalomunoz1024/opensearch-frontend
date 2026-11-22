@@ -1,0 +1,264 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/* Charts: marks carry the colour of their series; everything around them is quiet. */
+
+.chtFrame {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  gap: var(--space-2);
+}
+
+.chtFrame__plot {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.chtPlot {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.chtPlot svg {
+  display: block;
+  overflow: visible;
+  user-select: none;
+}
+
+/* Proportional figures: labels are measured, and placed, as the classic charts measure theirs */
+.chtAxis text,
+.chtText {
+  fill: var(--color-text-secondary);
+  font-size: var(--font-size-chart);
+}
+
+.chtAxisTitle {
+  fill: var(--color-text-primary);
+  font-size: var(--font-size-chart);
+  font-weight: var(--font-weight-semibold);
+}
+
+.chtGrid {
+  stroke: var(--chart-line);
+  stroke-width: 1;
+  shape-rendering: crispedges;
+}
+
+.chtAxisLine {
+  stroke: var(--color-border);
+  stroke-width: 1;
+  shape-rendering: crispedges;
+}
+
+.chtCrosshair {
+  stroke: var(--color-text-tertiary);
+  stroke-width: 1;
+  shape-rendering: crispedges;
+  pointer-events: none;
+}
+
+.chtBand {
+  fill: var(--color-text-primary);
+  opacity: 0.06;
+  pointer-events: none;
+}
+
+.chtBrush {
+  fill: var(--color-accent);
+  opacity: 0.15;
+  pointer-events: none;
+}
+
+.chtEndZone {
+  fill: var(--color-text-primary);
+  fill-opacity: 0.08;
+  pointer-events: none;
+}
+
+.chtNowLine {
+  stroke: var(--color-critical);
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+.chtDim {
+  opacity: 0.25;
+}
+
+.chtMark {
+  transition: opacity var(--duration-fast) linear;
+}
+
+.chtClickable {
+  cursor: pointer;
+}
+
+.chtLegend {
+  display: flex;
+  flex: none;
+  gap: 2px var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: auto;
+}
+
+.chtLegend--right,
+.chtLegend--left {
+  flex-direction: column;
+  width: 25%;
+  min-width: 96px;
+  max-width: 220px;
+}
+
+.chtLegend--right.chtLegend--classic,
+.chtLegend--left.chtLegend--classic {
+  width: 150px;
+  min-width: 150px;
+  max-width: 150px;
+}
+
+.chtLegend--top,
+.chtLegend--bottom {
+  flex-wrap: wrap;
+  max-height: 30%;
+}
+
+.chtLegend__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: none;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xs);
+  text-align: left;
+  cursor: pointer;
+}
+
+.chtLegend__item:hover {
+  background: var(--color-hover);
+}
+
+.chtSwatch {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 50%;
+}
+
+.chtLegend__item .chtSwatch {
+  margin-right: 0;
+}
+
+.chtTooltip {
+  position: fixed;
+  z-index: 6000;
+  max-width: 360px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  pointer-events: none;
+}
+
+.chtTooltip__title {
+  margin-bottom: var(--space-1);
+  font-weight: var(--font-weight-semibold);
+}
+
+.chtTooltip table {
+  border-collapse: collapse;
+}
+
+.chtTooltip td {
+  padding: 1px 0;
+  vertical-align: top;
+}
+
+.chtTooltip td:first-child {
+  padding-right: var(--space-4);
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.chtTooltip td:last-child {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-medium);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.chtTooltip__active td:first-child {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.chtMessage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: var(--space-3);
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.chtMarkLine line {
+  stroke: currentcolor;
+  stroke-dasharray: 3 3;
+  stroke-width: 1;
+}
+
+.chtMarkLine circle {
+  fill: currentcolor;
+  stroke: var(--color-surface);
+  stroke-width: 2;
+}
+
+/* The latest value of a series, at the far end of its line in the legend */
+.chtLegend__value {
+  margin-left: auto;
+  padding-left: var(--space-3, 12px);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+.chtLegend--top .chtLegend__value,
+.chtLegend--bottom .chtLegend__value {
+  margin-left: 0;
+}
+
+/* The button that opens and closes the legend of a classic chart, in its bottom left corner */
+.chtLegendToggle {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  display: inline-flex;
+  padding: 3px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.chtLegendToggle:hover {
+  color: var(--color-text-primary);
+}
+
+.chtLegendToggle--open {
+  background: var(--color-surface-tertiary);
+  color: var(--color-text-primary);
+}

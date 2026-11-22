@@ -1,0 +1,337 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/*
+ * What can be done to indexes, aliases and data streams alike: clearing their caches, flushing
+ * and refreshing them. Each dialog first finds which of the chosen ones are closed, blocked or
+ * red, names those apart, and does the operation to the rest.
+ */
+
+import { useEffect, useState } from 'react';
+import { CallOut } from '../../components/basic';
+import { ActionModal, Names, ism, toasts } from './common';
+import {
+  BLOCKS,
+  SINGULAR,
+  blockedIndices,
+  clearCacheToast,
+  closedWording,
+  flushBlockedMessage,
+  flushToast,
+  redOpenIndices,
+  refreshToast,
+  splitBlocked,
+  type Operand,
+  type Target,
+} from './model';
+
+// --- Work that goes on after its request -------------------------------------------------------------
+
+type Listener = () => void;
+const listeners = new Map<string, Set<Listener>>();
+
+/** Hears of work that finished in the background: an index opened, a reindex done */
+export function onJobDone(event: string, listener: Listener): () => void {
+  const set = listeners.get(event) ?? new Set<Listener>();
+  listeners.set(event, set);
+  set.add(listener);
+  return () => set.delete(listener);
+}
+
+export function jobDone(event: string) {
+  for (const listener of [...(listeners.get(event) ?? [])]) listener();
+}
+
+interface Task {
+  completed?: boolean;
+  error?: { reason?: string };
+  response?: Record<string, unknown>;
+}
+
+const POLL_MS = 3000;
+const GIVE_UP_MS = 60 * 60 * 1000;
+
+/**
+ * Follows a task of OpenSearch until it is done, asking every three seconds for at most an
+ * hour. `done` says whether the task's answer settles it; `timedOut` is told when it never did.
+ */
+export function watchTask(taskId: string, done: (task: Task) => boolean, timedOut: () => void) {
+  const started = Date.now();
+  const look = async () => {
+    const answer = await ism.request<Task>('GET', `/_tasks/${taskId}`);
+    if (answer.ok && answer.response?.completed && done(answer.response)) return;
+    if (Date.now() - started > GIVE_UP_MS) timedOut();
+    else window.setTimeout(look, POLL_MS);
+  };
+  window.setTimeout(look, POLL_MS);
+}
+
+// --- Which of the chosen ones can be worked on ----------------------------------------------------------
+
+interface Split {
+  unBlockedItems: string[];
+  blockedItems: string[];
+}
+
+/** Sorts the chosen items into those an operation can be done to and those it cannot */
+export async function filterBlockedItems(
+  items: Operand[],
+  blocks: string[],
+  target: Target,
+  filterRed = false
+): Promise<Split> {
+  let red: string[] = [];
+  if (filterRed) {
+    if (items.length === 0 && target !== 'indexes') {
+      throw new Error('Can only filter red indexes for type index.');
+    }
+    const answer = await ism.call<string>('cat.indices', { h: 'i,s', health: 'red' });
+    if (!answer.ok) throw new Error(answer.error);
+    red = redOpenIndices(answer.response);
+  }
+  if (items.length === 0) return { unBlockedItems: [], blockedItems: red };
+  const state = await ism.call('cluster.state', { metric: 'blocks' });
+  if (!state.ok) throw new Error(state.error);
+  const blocked = blockedIndices(state.response, blocks);
+  for (const index of red) blocked.add(index);
+  return splitBlocked(items, blocked);
+}
+
+interface OperationProps {
+  items: Operand[];
+  target: Target;
+  onClose: () => void;
+}
+
+/** The split of the chosen items, once it is known; every item is taken as free when it cannot be told */
+function useSplit(
+  { items, target }: OperationProps,
+  blocks: string[],
+  filterRed: boolean,
+  settle: (split: Split) => boolean
+) {
+  const [split, setSplit] = useState<Split>();
+  useEffect(() => {
+    let live = true;
+    filterBlockedItems(items, blocks, target, filterRed)
+      .catch((): Split => ({ unBlockedItems: items.map((item) => item.name), blockedItems: [] }))
+      .then((found) => {
+        if (live && settle(found)) setSplit(found);
+      });
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return split;
+}
+
+// --- Clear cache ----------------------------------------------------------------------------------------
+
+const CLEAR_HINTS: Record<Target, [string, string]> = {
+  indexes: [
+    'Cache will be cleared for the following indexes.',
+    'Cache will not be cleared for the following indexes because they may be closed or blocked.',
+  ],
+  aliases: [
+    'Cache will be cleared for the following aliases.',
+    'Cache will not be cleared for the following aliases because one or more indexes are closed or blocked.',
+  ],
+  'data streams': [
+    'Cache will be cleared for the following data streams.',
+    'Cache will not be cleared for the following data streams because one or more backing indexes are closed or blocked.',
+  ],
+};
+
+export function ClearCacheModal(props: OperationProps) {
+  const { items, target, onClose } = props;
+  const split = useSplit(
+    props,
+    [BLOCKS.CLOSED, BLOCKS.META_DATA, BLOCKS.READ_ONLY, BLOCKS.READ_ONLY_ALLOW_DELETE],
+    false,
+    (found) => {
+      if (items.length === 0 || found.blockedItems.length !== items.length) return true;
+      toasts.danger(
+        'Unable to clear cache',
+        items.length === 1
+          ? `Cache cannot be cleared for ${found.blockedItems[0]} because it is closed or blocked.`
+          : `Cache cannot be cleared for the selected ${target} because they are closed or blocked.`
+      );
+      onClose();
+      return false;
+    }
+  );
+  if (!split) return null;
+  const { unBlockedItems, blockedItems } = split;
+  const [hint, blockHint] = CLEAR_HINTS[target];
+
+  const confirm = async () => {
+    const result = await ism.call('indices.clearCache', { index: unBlockedItems.join(',') || '_all' });
+    if (result.ok) {
+      onClose();
+      toasts.success(clearCacheToast(target, unBlockedItems, items.length === 0));
+    } else if (result.error?.includes('cluster_block_exception')) {
+      toasts.danger('Clear cache failed.', 'One or more indexes are blocked.');
+    } else {
+      toasts.danger('Clear cache failed.', result.error);
+    }
+  };
+
+  return (
+    <ActionModal
+      title={`Clear cache for ${target}`}
+      label="Clear cache"
+      onClose={onClose}
+      onConfirm={confirm}
+      disabled={items.length > 0 && unBlockedItems.length === 0}
+      cancelTestId="ClearCacheCancelButton"
+      confirmTestId="ClearCacheConfirmButton"
+    >
+      {items.length === 0 ? (
+        <p>Cache will be cleared for all open indexes.</p>
+      ) : (
+        <>
+          {unBlockedItems.length > 0 && (
+            <>
+              <p>{hint}</p>
+              <Names names={unBlockedItems} />
+            </>
+          )}
+          {blockedItems.length > 0 && (
+            <CallOut tone="warning">
+              <p>{blockHint}</p>
+              <Names names={blockedItems} />
+            </CallOut>
+          )}
+        </>
+      )}
+    </ActionModal>
+  );
+}
+
+// --- Flush ----------------------------------------------------------------------------------------------
+
+export function FlushModal(props: OperationProps) {
+  const { items, target, onClose } = props;
+  const flushAll = items.length === 0 && target === 'indexes';
+  const split = useSplit(props, [BLOCKS.CLOSED], true, (found) => {
+    if (items.length > 0 && items.length === found.blockedItems.length) {
+      toasts.danger(
+        `Unable to flush ${target}`,
+        `The selected ${target} cannot be flushed because they are either closed or in red status.`
+      );
+      onClose();
+      return false;
+    }
+    if (items.length === 0 && found.blockedItems.length > 0) {
+      toasts.danger(
+        `Unable to flush ${target}`,
+        `Can not flush all open indexes because indexes [${found.blockedItems.join(',')}] are in red status.`
+      );
+      onClose();
+      return false;
+    }
+    return true;
+  });
+  if (!split) return null;
+  const { unBlockedItems, blockedItems } = split;
+
+  const confirm = async () => {
+    const result = await ism.call('indices.flush', { index: unBlockedItems.join(', ') });
+    if (result.ok) toasts.success(flushToast(target, unBlockedItems));
+    else toasts.danger(`Unable to flush ${target}`, result.error);
+    onClose();
+  };
+
+  return (
+    <ActionModal
+      title={`Flush ${target}`}
+      titleTestId="flushModalTitle"
+      label="Flush"
+      onClose={onClose}
+      onConfirm={confirm}
+      cancelTestId="flushCancelButton"
+      confirmTestId="flushConfirmButton"
+    >
+      {flushAll && <p>All open indexes will be flushed.</p>}
+      {unBlockedItems.length > 0 && (
+        <>
+          <p>{`The following ${target} will be flushed:`}</p>
+          <Names names={unBlockedItems} />
+        </>
+      )}
+      {blockedItems.length > 0 && (
+        <div data-test-subj="flushBlockedCallout">
+          <CallOut tone="warning">
+            <p>{flushBlockedMessage(target)}</p>
+            <Names names={blockedItems} />
+          </CallOut>
+        </div>
+      )}
+    </ActionModal>
+  );
+}
+
+// --- Refresh --------------------------------------------------------------------------------------------
+
+export function RefreshModal(props: OperationProps) {
+  const { items, target, onClose } = props;
+  const split = useSplit(props, [BLOCKS.CLOSED], true, (found) => {
+    if (items.length === 0 && found.blockedItems.length > 0) {
+      const verb = found.blockedItems.length === 1 ? 'is' : 'are';
+      toasts.danger(
+        'Unable to refresh indexes.',
+        `Cannot refresh all open indexes because [${found.blockedItems.join(', ')}] ${verb} in red status.`
+      );
+      onClose();
+      return false;
+    }
+    if (items.length > 0 && found.unBlockedItems.length === 0) {
+      toasts.danger(
+        `Unable to refresh ${target}.`,
+        `All selected ${target} cannot be refreshed because ${closedWording(target)} are either closed or in red status.`
+      );
+      onClose();
+      return false;
+    }
+    return true;
+  });
+  if (!split) return null;
+  const { unBlockedItems, blockedItems } = split;
+  const one = (count: number) => (count === 1 ? SINGULAR[target] : target);
+
+  const confirm = async () => {
+    const result = await ism.call('indices.refresh', { index: unBlockedItems.join(',') });
+    if (result.ok) {
+      toasts.success(refreshToast(target, unBlockedItems, items.length === 0 && blockedItems.length === 0));
+      onClose();
+    } else {
+      toasts.danger(result.error);
+    }
+  };
+
+  return (
+    <ActionModal
+      title={`Refresh ${target}`}
+      label="Refresh"
+      onClose={onClose}
+      onConfirm={confirm}
+      confirmTestId="refreshConfirmButton"
+    >
+      {items.length === 0 && blockedItems.length === 0 && <p>All open indexes will be refreshed.</p>}
+      {unBlockedItems.length > 0 && (
+        <>
+          <p>{`The following ${one(unBlockedItems.length)} will be refreshed.`}</p>
+          <Names names={unBlockedItems} testId={(name) => `UnblockedItem-${name}`} />
+        </>
+      )}
+      {blockedItems.length > 0 && (
+        <CallOut
+          tone="warning"
+          title={`The following ${one(blockedItems.length)} cannot be refreshed because ${closedWording(target)} are either closed or in red status.`}
+        >
+          <Names names={blockedItems} testId={(name) => `BlockedItem-${name}`} />
+        </CallOut>
+      )}
+    </ActionModal>
+  );
+}

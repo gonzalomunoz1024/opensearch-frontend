@@ -1,0 +1,12 @@
+@rspack/cli
+@types/chance
+@types/dedent
+@types/license-checker
+@types/node-jose
+@types/reach__router
+@types/react-input-autosize
+@types/strong-log-transformer
+peggy
+react-sizeme
+text-diff
+vega-interpreter

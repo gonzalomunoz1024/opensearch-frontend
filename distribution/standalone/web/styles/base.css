@@ -1,0 +1,194 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-s);
+  line-height: 1.43;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizelegibility;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+code,
+pre,
+kbd {
+  font-family: var(--font-family-code);
+  font-size: var(--font-size-xs);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-accent) 30%, transparent);
+}
+
+/* What the server sends before the script has run */
+.bootScreen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  height: 100%;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-m);
+}
+
+.atlTitleL {
+  font-size: var(--font-size-xxl);
+  line-height: 34px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.022em;
+}
+
+.atlTitleM {
+  font-size: var(--font-size-xl);
+  line-height: 28px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.021em;
+}
+
+.atlTitleS {
+  font-size: var(--font-size-l);
+  line-height: 22px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.022em;
+}
+
+.atlTitleXs {
+  font-size: var(--font-size-m);
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.atlTitleXxs {
+  font-size: var(--font-size-s);
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.atlSubdued {
+  color: var(--color-text-secondary);
+}
+
+.atlSmall {
+  font-size: var(--font-size-xs);
+}
+
+.atlMono {
+  font-family: var(--font-family-code);
+  font-size: var(--font-size-xs);
+}
+
+.atlTruncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.atlRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.atlRowWrap {
+  flex-wrap: wrap;
+}
+
+.atlRowTop {
+  align-items: flex-start;
+}
+
+.atlRowBetween {
+  justify-content: space-between;
+}
+
+.atlGrow {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.atlStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.atlStackL {
+  gap: var(--space-6);
+}
+
+.atlSpacer {
+  height: var(--space-4);
+}
+
+.atlHidden {
+  display: none !important;
+}
+
+.atlScreenReaderOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Thin scroll bars that take the theme */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0s !important;
+    transition-duration: 0s !important;
+  }
+}
