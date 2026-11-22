@@ -70,29 +70,54 @@ type DestroyHandler = () => unknown;
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
-/** A query a spec gave, as a filter can hold it: an object with no functions in it */
-function handleInvalidQuery(query: unknown): Record<string, unknown> | null {
-  const isObject = (value: unknown) => Boolean(value && typeof value === 'object' && !Array.isArray(value));
-  const hasFunction = (value: object): boolean =>
-    Object.values(value).some(
-      (item: unknown) =>
-        typeof item === 'function' ||
-        (isObject(item) && hasFunction(item as object)) ||
-        (Array.isArray(item) && item.some((inner: unknown) => typeof inner === 'function' || (isObject(inner) && hasFunction(inner as object))))
-    );
-  if (isObject(query) && !hasFunction(query as object)) {
-    // keys that would reach a prototype are refused
-    const check = (value: unknown) => {
-      if (value && typeof value === 'object') {
-        for (const key of Object.keys(value)) {
-          if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
-            throw new Error(`'${key}' is an invalid key`);
-          }
-          check((value as Record<string, unknown>)[key]);
-        }
+/**
+ * An object that cannot reach a prototype, as @osd/std's validateObject checks it: no `__proto__`
+ * key anywhere, no `prototype` under a `constructor` key, and no object in itself
+ */
+export function validateObject(obj: unknown) {
+  const isObject = (value: unknown): value is object => typeof value === 'object' && value !== null;
+  const hasOwn = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value, key);
+  if (!isObject(obj)) return;
+  const stack: Array<{ value: unknown; previousKey: string | null }> = [{ value: obj, previousKey: null }];
+  const seen = new WeakSet<object>([obj]);
+  while (stack.length > 0) {
+    const { value, previousKey } = stack.pop() as { value: unknown; previousKey: string | null };
+    if (!isObject(value)) continue;
+    if (hasOwn(value, '__proto__')) throw new Error(`'__proto__' is an invalid key`);
+    if (hasOwn(value, 'prototype') && previousKey === 'constructor') throw new Error(`'constructor.prototype' is an invalid key`);
+    const entries = Object.entries(value);
+    for (let index = entries.length - 1; index >= 0; --index) {
+      const [key, childValue] = entries[index];
+      if (isObject(childValue)) {
+        if (seen.has(childValue)) throw new Error('circular reference detected');
+        seen.add(childValue);
       }
-    };
-    check(query);
+      stack.push({ value: childValue, previousKey: key });
+    }
+  }
+}
+
+const isPlainRecord = (value: unknown): value is object => Boolean(value && typeof value === 'object' && !Array.isArray(value));
+
+/** Whether an object holds a function, in itself, in an object in it or in a list in it */
+export function checkForFunctionProperty(object: object): boolean {
+  for (const value of Object.values(object)) {
+    if (typeof value === 'function') return true;
+    if (isPlainRecord(value) && checkForFunctionProperty(value)) return true;
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (typeof item === 'function') return true;
+        if (isPlainRecord(item) && checkForFunctionProperty(item)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+/** A query a spec gave, as a filter can hold it: an object with no functions in it */
+export function handleInvalidQuery(query: unknown): Record<string, unknown> | null {
+  if (isPlainRecord(query) && !checkForFunctionProperty(query)) {
+    validateObject(query);
     return clone(query as Record<string, unknown>);
   }
   return null;
@@ -111,7 +136,8 @@ function sameValue(a: unknown, b: unknown): boolean {
   return keysA.every((key) => Object.prototype.hasOwnProperty.call(b, key) && sameValue((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]));
 }
 
-function handleInvalidDate(date: unknown): number | string | Date | null {
+/** A time a spec gave: a number that is one, a date or a text; otherwise none */
+export function handleInvalidDate(date: unknown): number | string | Date | null {
   if (typeof date === 'number') return !Number.isNaN(date) ? date : null;
   if (date instanceof Date || typeof date === 'string') return date;
   return null;
@@ -130,6 +156,21 @@ function absoluteDate(value: number | string | Date | null): Date | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date;
 }
 
+/**
+ * A time as @osd/datemath's parse reads one, without rounding up: `now` and its math, or a date
+ * moment reads with math after `||`. As there, a number that is not 0 cannot be read as text.
+ */
+function dateMath(value: number | string | Date | null): Date | undefined {
+  if (!value) return undefined;
+  if (value instanceof Date) return absoluteDate(value);
+  if (typeof value !== 'string') throw new TypeError('text.substring is not a function');
+  if (value.startsWith('now')) return parseDateMath(value);
+  const split = value.indexOf('||');
+  const base = absoluteDate(split === -1 ? value : value.slice(0, split));
+  if (split === -1 || !base) return base;
+  return parseDateMath(`${base.toISOString()}||${value.slice(split + 2)}`);
+}
+
 /** The start and end a spec gave, earliest first: absolute dates, or relative expressions */
 export function parseTimeRange(start: number | string | Date | null, end: number | string | Date | null): TimeRange {
   const absStart = absoluteDate(start);
@@ -142,8 +183,8 @@ export function parseTimeRange(start: number | string | Date | null, end: number
     to = absEnd.toISOString();
     reverse = absStart.getTime() > absEnd.getTime();
   } else {
-    const startDate = typeof start === 'string' ? parseDateMath(start) : absStart;
-    const endDate = typeof end === 'string' ? parseDateMath(end, { roundUp: true }) : absEnd;
+    const startDate = dateMath(start);
+    const endDate = dateMath(end);
     if (!startDate || !endDate) {
       throw new Error(
         `Error setting time filter: both time values must be either relative or absolute dates. start=${JSON.stringify(start)}, end=${JSON.stringify(end)}`
@@ -445,12 +486,15 @@ const createRect = (left: number, top: number, width: number, height: number): R
 
 type Position = 'top' | 'right' | 'bottom' | 'left';
 
-/** Where a popover goes beside its anchor: the side asked for, unless another shows more of it */
+/**
+ * Where a popover goes beside its anchor, as EUI's calculatePopoverPosition places it: the side
+ * asked for, unless another shows more of it in the window
+ */
 export function calculatePopoverPosition(
   anchor: Rect,
   popover: { width: number; height: number },
   requested: Position,
-  buffer = 16,
+  buffer = 10,
   positions: Position[] = ['top', 'right', 'bottom', 'left']
 ): { position: Position; left: number; top: number; width: number; height: number } {
   const { width, height } = popover;
