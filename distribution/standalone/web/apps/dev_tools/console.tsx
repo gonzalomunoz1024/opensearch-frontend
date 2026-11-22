@@ -8,10 +8,10 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { Badge, Button, CallOut, cx } from '../../components/basic';
-import { CodeEditor, type CodeEditorHandle } from '../../components/code_editor';
+import { CodeEditor, SuggestList, type CodeEditorHandle } from '../../components/code_editor';
 import { Checkbox, FormRow, NumberField, RadioGroup, Switch } from '../../components/form';
 import { Icon } from '../../components/icon';
-import { ConfirmModal, Flyout, MenuButton, Modal, Portal, copyText, downloadFile } from '../../components/overlay';
+import { ConfirmModal, Flyout, MenuButton, Modal, copyText, downloadFile } from '../../components/overlay';
 import { formatDate } from '../../lib/dates';
 import { services } from '../../services';
 import {
@@ -997,26 +997,7 @@ export function Console() {
       </div>
 
       {menu && menuAt && (
-        <Portal>
-          <ul className="dvtSuggest" role="listbox" style={{ left: menuAt.left, top: menuAt.top }} data-test-subj="consoleAutocomplete">
-            {menu.items.slice(0, 200).map((item, index) => (
-              <li
-                key={item.label}
-                role="option"
-                aria-selected={index === menu.active}
-                className={cx('dvtSuggest__item', index === menu.active && 'dvtSuggest__item--active')}
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  accept(index);
-                }}
-                ref={index === menu.active ? (node) => node?.scrollIntoView({ block: 'nearest' }) : undefined}
-              >
-                <span>{item.label}</span>
-                {item.meta && <span className="dvtSuggest__meta">{item.meta}</span>}
-              </li>
-            ))}
-          </ul>
-        </Portal>
+        <SuggestList items={menu.items} active={menu.active} at={menuAt} onPick={accept} testId="consoleAutocomplete" />
       )}
 
       {welcome && (

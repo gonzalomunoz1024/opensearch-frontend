@@ -29,6 +29,7 @@ import { fieldsForWildcard } from './index_pattern_fields';
 import type { Logger } from './logger';
 import { OpenSearchClient, OpenSearchError, OpenSearchUnavailableError } from './opensearch';
 import { SavedObjectsRepository, type FindOptions } from './saved_objects';
+import { registerSqlConsole } from './sql_console';
 import { CONTENT_SECURITY_POLICY, readBuild, renderPage, serveStatic } from './static';
 import { UiSettings } from './ui_settings';
 
@@ -374,6 +375,10 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
   router.get('/api/console/opensearch_config', () => ({ body: { host: config.opensearch.hosts[0] } }));
   router.post('/internal/opensearch', proxy, proxyOptions);
 
+  // --- Query Workbench -------------------------------------------------------------------------
+
+  registerSqlConsole(router, client);
+
   // --- The pipeline every request goes through -------------------------------------------------
 
   const page = async (): Promise<Reply> => {
@@ -437,7 +442,7 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
       // A page of another site cannot set this header on a request it makes a browser send
       if (method !== 'GET' && method !== 'HEAD') {
         if (req.headers['osd-xsrf'] === undefined && req.headers['osd-version'] === undefined) {
-          throw badRequest('Request must contain a osd-xsrf header.');
+          throw badRequest('Request must contain the osd-xsrf header.');
         }
       }
       let cached: Promise<Buffer> | undefined;
@@ -456,7 +461,7 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
           try {
             return JSON.parse(text) as T;
           } catch {
-            throw badRequest('The request body is not JSON');
+            throw badRequest('Invalid request payload JSON format');
           }
         },
       });

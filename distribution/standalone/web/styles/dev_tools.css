@@ -141,43 +141,6 @@
   color: var(--code-number);
 }
 
-/* --- What could be typed next -------------------------------------------------------------- */
-
-.dvtSuggest {
-  position: fixed;
-  z-index: 3000;
-  min-width: 220px;
-  max-width: 420px;
-  max-height: 240px;
-  margin: 0;
-  padding: var(--space-1);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-md);
-  font-family: var(--font-family-code);
-  font-size: var(--font-size-xs);
-  list-style: none;
-  overflow-y: auto;
-}
-
-.dvtSuggest__item {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding: 3px var(--space-2);
-  border-radius: var(--radius-xs);
-  cursor: pointer;
-}
-
-.dvtSuggest__item--active {
-  background: var(--color-accent-tint);
-}
-
-.dvtSuggest__meta {
-  color: var(--color-text-tertiary);
-}
-
 /* --- History ------------------------------------------------------------------------------- */
 
 .dvtHistory {

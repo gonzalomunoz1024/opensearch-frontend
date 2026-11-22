@@ -19,6 +19,7 @@ import {
   type Ref,
 } from 'react';
 import { cx } from './basic';
+import { Portal } from './overlay';
 
 /** A run of text of one kind: `kind` is the end of a `tok…` class (Key, String, Number…) */
 export interface CodeToken {
@@ -63,6 +64,8 @@ export interface CodeEditorProps {
   handle?: Ref<CodeEditorHandle>;
   /** Called with how far the text is scrolled down */
   onScroll?: (top: number) => void;
+  /** Line numbers at the left; on unless said otherwise */
+  gutter?: boolean;
 }
 
 const PAIRS: Record<string, string> = { '{': '}', '[': ']', '(': ')', '"': '"' };
@@ -111,6 +114,7 @@ export function CodeEditor({
   overlay,
   handle,
   onScroll,
+  gutter = true,
 }: CodeEditorProps) {
   const area = useRef<HTMLTextAreaElement>(null);
   const frame = useRef<HTMLDivElement>(null);
@@ -252,7 +256,13 @@ export function CodeEditor({
   return (
     <div
       ref={frame}
-      className={cx('atlCodeEditor', wrap && 'atlCodeEditor--wrap', readOnly && 'atlCodeEditor--readOnly', className)}
+      className={cx(
+        'atlCodeEditor',
+        wrap && 'atlCodeEditor--wrap',
+        readOnly && 'atlCodeEditor--readOnly',
+        !gutter && 'atlCodeEditor--noGutter',
+        className
+      )}
       style={{
         height: height ?? shownLines * lineHeight + 18,
         ...(fontSize ? { fontSize, lineHeight: `${lineHeight}px` } : {}),
@@ -293,5 +303,51 @@ export function CodeEditor({
         {overlay}
       </div>
     </div>
+  );
+}
+
+// --- What could be typed next ------------------------------------------------------------------
+
+export interface SuggestItem {
+  label: string;
+  /** What kind of thing it is, shown at the right */
+  meta?: string;
+}
+
+/** The list an editor shows under the cursor; the editor keeps the keys and the choice */
+export function SuggestList({
+  items,
+  active,
+  at,
+  onPick,
+  testId,
+}: {
+  items: SuggestItem[];
+  active: number;
+  at: { left: number; top: number };
+  onPick: (index: number) => void;
+  testId?: string;
+}) {
+  return (
+    <Portal>
+      <ul className="atlSuggest" role="listbox" style={{ left: at.left, top: at.top }} data-test-subj={testId}>
+        {items.slice(0, 200).map((item, index) => (
+          <li
+            key={`${item.label}/${item.meta ?? ''}`}
+            role="option"
+            aria-selected={index === active}
+            className={cx('atlSuggest__item', index === active && 'atlSuggest__item--active')}
+            onMouseDown={(event) => {
+              event.preventDefault();
+              onPick(index);
+            }}
+            ref={index === active ? (node) => node?.scrollIntoView({ block: 'nearest' }) : undefined}
+          >
+            <span>{item.label}</span>
+            {item.meta && <span className="atlSuggest__meta">{item.meta}</span>}
+          </li>
+        ))}
+      </ul>
+    </Portal>
   );
 }
