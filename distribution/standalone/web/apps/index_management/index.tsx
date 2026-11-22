@@ -12,14 +12,20 @@ import { navigateHash, useLocation } from '../../router';
 import { Aliases } from './aliases';
 import { CreateDataStream, DataStreamDetail } from './data_stream_pages';
 import { DataStreams } from './data_streams';
+import { ForceMerge } from './force_merge';
 import { CreateIndex, IndexDetail } from './index_pages';
 import { Indices } from './indices';
 import { ChangePolicy, ManagedIndices } from './managed_indices';
 import { CreatePolicy, Policies, PolicyDetails } from './policies';
+import { Reindex } from './reindex';
+import { ShrinkIndex, SplitIndex } from './resize_pages';
+import { Rollover } from './rollover';
 import { ROUTES, SNAPSHOT_MANAGEMENT_PATH } from './routes';
 import { ComposableTemplateDetail, TemplateDetail } from './template_pages';
 import { ComposableTemplates, Templates } from './templates';
 import '../../styles/index_management.css';
+
+export { startJobs } from './job_handlers';
 
 interface NavItem {
   name: string;
@@ -120,6 +126,11 @@ const PAGES: Page[] = [
     // The address of a data stream ends with a word the page has no use for
     render: (rest) => (rest === '' ? <CreateDataStream /> : <DataStreamDetail name={rest.split('/')[0]} />),
   },
+  { route: ROUTES.FORCE_MERGE, render: (indexes) => <ForceMerge key={indexes} indexes={indexes} /> },
+  { route: ROUTES.ROLLOVER, render: (source) => <Rollover key={source} source={source} /> },
+  { route: ROUTES.SPLIT_INDEX, render: () => <SplitIndex /> },
+  { route: ROUTES.SHRINK_INDEX, render: () => <ShrinkIndex /> },
+  { route: ROUTES.REINDEX, render: () => <Reindex /> },
 ];
 
 function findPage(hashPath: string): { page: Page; rest: string } | undefined {

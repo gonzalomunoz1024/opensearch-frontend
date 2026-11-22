@@ -1039,3 +1039,148 @@
 .ismPage--form .ismMappings .ismLabeled__title {
   font-size: var(--font-size-s);
 }
+
+/* --- The pages that start an operation on indexes ------------------------------------------------ */
+
+/* A field's name that is a heading of the page */
+.ismLabeled__heading {
+  margin: 0;
+  font-size: var(--font-size-l);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.3;
+}
+
+.ismField {
+  width: 100%;
+  max-width: 400px;
+}
+
+/* A panel that opens under its heading */
+.ismFold__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+}
+
+.ismFold__body {
+  padding: var(--space-4);
+  border-top: 1px solid var(--color-border-light);
+}
+
+.ismFold__body > .ismLabeled + .ismLabeled {
+  margin-top: var(--space-3);
+}
+
+.ismNotifications {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.ismNotifications .ismLabeled + .ismLabeled {
+  margin-top: 0;
+}
+
+.ismNotifications__list {
+  margin: 0;
+  padding-left: var(--space-5);
+}
+
+/* The name of a field inside another field's body is the small one of a plain form */
+.ismPage--form .ismLabeled .ismLabeled .ismLabeled__title {
+  font-size: var(--font-size-s);
+}
+
+.ismPage--form .ismNotifications .ismLabeled__title {
+  font-size: var(--font-size-m);
+}
+
+.ismPage--form .ismNotifications__channels .ismLabeled__title {
+  font-size: var(--font-size-s);
+}
+
+.ismPage--form .ismNotifications__channels .ismLabeled > .ismLabeled__body {
+  max-width: none;
+}
+
+.ismNotifications__channels--invalid .ismLabeled__title {
+  color: var(--color-critical-text);
+}
+
+.ismSmallLabel {
+  margin-bottom: var(--space-1);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* What stands in the way of an operation, under the details of its source */
+.ismReasons {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+.ismReasons:empty {
+  display: none;
+}
+
+.ismReasons .atlCallOut p {
+  margin: 0 0 var(--space-3);
+}
+
+/* The details of the index an operation starts from are named in the weight of a heading */
+.ismSource .ismDetail dt {
+  color: var(--color-text);
+  font-size: var(--font-size-m);
+  font-weight: var(--font-weight-semibold);
+}
+
+.ismFold__body--notifications .ismNotifications {
+  margin-top: 0;
+}
+
+.ismFold__body--notifications .ismDefinition__title {
+  margin-top: 0;
+}
+
+/* --- Reindex -------------------------------------------------------------------------------------- */
+
+.ismReindex__legend {
+  margin: 0 0 var(--space-2);
+}
+
+.ismReindex__query {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.ismReindex__queryHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: var(--font-size-xs);
+}
+
+.ismReindex__destination {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-5);
+}
+
+.ismReindex__destination > .ismLabeled {
+  flex: 0 1 400px;
+  min-width: 0;
+}
+
+.ismReindex__slices {
+  margin-top: var(--space-4);
+}
+
+/* The form of a new index inside a flyout */
+.ismPage--flyout {
+  padding: 0;
+}

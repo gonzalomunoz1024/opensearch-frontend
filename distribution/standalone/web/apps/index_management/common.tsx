@@ -69,9 +69,11 @@ export const ism = {
 };
 
 export const toasts = {
-  success: (title: string) => services.toasts.success(title),
-  danger: (title: string | undefined, text?: string) => services.toasts.danger(title || 'Error', text),
-  warning: (title: string) => services.toasts.warning(title),
+  success: (title: ReactNode, text?: ReactNode, lifetime?: number) => services.toasts.success(title, text, lifetime),
+  danger: (title: ReactNode | undefined, text?: ReactNode, lifetime?: number) =>
+    services.toasts.danger(title || 'Error', text, lifetime),
+  warning: (title: ReactNode, text?: ReactNode, lifetime?: number) => services.toasts.warning(title, text, lifetime),
+  remove: (id: number) => services.toasts.dismiss(id),
 };
 
 /** Loads something when the page opens and again when asked to */

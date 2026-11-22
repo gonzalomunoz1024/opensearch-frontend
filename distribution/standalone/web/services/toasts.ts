@@ -2,13 +2,14 @@
 
 /* The short messages in the corner: something was saved, something failed. */
 
+import type { ReactNode } from 'react';
 import { errorMessage } from './http';
 
 export interface Toast {
   id: number;
   kind: 'healthy' | 'warning' | 'critical' | 'info';
-  title: string;
-  text?: string;
+  title: ReactNode;
+  text?: ReactNode;
 }
 
 export class Toasts {
@@ -29,13 +30,15 @@ export class Toasts {
     for (const listener of [...this.listeners]) listener();
   }
 
-  add(kind: Toast['kind'], title: string, text?: string) {
+  /** `lifetime` keeps a message longer than its kind does: the news of work that takes hours */
+  add(kind: Toast['kind'], title: ReactNode, text?: ReactNode, lifetime?: number) {
     const id = this.next;
     this.next += 1;
     // The same message again replaces the one still showing
     const others = this.items.filter((item) => !(item.title === title && item.text === text));
     this.change([...others, { id, kind, title, text }].slice(-5));
-    window.setTimeout(() => this.dismiss(id), this.lifetimes[kind]);
+    // A timer cannot wait longer than some 24 days
+    window.setTimeout(() => this.dismiss(id), Math.min(lifetime ?? this.lifetimes[kind], 2 ** 31 - 1));
     return id;
   }
   dismiss(id: number) {
@@ -44,17 +47,17 @@ export class Toasts {
     }
   }
 
-  success(title: string, text?: string) {
-    return this.add('healthy', title, text);
+  success(title: ReactNode, text?: ReactNode, lifetime?: number) {
+    return this.add('healthy', title, text, lifetime);
   }
-  info(title: string, text?: string) {
-    return this.add('info', title, text);
+  info(title: ReactNode, text?: ReactNode, lifetime?: number) {
+    return this.add('info', title, text, lifetime);
   }
-  warning(title: string, text?: string) {
-    return this.add('warning', title, text);
+  warning(title: ReactNode, text?: ReactNode, lifetime?: number) {
+    return this.add('warning', title, text, lifetime);
   }
-  danger(title: string, text?: string) {
-    return this.add('critical', title, text);
+  danger(title: ReactNode, text?: ReactNode, lifetime?: number) {
+    return this.add('critical', title, text, lifetime);
   }
   error(error: unknown, title = 'Something went wrong') {
     if ((error as Error)?.name === 'AbortError') return 0;

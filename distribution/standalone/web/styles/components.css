@@ -731,9 +731,10 @@ select.atlField {
 
 /* --- What floats: popovers, menus, dialogs, flyouts, toasts ---------------------------------- */
 
+/* A popover is opened from a field or a button, and those are in dialogs and flyouts too: it floats above both */
 .atlPopover {
   position: fixed;
-  z-index: 3000;
+  z-index: 4500;
   min-width: 160px;
   max-width: min(480px, calc(100vw - 16px));
   max-height: calc(100vh - 16px);
@@ -1126,7 +1127,7 @@ select.atlField {
 
 .atlSuggest {
   position: fixed;
-  z-index: 3000;
+  z-index: 4500;
   min-width: 220px;
   max-width: 420px;
   max-height: 240px;

@@ -32,6 +32,8 @@ export interface ComboBoxProps {
   loading?: boolean;
   /** Called as the text changes: the list may come from a search */
   onSearch?: (text: string) => void;
+  /** The options are the answer of that search already: they are listed as given */
+  searched?: boolean;
   testId?: string;
   fullWidth?: boolean;
 }
@@ -51,6 +53,7 @@ export function ComboBox({
   invalid,
   loading,
   onSearch,
+  searched,
   testId,
   fullWidth = true,
 }: ComboBoxProps) {
@@ -62,31 +65,36 @@ export function ComboBox({
 
   const labels = useMemo(() => new Map(options.map((option) => [option.value, option.label])), [options]);
   const matches = useMemo(() => {
-    const needle = text.trim().toLowerCase();
+    const needle = searched ? '' : text.trim().toLowerCase();
     const found = options.filter(
       (option) =>
         (single || !selected.includes(option.value)) &&
         (needle === '' || option.label.toLowerCase().includes(needle))
     );
     if (needle !== '') {
-      // What starts with the text comes before what merely contains it
-      found.sort(
-        (a, b) =>
-          Number(b.label.toLowerCase().startsWith(needle)) - Number(a.label.toLowerCase().startsWith(needle))
-      );
+      // What is the text comes first, then what starts with it, then what merely contains it
+      const rank = (label: string) => (label === needle ? 2 : label.startsWith(needle) ? 1 : 0);
+      found.sort((a, b) => rank(b.label.toLowerCase()) - rank(a.label.toLowerCase()));
     }
     return found;
-  }, [options, selected, single, text]);
+  }, [options, searched, selected, single, text]);
   const custom =
     allowCustom && text.trim() !== '' && !options.some((option) => option.label === text.trim())
       ? text.trim()
       : undefined;
   const shown = matches.slice(0, MAX_SHOWN);
 
+  // A list that came from a search is asked for again whole once the text is gone
+  const typed = useRef(text);
+  typed.current = text;
+  const forget = useCallback(() => {
+    if (searched && typed.current !== '') onSearch?.('');
+    setText('');
+  }, [onSearch, searched]);
   const close = useCallback(() => {
     setOpen(false);
-    setText('');
-  }, []);
+    forget();
+  }, [forget]);
 
   useEffect(() => setActive(0), [text, open]);
   useEffect(() => {
@@ -100,7 +108,7 @@ export function ComboBox({
       input.current?.blur();
     } else {
       onChange([...selected, value]);
-      setText('');
+      forget();
       input.current?.focus();
     }
   };
@@ -198,7 +206,7 @@ export function ComboBox({
               onMouseDown={(event) => event.stopPropagation()}
               onClick={() => {
                 onChange([]);
-                setText('');
+                forget();
               }}
             >
               <Icon name="cross" />
