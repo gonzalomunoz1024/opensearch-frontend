@@ -232,6 +232,11 @@
   line-height: 1;
 }
 
+/* The original's small icon buttons, in the accent colour */
+.vgaEditor__action.atlButton {
+  color: var(--color-accent);
+}
+
 /* The editor takes the whole width and grows with the spec: the sidebar scrolls */
 .vzeSide__body.vzeSide__body--flush {
   padding: 0;

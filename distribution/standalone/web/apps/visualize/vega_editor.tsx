@@ -49,7 +49,7 @@ export function VegaSpecEditor({ params, setParams }: OptionsProps) {
       />
       <div className="vgaEditor__aceEditorActions">
         <MenuButton
-          button={(toggle) => <IconButton icon="help" size="s" label="Vega help" onClick={toggle} />}
+          button={(toggle) => <IconButton icon="help" label="Vega help" onClick={toggle} className="vgaEditor__action" />}
           items={[
             { label: 'OpenSearch Dashboards Vega help', href: 'https://opensearch.org/docs/latest/dashboards/' },
             { label: 'Vega-Lite documentation', href: 'https://vega.github.io/vega-lite/docs/' },
@@ -57,7 +57,7 @@ export function VegaSpecEditor({ params, setParams }: OptionsProps) {
           ]}
         />
         <MenuButton
-          button={(toggle) => <IconButton icon="wrench" size="s" label="Vega editor options" onClick={toggle} />}
+          button={(toggle) => <IconButton icon="wrench" label="Vega editor options" onClick={toggle} className="vgaEditor__action" />}
           items={[
             { label: 'Reformat as HJSON', onClick: () => setSpec(formatSpec(spec, asHjson)) },
             { label: 'Reformat as JSON, delete comments', onClick: () => setSpec(formatSpec(spec, asJson)) },

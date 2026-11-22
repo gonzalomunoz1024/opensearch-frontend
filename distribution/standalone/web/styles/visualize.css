@@ -15,6 +15,12 @@
   min-height: 420px;
 }
 
+/* The heading kept for screen readers takes a pixel of the page, as the original's does */
+.vzePage > .atlScreenReaderOnly {
+  position: relative;
+  flex: none;
+}
+
 .vzeEditor {
   display: flex;
   flex: 1 1 auto;
