@@ -2,6 +2,7 @@
 
 /* The files of the browser side, and the one page that loads them. */
 
+import type { MapConfig } from '../common/map_config';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import type { IncomingMessage } from 'node:http';
 import { extname, join, normalize, sep } from 'node:path';
@@ -74,7 +75,7 @@ export interface PageOptions {
   bootData: unknown;
 }
 
-export const CONTENT_SECURITY_POLICY = [
+const BASE_POLICY = [
   "default-src 'self'",
   "script-src 'self'",
   // React writes styles on elements; nothing here writes style sheets at run time
@@ -82,12 +83,40 @@ export const CONTENT_SECURITY_POLICY = [
   // A markdown panel may show a picture from elsewhere
   "img-src 'self' data: blob: https: http:",
   "font-src 'self' data:",
-  "connect-src 'self'",
+  'CONNECT',
   "worker-src 'self' blob:",
   "frame-ancestors 'self'",
   "base-uri 'self'",
   "form-action 'self'",
-].join('; ');
+];
+
+/** The origins of URLs a page fetches from outside the server: the maps service and the shapes of region maps */
+export function mapOrigins(map: MapConfig): string[] {
+  const urls = [
+    map.opensearchManifestServiceUrl,
+    map.manifestServiceUrl,
+    map.emsFileApiUrl,
+    map.emsTileApiUrl,
+    ...map.regionmap.layers.map((layer) => layer.url),
+  ];
+  const origins = new Set<string>();
+  for (const url of urls) {
+    try {
+      if (url) origins.add(new URL(url).origin);
+    } catch {
+      // Not an absolute URL: the browser resolves it against the page, which 'self' covers
+    }
+  }
+  return [...origins].filter((origin) => origin !== 'null');
+}
+
+/** The page's policy: the browser may fetch from the server and from the map services of map.* */
+export function contentSecurityPolicy(map?: MapConfig): string {
+  const connect = ["'self'", ...(map ? mapOrigins(map) : [])];
+  return BASE_POLICY.map((rule) => (rule === 'CONNECT' ? `connect-src ${connect.join(' ')}` : rule)).join('; ');
+}
+
+export const CONTENT_SECURITY_POLICY = contentSecurityPolicy();
 
 export function renderPage({ basePath, build, title, dark, bootData }: PageOptions): string {
   const data = JSON.stringify(bootData).replace(/</g, '\\u003c');

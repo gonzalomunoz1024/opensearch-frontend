@@ -17,6 +17,7 @@ import { Visualize } from './apps/visualize';
 import { Management } from './apps/management';
 import { startRouter } from './router';
 import { createServices, type BootData } from './services';
+import { DEFAULT_MAP_CONFIG } from '../common/map_config';
 
 function readBootData(): BootData {
   const element = document.getElementById('boot-data');
@@ -27,7 +28,7 @@ function readBootData(): BootData {
     settings: {},
     settingsDefaults: {},
     settingsOverrides: {},
-    map: { tileUrl: '', attribution: '' },
+    map: DEFAULT_MAP_CONFIG,
   };
   if (!element?.textContent) return fallback;
   try {

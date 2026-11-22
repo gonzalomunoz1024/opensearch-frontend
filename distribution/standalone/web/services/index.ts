@@ -2,6 +2,7 @@
 
 /* What every page uses: made once when the page loads, from what the server put in it. */
 
+import type { MapConfig } from '../../common/map_config';
 import { DEFAULT_FORMAT_SETTINGS, type FormatSettings } from '../lib/field_formats';
 import type { QueryConfig } from '../lib/query';
 import type { FieldFormatSpec } from '../lib/types';
@@ -19,7 +20,7 @@ export interface BootData {
   settings: Record<string, unknown>;
   settingsDefaults: Record<string, unknown>;
   settingsOverrides: Record<string, unknown>;
-  map: { tileUrl: string; attribution: string };
+  map: MapConfig;
 }
 
 export interface Services {
