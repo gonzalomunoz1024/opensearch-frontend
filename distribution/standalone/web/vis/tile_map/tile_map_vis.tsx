@@ -9,7 +9,7 @@ import { useMemo, useRef } from 'react';
 import type { Table } from '../../lib/aggs';
 import type { Filter } from '../../lib/types';
 import type { Vis } from '../../lib/vis';
-import { MapVisContainer, type MapSessionState } from '../../maps/map_vis_container';
+import { MapVisContainer, type MapSessionState, type MapUiState } from '../../maps/map_vis_container';
 import { services } from '../../services';
 import type { VisRenderProps } from '../types';
 import { GEOHASH_DEFAULTS, tileMapDefaults } from './defaults';
@@ -49,6 +49,15 @@ export function TileMapVis({ vis, data, uiState, onUiState, onFilter, onAggParam
   current.current = { vis, onFilter, onAggParams };
   const geo = useMemo(() => toTileMapData(data.table, data.indexPattern.id), [data]);
   const defaults = useMemo(() => tileMapDefaults(), []);
+  // A dashboard's panel may save mapZoom and mapCenter as null: the visualization's own apply then
+  const mapState = useMemo(() => {
+    const own = vis.uiState as MapUiState;
+    return {
+      ...uiState,
+      mapZoom: uiState.mapZoom ?? own.mapZoom,
+      mapCenter: uiState.mapCenter ?? own.mapCenter,
+    } as MapUiState;
+  }, [uiState, vis.uiState]);
 
   const deps = useMemo<TileMapDeps>(
     () => ({
@@ -70,7 +79,7 @@ export function TileMapVis({ vis, data, uiState, onUiState, onFilter, onAggParam
       vis={vis}
       data={geo}
       defaults={defaults}
-      uiState={uiState}
+      uiState={mapState}
       onUiState={onUiState}
       sessionState={session.current}
       create={(element, host) => new CoordinateMapsVisualization(element, host, deps)}

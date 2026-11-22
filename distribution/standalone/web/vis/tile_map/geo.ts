@@ -419,7 +419,7 @@ export function tooltipHtml(details: TooltipDetail[]): string {
 }
 
 export interface SpatialFilter {
-  meta: { negate: boolean; index?: string; alias: null; disabled: boolean; key: string; type: string; value: string; params: unknown };
+  meta: { negate: boolean; index?: string; alias: null; disabled: boolean; key: string; type: string; params: unknown };
   [clause: string]: unknown;
 }
 
@@ -433,13 +433,8 @@ export function spatialFilter(
   indexId: string | undefined,
   data: GeoBoundingBox | { points: Array<{ lat: number; lon: number }> }
 ): SpatialFilter {
-  const text = (value: unknown) => JSON.stringify(value);
-  const value =
-    kind === 'geo_bounding_box'
-      ? `${text((data as GeoBoundingBox).top_left)} to ${text((data as GeoBoundingBox).bottom_right)}`
-      : ((data as { points: unknown[] }).points ?? []).map(text).join(', ');
   return {
-    meta: { negate: false, index: indexId, alias: null, disabled: false, key: field, type: kind, value, params: data },
+    meta: { negate: false, index: indexId, alias: null, disabled: false, key: field, type: kind, params: data },
     [kind]: { ignore_unmapped: true, [field]: data },
   };
 }

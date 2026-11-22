@@ -15,6 +15,18 @@ import { GeohashLayer, MAP_TYPES, type GeohashOptions } from './geohash_layer';
 
 setDrawControlFactory(createDrawControl);
 
+/** The original's import() of geohash_layer: resolved after what the same render does */
+let importing: Promise<void> | null = null;
+const moduleImported = () =>
+  (importing ??= new Promise<void>((resolve) =>
+    window.setTimeout(() => {
+      importing = null;
+      resolve();
+    }, 0)
+  ));
+/** lazyLoadMapsLegacyModules, already loaded */
+const modulesLoaded = () => Promise.resolve();
+
 /** What a coordinate map is given to draw: the answer as GeoJSON, and what it came from */
 export interface TileMapData {
   featureCollection: GeoFeatureCollection;
@@ -108,18 +120,29 @@ export class CoordinateMapsVisualization extends BaseMapsVis<TileMapData | null>
       this.updateGeohashAgg();
     }
     this.geoData = data;
-    this.recreateGeohashLayer();
+    void this.recreateGeohashLayer();
   }
 
-  private recreateGeohashLayer() {
+  /**
+   * As the original's: the layer before is taken off after one wait (its `import()` of
+   * geohash_layer) and the new one is put on after another (lazyLoadMapsLegacyModules). Calls
+   * that overlap each put a layer on, which a heat map shows as stronger heat.
+   */
+  private async recreateGeohashLayer() {
+    await moduleImported();
     const map = this.map;
-    const data = this.geoData;
-    if (!map || !data) return;
+    if (!map) return;
     if (this.geohashLayer) {
       map.removeLayer(this.geohashLayer);
       this.geohashLayer = null;
     }
-    this.geohashLayer = new GeohashLayer(data.featureCollection, data.meta, this.getGeohashOptions(), map.getZoomLevel(), map);
+    const data = this.geoData;
+    if (!data) return;
+    const options = this.getGeohashOptions();
+    const zoom = map.getZoomLevel();
+    await modulesLoaded();
+    if (!this.map) return;
+    this.geohashLayer = new GeohashLayer(data.featureCollection, data.meta, options, zoom, map);
     map.addLayer(this.geohashLayer);
   }
 
@@ -129,7 +152,7 @@ export class CoordinateMapsVisualization extends BaseMapsVis<TileMapData | null>
     // Options that change nothing drawn (the tooltip, the legend's place, the tiles) keep the layer
     const options = this.getGeohashOptions();
     if (!this.geohashLayer || !this.geohashLayer.isReusable(options)) {
-      if (this.geoData) this.recreateGeohashLayer();
+      if (this.geoData) void this.recreateGeohashLayer();
       this.updateDataInternal(this.geoData);
     }
   }

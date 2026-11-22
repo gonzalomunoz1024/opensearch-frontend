@@ -303,7 +303,8 @@ export function aggLabel(agg: AggConfig, context: AggContext): string {
     case 'filters':
       return 'filters';
     case 'geohash_grid':
-      return 'Geo coordinates';
+      // makeLabel of the geohash_grid
+      return 'Geohash';
     default:
       return field || agg.type;
   }

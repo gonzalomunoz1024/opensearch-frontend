@@ -104,7 +104,8 @@ class PolygonDraw implements Mode {
     });
     marker.addTo(this.map);
     this.markers.push(marker);
-    if (!this.poly) this.poly = L.polyline([], { color: DRAW_COLOR, weight: 4, opacity: 0.5, fill: false, interactive: false }).addTo(this.map);
+    // Leaflet.draw draws a polygon while it is made: closed and filled
+    if (!this.poly) this.poly = L.polygon([], { color: DRAW_COLOR, weight: 4, opacity: 0.5, fill: true, fillOpacity: 0.2, interactive: false }).addTo(this.map);
     this.poly.setLatLngs(this.points);
     this.redrawGuide();
   }
