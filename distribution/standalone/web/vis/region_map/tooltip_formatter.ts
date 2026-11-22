@@ -5,7 +5,7 @@
  * mapTooltipProvider of maps_legacy, which writes the rows as a table.
  */
 
-import type { RegionMetric } from './choropleth_layer';
+import type { RegionMetric } from './util';
 
 export interface TooltipDetail {
   label: string | undefined;

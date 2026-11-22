@@ -58,7 +58,7 @@ function wmsSetting(): Record<string, unknown> {
 }
 
 /** visConfig.defaults of the region map */
-export function regionMapDefaults(): RegionMapParams {
+export function regionMapDefaults(wms: Record<string, unknown> = wmsSetting()): RegionMapParams {
   return {
     layerChosenByUser: DEFAULT_MAP_CHOICE,
     legendPosition: 'bottomright',
@@ -66,7 +66,7 @@ export function regionMapDefaults(): RegionMapParams {
     colorSchema: 'Yellow to Red',
     emsHotLink: '',
     isDisplayWarning: true,
-    wms: structuredClone(wmsSetting()),
+    wms: structuredClone(wms),
     mapZoom: 2,
     mapCenter: [0, 0],
     outlineWeight: 1,
@@ -98,17 +98,24 @@ export async function getCustomIndices(): Promise<string[] | false> {
   return answer?.resp ?? false;
 }
 
-/** The join fields of a custom vector map: every property of its mapping but `location` */
+/**
+ * The join fields of the properties of a custom vector map's mapping: diffArray of the original,
+ * every property but `location`, and `location` itself when the mapping lacks it
+ */
+export function joinFieldsOf(properties: string[]): FileLayerField[] {
+  const others = ['location'];
+  const fields = properties.concat(others).filter((item) => !properties.includes(item) || !others.includes(item));
+  return fields.map((property) => ({ type: 'id', name: property, description: property }));
+}
+
+/** The join fields of a custom vector map, from its mapping */
 export async function getJoinFields(indexName: string): Promise<FileLayerField[] | false> {
   try {
     const answer = await geospatial<{ resp: Record<string, { mappings: { properties: Record<string, unknown> } }> }>('_mappings', {
       index: indexName,
     });
     if (!answer) return false;
-    const properties = Object.keys(answer.resp[indexName].mappings.properties);
-    // diffArray of the original: the properties without 'location', and 'location' when absent
-    const fields = [...properties, 'location'].filter((item) => !properties.includes(item) || item !== 'location');
-    return fields.map((property) => ({ type: 'id', name: property, description: property }));
+    return joinFieldsOf(Object.keys(answer.resp[indexName].mappings.properties));
   } catch {
     return false;
   }

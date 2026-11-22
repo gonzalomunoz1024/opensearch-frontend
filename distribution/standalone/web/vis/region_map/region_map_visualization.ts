@@ -11,7 +11,7 @@ import type { FileLayer } from '../../maps/service_settings';
 import { bucketFilter, type AggContext, type Table, type TableColumn } from '../../lib/aggs';
 import type { Filter } from '../../lib/types';
 import { services } from '../../services';
-import { ChoroplethLayer, type RegionMetric } from './choropleth_layer';
+import { ChoroplethLayer } from './choropleth_layer';
 import { truncatedColorRamp } from './color_maps';
 import {
   CUSTOM_MAP_CHOICE,
@@ -22,6 +22,7 @@ import {
   type VectorLayer,
 } from './region_map_type';
 import { mapTooltipProvider, tooltipFormatter } from './tooltip_formatter';
+import { mismatchWarning, regionMetrics, type RegionMetric } from './util';
 
 /** What a region map draws: the table of its answer, and what a click needs to filter */
 export interface RegionMapData {
@@ -31,26 +32,6 @@ export interface RegionMapData {
 
 const escapeHtml = (text: string) =>
   text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c);
-
-/** The text of the warning toast for terms no shape has */
-export function mismatchWarning(mismatches: unknown[]): { title: string; text: string } {
-  const count = mismatches.length;
-  return {
-    title: `Unable to show ${count} ${count > 1 ? 'results' : 'result'} on map`,
-    text: `Ensure that each of these term matches a shape on that shape's join field: ${mismatches.join(', ')}`,
-  };
-}
-
-/** The terms and values of an answer, as the layer joins them */
-export function regionMetrics(table: Table): { results: RegionMetric[]; termColumn?: TableColumn; valueColumn?: TableColumn } {
-  const termColumn = table.columns.find((column) => column.kind === 'bucket' && column.schema === 'segment');
-  const valueColumn = table.columns.find((column) => column.kind === 'metric');
-  if (table.columns.length !== 2 || !termColumn || !valueColumn || !table.rows.length) {
-    return { results: [], termColumn, valueColumn };
-  }
-  const results = table.rows.map((row) => ({ term: row[termColumn.id], value: row[valueColumn.id] as number }));
-  return { results, termColumn, valueColumn };
-}
 
 export class RegionMapVisualization extends BaseMapsVis<RegionMapData> {
   private choroplethLayer: ChoroplethLayer | null = null;
