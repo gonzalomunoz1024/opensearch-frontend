@@ -74,6 +74,22 @@ function decodeVersion(version: string): { if_seq_no: number; if_primary_term: n
   throw badRequest(`Invalid version [${version}]`);
 }
 
+/**
+ * The clauses that let a search ending in a star find the objects with a phrase starting with
+ * it, one for each field and with its boost, as the original's repository adds them: on its own,
+ * `zz-agent*` is a word no field holds, since the hyphen splits the words of a title.
+ */
+export function phrasePrefixClauses(search: string, fields: string[]): unknown[] {
+  const query = search.replace(/[*]$/, '');
+  return fields
+    .filter((field) => field !== '*')
+    .map((rawField) => {
+      const [field, rawBoost] = rawField.split('^');
+      const boost = rawBoost ? parseInt(rawBoost, 10) : 1;
+      return { match_phrase_prefix: { [field]: { query, boost: Number.isNaN(boost) ? 1 : boost } } };
+    });
+}
+
 export class SavedObjectsRepository {
   constructor(
     private readonly client: OpenSearchClient,
@@ -222,17 +238,23 @@ export class SavedObjectsRepository {
       });
     }
     const must: unknown[] = [];
+    const should: unknown[] = [];
     if (options.search) {
       const fields = options.searchFields?.length
         ? options.searchFields.flatMap((field) => options.type.map((type) => `${type}.${field}`))
         : undefined;
-      must.push({
+      const words = {
         simple_query_string: {
           query: options.search,
           ...(fields ? { fields } : { lenient: true, fields: ['*'] }),
           default_operator: options.defaultSearchOperator ?? 'OR',
         },
-      });
+      };
+      if (fields && options.search.trim().endsWith('*')) {
+        should.push(words, ...phrasePrefixClauses(options.search, fields));
+      } else {
+        must.push(words);
+      }
     }
 
     const body: Record<string, unknown> = {
@@ -240,7 +262,9 @@ export class SavedObjectsRepository {
       track_total_hits: true,
       from: (page - 1) * perPage,
       size: perPage,
-      query: { bool: { filter, ...(must.length ? { must } : {}) } },
+      query: {
+        bool: { filter, ...(must.length ? { must } : {}), ...(should.length ? { should, minimum_should_match: 1 } : {}) },
+      },
     };
     if (options.sortField) {
       const order = options.sortOrder ?? 'asc';
