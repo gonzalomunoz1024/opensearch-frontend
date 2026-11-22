@@ -732,11 +732,12 @@
   white-space: nowrap;
 }
 
+/* As the original's external link: its small icon 4 px after the text, on the text's middle */
 .shlExternal > .atlIcon {
   width: 12px;
   height: 12px;
-  margin-left: 2px;
-  vertical-align: -1px;
+  margin-left: var(--space-1);
+  vertical-align: middle;
 }
 
 .shlPainlessError {

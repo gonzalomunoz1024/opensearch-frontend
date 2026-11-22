@@ -508,7 +508,18 @@ export function CopyableCode({ children, size = 'm' }: { children: string; size?
 }
 
 /** A short text shown over what the pointer or the focus is on */
-export function Tooltip({ content, children, testId }: { content: ReactNode; children: ReactNode; testId?: string }) {
+export function Tooltip({
+  content,
+  children,
+  testId,
+  block,
+}: {
+  content: ReactNode;
+  children: ReactNode;
+  testId?: string;
+  /** The anchor a block as wide as its line, as the original's `eui-displayBlock` anchors */
+  block?: boolean;
+}) {
   const anchor = useRef<HTMLSpanElement>(null);
   const [place, setPlace] = useState<{ left: number; top: number }>();
   const box = useRef<HTMLDivElement>(null);
@@ -518,14 +529,14 @@ export function Tooltip({ content, children, testId }: { content: ReactNode; chi
     const target = anchor.current.getBoundingClientRect();
     const own = box.current.getBoundingClientRect();
     const left = Math.max(8, Math.min(target.left + target.width / 2 - own.width / 2, window.innerWidth - own.width - 8));
-    // Above, as the original's, unless there is no room
-    const top = target.top - own.height - 8 >= 8 ? target.top - own.height - 8 : target.bottom + 8;
+    // Above, as the original's, 16 px from its anchor, unless there is no room
+    const top = target.top - own.height - 16 >= 8 ? target.top - own.height - 16 : target.bottom + 16;
     setPlace({ left, top });
   }, [shown, content]);
   return (
     <span
       ref={anchor}
-      className="atlTooltipAnchor"
+      className={block ? 'atlTooltipAnchor atlTooltipAnchor--block' : 'atlTooltipAnchor'}
       onMouseEnter={() => setShown(true)}
       onMouseLeave={() => {
         setShown(false);

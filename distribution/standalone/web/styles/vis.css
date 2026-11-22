@@ -478,142 +478,225 @@
   overflow: auto;
 }
 
-/* Controls */
+/* Controls: the original's input controls with the Atlas theme */
 
 .visControls {
-  display: flex;
   flex: 1 1 auto;
-  flex-direction: column;
-  gap: var(--space-3);
   min-height: 0;
-  padding: var(--space-3) var(--space-4);
+  margin: 0 var(--space-1);
+  padding: var(--space-2);
   overflow: auto;
 }
 
 .visControls__list {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3) var(--space-5);
+  gap: var(--space-6);
 }
 
-.visControls__control {
-  display: flex;
-  flex: 1 1 200px;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-width: 0;
+.visControls__item {
+  flex: 1 1 0%;
+  min-width: 250px;
 }
 
-.visControls__label {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
+.visControls__row > .atlFormRow__label {
+  align-self: flex-start;
 }
 
+.visControls__row .atlFormRow__label > .atlTooltipAnchor {
+  vertical-align: middle;
+}
+
+/* The field of a list that cannot be used: the original's compressed text field */
+.visControls__field.atlField {
+  max-width: 400px;
+  padding: 0 var(--space-2);
+}
+
+/* As the original's buttons, which keep a 1px border */
 .visControls__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
+  gap: var(--space-6);
+  margin-top: var(--space-3);
 }
 
+.visControls__actions > .atlButton {
+  border: 1px solid transparent;
+}
+
+/* The dual range: number fields at its ends, a track with two thumbs between them */
 .visControls__range {
   display: flex;
-  gap: var(--space-3);
-  align-items: flex-start;
-}
-
-.visControls__range > .atlField {
-  flex: none;
-  width: 68px;
-}
-
-.visControls__dual {
-  position: relative;
-  flex: 1 1 auto;
-  min-width: 60px;
-  height: 40px;
-}
-
-.visControls__track {
-  position: absolute;
-  top: 11px;
-  right: 0;
-  left: 0;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--chart-band);
-}
-
-.visControls__track span {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  border-radius: 2px;
-  background: var(--color-accent);
-}
-
-.visControls__dual input[type='range'] {
-  position: absolute;
-  top: 3px;
-  left: 0;
+  align-items: center;
   width: 100%;
-  height: 20px;
+  max-width: 400px;
+  height: var(--control-height);
+}
+
+.visControls__input.atlField {
+  flex: none;
+  min-width: 64px;
+  padding: 0 var(--space-2);
+}
+
+.visControls__spacer {
+  flex: 0 1 var(--space-4);
+}
+
+.visControls__spacer--slim {
+  flex-basis: var(--space-2);
+}
+
+/* As wide as a browser draws a slider, then as the room allows */
+.visControls__track {
+  position: relative;
+  flex: 1 1 129px;
+  align-self: flex-start;
+  min-width: 0;
+  height: 100%;
+}
+
+.visControls__track--ticks {
+  margin: 0 1em;
+}
+
+.visControls__range--disabled .visControls__track {
+  opacity: 0.25;
+}
+
+.visControls__slider {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: var(--control-height);
   margin: 0;
-  background: none;
-  pointer-events: none;
+  background: transparent;
+  cursor: pointer;
   appearance: none;
 }
 
-.visControls__dual input[type='range']::-webkit-slider-runnable-track {
-  background: none;
+.visControls__track--ticks .visControls__slider {
+  height: var(--space-4);
 }
 
-.visControls__dual input[type='range']::-moz-range-track {
-  background: none;
-}
-
-.visControls__dual input[type='range']::-webkit-slider-thumb {
-  width: 16px;
-  height: 16px;
-  border: 1px solid var(--color-border);
-  border-radius: 50%;
-  background: var(--color-surface);
-  box-shadow: var(--shadow-sm);
-  cursor: pointer;
-  pointer-events: auto;
-  appearance: none;
-}
-
-.visControls__dual input[type='range']::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
-  border: 1px solid var(--color-border);
-  border-radius: 50%;
-  background: var(--color-surface);
-  box-shadow: var(--shadow-sm);
-  cursor: pointer;
-  pointer-events: auto;
-}
-
-.visControls__dual input[type='range']:focus-visible::-webkit-slider-thumb {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 1px;
-}
-
-.visControls__dual input[type='range']:disabled::-webkit-slider-thumb {
+.visControls__slider:disabled {
   cursor: not-allowed;
 }
 
-.visControls__ends {
+.visControls__slider:focus {
+  outline: none;
+}
+
+.visControls__slider::-webkit-slider-runnable-track {
+  height: 2px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-text-secondary) 40%, transparent);
+}
+
+.visControls__slider::-moz-range-track {
+  height: 2px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-text-secondary) 40%, transparent);
+}
+
+/* The browser's own thumb only places a value: the drawn thumbs are those below */
+.visControls__slider::-webkit-slider-thumb {
+  width: var(--space-4);
+  height: var(--space-4);
+  margin-top: -7px;
+  visibility: hidden;
+  appearance: none;
+}
+
+.visControls__slider::-moz-range-thumb {
+  width: var(--space-4);
+  height: var(--space-4);
+  border: 0;
+  visibility: hidden;
+}
+
+.visControls__highlight {
   position: absolute;
-  right: 0;
-  bottom: 0;
+  top: calc(50% - 2px);
   left: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+.visControls__track--ticks .visControls__highlight {
+  top: 6px;
+}
+
+.visControls__progress {
+  height: var(--space-1);
+  border-radius: var(--space-1);
+  background: var(--color-text-secondary);
+}
+
+.visControls__thumb {
+  position: absolute;
+  top: var(--space-2);
+  z-index: 1;
+  width: var(--space-4);
+  height: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  pointer-events: none;
+}
+
+.visControls__track--ticks .visControls__thumb {
+  top: 0;
+}
+
+.visControls__range--disabled .visControls__thumb {
+  border-color: var(--color-text-secondary);
+  background: var(--color-text-secondary);
+  box-shadow: none;
+}
+
+.visControls__ticks {
+  position: absolute;
+  top: 6px;
+  right: 2px;
+  left: 2px;
   display: flex;
-  justify-content: space-between;
-  color: var(--color-text-secondary);
+}
+
+/* A bound under its end of the track, with the dot it marks the track with */
+.visControls__tick {
+  position: absolute;
+  padding: 14px 0 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
   font-size: var(--font-size-xs);
-  font-variant-numeric: tabular-nums;
+  line-height: normal;
+  transform: translateX(-50%);
+  cursor: pointer;
+}
+
+.visControls__tick::before {
+  position: absolute;
+  top: 0;
+  left: calc(50% - 2px);
+  width: var(--space-1);
+  height: var(--space-1);
+  border-radius: 50%;
+  background: var(--color-text-secondary);
+  content: "";
+}
+
+.visControls__tick:enabled:hover,
+.visControls__tick:focus {
+  color: var(--color-accent);
+}
+
+.visControls__tick:disabled {
+  cursor: not-allowed;
 }
 
 /* TSVB */

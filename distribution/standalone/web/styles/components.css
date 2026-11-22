@@ -185,10 +185,11 @@
   color: var(--color-text-tertiary);
 }
 
+/* As the theme's focused field: the accent for a border and a 2 px ring */
 .atlField:focus,
 .atlField:focus-within {
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px var(--color-focus-ring);
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
   outline: none;
 }
 
@@ -198,6 +199,11 @@
 }
 
 .atlField--invalid {
+  border-color: var(--color-critical);
+}
+
+/* A field the browser finds invalid, a number out of its bounds, as the theme draws one */
+.atlField:invalid {
   border-color: var(--color-critical);
 }
 
@@ -272,9 +278,11 @@ select.atlField {
   color: var(--color-text-secondary);
 }
 
+/* As the original's error under a field: the critical colour itself */
 .atlFormRow__error {
   font-size: var(--font-size-xs);
-  color: var(--color-critical-text);
+  line-height: 18px;
+  color: var(--color-critical);
 }
 
 .atlCheckbox,
@@ -1163,14 +1171,20 @@ select.atlField {
   min-width: 0;
 }
 
+.atlTooltipAnchor--block {
+  display: block;
+}
+
+/* As the theme's tooltip: frosted, without the arrow */
 .atlTooltip {
   position: fixed;
   z-index: 6000;
   max-width: 320px;
-  padding: 6px var(--space-2);
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
   color: var(--color-text-primary);
   font-size: var(--font-size-xs);
+  line-height: 18px;
   pointer-events: none;
 }
 

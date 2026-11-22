@@ -26,9 +26,6 @@ const SOURCE_TYPES = [
   { type: 'index-pattern', name: 'Index pattern', icon: 'index' as const },
 ];
 
-// Kinds that are still being tried out are marked, as OpenSearch Dashboards marks them
-const EXPERIMENTAL = new Set(['input_control_vis', 'vega']);
-
 // Kinds another application makes, listed with the others as OpenSearch Dashboards lists them
 const ALIASES: Array<VisType & { open: () => string }> = [
   {
@@ -184,7 +181,7 @@ export function NewVisModal({ onClose }: { onClose: () => void }) {
                   >
                     <Icon name={type.icon as IconName} className="atlIcon--l" />
                     <span>{type.title}</span>
-                    {EXPERIMENTAL.has(type.name) && (
+                    {'stage' in type && type.stage === 'experimental' && (
                       <span className="vzeNew__mark" title="Experimental">
                         E
                       </span>
@@ -204,7 +201,7 @@ export function NewVisModal({ onClose }: { onClose: () => void }) {
                 {aliasOf(described) ? '' : '.'}
               </p>
               {!aliasOf(described) && !canDraw(described.name) && <Badge tone="warning">Not in this build yet</Badge>}
-              {EXPERIMENTAL.has(described.name) && (
+              {'stage' in described && described.stage === 'experimental' && (
                 <p className="atlSubdued atlSmall">
                   This visualization is experimental. The design and implementation are less mature than stable visualizations and might be subject
                   to change.

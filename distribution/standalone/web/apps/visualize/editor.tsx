@@ -8,7 +8,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, EmptyPrompt, IconButton, Loading, Tabs, cx } from '../../components/basic';
+import { Button, CallOut, EmptyPrompt, IconButton, Loading, Tabs, cx } from '../../components/basic';
 import { Icon } from '../../components/icon';
 import type { AggConfig, AggContext } from '../../lib/aggs';
 import type { TimeRange } from '../../lib/dates';
@@ -411,6 +411,7 @@ export function VisEditor({ savedId }: { savedId?: string }) {
         savedQueryId={urlState.savedQuery}
         onSavedQueryChange={onSavedQueryChange}
       />
+      {kind?.stage === 'experimental' && <ExperimentalVisInfo />}
       <h1 className="atlScreenReaderOnly">{editorHeading(saved.title, kind?.title ?? saved.type, Boolean(saved.id))}</h1>
       <div
         className="vzeEditor"
@@ -552,6 +553,34 @@ export function VisEditor({ savedId }: { savedId?: string }) {
           onClose={() => setDialog(undefined)}
         />
       )}
+    </div>
+  );
+}
+
+/** The original's banner over the editor of a kind still being tried out */
+function ExperimentalVisInfo() {
+  return (
+    <div className="vzeExperimental" data-test-subj="experimentalVisInfo">
+      <CallOut
+        size="s"
+        icon="beaker"
+        title={
+          <>
+            This visualization is experimental and is not subject to the support SLA of official GA features. For feedback, please create
+            an issue in{' '}
+            <a
+              className="shlExternal"
+              href="https://github.com/opensearch-project/OpenSearch-Dashboards/issues/new/choose"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              GitHub
+              <Icon name="external" title="External link" />
+            </a>
+            .
+          </>
+        }
+      />
     </div>
   );
 }
