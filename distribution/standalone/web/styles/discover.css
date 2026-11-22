@@ -1,0 +1,367 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/* Discover: the fields on one side, the histogram and the documents on the other. */
+
+.dscPage {
+  display: flex;
+  flex: 1 1 auto;
+  gap: var(--space-2);
+  min-height: 0;
+  height: calc(100vh - var(--header-height));
+  padding: var(--space-2);
+}
+
+.dscSidebar {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: 284px;
+  min-height: 0;
+}
+
+.dscSidebar__top {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.dscSidebar__top .atlButton {
+  flex: none;
+}
+
+.dscSidebar__search {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+  min-width: 0;
+}
+
+.dscSidebar__search > :first-child {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.dscSidebar__search .atlButton {
+  padding: 0 var(--space-2);
+  white-space: nowrap;
+}
+
+.dscSidebar__lists {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--space-1) var(--space-3) var(--space-3);
+  overflow-y: auto;
+}
+
+.dscSidebar__lists .atlAccordion__button {
+  font-size: var(--font-size-xs);
+}
+
+.dscSidebar__label {
+  padding: var(--space-2) 0 var(--space-1);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.dscSidebar__empty {
+  display: block;
+  padding: var(--space-1) 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.dscField {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 32px;
+  border-radius: var(--radius-sm);
+}
+
+.dscField:hover,
+.dscField--open {
+  background: var(--color-hover);
+}
+
+.dscField__name {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  height: 32px;
+  padding: 0 var(--space-1);
+  border: 0;
+  background: none;
+  font-size: var(--font-size-xs);
+  text-align: left;
+  cursor: pointer;
+}
+
+.dscField__action {
+  flex: none;
+  opacity: 0;
+}
+
+.dscField:hover .dscField__action,
+.dscField__action:focus-visible {
+  opacity: 1;
+}
+
+.dscFieldDetails {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 280px;
+}
+
+.dscFieldDetails__bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-surface-secondary);
+  overflow: hidden;
+}
+
+.dscFieldDetails__bar span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--color-accent);
+}
+
+.dscMain {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.dscMain .shlSearchBar {
+  padding: 0 0 var(--space-2);
+}
+
+.dscCanvas {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+}
+
+.dscChartHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4) 0;
+  font-size: var(--font-size-m);
+}
+
+.dscChart {
+  flex: none;
+  height: 200px;
+  padding: var(--space-2) var(--space-3) var(--space-2);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.dscResultsHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.dscTableWrap {
+  padding: 0 var(--space-2);
+}
+
+.dscTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-family-code);
+  font-size: var(--font-size-xs);
+  line-height: 24px;
+}
+
+.dscTable th {
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--color-border-light);
+  font-weight: var(--font-weight-semibold);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.dscTable td {
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--color-border-light);
+  vertical-align: top;
+}
+
+.dscTable__toggle {
+  width: 28px;
+  padding-right: 0 !important;
+}
+
+.dscTable__row--open > td {
+  border-bottom-color: transparent;
+}
+
+.dscTable__details > td {
+  padding: 0 var(--space-2) var(--space-4) !important;
+}
+
+.dscDetails {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.dscDetails__title {
+  font-family: var(--font-family-code);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-semibold);
+}
+
+.dscDetails__links {
+  gap: var(--space-4);
+  font-family: var(--font-family-code);
+  font-size: var(--font-size-xs);
+}
+
+.dscTable__time {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.dscHeader {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.dscHeader__button {
+  display: inline-flex;
+  padding: 2px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--color-text-secondary);
+  opacity: 0;
+  cursor: pointer;
+}
+
+th:hover .dscHeader__button,
+.dscHeader__button:focus-visible {
+  opacity: 1;
+}
+
+.dscHeader__button:hover {
+  background: var(--color-hover);
+  color: var(--color-text-primary);
+}
+
+.dscCell {
+  position: relative;
+  display: block;
+}
+
+.dscCell__value {
+  overflow-wrap: anywhere;
+}
+
+.dscCell__actions {
+  position: absolute;
+  top: -2px;
+  right: 0;
+  display: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+td:hover > .dscCell > .dscCell__actions {
+  display: inline-flex;
+}
+
+.dscSource {
+  display: -webkit-box;
+  margin: 0;
+  max-height: 96px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow-wrap: anywhere;
+}
+
+.dscSource__pair {
+  margin-right: var(--space-2);
+}
+
+.dscSource dt,
+.dscSource dd {
+  display: inline;
+  margin: 0;
+}
+
+.dscSource dt {
+  margin-right: 6px;
+  padding: 2px 5px;
+  border-radius: var(--radius-xs);
+  background: var(--color-accent-tint);
+}
+
+.dscFooter {
+  padding: var(--space-4);
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.dscDocFields td {
+  vertical-align: top;
+  font-size: var(--font-size-xs);
+}
+
+.dscDocFields__actions {
+  width: 1%;
+  white-space: nowrap;
+  padding-right: 0 !important;
+}
+
+.dscDocFields__actions .atlButton {
+  width: 22px;
+  height: 22px;
+}
+
+.dscDocFields__name {
+  width: 30%;
+  font-weight: var(--font-weight-medium);
+  overflow-wrap: anywhere;
+}
+
+.dscDocFields__value {
+  font-family: var(--font-family-code);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.dscDocPage {
+  max-width: 1120px;
+}
+
+@media (max-width: 767px) {
+  .dscPage {
+    flex-direction: column;
+    height: auto;
+  }
+
+  .dscSidebar {
+    width: 100%;
+    max-height: 320px;
+  }
+}

@@ -1,6 +1,54 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
+/* Where the browser side starts: it reads what the server put in the page and draws the app. */
+
 import { createRoot } from 'react-dom/client';
+import './styles/tokens.css';
+import './styles/base.css';
+import './styles/components.css';
+import { App, registerRoute } from './app';
+import { Discover } from './apps/discover';
+import { startRouter } from './router';
+import { createServices, type BootData } from './services';
+
+function readBootData(): BootData {
+  const element = document.getElementById('boot-data');
+  const fallback: BootData = {
+    basePath: '',
+    version: '',
+    name: 'InfraDashboard',
+    settings: {},
+    settingsDefaults: {},
+    settingsOverrides: {},
+    map: { tileUrl: '', attribution: '' },
+  };
+  if (!element?.textContent) return fallback;
+  try {
+    return { ...fallback, ...(JSON.parse(element.textContent) as Partial<BootData>) };
+  } catch {
+    return fallback;
+  }
+}
+
+const boot = readBootData();
+const services = createServices(boot);
+startRouter(boot.basePath);
+
+// The theme is a class on the page; the server wrote the one the setting names
+const applyTheme = () => {
+  const dark = services.uiSettings.get<boolean>('theme:darkMode', false) === true;
+  document.documentElement.classList.toggle('themeDark', dark);
+  document.documentElement.classList.toggle('themeLight', !dark);
+  document.documentElement.classList.toggle(
+    'reduceMotion',
+    services.uiSettings.get<boolean>('accessibility:disableAnimations', false) === true
+  );
+};
+applyTheme();
+services.uiSettings.subscribe(applyTheme);
+
+registerRoute({ paths: ['/app/data-explorer/discover', '/app/data-explorer'], render: () => <Discover basePath="/app/data-explorer/discover" /> });
+registerRoute({ paths: ['/app/discover'], render: () => <Discover basePath="/app/discover" /> });
 
 const root = document.getElementById('root');
-if (root) createRoot(root).render(<p>InfraDashboard</p>);
+if (root) createRoot(root).render(<App />);

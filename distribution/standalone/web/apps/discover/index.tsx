@@ -1,0 +1,666 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/* Discover: search an index pattern's documents, see when they happened, look into each one. */
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Button, CallOut, EmptyPrompt, Loading, Panel } from '../../components/basic';
+import { Select } from '../../components/form';
+import { downloadFile } from '../../components/overlay';
+import { XYChart } from '../../charts/xy';
+import { dateInterval, tabify } from '../../lib/aggs';
+import { formatDate, resolveTimeRange } from '../../lib/dates';
+import { flattenHit, toCsv, type RawHit } from '../../lib/docs';
+import { existsFilter, mergeFilters, phraseFilter } from '../../lib/query';
+import { parseSearchSource, serializeSearchSource } from '../../lib/search_source';
+import type { Field, Filter, IndexPattern, Query } from '../../lib/types';
+import { appUrl, decodeState, encodeState } from '../../lib/url';
+import { href, navigate, navigateHash, setHashParams, useLocation } from '../../router';
+import { services } from '../../services';
+import type { IndexPatternSummary } from '../../services/index_patterns';
+import type { SavedObject } from '../../services/saved_objects';
+import { totalOf, type RequestRecord, type SearchResponse } from '../../services/search';
+import { TopNav } from '../../shell/chrome';
+import { isPinned, splitFilters } from '../../shell/filter_bar';
+import { Inspector } from '../../shell/inspect';
+import { defaultQueryLanguage } from '../../shell/query_bar';
+import { OpenFlyout, SaveModal, ShareModal } from '../../shell/saved_objects_ui';
+import { SearchBar } from '../../shell/search_bar';
+import { addRecentlyAccessed, currentGlobalParam, useAutoRefresh, useBreadcrumbs, useGlobalState } from '../../shell/state';
+import { DocDetails } from './doc_viewer';
+import { DocTable, type SortPair } from './doc_table';
+import { DocPage, ContextPage } from './doc_pages';
+import { HISTOGRAM_AGG_ID, aggContext, buildDiscoverRequest, histogramAgg } from './search';
+import { Sidebar } from './sidebar';
+import '../../styles/discover.css';
+
+interface SavedSearchAttributes {
+  title: string;
+  description?: string;
+  columns?: string[];
+  sort?: unknown;
+  hits?: number;
+  version?: number;
+  kibanaSavedObjectMeta?: { searchSourceJSON?: string };
+}
+
+interface UrlAppState {
+  discover?: { columns?: string[]; sort?: unknown; interval?: string; isDirty?: boolean };
+  metadata?: { indexPattern?: string; view?: string };
+  // The shape of older addresses
+  columns?: string[];
+  sort?: unknown;
+  interval?: string;
+  index?: string;
+  query?: Query;
+  filters?: Filter[];
+}
+
+interface UrlQueryState {
+  query?: Query;
+  filters?: Filter[];
+}
+
+/** A sort as pairs, from any of the forms it has been saved in */
+export function normalizeSort(sort: unknown): SortPair[] {
+  if (!Array.isArray(sort) || sort.length === 0) return [];
+  if (typeof sort[0] === 'string') {
+    return sort.length >= 2 ? [[sort[0], sort[1] === 'asc' ? 'asc' : 'desc']] : [];
+  }
+  return (sort as unknown[])
+    .filter((pair): pair is [string, string] => Array.isArray(pair) && typeof pair[0] === 'string')
+    .map(([field, direction]) => [field, direction === 'asc' ? 'asc' : 'desc']);
+}
+
+const INTERVALS = [
+  { value: 'auto', label: 'Auto' },
+  { value: 'ms', label: 'Millisecond' },
+  { value: 's', label: 'Second' },
+  { value: 'm', label: 'Minute' },
+  { value: 'h', label: 'Hourly' },
+  { value: 'd', label: 'Daily' },
+  { value: 'w', label: 'Weekly' },
+  { value: 'M', label: 'Monthly' },
+  { value: 'y', label: 'Yearly' },
+];
+
+interface Result {
+  rows: RawHit[];
+  total: number;
+  response: SearchResponse;
+  range?: { from: Date; to: Date };
+}
+
+export function Discover({ basePath }: { basePath: string }) {
+  const location = useLocation();
+  const { hashPath } = location;
+  const doc = /^\/doc\/([^/]+)\/([^/]+)/.exec(hashPath);
+  const context = /^\/context\/([^/]+)\/(.+)$/.exec(hashPath);
+  if (doc) {
+    return <DocPage indexPatternId={decodeURIComponent(doc[1])} index={decodeURIComponent(doc[2])} id={location.hashParams.id ?? ''} basePath={basePath} />;
+  }
+  if (context) {
+    return <ContextPage indexPatternId={decodeURIComponent(context[1])} id={decodeURIComponent(context[2])} basePath={basePath} />;
+  }
+  const savedId = /^\/view\/(.+)$/.exec(hashPath)?.[1];
+  return <DiscoverMain basePath={basePath} savedId={savedId ? decodeURIComponent(savedId) : undefined} />;
+}
+
+function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: string }) {
+  const location = useLocation();
+  const [global, setGlobal] = useGlobalState();
+  const [patterns, setPatterns] = useState<IndexPatternSummary[]>();
+  const [defaultId, setDefaultId] = useState<string>();
+  const [saved, setSaved] = useState<SavedObject<SavedSearchAttributes>>();
+  const [savedError, setSavedError] = useState<string>();
+  const [indexPattern, setIndexPattern] = useState<IndexPattern>();
+  const [patternError, setPatternError] = useState<string>();
+  const [result, setResult] = useState<Result>();
+  const [error, setError] = useState<string>();
+  const [loading, setLoading] = useState(false);
+  const [tick, setTick] = useState(0);
+  const [records, setRecords] = useState<RequestRecord[]>([]);
+  const [dialog, setDialog] = useState<'save' | 'open' | 'share' | 'inspect'>();
+
+  // --- What the address says, over what the saved search says, over the defaults ---
+  const urlApp = useMemo(() => decodeState<UrlAppState>(location.hashParams._a), [location.hashParams._a]);
+  const urlQuery = useMemo(() => decodeState<UrlQueryState>(location.hashParams._q), [location.hashParams._q]);
+  const savedSource = useMemo(
+    () => (saved ? parseSearchSource(saved.attributes.kibanaSavedObjectMeta?.searchSourceJSON, saved.references) : undefined),
+    [saved]
+  );
+
+  const columns = useMemo(() => {
+    const fromUrl = urlApp.discover?.columns ?? urlApp.columns;
+    const chosen = fromUrl ?? saved?.attributes.columns ?? services.uiSettings.get<string[]>('defaultColumns', ['_source']);
+    return chosen.length ? chosen : ['_source'];
+  }, [urlApp, saved]);
+  const sort = useMemo(
+    () => normalizeSort(urlApp.discover?.sort ?? urlApp.sort ?? saved?.attributes.sort),
+    [urlApp, saved]
+  );
+  const interval = urlApp.discover?.interval ?? urlApp.interval ?? 'auto';
+  const indexPatternId = urlApp.metadata?.indexPattern ?? urlApp.index ?? savedSource?.indexId ?? defaultId;
+  const query: Query = useMemo(
+    () => urlQuery.query ?? urlApp.query ?? savedSource?.query ?? { query: '', language: defaultQueryLanguage() },
+    [urlQuery, urlApp, savedSource]
+  );
+  const appFilters: Filter[] = useMemo(
+    () => urlQuery.filters ?? urlApp.filters ?? savedSource?.filters ?? [],
+    [urlQuery, urlApp, savedSource]
+  );
+  const filters = useMemo(() => [...global.filters, ...appFilters.filter((filter) => !isPinned(filter))], [global.filters, appFilters]);
+
+  const writeApp = useCallback(
+    (changes: { columns?: string[]; sort?: SortPair[]; interval?: string; indexPattern?: string }, replace = false) => {
+      const next = {
+        discover: {
+          columns: changes.columns ?? columns,
+          interval: changes.interval ?? interval,
+          isDirty: Boolean(savedId),
+          sort: changes.sort ?? sort,
+        },
+        metadata: { indexPattern: changes.indexPattern ?? indexPatternId, view: 'discover' },
+      };
+      setHashParams({ _a: encodeState(next) }, { replace });
+    },
+    [columns, interval, sort, indexPatternId, savedId]
+  );
+  const writeQuery = useCallback(
+    (changes: { query?: Query; filters?: Filter[] }) => {
+      setHashParams({ _q: encodeState({ filters: changes.filters ?? appFilters, query: changes.query ?? query }) }, { replace: false });
+    },
+    [appFilters, query]
+  );
+  const setFilters = useCallback(
+    (next: Filter[]) => {
+      const { pinned, app } = splitFilters(next);
+      if (JSON.stringify(pinned) !== JSON.stringify(global.filters)) setGlobal({ filters: pinned });
+      if (JSON.stringify(app) !== JSON.stringify(appFilters)) writeQuery({ filters: app });
+    },
+    [global.filters, appFilters, setGlobal, writeQuery]
+  );
+
+  // --- What has to be loaded before there is anything to search ---
+  useEffect(() => {
+    let live = true;
+    services.indexPatterns
+      .list()
+      .then(async (list) => {
+        const chosen = await services.indexPatterns.defaultId();
+        if (!live) return;
+        setPatterns(list);
+        setDefaultId(chosen);
+      })
+      .catch((failure) => live && setPatternError((failure as Error).message));
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    setSaved(undefined);
+    setSavedError(undefined);
+    if (!savedId) return undefined;
+    let live = true;
+    services.savedObjects
+      .get<SavedSearchAttributes>('search', savedId)
+      .then((object) => {
+        if (!live) return;
+        setSaved(object);
+        addRecentlyAccessed(appUrl(basePath, `/view/${encodeURIComponent(savedId)}`), object.attributes.title, savedId);
+      })
+      .catch((failure) => live && setSavedError((failure as Error).message));
+    return () => {
+      live = false;
+    };
+  }, [savedId, basePath]);
+
+  const waitingForSaved = Boolean(savedId) && !saved && !savedError;
+  useEffect(() => {
+    if (!indexPatternId || waitingForSaved) return undefined;
+    let live = true;
+    setPatternError(undefined);
+    services.indexPatterns
+      .get(indexPatternId)
+      .then((pattern) => live && setIndexPattern(pattern))
+      .catch((failure) => {
+        if (!live) return;
+        setIndexPattern(undefined);
+        setPatternError(`The index pattern ${indexPatternId} could not be loaded: ${(failure as Error).message}`);
+      });
+    return () => {
+      live = false;
+    };
+  }, [indexPatternId, waitingForSaved]);
+
+  useBreadcrumbs(
+    saved ? [{ text: 'Discover', to: appUrl(basePath, '/', { _g: currentGlobalParam() }) }, { text: saved.attributes.title }] : [{ text: 'Discover' }]
+  );
+
+  // --- The search ---
+  const sampleSize = services.uiSettings.get<number>('discover:sampleSize', 500);
+  const queryKey = JSON.stringify([query, filters, sort, interval]);
+  useEffect(() => {
+    if (!indexPattern || indexPattern.id !== indexPatternId) return undefined;
+    const controller = new AbortController();
+    const range = indexPattern.timeFieldName
+      ? resolveTimeRange(global.time, { weekStart: services.weekStart() })
+      : undefined;
+    let body: Record<string, unknown>;
+    try {
+      body = buildDiscoverRequest({ indexPattern, query, filters, range, sort, size: sampleSize, interval });
+    } catch (failure) {
+      setError((failure as Error).message);
+      return undefined;
+    }
+    const record: RequestRecord = { name: 'data', index: indexPattern.title, body, startedAt: Date.now() };
+    setLoading(true);
+    services.search
+      .search(indexPattern.title, body, { signal: controller.signal, record })
+      .then((response) => {
+        setResult({ rows: response.hits.hits as RawHit[], total: totalOf(response), response, range });
+        setError(undefined);
+        setRecords([record]);
+        setLoading(false);
+      })
+      .catch((failure) => {
+        if ((failure as Error).name === 'AbortError') return;
+        setError((failure as Error).message);
+        setRecords([record]);
+        setLoading(false);
+      });
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [indexPattern, indexPatternId, queryKey, global.time.from, global.time.to, sampleSize, tick]);
+
+  const refresh = useCallback(() => setTick((count) => count + 1), []);
+  useAutoRefresh(global.refreshInterval, refresh);
+
+  // --- What the page does ---
+  const toggleColumn = useCallback(
+    (name: string) => {
+      const without = columns.filter((column) => column !== name);
+      let next: string[];
+      if (without.length !== columns.length) next = without.length ? without : ['_source'];
+      else next = [...columns.filter((column) => column !== '_source'), name];
+      writeApp({ columns: next, sort: sort.filter(([field]) => next.includes(field) || field === indexPattern?.timeFieldName) });
+    },
+    [columns, sort, writeApp, indexPattern]
+  );
+  const moveColumn = useCallback(
+    (name: string, by: number) => {
+      const from = columns.indexOf(name);
+      const to = from + by;
+      if (from === -1 || to < 0 || to >= columns.length) return;
+      const next = [...columns];
+      next.splice(from, 1);
+      next.splice(to, 0, name);
+      writeApp({ columns: next });
+    },
+    [columns, writeApp]
+  );
+  const addFilter = useCallback(
+    (name: string, value: unknown, negate: boolean) => {
+      if (!indexPattern) return;
+      const values = Array.isArray(value) ? value : [value];
+      const made = values.map((item) => {
+        const filter = phraseFilter({ name }, item, indexPattern.id);
+        filter.meta.negate = negate;
+        if (services.uiSettings.get('filters:pinnedByDefault', false)) filter.$state = { store: 'globalState' };
+        return filter;
+      });
+      setFilters(mergeFilters(filters, made));
+    },
+    [indexPattern, filters, setFilters]
+  );
+  const addExists = useCallback(
+    (name: string) => {
+      if (indexPattern) setFilters(mergeFilters(filters, [existsFilter({ name }, indexPattern.id)]));
+    },
+    [indexPattern, filters, setFilters]
+  );
+  const visualize = useCallback(
+    (field: Field) => {
+      if (!indexPattern) return;
+      const isDate = field.type === 'date';
+      const visState = {
+        title: '',
+        type: 'histogram',
+        params: {},
+        aggs: [
+          { id: '1', type: 'count', schema: 'metric', params: {} },
+          isDate
+            ? { id: '2', type: 'date_histogram', schema: 'segment', params: { field: field.name, interval: 'auto' } }
+            : { id: '2', type: 'terms', schema: 'segment', params: { field: field.name, size: services.uiSettings.get('discover:aggs:terms:size', 20), orderBy: '1', order: 'desc' } },
+        ],
+      };
+      navigate(
+        appUrl('/app/visualize', '/create', {
+          type: 'histogram',
+          indexPattern: indexPattern.id,
+          _g: currentGlobalParam(),
+          _a: { filters: appFilters, query, vis: visState },
+        })
+      );
+    },
+    [indexPattern, appFilters, query]
+  );
+
+  const details = useCallback(
+    (hit: RawHit) => (
+      <DocDetails
+        hit={hit}
+        indexPattern={indexPattern as IndexPattern}
+        basePath={basePath}
+        actions={{ columns, onToggleColumn: toggleColumn, onFilter: addFilter, onFilterExists: addExists }}
+      />
+    ),
+    [indexPattern, basePath, columns, toggleColumn, addFilter, addExists]
+  );
+
+  const histogram = useMemo(() => {
+    if (!result || !indexPattern?.timeFieldName || !result.range) return undefined;
+    const agg = histogramAgg(indexPattern, interval);
+    if (!agg) return undefined;
+    const aggContextValue = aggContext(indexPattern, result.range);
+    const table = tabify([agg, { id: '1', type: 'count', schema: 'metric' }], result.response, aggContextValue);
+    const [bucketColumn, countColumn] = table.columns;
+    if (!bucketColumn || !countColumn) return undefined;
+    return {
+      interval: dateInterval(agg, aggContextValue),
+      column: bucketColumn,
+      points: table.rows.map((row) => ({ x: row[bucketColumn.id] as number, y: row[countColumn.id] as number })),
+    };
+  }, [result, indexPattern, interval]);
+
+  const downloadCsv = () => {
+    if (!result || !indexPattern) return;
+    const names =
+      columns.length === 1 && columns[0] === '_source'
+        ? [...new Set(result.rows.flatMap((row) => Object.keys(flattenHit(row, indexPattern))))].sort()
+        : [...(indexPattern.timeFieldName && !columns.includes(indexPattern.timeFieldName) ? [indexPattern.timeFieldName] : []), ...columns];
+    const csv = toCsv(
+      names,
+      result.rows.map((row) => {
+        const flat = flattenHit(row, indexPattern);
+        return names.map((name) => flat[name]);
+      }),
+      services.uiSettings.get('csv:separator', ','),
+      services.uiSettings.get('csv:quoteValues', true)
+    );
+    downloadFile(`${saved?.attributes.title ?? 'discover'}.csv`, csv, 'text/csv');
+  };
+
+  const save = async ({ title, asNew }: { title: string; asNew: boolean }) => {
+    if (!indexPattern) return;
+    const source = serializeSearchSource(
+      { indexId: indexPattern.id, query, filters: appFilters },
+      { highlightAll: true, version: true }
+    );
+    const attributes: SavedSearchAttributes = {
+      title,
+      description: saved?.attributes.description ?? '',
+      hits: 0,
+      columns,
+      sort,
+      version: 1,
+      kibanaSavedObjectMeta: { searchSourceJSON: source.searchSourceJSON },
+    };
+    const object =
+      saved && !asNew
+        ? await services.savedObjects.update('search', saved.id, attributes, { references: source.references })
+        : await services.savedObjects.create('search', attributes, { references: source.references });
+    services.toasts.success(`Search “${title}” was saved`);
+    setDialog(undefined);
+    setSaved({ ...object, attributes, references: source.references });
+    navigateHash(`/view/${encodeURIComponent(object.id)}`, { _g: location.hashParams._g });
+  };
+
+  // --- What is drawn ---
+  if (patternError && !indexPattern) {
+    return (
+      <div className="shlPage">
+        <EmptyPrompt icon="warning" title="Discover could not start">
+          {patternError}
+        </EmptyPrompt>
+      </div>
+    );
+  }
+  if (savedError) {
+    return (
+      <div className="shlPage">
+        <EmptyPrompt
+          icon="warning"
+          title="The saved search could not be loaded"
+          actions={
+            <Button variant="primary" to={appUrl(basePath, '/')}>
+              Start a new search
+            </Button>
+          }
+        >
+          {savedError}
+        </EmptyPrompt>
+      </div>
+    );
+  }
+  if (patterns && patterns.length === 0) {
+    return (
+      <div className="shlPage">
+        <EmptyPrompt
+          icon="index"
+          title="There is no index pattern yet"
+          actions={
+            <Button variant="primary" to="/app/management/opensearch-dashboards/indexPatterns/create">
+              Create an index pattern
+            </Button>
+          }
+        >
+          An index pattern says which indices to search. Create one to see their documents here.
+        </EmptyPrompt>
+      </div>
+    );
+  }
+  if (!indexPattern || !patterns) return <Loading />;
+
+  const dateFormat = services.uiSettings.get<string>('dateFormat', 'MMM D, YYYY @ HH:mm:ss.SSS');
+  const total = result?.total ?? 0;
+  const rows = result?.rows ?? [];
+
+  return (
+    <div className="dscPage" data-test-subj="discoverApp">
+      <TopNav
+        items={[
+          { id: 'new', label: 'New', to: appUrl(basePath, '/', { _g: currentGlobalParam() }), testId: 'discoverNewButton' },
+          { id: 'save', label: 'Save', onClick: () => setDialog('save'), testId: 'discoverSaveButton' },
+          { id: 'open', label: 'Open', onClick: () => setDialog('open'), testId: 'discoverOpenButton' },
+          { id: 'share', label: 'Share', onClick: () => setDialog('share'), testId: 'shareTopNavButton' },
+          { id: 'inspect', label: 'Inspect', onClick: () => setDialog('inspect'), testId: 'openInspectorButton' },
+        ]}
+      />
+      <Sidebar
+        indexPattern={indexPattern}
+        indexPatterns={patterns}
+        onIndexPatternChange={(id) => {
+          setResult(undefined);
+          setHashParams({
+            _a: encodeState({ discover: { columns: ['_source'], interval: 'auto', isDirty: false, sort: [] }, metadata: { indexPattern: id, view: 'discover' } }),
+            _q: encodeState({ filters: [], query }),
+          });
+        }}
+        onRefreshFields={() => {
+          services.indexPatterns
+            .fetchFields(indexPattern.title)
+            .then((fields) => {
+              // What was counted and scripted stays; what OpenSearch says about the rest is new
+              const kept = new Map(indexPattern.fields.map((field) => [field.name, field]));
+              const merged = fields.map((field) => ({ ...field, count: kept.get(field.name)?.count ?? 0 }));
+              for (const field of indexPattern.fields) if (field.scripted) merged.push({ ...field, count: field.count ?? 0 });
+              setIndexPattern({ ...indexPattern, fields: merged });
+              services.toasts.success('The field list was refreshed');
+            })
+            .catch((failure) => services.toasts.error(failure, 'The fields could not be read'));
+        }}
+        columns={columns}
+        rows={rows}
+        onToggleColumn={toggleColumn}
+        onFilter={addFilter}
+        onVisualize={visualize}
+      />
+      <div className="dscMain">
+        <SearchBar
+          indexPatterns={[indexPattern]}
+          query={query}
+          onQuerySubmit={(next) => writeQuery({ query: next })}
+          filters={filters}
+          onFiltersChange={setFilters}
+          time={global.time}
+          refreshInterval={global.refreshInterval}
+          onTimeChange={(time) => setGlobal({ time })}
+          onRefreshChange={(refreshInterval) => setGlobal({ refreshInterval })}
+          onRefresh={refresh}
+          loading={loading}
+          showTime={Boolean(indexPattern.timeFieldName)}
+        />
+        <Panel flush className="dscCanvas">
+          {loading && <div className="atlProgress" />}
+          {error ? (
+            <div style={{ padding: 'var(--space-4)' }}>
+              <CallOut tone="critical" title="The search failed">
+                {error}
+              </CallOut>
+            </div>
+          ) : !result ? (
+            <Loading>Searching</Loading>
+          ) : total === 0 ? (
+            <EmptyPrompt icon="search" title="No results match your search criteria">
+              {indexPattern.timeFieldName
+                ? 'Expand your time range: the documents may be older or newer than the range in the time picker. Or adjust your query and filters.'
+                : 'Adjust your query and filters.'}
+            </EmptyPrompt>
+          ) : (
+            <>
+              {histogram && result.range && (
+                <>
+                  <div className="dscChartHeader" data-test-subj="discoverIntervalDateRange">
+                    <span>
+                      {formatDate(result.range.from, dateFormat, services.timeZone())} -{' '}
+                      {formatDate(result.range.to, dateFormat, services.timeZone())} per
+                    </span>
+                    <Select
+                      compact
+                      style={{ width: 132 }}
+                      value={INTERVALS.some((item) => item.value === interval) ? interval : 'auto'}
+                      onChange={(next) => writeApp({ interval: next })}
+                      options={INTERVALS}
+                      aria-label="Interval"
+                      testId="discoverIntervalSelect"
+                    />
+                    {histogram.interval.scaled && (
+                      <span className="atlSubdued atlSmall">
+                        This interval makes too many bars for the time range, so it was scaled to {histogram.interval.description}.
+                      </span>
+                    )}
+                  </div>
+                  <div className="dscChart" data-test-subj="discoverChart">
+                    <XYChart
+                      series={[
+                        {
+                          id: 'count',
+                          label: 'Count',
+                          color: '#6092C0',
+                          type: 'histogram',
+                          mode: 'stacked',
+                          axisId: 'count',
+                          points: histogram.points,
+                        },
+                      ]}
+                      axes={[{ id: 'count', position: 'left', title: 'Count', format: (value) => value.toLocaleString() }]}
+                      x={{
+                        type: 'time',
+                        values: histogram.points.map((point) => point.x),
+                        interval: histogram.interval.ms,
+                        domain: [result.range.from.getTime(), result.range.to.getTime()],
+                        format: (value) => histogram.column.format(value),
+                        title: `${indexPattern.timeFieldName} per ${histogram.interval.description}`,
+                      }}
+                      legend={false}
+                      nowMarker
+                      onBrush={(from, to) =>
+                        setGlobal({ time: { from: new Date(from).toISOString(), to: new Date(to).toISOString() } })
+                      }
+                      onPointClick={(_series, point) =>
+                        setGlobal({
+                          time: {
+                            from: new Date(point.x as number).toISOString(),
+                            to: new Date((point.x as number) + histogram.interval.ms).toISOString(),
+                          },
+                        })
+                      }
+                    />
+                  </div>
+                </>
+              )}
+              <div className="dscResultsHeader">
+                <span className="atlTitleXxs" data-test-subj="discoverQueryHits">
+                  Results ({rows.length.toLocaleString()}/{total.toLocaleString()})
+                </span>
+                <Button variant="empty" size="s" icon="download" onClick={downloadCsv} testId="dscDownloadCsvButton">
+                  Download as CSV
+                </Button>
+              </div>
+              <DocTable
+                rows={rows}
+                indexPattern={indexPattern}
+                columns={columns}
+                sort={sort}
+                onSort={(next) => writeApp({ sort: next })}
+                onRemoveColumn={toggleColumn}
+                onMoveColumn={moveColumn}
+                onFilter={addFilter}
+                details={details}
+              />
+              {rows.length < total && (
+                <div className="dscFooter">
+                  These are the first {rows.length.toLocaleString()} documents matching your search. Refine your search to see others.
+                </div>
+              )}
+            </>
+          )}
+        </Panel>
+      </div>
+      {dialog === 'save' && (
+        <SaveModal
+          objectType="search"
+          title={saved?.attributes.title ?? ''}
+          existing={Boolean(saved)}
+          onSave={save}
+          onClose={() => setDialog(undefined)}
+        />
+      )}
+      {dialog === 'open' && (
+        <OpenFlyout
+          title="Open search"
+          types={[{ type: 'search', name: 'Saved search', icon: 'discover' }]}
+          manageLink="/app/management/opensearch-dashboards/objects"
+          onClose={() => setDialog(undefined)}
+          onChoose={(object) => {
+            setDialog(undefined);
+            navigate(appUrl(basePath, `/view/${encodeURIComponent(object.id)}`, { _g: currentGlobalParam() }));
+          }}
+        />
+      )}
+      {dialog === 'share' && (
+        <ShareModal
+          objectType="search"
+          savedUrl={saved ? `${window.location.origin}${href(appUrl(basePath, `/view/${encodeURIComponent(saved.id)}`))}` : undefined}
+          onClose={() => setDialog(undefined)}
+        />
+      )}
+      {dialog === 'inspect' && (
+        <Inspector title={saved?.attributes.title ?? 'Discover'} requests={records} onClose={() => setDialog(undefined)} />
+      )}
+    </div>
+  );
+}
+
+export { HISTOGRAM_AGG_ID };

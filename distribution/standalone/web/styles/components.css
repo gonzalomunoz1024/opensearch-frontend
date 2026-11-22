@@ -1225,3 +1225,58 @@ mark,
   background: var(--color-highlight);
   color: inherit;
 }
+
+/* --- Page furniture ------------------------------------------------------------------------- */
+
+.atlPageHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.atlPageHeader__description {
+  margin-top: var(--space-1);
+  max-width: 720px;
+}
+
+.atlXs {
+  font-size: var(--font-size-xs);
+}
+
+.atlRange {
+  width: 100%;
+  accent-color: var(--color-accent);
+}
+
+.atlCombo--s {
+  min-height: var(--control-height-s);
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+}
+
+.atlCombo--disabled {
+  color: var(--color-text-tertiary);
+  cursor: not-allowed;
+}
+
+.atlCombo__clear {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+}
+
+.atlCombo__clear:hover {
+  color: var(--color-text-primary);
+}
+
+.atlCombo__caret {
+  color: var(--color-text-tertiary);
+  pointer-events: none;
+}

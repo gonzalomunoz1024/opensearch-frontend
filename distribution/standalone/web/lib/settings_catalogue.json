@@ -1,0 +1,431 @@
+{
+ "accessibility:disableAnimations": {
+  "name": "Disable Animations",
+  "value": false,
+  "description": "Turn off all unnecessary animations in the OpenSearch Dashboards UI. Refresh the page to apply the changes.",
+  "type": "boolean",
+  "category": "appearance",
+  "requiresPageReload": true
+ },
+ "courier:ignoreFilterIfFieldNotInIndex": {
+  "name": "Ignore filter(s)",
+  "value": false,
+  "description": "This configuration enhances support for dashboards containing visualizations accessing dissimilar indexes. When disabled, all filters are applied to all visualizations. When enabled, filter(s) will be ignored for a visualization when the visualization's index does not contain the filtering field.",
+  "type": "boolean",
+  "category": "search"
+ },
+ "courier:maxConcurrentShardRequests": {
+  "name": "Max Concurrent Shard Requests",
+  "value": 0,
+  "description": "Controls the max_concurrent_shard_requests setting used for _msearch requests sent by OpenSearch Dashboards. Set to 0 to disable this config and use the OpenSearch default.",
+  "type": "number",
+  "category": "search"
+ },
+ "csv:quoteValues": {
+  "name": "Quote CSV values",
+  "value": true,
+  "description": "Should values be quoted in csv exports?",
+  "type": "boolean",
+  "category": "general"
+ },
+ "csv:separator": {
+  "name": "CSV separator",
+  "value": ",",
+  "description": "Separate exported values with this string",
+  "type": "string",
+  "category": "general"
+ },
+ "dateFormat": {
+  "name": "Date format",
+  "value": "MMM D, YYYY @ HH:mm:ss.SSS",
+  "description": "When displaying a pretty formatted date, use this format",
+  "type": "string",
+  "category": "general"
+ },
+ "dateFormat:dow": {
+  "name": "Day of week",
+  "value": "Sunday",
+  "description": "What day should weeks start on?",
+  "type": "select",
+  "category": "general",
+  "options": [
+   "Sunday",
+   "Monday",
+   "Tuesday",
+   "Wednesday",
+   "Thursday",
+   "Friday",
+   "Saturday"
+  ]
+ },
+ "dateFormat:scaled": {
+  "name": "Scaled date format",
+  "value": "[\n  [\"\", \"HH:mm:ss.SSS\"],\n  [\"PT1S\", \"HH:mm:ss\"],\n  [\"PT1M\", \"HH:mm\"],\n  [\"PT1H\", \"YYYY-MM-DD HH:mm\"],\n  [\"P1DT\", \"YYYY-MM-DD\"],\n  [\"P1YT\", \"YYYY\"]\n]",
+  "description": "Values that define the format used in situations where time-based data is rendered in order, and formatted timestamps should adapt to the interval between measurements. Keys are ISO8601 intervals.",
+  "type": "json",
+  "category": "general"
+ },
+ "dateFormat:tz": {
+  "name": "Timezone for date formatting",
+  "value": "Browser",
+  "description": "Which timezone should be used. \"Browser\" will use the timezone detected by your browser.",
+  "type": "select",
+  "category": "general",
+  "options": [
+   "Browser"
+  ],
+  "requiresPageReload": true
+ },
+ "dateNanosFormat": {
+  "name": "Date with nanoseconds format",
+  "value": "MMM D, YYYY @ HH:mm:ss.SSSSSSSSS",
+  "description": "Used for the date_nanos datatype of OpenSearch",
+  "type": "string",
+  "category": "general"
+ },
+ "defaultColumns": {
+  "name": "Default columns",
+  "value": [
+   "_source"
+  ],
+  "description": "Columns displayed by default in the Discovery tab",
+  "type": "array",
+  "category": "discover"
+ },
+ "defaultIndex": {
+  "name": "Default index",
+  "value": null,
+  "description": "The index to access if no index is set",
+  "type": "string",
+  "category": "general"
+ },
+ "defaultRoute": {
+  "name": "Default route",
+  "value": "/app/home",
+  "description": "Where the product opens: a path that starts with /app/, such as /app/dashboards.",
+  "type": "string",
+  "category": "general"
+ },
+ "discover:aggs:terms:size": {
+  "name": "Number of terms",
+  "value": 20,
+  "description": "Determines how many terms will be visualized when clicking the \"visualize\" button, in the field drop downs, in the discover sidebar.",
+  "type": "number",
+  "category": "discover"
+ },
+ "discover:sampleSize": {
+  "name": "Number of rows",
+  "value": 500,
+  "description": "The number of rows to show in the table",
+  "type": "number",
+  "category": "discover"
+ },
+ "discover:searchOnPageLoad": {
+  "name": "Search on page load",
+  "value": true,
+  "description": "Controls whether a search is executed when Discover first loads. This setting does not have an effect when loading a saved search.",
+  "type": "boolean",
+  "category": "discover"
+ },
+ "discover:sort:defaultOrder": {
+  "name": "Default sort direction",
+  "value": "desc",
+  "description": "Controls the default sort direction for time based index patterns in the Discover app.",
+  "type": "select",
+  "category": "discover",
+  "options": [
+   "desc",
+   "asc"
+  ],
+  "optionLabels": {
+   "desc": "Descending",
+   "asc": "Ascending"
+  }
+ },
+ "doc_table:hideTimeColumn": {
+  "name": "Hide 'Time' column",
+  "value": false,
+  "description": "Hide the 'Time' column in Discover and in all Saved Searches on Dashboards.",
+  "type": "boolean",
+  "category": "discover"
+ },
+ "doc_table:highlight": {
+  "name": "Highlight results",
+  "value": true,
+  "description": "Highlight results in Discover and Saved Searches Dashboard. Highlighting makes requests slow when working on big documents.",
+  "type": "boolean",
+  "category": "discover"
+ },
+ "fields:popularLimit": {
+  "name": "Popular fields limit",
+  "value": 10,
+  "description": "The top N most popular fields to show",
+  "type": "number",
+  "category": "general"
+ },
+ "filterEditor:suggestValues": {
+  "name": "Filter editor suggest values",
+  "value": true,
+  "description": "Set this property to false to prevent the filter editor from suggesting values for fields.",
+  "type": "boolean",
+  "category": "general"
+ },
+ "filters:pinnedByDefault": {
+  "name": "Pin filters by default",
+  "value": false,
+  "description": "Whether the filters should have a global state (be pinned) by default",
+  "type": "boolean",
+  "category": "general"
+ },
+ "format:bytes:defaultPattern": {
+  "name": "Bytes format",
+  "value": "0,0.[0]b",
+  "description": "Default numeral format for the \"bytes\" format",
+  "type": "string",
+  "category": "general"
+ },
+ "format:currency:defaultPattern": {
+  "name": "Currency format",
+  "value": "($0,0.[00])",
+  "description": "Default numeral format for the \"currency\" format",
+  "type": "string",
+  "category": "general"
+ },
+ "format:defaultTypeMap": {
+  "name": "Field type format name",
+  "value": "{\n  \"ip\": { \"id\": \"ip\", \"params\": {} },\n  \"date\": { \"id\": \"date\", \"params\": {} },\n  \"date_nanos\": { \"id\": \"date_nanos\", \"params\": {}, \"opensearch\": true },\n  \"number\": { \"id\": \"number\", \"params\": {} },\n  \"boolean\": { \"id\": \"boolean\", \"params\": {} },\n  \"_source\": { \"id\": \"_source\", \"params\": {} },\n  \"_default_\": { \"id\": \"string\", \"params\": {} }\n}",
+  "description": "Map of the format name to use by default for each field type. \"_default_\" is used if the field type is not mentioned explicitly",
+  "type": "json",
+  "category": "general"
+ },
+ "format:number:defaultLocale": {
+  "name": "Formatting locale",
+  "value": "en",
+  "description": "Numeral language locale",
+  "type": "select",
+  "category": "general",
+  "options": [
+   "en",
+   "be-nl",
+   "chs",
+   "cs",
+   "da-dk",
+   "de-ch",
+   "de",
+   "en-gb",
+   "es-ES",
+   "es",
+   "et",
+   "fi",
+   "fr-CA",
+   "fr-ch",
+   "fr",
+   "hu",
+   "it",
+   "ja",
+   "nl-nl",
+   "pl",
+   "pt-br",
+   "pt-pt",
+   "ru-UA",
+   "ru",
+   "sk",
+   "th",
+   "tr",
+   "uk-UA"
+  ],
+  "optionLabels": {
+   "be-nl": "Dutch (Belgium)",
+   "chs": "Simplified Chinese",
+   "cs": "Czech",
+   "da-dk": "Danish (Denmark)",
+   "de-ch": "German (Switzerland)",
+   "de": "German",
+   "en-gb": "English (UK)",
+   "es-ES": "Spanish (Spain)",
+   "es": "Spanish",
+   "et": "Estonian",
+   "fi": "Finnish",
+   "fr-CA": "French (Canada)",
+   "fr-ch": "French (Switzerland)",
+   "fr": "French",
+   "hu": "Hungarian",
+   "it": "Italian",
+   "ja": "Japanese",
+   "nl-nl": "Dutch (Netherlands)",
+   "pl": "Polish",
+   "pt-br": "Portuguese (Brazil)",
+   "pt-pt": "Portuguese",
+   "ru-UA": "Russian (Ukraine)",
+   "ru": "Russian",
+   "sk": "Slovak",
+   "th": "Thai",
+   "tr": "Turkish",
+   "uk-UA": "Ukrainian"
+  }
+ },
+ "format:number:defaultPattern": {
+  "name": "Number format",
+  "value": "0,0.[000]",
+  "description": "Default numeral format for the \"number\" format",
+  "type": "string",
+  "category": "general"
+ },
+ "format:percent:defaultPattern": {
+  "name": "Percent format",
+  "value": "0,0.[000]%",
+  "description": "Default numeral format for the \"percent\" format",
+  "type": "string",
+  "category": "general"
+ },
+ "histogram:barTarget": {
+  "name": "Target bars",
+  "value": 50,
+  "description": "Attempt to generate around this many bars when using \"auto\" interval in date histograms",
+  "type": "number",
+  "category": "general"
+ },
+ "histogram:maxBars": {
+  "name": "Maximum bars",
+  "value": 100,
+  "description": "Never show more than this many bars in date histograms, scale values if needed",
+  "type": "number",
+  "category": "general"
+ },
+ "metaFields": {
+  "name": "Meta fields",
+  "value": [
+   "_source",
+   "_id",
+   "_type",
+   "_index",
+   "_score"
+  ],
+  "description": "Fields that exist outside of _source to merge into our document when displaying it",
+  "type": "array",
+  "category": "general"
+ },
+ "notifications:lifetime:error": {
+  "name": "Error notification lifetime",
+  "value": 300000,
+  "description": "The time in milliseconds which an error notification will be displayed on-screen for. Setting to Infinity will disable.",
+  "type": "number",
+  "category": "notifications"
+ },
+ "notifications:lifetime:info": {
+  "name": "Info notification lifetime",
+  "value": 5000,
+  "description": "The time in milliseconds which an information notification will be displayed on-screen for. Setting to Infinity will disable.",
+  "type": "number",
+  "category": "notifications"
+ },
+ "notifications:lifetime:warning": {
+  "name": "Warning notification lifetime",
+  "value": 10000,
+  "description": "The time in milliseconds which a warning notification will be displayed on-screen for. Setting to Infinity will disable.",
+  "type": "number",
+  "category": "notifications"
+ },
+ "query:allowLeadingWildcards": {
+  "name": "Allow leading wildcards in query",
+  "value": true,
+  "description": "When set, * is allowed as the first character in a query clause. Currently only applies when experimental query features are enabled in the query bar. To disallow leading wildcards in basic lucene queries, use query:queryString:options.",
+  "type": "boolean",
+  "category": "general"
+ },
+ "query:queryString:options": {
+  "name": "Query string options",
+  "value": "{ \"analyze_wildcard\": true }",
+  "description": "Options for the lucene query string parser. Is only used when \"Query language\" is set to Lucene.",
+  "type": "json",
+  "category": "general"
+ },
+ "savedObjects:perPage": {
+  "name": "Objects per page",
+  "value": 20,
+  "description": "Number of objects to show per page in the load dialog",
+  "type": "number",
+  "category": "general"
+ },
+ "search:queryLanguage": {
+  "name": "Query language",
+  "value": "kuery",
+  "description": "Query language used by the query bar. DQL is a new language built specifically for OpenSearch Dashboards.",
+  "type": "select",
+  "category": "general",
+  "options": [
+   "lucene",
+   "kuery"
+  ],
+  "optionLabels": {
+   "lucene": "Lucene",
+   "kuery": "DQL"
+  }
+ },
+ "shortDots:enable": {
+  "name": "Shorten fields",
+  "value": false,
+  "description": "Shorten long fields, for example, instead of foo.bar.baz, show f.b.baz",
+  "type": "boolean",
+  "category": "general"
+ },
+ "sort:options": {
+  "name": "Sort options",
+  "value": "{ \"unmapped_type\": \"boolean\" }",
+  "description": "Options for the OpenSearch sort parameter",
+  "type": "json",
+  "category": "general"
+ },
+ "theme:darkMode": {
+  "name": "Dark mode",
+  "value": false,
+  "description": "Draw the product in the dark colours of the Atlas design. The page reloads to apply it.",
+  "type": "boolean",
+  "category": "appearance",
+  "requiresPageReload": true
+ },
+ "timepicker:quickRanges": {
+  "name": "Time filter quick ranges",
+  "value": "[\n  {\n    \"from\": \"now/d\",\n    \"to\": \"now/d\",\n    \"display\": \"Today\"\n  },\n  {\n    \"from\": \"now/w\",\n    \"to\": \"now/w\",\n    \"display\": \"This week\"\n  },\n  {\n    \"from\": \"now-15m\",\n    \"to\": \"now\",\n    \"display\": \"Last 15 minutes\"\n  },\n  {\n    \"from\": \"now-30m\",\n    \"to\": \"now\",\n    \"display\": \"Last 30 minutes\"\n  },\n  {\n    \"from\": \"now-1h\",\n    \"to\": \"now\",\n    \"display\": \"Last 1 hour\"\n  },\n  {\n    \"from\": \"now-24h\",\n    \"to\": \"now\",\n    \"display\": \"Last 24 hours\"\n  },\n  {\n    \"from\": \"now-7d\",\n    \"to\": \"now\",\n    \"display\": \"Last 7 days\"\n  },\n  {\n    \"from\": \"now-30d\",\n    \"to\": \"now\",\n    \"display\": \"Last 30 days\"\n  },\n  {\n    \"from\": \"now-90d\",\n    \"to\": \"now\",\n    \"display\": \"Last 90 days\"\n  },\n  {\n    \"from\": \"now-1y\",\n    \"to\": \"now\",\n    \"display\": \"Last 1 year\"\n  }\n]",
+  "description": "The list of ranges to show in the Quick section of the time filter. This should be an array of objects, with each object containing \"from\", \"to\" (see accepted formats), and \"display\" (the title to be displayed).",
+  "type": "json",
+  "category": "general"
+ },
+ "timepicker:refreshIntervalDefaults": {
+  "name": "Time filter refresh interval",
+  "value": "{\n  \"pause\": false,\n  \"value\": 0\n}",
+  "description": "The timefilter's default refresh interval. The \"value\" needs to be specified in milliseconds.",
+  "type": "json",
+  "category": "general",
+  "requiresPageReload": true
+ },
+ "timepicker:timeDefaults": {
+  "name": "Time filter defaults",
+  "value": "{\n  \"from\": \"now-15m\",\n  \"to\": \"now\"\n}",
+  "description": "The timefilter selection to use when OpenSearch Dashboards is started without one",
+  "type": "json",
+  "category": "general",
+  "requiresPageReload": true
+ },
+ "visualization:colorMapping": {
+  "name": "Color mapping",
+  "value": "{\"Count\":\"#54B399\"}",
+  "description": "Maps values to specified colors within visualizations",
+  "type": "json",
+  "category": "visualization"
+ },
+ "visualization:heatmap:maxBuckets": {
+  "name": "Heatmap maximum buckets",
+  "value": 50,
+  "description": "The maximum number of buckets a single datasource can return. A higher number might have negative impact on browser rendering performance",
+  "type": "number",
+  "category": "visualization"
+ },
+ "visualization:tileMap:maxPrecision": {
+  "name": "Maximum tile map precision",
+  "value": 7,
+  "description": "The maximum geoHash precision displayed on tile maps: 7 is high, 10 is very high, 12 is the max. Explanation of cell dimensions",
+  "type": "number",
+  "category": "visualization"
+ }
+}

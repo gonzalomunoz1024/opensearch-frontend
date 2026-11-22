@@ -1,0 +1,64 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/* A value of a field, drawn the way the field's format says: text, a link, a picture, a colour. */
+
+import type { Formatted } from '../lib/field_formats';
+import { fieldFormatter } from '../lib/field_formats';
+import { highlightsOf, splitHighlights, type RawHit } from '../lib/docs';
+import type { IndexPattern } from '../lib/types';
+import { services } from '../services';
+
+export function FormattedText({ formatted, highlights }: { formatted: Formatted; highlights?: string[] }) {
+  const text =
+    highlights && highlights.length > 0
+      ? splitHighlights(formatted.text, highlights).map((part, index) =>
+          part.marked ? <mark key={index}>{part.text}</mark> : part.text
+        )
+      : formatted.text;
+  if (formatted.image) {
+    return (
+      <img
+        src={formatted.image.src}
+        alt={formatted.text}
+        style={{ maxWidth: formatted.image.width ?? 'none', maxHeight: formatted.image.height ?? 'none' }}
+      />
+    );
+  }
+  if (formatted.href) {
+    return (
+      <a
+        href={formatted.href}
+        target={formatted.newTab === false ? undefined : '_blank'}
+        rel="noopener noreferrer"
+      >
+        {text}
+      </a>
+    );
+  }
+  if (formatted.color || formatted.background) {
+    return (
+      <span style={{ color: formatted.color, backgroundColor: formatted.background, padding: formatted.background ? '0 4px' : undefined, borderRadius: 4 }}>
+        {text}
+      </span>
+    );
+  }
+  return <>{text}</>;
+}
+
+/** The value of one field of one document */
+export function FieldValue({
+  indexPattern,
+  fieldName,
+  value,
+  hit,
+}: {
+  indexPattern: IndexPattern | undefined;
+  fieldName: string;
+  value: unknown;
+  hit?: RawHit;
+}) {
+  const formatted = fieldFormatter(indexPattern, fieldName, services.formatSettings())(value);
+  const highlights =
+    hit && services.uiSettings.get('doc_table:highlight', true) ? highlightsOf(hit, fieldName) : undefined;
+  return <FormattedText formatted={formatted} highlights={highlights} />;
+}
