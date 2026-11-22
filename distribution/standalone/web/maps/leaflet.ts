@@ -1,8 +1,10 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
 /*
- * Leaflet, set up as maps_legacy sets it up: one copy for the page, kept on `window.L` for code
- * written against the global (a Vega map's layer), with touch and pointer events off.
+ * Leaflet: one copy for the page, kept on `window.L` for code written against the global (a Vega
+ * map's layer). maps_legacy sets L.Browser.touch and pointer to false, which Leaflet's own checks
+ * never read (they hold copies made when Leaflet loads): maps in OpenSearch Dashboards 3.9.0 have
+ * Leaflet's touch classes and styles, and so do these.
  */
 
 import * as Leaflet from 'leaflet';
@@ -18,12 +20,7 @@ declare global {
 
 function setUp(): LeafletModule {
   if (typeof window === 'undefined') return Leaflet;
-  if (!window.L) {
-    const browser = Leaflet.Browser as { touch: boolean; pointer?: boolean };
-    browser.touch = false;
-    browser.pointer = false;
-    window.L = Leaflet;
-  }
+  window.L ??= Leaflet;
   return window.L;
 }
 

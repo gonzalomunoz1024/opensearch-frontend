@@ -103,13 +103,12 @@ export function renderAttributionMarkdown(markdown: string): string {
   return `<p>${html.replace(/\n/g, '\n')}</p>\n`;
 }
 
-/** The query every request to the maps service carries */
-export function withServiceParams(url: string, version: string): string {
-  const params: Array<[string, string]> = [
-    ['elastic_tile_service_tos', 'agree'],
-    ['my_app_name', 'opensearch-dashboards'],
-    ['my_app_version', version],
-  ];
+/**
+ * The query every request to a maps service carries: the OpenSearch maps service's
+ * (`opensearch_tos_agree=true`; the original's osd_version is never set, so never sent), or the
+ * Elastic Maps Service's when the OpenSearch manifest says it is not enabled.
+ */
+export function withServiceParams(url: string, params: Array<[string, string]>): string {
   const [beforeHash, hash] = url.split('#', 2);
   const [path, query = ''] = beforeHash.split('?', 2);
   const search = new URLSearchParams(query);
@@ -117,6 +116,13 @@ export function withServiceParams(url: string, version: string): string {
   const text = search.toString().replace(/%7B(\w+?)%7D/gi, '{$1}');
   return `${path}?${text}${hash !== undefined ? `#${hash}` : ''}`;
 }
+
+export const OPENSEARCH_PARAMS: Array<[string, string]> = [['opensearch_tos_agree', 'true']];
+export const emsParams = (version: string): Array<[string, string]> => [
+  ['elastic_tile_service_tos', 'agree'],
+  ['my_app_name', 'opensearch-dashboards'],
+  ['my_app_version', version],
+];
 
 export function toAbsoluteUrl(host: string, path: string): string {
   if (!host) return path;
@@ -131,6 +137,7 @@ export class ServiceSettings {
   private readonly hasTmsConfigured: boolean;
   private readonly tmsOptionsFromConfig: TmsService;
   private catalogue?: Promise<Catalogue>;
+  private openSearchMaps?: Promise<boolean>;
   private tmsServices?: Promise<TmsServiceConfig[]>;
   private fileLayers?: Promise<FileLayerConfig[]>;
   private showZoomMessage = true;
@@ -190,7 +197,7 @@ export class ServiceSettings {
 
   private async getManifest<T>(manifestUrl: string): Promise<T> {
     try {
-      const result = await this.fetchWithTimeout(withServiceParams(manifestUrl, this.version));
+      const result = await this.fetchWithTimeout(withServiceParams(manifestUrl, await this.params()));
       return (await result.json()) as T;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
@@ -198,10 +205,36 @@ export class ServiceSettings {
     }
   }
 
+  /**
+   * Whether the OpenSearch maps service is used: its manifest says `enabled`, or cannot be reached
+   * (then it is still used). Otherwise the Elastic Maps Service of emsTileApiUrl and emsFileApiUrl.
+   */
+  private usesOpenSearchMaps(): Promise<boolean> {
+    this.openSearchMaps ??= (async () => {
+      let result: Response;
+      try {
+        result = await this.fetchWithTimeout(this.mapConfig.opensearchManifestServiceUrl);
+      } catch {
+        return true;
+      }
+      if (!result.ok) return false;
+      try {
+        return Boolean(((await result.json()) as { enabled?: unknown }).enabled);
+      } catch {
+        return false;
+      }
+    })();
+    return this.openSearchMaps;
+  }
+
+  private async params(): Promise<Array<[string, string]>> {
+    return (await this.usesOpenSearchMaps()) ? OPENSEARCH_PARAMS : emsParams(this.version);
+  }
+
   private mainCatalogue(): Promise<Catalogue> {
     this.catalogue ??= (async () => {
       const manifestUrl = this.mapConfig.opensearchManifestServiceUrl;
-      if (manifestUrl) return this.getManifest<Catalogue>(withServiceParams(manifestUrl, this.version));
+      if ((await this.usesOpenSearchMaps()) && manifestUrl) return this.getManifest<Catalogue>(manifestUrl);
       const services: Catalogue['services'] = [];
       if (this.mapConfig.emsTileApiUrl) services.push({ type: 'tms', manifest: toAbsoluteUrl(this.mapConfig.emsTileApiUrl, 'v7.10/manifest') });
       if (this.mapConfig.emsFileApiUrl) services.push({ type: 'file', manifest: toAbsoluteUrl(this.mapConfig.emsFileApiUrl, 'v7.10/manifest') });
@@ -357,10 +390,12 @@ export class ServiceSettings {
   async getEMSHotLink(config: { name?: string; id?: string }): Promise<string | null> {
     const layer = await this.findFileLayer(config).catch(() => undefined);
     if (!layer) return null;
-    const url = new URL(this.mapConfig.emsLandingPageUrl || 'http://localhost/');
-    url.searchParams.set('locale', this.language);
-    url.hash = `file/${layer.layer_id}`;
-    return url.toString();
+    // The OpenSearch client has no landing page: the link is then "?locale=en#file/<id>"
+    const landing = (await this.usesOpenSearchMaps()) ? '' : this.mapConfig.emsLandingPageUrl;
+    const [base, query = ''] = landing.split('?', 2);
+    const search = new URLSearchParams(query);
+    search.set('locale', this.language);
+    return `${base}?${search.toString()}#file/${layer.layer_id}`;
   }
 
   private async emsTmsAttributes(isDesaturated: boolean, isDarkMode: boolean): Promise<TmsAttributes | TmsService[]> {
@@ -379,7 +414,7 @@ export class ServiceSettings {
     }
     const style = await this.rasterStyle(service);
     return {
-      url: style ? withServiceParams(this.absolute(style.tiles[0], this.mapConfig.emsTileApiUrl), this.version) : '',
+      url: style ? withServiceParams(this.absolute(style.tiles[0], this.mapConfig.emsTileApiUrl), await this.params()) : '',
       minZoom: style?.minzoom,
       maxZoom: style?.maxzoom,
       attribution: this.attributionString(service.attribution),
@@ -411,7 +446,7 @@ export class ServiceSettings {
       const layer = await this.findFileLayer(config);
       if (!layer) throw new Error(`File  ${config.name} not recognized`);
       const format = layer.formats.find((f) => f.legacy_default) ?? layer.formats[0];
-      return withServiceParams(this.absolute(format.url, this.mapConfig.emsFileApiUrl), this.version);
+      return withServiceParams(this.absolute(format.url, this.mapConfig.emsFileApiUrl), await this.params());
     }
     return config.url;
   }
