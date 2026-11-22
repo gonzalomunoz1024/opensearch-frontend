@@ -50,7 +50,7 @@ const TYPES: Record<string, TypeInfo> = {
   search: { icon: 'discover', service: 'savedSearches', inApp: (id) => `/app/discover#/view/${encodeURIComponent(id)}` },
   url: { icon: 'link', service: 'url', inspect: false },
   visualization: { icon: 'visualize', service: 'savedVisualizations', inApp: (id) => `/app/visualize#/edit/${encodeURIComponent(id)}` },
-  'visualization-visbuilder': { icon: 'visualize', service: 'savedVisBuilder' },
+  'visualization-visbuilder': { icon: 'visualize', service: 'savedVisBuilder', inApp: (id) => `/app/vis-builder/edit/${encodeURIComponent(id)}` },
 };
 const ALL_TYPES = Object.keys(TYPES);
 

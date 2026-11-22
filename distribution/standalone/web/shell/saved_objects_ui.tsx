@@ -23,6 +23,7 @@ export interface SaveResult {
 
 export function SaveModal({
   objectType,
+  savedObjectType,
   title: initialTitle,
   description: initialDescription,
   showDescription,
@@ -33,6 +34,8 @@ export function SaveModal({
 }: {
   /** What is being saved, in words: "search", "dashboard" */
   objectType: string;
+  /** The type of saved object it is, when it is not the words: titles are unique among those */
+  savedObjectType?: string;
   title: string;
   description?: string;
   showDescription?: boolean;
@@ -56,7 +59,7 @@ export function SaveModal({
       const titleChanged = title.trim() !== initialTitle;
       if (!confirmed && (asNew || !existing || titleChanged)) {
         const found = await services.savedObjects.find<{ title: string }>({
-          type: typeFor(objectType),
+          type: savedObjectType ?? typeFor(objectType),
           search: `"${title.trim()}"`,
           searchFields: ['title'],
           fields: ['title'],

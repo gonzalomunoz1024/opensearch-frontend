@@ -9,7 +9,7 @@ import { XYChart, type XYAxis, type XYCategoryAxis, type XYPoint, type XYSeries 
 import { bucketFilter, type TableColumn } from '../lib/aggs';
 import { rangeFilter } from '../lib/query';
 import type { Filter } from '../lib/types';
-import { bucketColumns, keyText, metricColumns, numberOf, type VisRenderProps } from './types';
+import { bucketColumns, keyText, metricColumns, numberOf, pointsAlong, type VisRenderProps } from './types';
 
 interface SeriesParam {
   show?: boolean | string;
@@ -110,12 +110,20 @@ export function XYVis({ vis, data, uiState, onFilter, onTimeChange }: VisRenderP
       });
     }
     if (continuous) xValues.sort((a, b) => (a as number) - (b as number));
-    // A series with no bucket at a place on the axis counts as zero there, so that stacks and
-    // lines keep their shape; this is what OpenSearch Dashboards does
+    // A stacked series with no bucket at a place on the axis counts as zero there, so that the
+    // stack keeps its shape; a series that is not stacked joins the places it has. This is what
+    // OpenSearch Dashboards does: it stacks a series in the stacked mode or on an axis whose
+    // scale piles its series up (percentage, wiggle, silhouette)
     if (xColumn) {
+      const piled = new Set(
+        (params.valueAxes ?? [])
+          .filter((axis) => !['normal', 'grouped', undefined].includes(axis.scale?.mode))
+          .map((axis) => axis.id)
+      );
       for (const series of made.values()) {
-        const have = new Map(series.points.map((point) => [point.x, point]));
-        series.points = xValues.map((x) => have.get(x) ?? { x, y: 0 });
+        const stacked = series.mode === 'stacked' || piled.has(series.axisId);
+        series.points = pointsAlong(series.points, xValues, stacked);
+        series.joinMissing = !stacked;
       }
     }
 
@@ -148,6 +156,9 @@ export function XYVis({ vis, data, uiState, onFilter, onTimeChange }: VisRenderP
 
     const timeRange = context.timeRange;
     const isTimeField = Boolean(xColumn?.isDate && xColumn.fieldName === context.indexPattern?.timeFieldName);
+    // A date histogram spans the picked time range when it is on the time field, or when its
+    // interval is chosen by itself, whatever date it counts by
+    const bounded = isTimeField || Boolean(xColumn?.isDate && (xColumn.agg.params?.interval ?? 'auto') === 'auto');
     // Only time runs along a scale; the bars of anything else, a number histogram too, stand side
     // by side with a label each, turned on its side under an upright chart unless the
     // visualization says otherwise
@@ -155,9 +166,10 @@ export function XYVis({ vis, data, uiState, onFilter, onTimeChange }: VisRenderP
       type: xColumn?.isDate ? 'time' : 'category',
       values: xValues,
       interval: xColumn?.interval,
-      domain: isTimeField && timeRange ? [timeRange.from.getTime(), timeRange.to.getTime()] : undefined,
+      domain: bounded && timeRange ? [timeRange.from.getTime(), timeRange.to.getTime()] : undefined,
       format: (value) => (!xColumn ? String(value) : typeof value === 'number' ? xColumn.format(value) : value),
-      title: category.title?.text || xColumn?.name || '',
+      // Without a bucket on the axis the bars stand for all the documents, as the original names them
+      title: category.title?.text || (xColumn ? xColumn.name : 'All docs'),
       show: category.show !== false,
       showLabels: category.labels?.show !== false,
       rotate: xColumn?.isDate || horizontal ? 0 : (category.labels?.rotate ?? 90),

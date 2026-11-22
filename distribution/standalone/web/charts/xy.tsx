@@ -62,6 +62,8 @@ export interface XYSeries {
   fillOpacity?: number;
   /** The radius of the points, when they are all the same size */
   pointSize?: number;
+  /** Draw the line or area on through a place the series has no point at, instead of breaking */
+  joinMissing?: boolean;
 }
 
 export interface XYAxis {
@@ -556,7 +558,7 @@ export function XYChart({
         };
         spans.forEach((span, at) => {
           if (span && span.y !== null) run.push(at);
-          else flush();
+          else if (span || !item.joinMissing) flush();
         });
         flush();
       }
@@ -565,7 +567,7 @@ export function XYChart({
           <path
             key={`${item.id}-line`}
             className={className}
-            d={linePath(tops, item.interpolate, horizontal)}
+            d={linePath(item.joinMissing ? tops.filter((_, at) => spans[at] !== undefined) : tops, item.interpolate, horizontal)}
             fill="none"
             stroke={item.color}
             strokeWidth={item.lineWidth ?? 2}
@@ -926,15 +928,14 @@ export function XYChart({
     };
 
     // The classic charts shade what lies outside the time range: the part of the first bucket
-    // before it, and the last bucket, which is still filling
+    // before it, and the part of the last one after it, which is still filling (the axis of a
+    // classic chart always widens to the end of its last bucket)
     const endZones: Array<{ from: number; to: number }> = [];
     if (classic && domain && x.type === 'time' && x.domain) {
       const along = (value: number) => ((value - domain[0]) / (domain[1] - domain[0] || 1)) * geometry.length;
-      const numbers = x.values.filter((value): value is number => typeof value === 'number');
       const startsAt = Math.min(Math.max(along(x.domain[0]), 0), geometry.length);
       if (startsAt > 0) endZones.push({ from: 0, to: startsAt });
-      const lastValue = numbers.length ? Math.min(x.domain[1], numbers[numbers.length - 1]) : x.domain[1];
-      const endsAt = Math.min(Math.max(along(lastValue + 1), 0), geometry.length);
+      const endsAt = Math.min(Math.max(along(x.domain[1] + 1), 0), geometry.length);
       if (endsAt < geometry.length) endZones.push({ from: endsAt, to: geometry.length });
     }
 
