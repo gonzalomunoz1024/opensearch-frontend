@@ -1,6 +1,7 @@
 # The settings the InfraDashboard image starts with. They are the ones the OpenSearch
 # Dashboards 3.x image ships, so a deployment that mounts its own opensearch_dashboards.yml over
-# this file, or sets the same environment variables, behaves as it did before.
+# this file, or sets the same environment variables, behaves as it did before. The two at the end
+# are ours; a deployment that mounts its own file wants them in it.
 
 opensearch.hosts: [https://localhost:9200]
 opensearch.ssl.verificationMode: none
@@ -16,3 +17,6 @@ opensearch_security.cookie.secure: false
 
 # The sign-in page names the product; the security plugin's own default names OpenSearch Dashboards
 opensearch_security.ui.basicauth.login.title: Log in to InfraDashboard
+
+# One header bar instead of two. The Atlas theme is drawn for the one bar.
+opensearchDashboards.branding.useExpandedHeader: false

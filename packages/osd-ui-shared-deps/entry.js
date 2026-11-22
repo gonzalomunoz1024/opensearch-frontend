@@ -54,11 +54,19 @@ Moment.tz.load(require('moment-timezone/data/packed/latest.json'));
 export const Rxjs = require('rxjs');
 export const RxjsOperators = require('rxjs/operators');
 export const ElasticNumeral = require('@elastic/numeral');
-export const ElasticCharts = require('@elastic/charts');
+// Under the Atlas theme, the chart library with the Atlas colours on its two base themes
+export const ElasticCharts = require('@osd/atlas-theme/charts_theme').chartLibraryFor(
+  window.__osdThemeTag__,
+  require('@elastic/charts')
+);
 export const ElasticEui = require('@elastic/eui');
 export const ElasticEuiLibServices = require('@elastic/eui/lib/services');
 export const ElasticEuiLibServicesFormat = require('@elastic/eui/lib/services/format');
-export const ElasticEuiChartsTheme = require('@elastic/eui/dist/eui_charts_theme');
+// Under the Atlas theme, the chart themes with the Atlas colours around the data
+export const ElasticEuiChartsTheme = require('@osd/atlas-theme/charts_theme').chartThemesFor(
+  window.__osdThemeTag__,
+  require('@elastic/eui/dist/eui_charts_theme')
+);
 export const Theme = require('./theme.ts');
 export const Lodash = require('lodash');
 export const LodashFp = require('lodash/fp');

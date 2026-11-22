@@ -33,6 +33,8 @@ import { parseThemeTags } from './theme_tags';
 it('returns default tags when passed undefined', () => {
   expect(parseThemeTags()).toMatchInlineSnapshot(`
     Array [
+      "atlasdark",
+      "atlaslight",
       "v7dark",
       "v7light",
       "v8dark",
@@ -46,6 +48,8 @@ it('returns default tags when passed undefined', () => {
 it('returns all tags when passed *', () => {
   expect(parseThemeTags('*')).toMatchInlineSnapshot(`
     Array [
+      "atlasdark",
+      "atlaslight",
       "v7dark",
       "v7light",
       "v8dark",
@@ -85,13 +89,13 @@ it('returns specific tags when passed an array', () => {
 
 it('throws when an invalid tag is in the array', () => {
   expect(() => parseThemeTags(['v8light', 'v7light', 'bar'])).toThrowErrorMatchingInlineSnapshot(
-    `"Invalid theme tags [bar], options: [v7dark, v7light, v8dark, v8light, v9dark, v9light]"`
+    `"Invalid theme tags [bar], options: [atlasdark, atlaslight, v7dark, v7light, v8dark, v8light, v9dark, v9light]"`
   );
 });
 
 it('throws when an invalid tags in comma separated list', () => {
   expect(() => parseThemeTags('v8light ,v7light,bar,box ')).toThrowErrorMatchingInlineSnapshot(
-    `"Invalid theme tags [bar, box], options: [v7dark, v7light, v8dark, v8light, v9dark, v9light]"`
+    `"Invalid theme tags [bar, box], options: [atlasdark, atlaslight, v7dark, v7light, v8dark, v8light, v9dark, v9light]"`
   );
 });
 

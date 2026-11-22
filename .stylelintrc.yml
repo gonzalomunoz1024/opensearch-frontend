@@ -25,3 +25,13 @@ rules:
   scss/at-mixin-pattern: "^[a-z][a-zA-Z0-9_-]+$"
   scss/at-function-pattern: "^[a-z][a-zA-Z0-9_-]+$"
   scss/dollar-variable-pattern: "^[a-z][a-zA-Z0-9_-]+$"
+overrides:
+  # The Atlas theme restyles OUI's components and names its colours, which is what a theme is
+  # for and what these rules keep a plugin from doing
+  - files:
+      - packages/osd-atlas-theme/**/*.scss
+    rules:
+      "@osd/stylelint/no_modifying_global_selectors": null
+      "@osd/stylelint/no_custom_colors": null
+      "@osd/stylelint/no_restricted_properties": null
+      "@osd/stylelint/no_restricted_values": null
