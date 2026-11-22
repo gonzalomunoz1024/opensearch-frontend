@@ -337,6 +337,31 @@ declare module 'leaflet' {
   }
   export function circle(latlng: LatLngExpression, options?: CircleOptions): Circle;
 
+  export interface DivIconOptions {
+    className?: string;
+    html?: string | false;
+    iconSize?: PointExpression;
+    iconAnchor?: PointExpression;
+  }
+  export class DivIcon extends Class {
+    constructor(options?: DivIconOptions);
+  }
+  export function divIcon(options?: DivIconOptions): DivIcon;
+  export interface MarkerOptions extends LayerOptions {
+    icon?: DivIcon;
+    opacity?: number;
+    zIndexOffset?: number;
+    keyboard?: boolean;
+  }
+  export class Marker extends Layer {
+    constructor(latlng: LatLngExpression, options?: MarkerOptions);
+    getLatLng(): LatLng;
+    setLatLng(latlng: LatLngExpression): this;
+    getElement(): HTMLElement | undefined;
+    setZIndexOffset(offset: number): this;
+  }
+  export function marker(latlng: LatLngExpression, options?: MarkerOptions): Marker;
+
   export class Renderer extends Layer {
     options: LayerOptions & { padding?: number; tolerance?: number };
   }

@@ -16,6 +16,8 @@ export interface VisRenderProps {
   /** Called with the filters a click on a mark stands for */
   onFilter?: (filters: Filter[]) => void;
   onTimeChange?: (range: TimeRange) => void;
+  /** Sets params of one aggregation for the searches that follow, as a map changes its geohash_grid's */
+  onAggParams?: (aggId: string, params: Record<string, unknown>) => void;
 }
 
 export const bucketColumns = (table: Table, schema?: string): TableColumn[] =>
