@@ -7,6 +7,7 @@
   inset: 0;
 }
 
+.visualization.leaflet-container,
 .visualization .leaflet-container {
   background: var(--color-surface);
   font-family: var(--font-family);
@@ -15,6 +16,8 @@
 }
 
 .visualization .leaflet-bar,
+.visualization.leaflet-touch .leaflet-bar,
+.visualization .leaflet-touch .leaflet-bar,
 .visualization .leaflet-draw-actions {
   box-shadow: var(--shadow-md);
   border: none;

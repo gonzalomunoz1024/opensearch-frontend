@@ -303,7 +303,8 @@ export function aggLabel(agg: AggConfig, context: AggContext): string {
     case 'filters':
       return 'filters';
     case 'geohash_grid':
-      return 'Geo coordinates';
+      // makeLabel of the geohash_grid
+      return 'Geohash';
     default:
       return field || agg.type;
   }
@@ -614,12 +615,27 @@ export function buildAggsDsl(aggs: AggConfig[], context: AggContext, options: Bu
       }
     }
     if (agg.type === 'geohash_grid' && agg.params?.useGeocentroid !== false) {
-      own[`${agg.id}-centroid`] = { geo_centroid: { field: fieldNameOf(agg) } };
+      own[geoCentroidId(aggs)] = { geo_centroid: { field: fieldNameOf(agg) } };
     }
-    return { [agg.id]: { ...clause, ...(Object.keys(own).length ? { aggs: own } : {}) } };
+    const dsl = { [agg.id]: { ...clause, ...(Object.keys(own).length ? { aggs: own } : {}) } };
+    return agg.type === 'geohash_grid' ? withGeoCollar(agg, dsl) : dsl;
   };
 
   return nest(0, false);
+}
+
+/** The id the original gives the geo_centroid it asks for beside a geohash_grid: the next free one */
+export const geoCentroidId = (aggs: AggConfig[]) => String(aggs.reduce((max, agg) => Math.max(max, Number(agg.id) || 0), 0) + 1);
+
+/** What a geohash_grid that is filtered by the collar asks before the map's size is known */
+export const DEFAULT_GEO_BOUNDING_BOX = { top_left: { lat: 1, lon: 1 }, bottom_right: { lat: 0, lon: 0 } };
+
+/** A geohash_grid filtered by the collar sits in a `filter_agg` of geo_bounding_box, as the original's */
+function withGeoCollar(agg: AggConfig, dsl: Dsl): Dsl {
+  const field = fieldNameOf(agg);
+  if (agg.params?.isFilteredByCollar === false || !field) return dsl;
+  const box = (agg.params?.boundingBox as Dsl | null | undefined) || DEFAULT_GEO_BOUNDING_BOX;
+  return { filter_agg: { filter: { geo_bounding_box: { ignore_unmapped: true, [field]: box } }, aggs: dsl } };
 }
 
 function orderPath(metric: AggConfig, id: string): string {
@@ -784,6 +800,8 @@ function metricValue(column: TableColumn, bucket: Bucket): unknown {
           return values.length === 1 ? values[0] : values.join(', ');
       }
     }
+    case 'geo_centroid':
+      return data?.location ?? null;
     default:
       return (data?.value as number | null | undefined) ?? null;
   }
@@ -919,6 +937,11 @@ export function tabify(
         index += made.length;
         return made;
       });
+      if (agg.type === 'geohash_grid' && agg.params?.useGeocentroid !== false) {
+        const centroid: AggConfig = { id: geoCentroidId(aggs), type: 'geo_centroid', schema: 'geo_centroid', params: { field: fieldNameOf(agg) } };
+        own.push({ id: `col-${index}-${centroid.id}`, name: 'Geo Centroid', kind: 'metric', agg: centroid, schema: 'geo_centroid', fieldName: fieldNameOf(agg), format: (value) => JSON.stringify(value) });
+        index += 1;
+      }
       metricsByLevel[level] = own;
       columns.push(...own);
     } else metricsByLevel[level] = [];
@@ -943,7 +966,9 @@ export function tabify(
   const rows: TableRow[] = [];
   const walk = (container: Bucket, level: number, partial: TableRow) => {
     const agg = buckets[level];
-    let list = bucketsOf(agg, container[agg.id]);
+    // The collar's filter_agg holds the geohash_grid
+    const holder = agg.type === 'geohash_grid' && !(agg.id in container) && container.filter_agg ? (container.filter_agg as Bucket) : container;
+    let list = bucketsOf(agg, holder[agg.id]);
     // Buckets that reach outside the time range hold part of what they stand for
     const range = context.timeRange;
     if (agg.type === 'date_histogram' && agg.params?.drop_partials && range && list.length > 1 && fieldNameOf(agg) === context.indexPattern?.timeFieldName) {

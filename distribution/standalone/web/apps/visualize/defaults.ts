@@ -11,6 +11,7 @@
 import { METRIC_TYPES, BUCKET_TYPES, aggLabel, type AggConfig, type AggContext } from '../../lib/aggs';
 import type { Field, IndexPattern } from '../../lib/types';
 import { visType, type Vis, type VisType } from '../../lib/vis';
+import { tileMapDefaults } from '../../vis/tile_map/defaults';
 import { DEFAULT_VEGA_SPEC } from '../../vis/vega/default_spec';
 import { regionMapDefaults } from '../../vis/region_map/region_map_type';
 
@@ -198,6 +199,7 @@ const DEFAULT_PARAMS: Record<string, () => Record<string, unknown>> = {
   input_control_vis: () => ({ controls: [], updateFiltersOnChange: false, useTimeFilter: false, pinFilters: false }),
   vega: () => ({ spec: DEFAULT_VEGA_SPEC }),
   region_map: () => regionMapDefaults(),
+  tile_map: () => tileMapDefaults(),
 };
 
 export const defaultParams = (type: string): Record<string, unknown> => DEFAULT_PARAMS[type]?.() ?? {};

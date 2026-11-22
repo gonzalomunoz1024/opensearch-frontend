@@ -13,6 +13,7 @@ import { AGG_TITLES, BUCKET_TYPES, aggLabel, dateInterval, fieldNameOf, type Agg
 import type { IndexPattern, Query } from '../../lib/types';
 import { defaultQueryLanguage } from '../../shell/query_bar';
 import { PARENT_PIPELINES, SIBLING_PIPELINES, aggGroup, changeAggType, fieldsFor, orderableMetric, takesField } from './defaults';
+import { GeohashParams } from './maps/geohash_params';
 
 export interface AggEditorProps {
   agg: AggConfig;
@@ -527,11 +528,7 @@ export function AggEditor({ agg, types, indexPattern, aggs, context, onChange, s
       break;
     }
     case 'geohash_grid':
-      body = (
-        <FormRow label="Precision" full>
-          <NumberField compact min={1} max={12} value={typeof params.precision === 'number' ? params.precision : 2} onChange={(precision) => set({ precision: precision ?? 2 })} />
-        </FormRow>
-      );
+      body = <GeohashParams params={params} set={set} aggId={agg.id} />;
       break;
     case 'percentiles':
       body = <NumberList label="Percents" unit="percent" values={(params.percents as number[] | undefined) ?? []} onChange={(percents) => set({ percents })} />;
