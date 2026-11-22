@@ -28,6 +28,14 @@ ingress:
     - { secretName: dashboards-tls, hosts: [dashboards.example.com] }
 podAnnotations:
   example.com/team: platform
+# a cluster whose policy wants the user and groups named
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
 topologySpreadConstraints:
   - maxSkew: 1
     topologyKey: topology.kubernetes.io/zone
