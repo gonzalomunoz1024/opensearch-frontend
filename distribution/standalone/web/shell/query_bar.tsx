@@ -2,7 +2,7 @@
 
 /* Where a query is typed, in DQL or Lucene, with fields and values offered as it is written. */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Button, cx } from '../components/basic';
 import { Switch } from '../components/form';
 import { Popover } from '../components/overlay';
@@ -98,6 +98,8 @@ export interface QueryBarProps {
   indexPatterns: IndexPattern[];
   placeholder?: string;
   invalid?: boolean;
+  /** What sits before the query, inside the field: the saved queries' button */
+  prepend?: ReactNode;
 }
 
 export function QueryBar({
@@ -109,6 +111,7 @@ export function QueryBar({
   indexPatterns,
   placeholder = 'Search',
   invalid,
+  prepend,
 }: QueryBarProps) {
   const area = useRef<HTMLTextAreaElement>(null);
   const [focused, setFocused] = useState(false);
@@ -214,6 +217,7 @@ export function QueryBar({
           className={cx('atlField', 'shlQuery', multiline && 'shlQuery--multiline', invalid && 'atlField--invalid')}
           style={multiline ? { height: 'auto' } : undefined}
         >
+          {prepend}
           <textarea
             ref={area}
             rows={multiline ? Math.min(8, value.split('\n').length) : 1}
