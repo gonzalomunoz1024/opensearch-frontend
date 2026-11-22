@@ -257,24 +257,24 @@ export function allowedAggs(type: string, schema: Schema): string[] {
 export const SIBLING_PIPELINES = ['avg_bucket', 'sum_bucket', 'min_bucket', 'max_bucket'];
 export const PARENT_PIPELINES = ['derivative', 'cumulative_sum', 'moving_avg', 'serial_diff'];
 
-/** The heading an aggregation is listed under in the editor's select */
+/** The heading an aggregation is listed under in the editor's select, cased as OpenSearch Dashboards cases each */
 export function aggGroup(type: string): string | undefined {
   if (SIBLING_PIPELINES.includes(type)) return 'Sibling pipeline aggregations';
-  if (PARENT_PIPELINES.includes(type)) return 'Parent pipeline aggregations';
-  return (METRIC_TYPES as readonly string[]).includes(type) ? 'Metric aggregations' : undefined;
+  if (PARENT_PIPELINES.includes(type)) return 'Parent Pipeline Aggregations';
+  return (METRIC_TYPES as readonly string[]).includes(type) ? 'Metric Aggregations' : undefined;
 }
 
 // --- Which fields an aggregation accepts ----------------------------------------------------------
 
-const FIELD_TYPES: Record<string, string[] | '*'> = {
+export const FIELD_TYPES: Record<string, string[] | '*'> = {
   avg: ['number'],
   sum: ['number'],
-  median: ['number'],
+  median: ['number', 'date'],
   min: ['number', 'date'],
   max: ['number', 'date'],
   std_dev: ['number'],
   cardinality: '*',
-  percentiles: ['number'],
+  percentiles: ['number', 'date'],
   percentile_ranks: ['number'],
   top_hits: '*',
   date_histogram: ['date'],

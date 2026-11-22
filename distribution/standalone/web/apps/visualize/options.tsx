@@ -167,7 +167,7 @@ interface ColorRange {
 }
 
 /** The ranges a gauge, a metric or a heat map takes its colours by */
-function ColorRanges({ ranges, onChange }: { ranges: ColorRange[]; onChange: (ranges: ColorRange[]) => void }) {
+export function ColorRanges({ ranges, onChange }: { ranges: ColorRange[]; onChange: (ranges: ColorRange[]) => void }) {
   const set = (index: number, patch: ColorRange) => onChange(ranges.map((range, at) => (at === index ? { ...range, ...patch } : range)));
   return (
     <div className="vzeRanges" data-test-subj="colorRanges">

@@ -1,0 +1,507 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/*
+ * VisBuilder, as OpenSearch Dashboards has it: a visualization made by dragging the fields of an
+ * index pattern onto the parts of a chart. It opens new at /app/vis-builder/ and saved at
+ * /app/vis-builder/edit/<id>. What is on screen is in the address, as there: the visualization
+ * in `_a=(metadata,style,ui,visualization)`, the query and the page's filters in `_q`, the time
+ * in `_g`, so that a link shows what its sender saw.
+ */
+
+import '../../styles/vis_builder.css';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { Spinner } from '../../components/basic';
+import { SearchField } from '../../components/form';
+import { Icon } from '../../components/icon';
+import { Popover } from '../../components/overlay';
+import { resolveTimeRange, type TimeRange } from '../../lib/dates';
+import type { RawHit } from '../../lib/docs';
+import { buildQuery, mergeFilters, sameFilter, timeRangeFilter } from '../../lib/query';
+import type { Filter, IndexPattern, Query } from '../../lib/types';
+import { appUrl, buildHash, encodeState } from '../../lib/url';
+import { getLocation, navigate, setHashParams, useLocation, useUrlState } from '../../router';
+import { services } from '../../services';
+import { HttpFetchError, errorMessage } from '../../services/http';
+import { patternName, type IndexPatternSummary } from '../../services/index_patterns';
+import { TopNav } from '../../shell/chrome';
+import { splitFilters } from '../../shell/filter_bar';
+import { defaultQueryLanguage } from '../../shell/query_bar';
+import { SaveModal, type SaveResult } from '../../shell/saved_objects_ui';
+import { SearchBar } from '../../shell/search_bar';
+import { addRecentlyAccessed, currentGlobalParam, useAutoRefresh, useBreadcrumbs, useGlobalState } from '../../shell/state';
+import { visContext, type VisInput } from '../../vis/request';
+import { documentFields, sortClause } from '../discover/search';
+import { DataTab } from './data_tab';
+import {
+  afterChange,
+  newAppState,
+  openedState,
+  readAppState,
+  saveDisabledReason,
+  urlAppState,
+  withIndexPattern,
+  withStatus,
+  type AppState,
+} from './editor_state';
+import {
+  VIS_BUILDER_APP,
+  VIS_BUILDER_TYPE,
+  visBuilderEditUrl,
+  visBuilderFromSavedObject,
+  visBuilderToSavedObject,
+  type SavedVisBuilder,
+  type VisBuilderAttributes,
+} from './model';
+import { StylePanel } from './style_panel';
+import { Workspace } from './workspace';
+
+interface QueryState {
+  filters: Filter[];
+  query: Query;
+}
+
+const EDIT_PATH = /^\/app\/vis-builder\/edit\/([^/]+)/;
+
+// The right of the page takes a fifth of what the fields leave, and keeps room for the chart
+const RIGHT_SHARE = 20;
+const RIGHT_MIN = 250;
+const WORKSPACE_MIN = 300;
+
+export function VisBuilder() {
+  const { pathname } = useLocation();
+  const match = EDIT_PATH.exec(pathname);
+  return <VisBuilderPage savedId={match ? decodeURIComponent(match[1]) : undefined} />;
+}
+
+/** Writes the page's state to the address in place: each change replaces the last, as there */
+function writeApp(state: AppState) {
+  const encoded = encodeState(urlAppState(state));
+  if (encoded !== getLocation().hashParams._a) setHashParams({ _a: encoded }, { replace: true });
+}
+
+const readApp = () => readAppState(getLocation().hashParams._a);
+
+function VisBuilderPage({ savedId }: { savedId?: string }) {
+  const location = useLocation();
+  const [global, setGlobal] = useGlobalState();
+  const queryDefaults = useMemo<QueryState>(() => ({ filters: [], query: { query: '', language: defaultQueryLanguage() } }), []);
+  const [queryState, setQueryState] = useUrlState<QueryState>('_q', queryDefaults);
+  const [saved, setSaved] = useState<SavedVisBuilder>();
+  // The pinned filters when a saved visualization is opened: those it was saved with stay pinned
+  const pinnedFilters = useRef(global.filters);
+  pinnedFilters.current = global.filters;
+  // The saved object the page has opened; null while it opens one
+  const [opened, setOpened] = useState<string | null | undefined>(null);
+  const [saving, setSaving] = useState(false);
+  const [tick, setTick] = useState(0);
+
+  const app = useMemo(() => readAppState(location.hashParams._a), [location.hashParams._a]);
+
+  const update = useCallback((change: (state: AppState) => AppState) => {
+    const current = readApp();
+    if (current) writeApp(afterChange(current, change(current)));
+  }, []);
+
+  // --- Opening: a new visualization, or a saved one --------------------------------------------
+  useEffect(() => {
+    let live = true;
+    setOpened(null);
+    const open = async () => {
+      // The query and the filters are in the address from the start
+      if (getLocation().hashParams._q === undefined) setQueryState({}, { replace: true });
+      if (!savedId) {
+        const state = readApp() ?? newAppState(await services.indexPatterns.defaultId().catch(() => undefined));
+        if (!live) return;
+        setSaved(undefined);
+        writeApp(withStatus(state, 'clean'));
+        setOpened(undefined);
+        return;
+      }
+      try {
+        const loaded = visBuilderFromSavedObject(await services.savedObjects.get<VisBuilderAttributes>(VIS_BUILDER_TYPE, savedId));
+        if (!live) return;
+        setSaved(loaded);
+        writeApp(openedState(readApp(), loaded));
+        // What it was saved with becomes the page's query and filters, but for those pinned already
+        const pinned = pinnedFilters.current;
+        setQueryState(
+          {
+            filters: loaded.source.filters
+              .filter((filter) => !pinned.some((other) => sameFilter(other, filter)))
+              .map((filter) => ({ ...filter, $state: { store: 'appState' as const } })),
+            query: loaded.source.query ?? { query: '', language: defaultQueryLanguage() },
+          },
+          { replace: true }
+        );
+        addRecentlyAccessed(visBuilderEditUrl(savedId), loaded.title, savedId);
+        setOpened(savedId);
+      } catch (failure) {
+        if (!live) return;
+        if (failure instanceof HttpFetchError && failure.status === 404) {
+          const message = `Could not locate that ${VIS_BUILDER_TYPE} (id: ${savedId})`;
+          services.toasts.warning('Saved object is missing', message);
+          const hash = buildHash('/', { _g: currentGlobalParam() });
+          const search = `?notFound=${VIS_BUILDER_TYPE}&notFoundMessage=${encodeURIComponent(message).replace(/%3A/g, ':')}`;
+          navigate(`${VIS_BUILDER_APP}${search}${hash}`, { replace: true, force: true });
+          return;
+        }
+        services.toasts.danger('Failed to load the visualization', errorMessage(failure));
+        if (!readApp()) writeApp(withStatus(newAppState(await services.indexPatterns.defaultId().catch(() => undefined)), 'loading'));
+        setOpened(savedId);
+      }
+    };
+    void open();
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedId]);
+
+  // --- The index pattern ------------------------------------------------------------------------
+  const indexId = app?.visualization.indexPattern;
+  const [loadedPattern, setLoadedPattern] = useState<IndexPattern>();
+  const ready = opened !== null;
+  useEffect(() => {
+    if (!ready) return undefined;
+    let live = true;
+    const load = async () => {
+      if (indexId) {
+        try {
+          const pattern = await services.indexPatterns.get(indexId);
+          if (live) setLoadedPattern(pattern);
+          return;
+        } catch {
+          // An index pattern that is gone is replaced by the first there is, as there
+        }
+      }
+      const first = (await services.indexPatterns.list().catch(() => []))[0];
+      if (live && first && first.id !== indexId) update((current) => withIndexPattern(current, first.id));
+    };
+    void load();
+    return () => {
+      live = false;
+    };
+  }, [indexId, ready, update]);
+  const indexPattern = loadedPattern && loadedPattern.id === indexId ? loadedPattern : undefined;
+
+  // --- The query, the filters and the time ------------------------------------------------------
+  const query = queryState.query;
+  const appFilters = queryState.filters;
+  const filters = useMemo(() => [...global.filters, ...appFilters], [global.filters, appFilters]);
+  const markDirty = useCallback(() => update((current) => withStatus(current, 'dirty')), [update]);
+
+  const setFilters = useCallback(
+    (next: Filter[]) => {
+      const { pinned, app: own } = splitFilters(next);
+      let changed = false;
+      if (JSON.stringify(pinned) !== JSON.stringify(global.filters)) {
+        setGlobal({ filters: pinned });
+        changed = true;
+      }
+      if (JSON.stringify(own) !== JSON.stringify(appFilters)) {
+        setQueryState({ filters: own });
+        changed = true;
+      }
+      // A change of the filters is a change to the visualization, as there
+      if (changed) markDirty();
+    },
+    [global.filters, appFilters, setGlobal, setQueryState, markDirty]
+  );
+  const addFilters = useCallback(
+    (added: Filter[]) => {
+      const pinnedByDefault = services.uiSettings.get('filters:pinnedByDefault', false);
+      setFilters(mergeFilters(filters, pinnedByDefault ? added.map((filter) => ({ ...filter, $state: { store: 'globalState' as const } })) : added));
+    },
+    [filters, setFilters]
+  );
+  const submitQuery = useCallback(
+    (next: Query) => {
+      if (JSON.stringify(next) === JSON.stringify(query)) return;
+      setQueryState({ query: next });
+      markDirty();
+    },
+    [query, setQueryState, markDirty]
+  );
+  const setTime = useCallback((time: TimeRange) => setGlobal({ time }), [setGlobal]);
+  const refresh = useCallback(() => setTick((count) => count + 1), []);
+  useAutoRefresh(global.refreshInterval, refresh);
+
+  const context = useMemo(() => (indexPattern ? visContext(indexPattern, global.time) : {}), [indexPattern, global.time]);
+  const input = useMemo<VisInput>(() => ({ time: global.time, query, filters }), [global.time, query, filters]);
+  const hits = useSampleHits(indexPattern, query, filters, global.time);
+
+  // --- The title, the breadcrumbs, saving -------------------------------------------------------
+  const title = saved?.title ?? '';
+  useBreadcrumbs([{ text: 'Visualize', to: appUrl('/app/visualize', '/') }, { text: savedId ? title : 'Create' }]);
+  // The tab is named after the visualization once it is saved, and after the product before
+  useEffect(() => {
+    document.title = savedId && title ? `${title} - ${services.boot.name}` : services.boot.name;
+  }, [savedId, title]);
+
+  const reason = app ? saveDisabledReason(app) : 'The canvas is empty. Add some aggregations before saving.';
+
+  const save = async ({ title: newTitle, description, asNew }: SaveResult) => {
+    const current = readApp();
+    if (!current) return;
+    const { attributes, references } = visBuilderToSavedObject(
+      { title: newTitle, description, state: current },
+      { query, filters: [...global.filters, ...appFilters] }
+    );
+    try {
+      const stored = await services.savedObjects.create<VisBuilderAttributes>(VIS_BUILDER_TYPE, attributes, {
+        id: savedId && !asNew ? savedId : undefined,
+        overwrite: true,
+        references,
+      });
+      services.toasts.success(`Saved '${newTitle}'`);
+      setSaving(false);
+      setSaved(visBuilderFromSavedObject(stored));
+      writeApp({ ...current, metadata: { editor: { state: 'clean' }, isMigrated: false } });
+      if (stored.id !== savedId) {
+        const { hashPath, hashParams } = getLocation();
+        navigate(`${visBuilderEditUrl(stored.id)}${buildHash(hashPath, hashParams)}`, { force: true });
+      }
+    } catch (failure) {
+      services.toasts.danger(`Error on saving '${newTitle}'`, errorMessage(failure));
+      setSaving(false);
+    }
+  };
+
+  // --- The width of the right ------------------------------------------------------------------
+  const area = useRef<HTMLDivElement>(null);
+  const [rightShare, setRightShare] = useState(RIGHT_SHARE);
+  const clampShare = (right: number, width: number) => (Math.min(Math.max(right, RIGHT_MIN), Math.max(RIGHT_MIN, width - WORKSPACE_MIN)) / width) * 100;
+  const startResize = (event: PointerEvent<HTMLDivElement>) => {
+    const box = area.current?.getBoundingClientRect();
+    if (!box) return;
+    event.preventDefault();
+    const move = (moved: globalThis.PointerEvent) => setRightShare(clampShare(box.right - moved.clientX, box.width));
+    const stop = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', stop);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', stop);
+  };
+  const resizeByKey = (event: KeyboardEvent<HTMLDivElement>) => {
+    const width = area.current?.getBoundingClientRect().width;
+    if (!width || (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight')) return;
+    event.preventDefault();
+    const step = event.key === 'ArrowLeft' ? 1 : -1;
+    setRightShare((share) => clampShare(((share + step) / 100) * width, width));
+  };
+
+  if (!app || !ready) {
+    return (
+      <div className="vbdPage vbdPage--loading">
+        <Spinner size="l" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="vbdPage" data-test-subj="visBuilderPage">
+      <TopNav
+        items={[
+          {
+            id: 'save',
+            label: 'Save',
+            icon: 'save',
+            emphasize: !savedId,
+            disabled: Boolean(reason),
+            title: reason,
+            onClick: () => setSaving(true),
+            testId: 'visBuilderSaveButton',
+          },
+        ]}
+      />
+      <div className="vbdTop">
+        <SearchBar
+          indexPatterns={indexPattern ? [indexPattern] : []}
+          query={query}
+          onQuerySubmit={submitQuery}
+          filters={filters}
+          onFiltersChange={setFilters}
+          time={global.time}
+          refreshInterval={global.refreshInterval}
+          onTimeChange={setTime}
+          onRefreshChange={(refreshInterval) => setGlobal({ refreshInterval })}
+          onRefresh={refresh}
+          showTime={Boolean(indexPattern?.timeFieldName)}
+        />
+      </div>
+      <div className="vbdLayout">
+        <section className="vbdSide vbdSide--left" aria-label="Data">
+          <div className="vbdSide__header">
+            <DataSourceSelect
+              selectedId={indexId}
+              onChange={(id) => update((current) => withIndexPattern(current, id))}
+            />
+          </div>
+          <DataTab state={app} update={update} indexPattern={indexPattern} context={context} hits={hits} onAddFilters={addFilters} />
+        </section>
+        <div className="vbdArea" ref={area}>
+          <div className="vbdArea__workspace" style={{ width: `${100 - rightShare}%` }}>
+            <Workspace
+              state={app}
+              indexPattern={indexPattern}
+              input={input}
+              tick={tick}
+              onUiState={(ui) => update((current) => ({ ...current, ui }))}
+              onFilter={addFilters}
+              onTimeChange={setTime}
+            />
+          </div>
+          <div
+            className="vbdArea__resize"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize the settings"
+            tabIndex={0}
+            onPointerDown={startResize}
+            onKeyDown={resizeByKey}
+          />
+          <div className="vbdArea__right" style={{ width: `${rightShare}%` }}>
+            <StylePanel state={app} update={update} />
+          </div>
+        </div>
+      </div>
+      {saving && (
+        <SaveModal
+          objectType="visualization"
+          savedObjectType={VIS_BUILDER_TYPE}
+          title={title}
+          description={saved?.description}
+          showDescription
+          existing={Boolean(savedId)}
+          onSave={save}
+          onClose={() => setSaving(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+/** The documents the values of a field are counted in: the newest that the page's search finds */
+function useSampleHits(indexPattern: IndexPattern | undefined, query: Query, filters: Filter[], time: TimeRange): RawHit[] {
+  const [hits, setHits] = useState<RawHit[]>([]);
+  const key = JSON.stringify([query, filters, time]);
+  useEffect(() => {
+    if (!indexPattern) return undefined;
+    const controller = new AbortController();
+    const { version: _version, ...fields } = documentFields(indexPattern);
+    const bool = buildQuery(indexPattern, query, filters, services.queryConfig());
+    const range = indexPattern.timeFieldName ? resolveTimeRange(time, { weekStart: services.weekStart() }) : undefined;
+    const timeFilter = timeRangeFilter(indexPattern, range);
+    if (timeFilter) bool.bool.filter.push(timeFilter);
+    const body = {
+      ...fields,
+      size: services.uiSettings.get<number>('discover:sampleSize', 500),
+      sort: sortClause(indexPattern, [[indexPattern.timeFieldName || '_score', 'desc']]),
+      query: bool,
+    };
+    services.search
+      .search(indexPattern.title, body, { signal: controller.signal })
+      .then((response) => setHits(response.hits.hits as RawHit[]))
+      .catch(() => undefined);
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [indexPattern, key]);
+  return hits;
+}
+
+/** The index pattern the fields are those of: a list to search, as there */
+function DataSourceSelect({ selectedId, onChange }: { selectedId?: string; onChange: (id: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [patterns, setPatterns] = useState<IndexPatternSummary[]>();
+  const [error, setError] = useState<string>();
+  const [search, setSearch] = useState('');
+  useEffect(() => {
+    let live = true;
+    services.indexPatterns
+      .list()
+      .then((list) => live && setPatterns(list))
+      .catch((failure) => live && setError(errorMessage(failure)));
+    return () => {
+      live = false;
+    };
+  }, []);
+  const loading = patterns === undefined && error === undefined;
+  const current = patterns?.find((pattern) => pattern.id === selectedId);
+  const wanted = search.trim().toLowerCase();
+  const shown = (patterns ?? []).filter(
+    (pattern) => !wanted || patternName(pattern).toLowerCase().includes(wanted) || pattern.title.toLowerCase().includes(wanted)
+  );
+  const close = useCallback(() => {
+    setOpen(false);
+    setSearch('');
+  }, []);
+
+  return (
+    <Popover
+      open={open}
+      onClose={close}
+      matchWidth
+      anchorStyle={{ display: 'flex', width: '100%' }}
+      className="vbdSourceList"
+      button={
+        <div className="vbdSource" title={current ? patternName(current) : 'Select an option'}>
+          <span className="vbdSource__prepend">Data Source</span>
+          <button
+            type="button"
+            className="vbdSource__button"
+            aria-haspopup="listbox"
+            aria-expanded={open}
+            onClick={() => (open ? close() : setOpen(true))}
+            data-test-subj="searchableDropdownValue"
+          >
+            {current ? (
+              <>
+                <Icon name="index" className="vbdSource__icon" />
+                <span className="atlTruncate">{patternName(current)}</span>
+              </>
+            ) : (
+              <span className="atlSubdued">{loading ? 'Loading' : 'Select an option'}</span>
+            )}
+            {loading ? <Spinner /> : <Icon name="chevronDown" className="vbdSource__caret" />}
+          </button>
+        </div>
+      }
+    >
+      {error !== undefined ? (
+        <p className="vbdSourceList__message">{error}</p>
+      ) : loading ? (
+        <div className="vbdSourceList__message">
+          <Spinner />
+        </div>
+      ) : (
+        <>
+          <div className="vbdSourceList__search">
+            <SearchField compact value={search} onChange={setSearch} placeholder="Filter options" aria-label="Filter options" autoFocus />
+          </div>
+          <ul className="vbdSourceList__options" role="listbox" aria-label="Selectable options" data-test-subj="searchableDropdownList">
+            {shown.map((pattern) => (
+              <li key={pattern.id}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={pattern.id === selectedId}
+                  className="vbdSourceList__option"
+                  title={patternName(pattern)}
+                  onClick={() => {
+                    close();
+                    if (pattern.id !== selectedId) onChange(pattern.id);
+                  }}
+                >
+                  <Icon name="index" className="vbdSource__icon" />
+                  <span className="atlTruncate">{patternName(pattern)}</span>
+                </button>
+              </li>
+            ))}
+            {shown.length === 0 && <li className="vbdSourceList__message">No options match the search</li>}
+          </ul>
+        </>
+      )}
+    </Popover>
+  );
+}

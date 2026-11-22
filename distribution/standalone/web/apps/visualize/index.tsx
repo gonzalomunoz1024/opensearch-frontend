@@ -17,7 +17,7 @@ import { Listing, type Listed } from '../../shell/listing';
 import { SavedObjectFinder } from '../../shell/saved_objects_ui';
 import { currentGlobalParam, useBreadcrumbs } from '../../shell/state';
 import { canDraw } from '../../vis/visualization';
-import { VIS_BUILDER_TITLE, VIS_BUILDER_TYPE, visBuilderEditUrl } from '../vis_builder/model';
+import { VIS_BUILDER_APP, VIS_BUILDER_TITLE, VIS_BUILDER_TYPE, visBuilderEditUrl } from '../vis_builder/model';
 import { VISUALIZE, VisEditor } from './editor';
 import '../../styles/visualize.css';
 
@@ -28,6 +28,19 @@ const SOURCE_TYPES = [
 
 // Kinds that are still being tried out are marked, as OpenSearch Dashboards marks them
 const EXPERIMENTAL = new Set(['input_control_vis', 'vega']);
+
+// Kinds another application makes, listed with the others as OpenSearch Dashboards lists them
+const ALIASES: Array<VisType & { open: () => string }> = [
+  {
+    name: 'vis-builder',
+    title: VIS_BUILDER_TITLE,
+    description: 'Create visualizations using the new VisBuilder',
+    icon: 'visBuilder',
+    aggBased: false,
+    open: () => appUrl(VIS_BUILDER_APP, '/', { _g: currentGlobalParam() }),
+  },
+];
+const aliasOf = (type: VisType) => ALIASES.find((alias) => alias.name === type.name);
 
 const typeOf = (object: Listed): string => {
   if (object.type === VIS_BUILDER_TYPE) return VIS_BUILDER_TYPE;
@@ -110,7 +123,7 @@ export function NewVisModal({ onClose }: { onClose: () => void }) {
   const shown = useMemo(() => {
     const text = filter.trim().toLowerCase();
     // In the order of the letters' codes, as OpenSearch Dashboards lists them: TSVB before Tag Cloud
-    const list = [...VIS_TYPES].sort((a, b) => (a.title < b.title ? -1 : a.title > b.title ? 1 : 0));
+    const list = [...VIS_TYPES, ...ALIASES].sort((a, b) => (a.title < b.title ? -1 : a.title > b.title ? 1 : 0));
     return text ? list.filter((type) => type.title.toLowerCase().includes(text) || type.name.includes(text)) : list;
   }, [filter]);
 
@@ -145,7 +158,8 @@ export function NewVisModal({ onClose }: { onClose: () => void }) {
           </span>
           <ul className="vzeNew__grid">
             {shown.map((type) => {
-              const drawn = canDraw(type.name);
+              const alias = aliasOf(type);
+              const drawn = Boolean(alias) || canDraw(type.name);
               return (
                 <li key={type.name}>
                   <button
@@ -157,6 +171,11 @@ export function NewVisModal({ onClose }: { onClose: () => void }) {
                     onMouseLeave={() => setHovered(undefined)}
                     onBlur={() => setHovered(undefined)}
                     onClick={() => {
+                      if (alias) {
+                        onClose();
+                        navigate(alias.open(), { force: true });
+                        return;
+                      }
                       if (!drawn) return;
                       if (type.aggBased) setChosen(type);
                       else create(type);
@@ -180,8 +199,11 @@ export function NewVisModal({ onClose }: { onClose: () => void }) {
           {described ? (
             <>
               <h3 className="atlTitleXs">{described.title}</h3>
-              <p>{described.description}.</p>
-              {!canDraw(described.name) && <Badge tone="warning">Not in this build yet</Badge>}
+              <p>
+                {described.description}
+                {aliasOf(described) ? '' : '.'}
+              </p>
+              {!aliasOf(described) && !canDraw(described.name) && <Badge tone="warning">Not in this build yet</Badge>}
               {EXPERIMENTAL.has(described.name) && (
                 <p className="atlSubdued atlSmall">
                   This visualization is experimental. The design and implementation are less mature than stable visualizations and might be subject

@@ -11,6 +11,7 @@
 import type { SavedObjectReference } from '../../../common/saved_objects';
 import { aggLabel, type AggConfig } from '../../lib/aggs';
 import { parseSearchSource, serializeSearchSource, type SearchSource } from '../../lib/search_source';
+import type { Filter, Query } from '../../lib/types';
 import type { UiState, Vis } from '../../lib/vis';
 import { defaultParams } from '../visualize/defaults';
 
@@ -182,6 +183,8 @@ export const visBuilderType = (name: string | undefined): VisBuilderType | undef
 
 // --- Reading and writing the saved object -----------------------------------------------------------
 
+const INDEX_REF = 'kibanaSavedObjectMeta.searchSourceJSON.index';
+
 const GENERIC_ERROR =
   'Something went wrong while loading your saved object. The object may be corrupted or does not match the latest schema';
 
@@ -251,32 +254,49 @@ export function visBuilderFromSavedObject(object: {
   };
 }
 
-/** The attributes and references VisBuilder writes: the index pattern goes into the references */
-export function visBuilderToSavedObject(saved: Pick<SavedVisBuilder, 'title' | 'description' | 'state'>): {
+/**
+ * The attributes and references VisBuilder writes. The index pattern goes into the references and
+ * the search source holds the query and the filters of the page when it saved, as
+ * `{"query":...,"filter":[...],"indexRefName":...}`; the index pattern's reference comes first.
+ */
+export function visBuilderToSavedObject(
+  saved: Pick<SavedVisBuilder, 'title' | 'description' | 'state'>,
+  search: { query?: Query; filters?: Filter[] } = {}
+): {
   attributes: VisBuilderAttributes;
   references: SavedObjectReference[];
 } {
-  const { indexPattern, ...visualization } = saved.state.visualization;
-  const active = visualization.activeVisualization;
+  const { indexPattern, searchField, activeVisualization: active, ...rest } = saved.state.visualization;
+  // Written with the keys in the order the original writes them, though the address sorts them
   const stored: VisualizationState = {
-    ...visualization,
-    activeVisualization: active ? { name: active.name, aggConfigParams: active.aggConfigParams } : undefined,
+    searchField,
+    ...rest,
+    activeVisualization: active
+      ? {
+          name: active.name,
+          aggConfigParams: active.aggConfigParams.map(({ id, enabled, type, params, schema, ...others }) => ({ id, enabled, type, params, schema, ...others })),
+        }
+      : undefined,
   };
-  // The search source holds the index pattern only, as `{"indexRefName":...}`
-  const { searchSourceJSON, references } = serializeSearchSource({ indexId: indexPattern, filters: [] });
-  const json = JSON.parse(searchSourceJSON) as Record<string, unknown>;
-  delete json.filter;
+  const query = search.query && { query: search.query.query, language: search.query.language };
+  const { searchSourceJSON, references } = serializeSearchSource({
+    indexId: indexPattern,
+    query,
+    filters: search.filters ?? [],
+  });
+  const isIndex = (reference: SavedObjectReference) => reference.name === INDEX_REF;
+  const style = visBuilderType(active?.name)?.style();
   return {
     attributes: {
       title: saved.title,
       description: saved.description,
       visualizationState: JSON.stringify(stored),
-      styleState: JSON.stringify(saved.state.style),
+      styleState: JSON.stringify(style ? orderedLike(saved.state.style, style) : saved.state.style),
       uiState: JSON.stringify(saved.state.ui ?? {}),
       version: 3,
-      kibanaSavedObjectMeta: { searchSourceJSON: JSON.stringify(json) },
+      kibanaSavedObjectMeta: { searchSourceJSON },
     },
-    references,
+    references: [...references.filter(isIndex), ...references.filter((reference) => !isIndex(reference))],
   };
 }
 
@@ -299,6 +319,15 @@ export function schemaProblem(visualization: VisualizationState): string | undef
 // --- Drawing it as Visualize draws its own -----------------------------------------------------------
 
 type Plain = Record<string, unknown>;
+
+/** The keys of an object in the order a template has them, those it lacks after */
+function orderedLike<T>(value: T, template: unknown): T {
+  if (!isPlainObject(value) || !isPlainObject(template)) return value;
+  const out: Plain = {};
+  for (const key of Object.keys(template)) if (key in value) out[key] = orderedLike(value[key], template[key]);
+  for (const [key, item] of Object.entries(value)) if (!(key in out)) out[key] = item;
+  return out as T;
+}
 
 /** What lodash's `defaultsDeep` does: fills what is missing, arrays place by place */
 export function defaultsDeep<T>(target: T, defaults: unknown): T {

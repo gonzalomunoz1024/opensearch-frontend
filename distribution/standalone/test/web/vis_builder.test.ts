@@ -99,25 +99,80 @@ describe('a saved VisBuilder visualization', () => {
     const saved = visBuilderFromSavedObject(object('metric', [{ id: '1', enabled: true, type: 'count', params: {}, schema: 'metric' }], {}));
     const count = { id: '1', enabled: true, type: 'count', params: {}, schema: 'metric' };
     const draftAgg = { id: '9', enabled: true, type: 'avg', schema: 'metric', params: {} };
-    const written = visBuilderToSavedObject({
-      ...saved,
-      title: 'zz-agent-copy',
-      state: {
-        ...saved.state,
-        visualization: { ...saved.state.visualization, activeVisualization: { name: 'metric', aggConfigParams: [count], draftAgg } },
+    const filter = {
+      meta: { alias: null, negate: false, disabled: false, index: 'other-pattern' },
+      query: { match_phrase: { 'geo.src': 'CN' } },
+      $state: { store: 'appState' as const },
+    };
+    const written = visBuilderToSavedObject(
+      {
+        ...saved,
+        title: 'zz-agent-copy',
+        state: {
+          ...saved.state,
+          visualization: { ...saved.state.visualization, activeVisualization: { name: 'metric', aggConfigParams: [count], draftAgg } },
+        },
       },
-    });
-    assert.equal(written.attributes.kibanaSavedObjectMeta?.searchSourceJSON, SEARCH_SOURCE);
-    assert.deepEqual(written.references, REFERENCES);
+      { query: { query: 'bytes > 0', language: 'kuery' }, filters: [filter] }
+    );
+    // the query and filters of the page go into the search source, the index pattern first in the references
+    assert.equal(
+      written.attributes.kibanaSavedObjectMeta?.searchSourceJSON,
+      '{"query":{"query":"bytes > 0","language":"kuery"},"filter":[{"meta":{"alias":null,"negate":false,"disabled":false,' +
+        '"indexRefName":"kibanaSavedObjectMeta.searchSourceJSON.filter[0].meta.index"},"query":{"match_phrase":{"geo.src":"CN"}},' +
+        '"$state":{"store":"appState"}}],"indexRefName":"kibanaSavedObjectMeta.searchSourceJSON.index"}'
+    );
+    assert.deepEqual(written.references, [
+      ...REFERENCES,
+      { name: 'kibanaSavedObjectMeta.searchSourceJSON.filter[0].meta.index', type: 'index-pattern', id: 'other-pattern' },
+    ]);
     assert.equal(written.attributes.version, 3);
     assert.equal(written.attributes.title, 'zz-agent-copy');
     assert.deepEqual(JSON.parse(written.attributes.visualizationState ?? ''), {
       searchField: '',
       activeVisualization: { name: 'metric', aggConfigParams: [{ id: '1', enabled: true, type: 'count', params: {}, schema: 'metric' }] },
     });
-    // and read back as it was
+    // and read back as it was, with its query and filters
     const again = visBuilderFromSavedObject({ id: 'vb-2', ...written });
     assert.deepEqual(again.state.visualization, saved.state.visualization);
+    assert.deepEqual(again.source.query, { query: 'bytes > 0', language: 'kuery' });
+    assert.equal(again.source.filters[0].meta.index, 'other-pattern');
+    // with nothing on the page, an empty list of filters
+    assert.equal(
+      visBuilderToSavedObject(saved, { query: { query: '', language: 'kuery' }, filters: [] }).attributes.kibanaSavedObjectMeta
+        ?.searchSourceJSON,
+      '{"query":{"query":"","language":"kuery"},"filter":[],"indexRefName":"kibanaSavedObjectMeta.searchSourceJSON.index"}'
+    );
+  });
+
+  it('is written with its keys in the order OpenSearch Dashboards writes them, whatever order the address gave', () => {
+    // As the address holds it: every key sorted
+    const written = visBuilderToSavedObject(
+      {
+        title: 'zz-agent-order',
+        description: '',
+        state: {
+          style: { addLegend: true, addTooltip: true, legendPosition: 'right', type: 'histogram' },
+          ui: {},
+          visualization: {
+            activeVisualization: { aggConfigParams: [{ enabled: true, id: '1', params: {}, schema: 'metric', type: 'count' }], name: 'histogram' },
+            indexPattern: INDEX,
+            searchField: 'order',
+          },
+        },
+      },
+      { query: { language: 'kuery', query: 'currency : EUR' }, filters: [] }
+    );
+    // what OpenSearch Dashboards sent when it saved the same
+    assert.equal(
+      written.attributes.visualizationState,
+      '{"searchField":"order","activeVisualization":{"name":"histogram","aggConfigParams":[{"id":"1","enabled":true,"type":"count","params":{},"schema":"metric"}]}}'
+    );
+    assert.equal(written.attributes.styleState, '{"addTooltip":true,"addLegend":true,"legendPosition":"right","type":"histogram"}');
+    assert.equal(
+      written.attributes.kibanaSavedObjectMeta?.searchSourceJSON,
+      '{"query":{"query":"currency : EUR","language":"kuery"},"filter":[],"indexRefName":"kibanaSavedObjectMeta.searchSourceJSON.index"}'
+    );
   });
 
   it('opens in VisBuilder', () => {

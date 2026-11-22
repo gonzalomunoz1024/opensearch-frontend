@@ -850,15 +850,14 @@ export function XYChart({
     };
 
     // The classic charts shade what lies outside the time range: the part of the first bucket
-    // before it, and the last bucket, which is still filling
+    // before it, and the part of the last one after it, which is still filling (the axis of a
+    // classic chart always widens to the end of its last bucket)
     const endZones: Array<{ from: number; to: number }> = [];
     if (classic && domain && x.type === 'time' && x.domain) {
       const along = (value: number) => ((value - domain[0]) / (domain[1] - domain[0] || 1)) * geometry.length;
-      const numbers = x.values.filter((value): value is number => typeof value === 'number');
       const startsAt = Math.min(Math.max(along(x.domain[0]), 0), geometry.length);
       if (startsAt > 0) endZones.push({ from: 0, to: startsAt });
-      const lastValue = numbers.length ? Math.min(x.domain[1], numbers[numbers.length - 1]) : x.domain[1];
-      const endsAt = Math.min(Math.max(along(lastValue + 1), 0), geometry.length);
+      const endsAt = Math.min(Math.max(along(x.domain[1] + 1), 0), geometry.length);
       if (endsAt < geometry.length) endZones.push({ from: endsAt, to: geometry.length });
     }
 

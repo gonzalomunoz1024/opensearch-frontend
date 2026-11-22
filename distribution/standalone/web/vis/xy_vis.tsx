@@ -152,6 +152,9 @@ export function XYVis({ vis, data, uiState, onFilter, onTimeChange }: VisRenderP
     const category = params.categoryAxes?.[0] ?? {};
     const timeRange = context.timeRange;
     const isTimeField = Boolean(xColumn?.isDate && xColumn.fieldName === context.indexPattern?.timeFieldName);
+    // A date histogram spans the picked time range when it is on the time field, or when its
+    // interval is chosen by itself, whatever date it counts by
+    const bounded = isTimeField || Boolean(xColumn?.isDate && (xColumn.agg.params?.interval ?? 'auto') === 'auto');
     const horizontal = category.position === 'left' || category.position === 'right';
     // Only time runs along a scale; the bars of anything else, a number histogram too, stand side
     // by side with a label each, turned on its side under an upright chart unless the
@@ -160,9 +163,10 @@ export function XYVis({ vis, data, uiState, onFilter, onTimeChange }: VisRenderP
       type: xColumn?.isDate ? 'time' : 'category',
       values: xValues,
       interval: xColumn?.interval,
-      domain: isTimeField && timeRange ? [timeRange.from.getTime(), timeRange.to.getTime()] : undefined,
+      domain: bounded && timeRange ? [timeRange.from.getTime(), timeRange.to.getTime()] : undefined,
       format: (value) => (!xColumn ? String(value) : typeof value === 'number' ? xColumn.format(value) : value),
-      title: category.title?.text || xColumn?.name || '',
+      // Without a bucket on the axis the bars stand for all the documents, as the original names them
+      title: category.title?.text || (xColumn ? xColumn.name : 'All docs'),
       show: category.show !== false,
       showLabels: category.labels?.show !== false,
       rotate: xColumn?.isDate || horizontal ? 0 : (category.labels?.rotate ?? 90),
