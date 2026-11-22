@@ -18,10 +18,13 @@ import { Indices } from './indices';
 import { ChangePolicy, ManagedIndices } from './managed_indices';
 import { CreatePolicy, Policies, PolicyDetails } from './policies';
 import { CreateRollup } from './create_rollup';
+import { CreateTransform } from './create_transform';
 import { Reindex } from './reindex';
 import { ShrinkIndex, SplitIndex } from './resize_pages';
 import { EditRollup, RollupDetails } from './rollup_pages';
 import { Rollups } from './rollups';
+import { EditTransform, TransformDetails } from './transform_pages';
+import { Transforms } from './transforms';
 import { Rollover } from './rollover';
 import { ROUTES, SNAPSHOT_MANAGEMENT_PATH } from './routes';
 import { ComposableTemplateDetail, TemplateDetail } from './template_pages';
@@ -138,6 +141,10 @@ const PAGES: Page[] = [
   { route: ROUTES.CREATE_ROLLUP, render: () => <CreateRollup /> },
   { route: ROUTES.EDIT_ROLLUP, render: () => <EditRollup /> },
   { route: ROUTES.ROLLUP_DETAILS, render: () => <RollupDetails /> },
+  { route: ROUTES.TRANSFORMS, render: () => <Transforms /> },
+  { route: ROUTES.CREATE_TRANSFORM, render: () => <CreateTransform /> },
+  { route: ROUTES.EDIT_TRANSFORM, render: () => <EditTransform /> },
+  { route: ROUTES.TRANSFORM_DETAILS, render: () => <TransformDetails /> },
 ];
 
 function findPage(hashPath: string): { page: Page; rest: string } | undefined {

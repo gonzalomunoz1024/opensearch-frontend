@@ -5,16 +5,15 @@
  * measured, the schedule, and a look at it all before it is sent.
  */
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { Button, CallOut, IconButton, Panel } from '../../components/basic';
 import { ComboBox } from '../../components/combo_box';
-import { Checkbox, NumberField, RadioGroup, Select, TextArea, TextField } from '../../components/form';
+import { Checkbox, NumberField, RadioGroup, Select, TextArea } from '../../components/form';
 import { Icon } from '../../components/icon';
 import { MenuButton } from '../../components/overlay';
 import { useBreadcrumbs } from '../../shell/state';
 import { Detail, Details, ExternalLink, PAGE_SIZES, Table, go, ism, toasts, type TableColumn } from './common';
-import { useSpaced } from './index_select';
-import { AddFieldsModal, FieldRow, Paired, Wizard, loadNames } from './job_parts';
+import { AddFieldsModal, ConfigureJob, FieldRow, FormPanel, Paired, Wizard, nameOptions, useIndexNames } from './job_parts';
 import {
   CALENDAR_TIMEUNITS,
   DELAY_TIMEUNITS,
@@ -38,7 +37,6 @@ import {
   rollupBody,
   setMetricKind,
   toggleMetric,
-  wildcardOption,
   type DimensionItem,
   type FieldItem,
   type MetricItem,
@@ -75,20 +73,6 @@ export interface RollupErrors {
 
 type Change = (changes: Partial<RollupForm>) => void;
 
-/** A panel of a form: its title over a line, and its fields */
-export function FormPanel({ title, actions, children }: { title: ReactNode; actions?: ReactNode; children: ReactNode }) {
-  return (
-    <Panel>
-      <div className="ismFormPanel__header">
-        <h2 className="ismPanel__heading">{title}</h2>
-        {actions}
-      </div>
-      <hr className="ismRule" />
-      <div className="ismFormPanel__body">{children}</div>
-    </Panel>
-  );
-}
-
 // --- Step 1 ----------------------------------------------------------------------------------------
 
 /** The name of a job and what it is for; the name of a job that exists cannot be changed */
@@ -108,21 +92,15 @@ export function ConfigureRollup({
   onChangeDescription: (description: string) => void;
 }) {
   return (
-    <FormPanel title="Job name and description">
-      <FieldRow title="Name" help="Specify a unique, descriptive name." error={rollupIdError}>
-        <TextField
-          compact
-          value={rollupId}
-          onChange={(name) => onChangeName?.(name)}
-          placeholder="my-rollupjob1"
-          invalid={Boolean(rollupIdError)}
-          disabled={isEdit}
-        />
-      </FieldRow>
-      <FieldRow title="Description" optional>
-        <TextArea value={description} onChange={onChangeDescription} rows={3} testId="description" />
-      </FieldRow>
-    </FormPanel>
+    <ConfigureJob
+      jobId={rollupId}
+      jobIdError={rollupIdError}
+      placeholder="my-rollupjob1"
+      description={description}
+      isEdit={isEdit}
+      onChangeName={onChangeName}
+      onChangeDescription={onChangeDescription}
+    />
   );
 }
 
@@ -137,37 +115,7 @@ function RollupIndices({
   onChangeSource: (index: string) => void;
   onChangeTarget: (index: string) => void;
 }) {
-  const [sources, setSources] = useState<string[]>([]);
-  const [targets, setTargets] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
-  const turn = useRef(0);
-
-  const search = useCallback((text: string) => {
-    const mine = (turn.current += 1);
-    setLoading(true);
-    setSources([]);
-    void loadNames(text).then((answer) => {
-      if (mine !== turn.current) return;
-      if (answer.ok && answer.response) {
-        const { dataStreams, indices } = answer.response;
-        setSources([...(text.trim() ? [wildcardOption(text)] : []), ...dataStreams, ...indices]);
-        setTargets(indices);
-      } else if (answer.error?.startsWith('[index_not_found_exception]')) {
-        toasts.danger('No index available');
-      } else {
-        toasts.danger(answer.error);
-      }
-      setLoading(false);
-    });
-  }, []);
-  useEffect(() => {
-    search('');
-    return () => {
-      turn.current += 1;
-    };
-  }, [search]);
-  const spaced = useSpaced(search, 500);
-  const options = (names: string[]) => [...new Set(names)].map((name) => ({ value: name, label: name }));
+  const { sources, targets, loading, onSearch: spaced } = useIndexNames();
 
   return (
     <FormPanel title="Indices">
@@ -190,7 +138,7 @@ function RollupIndices({
           single
           searched
           placeholder="Select source index"
-          options={options(sources)}
+          options={nameOptions(sources)}
           selected={form.sourceIndex ? [form.sourceIndex] : []}
           onChange={(chosen) => onChangeSource(chosen[0] ?? '')}
           onSearch={spaced}
@@ -215,7 +163,7 @@ function RollupIndices({
           searched
           allowCustom
           placeholder="Select or create target index"
-          options={options(targets)}
+          options={nameOptions(targets)}
           selected={form.targetIndex ? [form.targetIndex] : []}
           onChange={(chosen) => onChangeTarget(chosen[0] ?? '')}
           onSearch={spaced}
@@ -641,7 +589,7 @@ export function Schedule({
         />
       )}
       {!isEdit && (
-        <FieldRow title="Continuous">
+        <FieldRow title="Continuous" minor>
           <RadioGroup
             options={[
               { id: 'no', label: 'No' },

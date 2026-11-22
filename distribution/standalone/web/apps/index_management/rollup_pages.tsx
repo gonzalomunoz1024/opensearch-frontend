@@ -7,7 +7,8 @@ import { Button, Health } from '../../components/basic';
 import { useLocation } from '../../router';
 import { useBreadcrumbs } from '../../shell/state';
 import { Detail, Details, JSONModal, go, ism, renderTime, toasts } from './common';
-import { AggregationTables, ConfigureRollup, FormPanel, Schedule } from './create_rollup';
+import { AggregationTables, ConfigureRollup, Schedule } from './create_rollup';
+import { FormPanel } from './job_parts';
 import {
   INTERVAL_REQUIRED,
   editOf,

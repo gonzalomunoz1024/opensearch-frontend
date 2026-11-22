@@ -156,10 +156,13 @@ export function histogramIntervalText(interval: string | undefined): string {
 export interface FieldItem {
   label: string;
   type?: string;
+  /** Of an alias: the field it stands for */
+  path?: string;
 }
 
 interface Mapping {
   type?: string;
+  path?: string;
   fields?: Record<string, Mapping>;
   properties?: Record<string, Mapping>;
 }
@@ -169,7 +172,11 @@ export function parseFieldOptions(prefix: string, mappings: Record<string, Mappi
   const fields: FieldItem[] = [];
   for (const [name, mapping] of Object.entries(mappings ?? {})) {
     if (mapping.type !== 'object' && mapping.type != null && mapping.type !== 'nested') {
-      fields.push({ label: prefix + name, type: mapping.type });
+      fields.push({
+        label: prefix + name,
+        type: mapping.type,
+        ...(mapping.path !== undefined && { path: mapping.path }),
+      });
     }
     if (mapping.fields != null) fields.push(...parseFieldOptions(`${prefix}${name}.`, mapping.fields));
     if (mapping.properties != null) fields.push(...parseFieldOptions(`${prefix}${name}.`, mapping.properties));

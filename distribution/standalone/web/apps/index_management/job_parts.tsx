@@ -2,11 +2,13 @@
 
 /* What the pages of rollup jobs and of transform jobs are both made of. */
 
-import { useState, type ReactNode } from 'react';
-import { Button, cx } from '../../components/basic';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Button, Panel, cx } from '../../components/basic';
+import { TextArea, TextField } from '../../components/form';
 import { Modal } from '../../components/overlay';
-import { LocalTable, ism, type Answer, type TableColumn } from './common';
-import { type FieldItem } from './rollup_model';
+import { LocalTable, ism, toasts, type Answer, type TableColumn } from './common';
+import { useSpaced } from './index_select';
+import { wildcardOption, type FieldItem } from './rollup_model';
 
 /** The steps of a form at its left: the ones not reached yet are pale */
 export function Steps({ titles, step }: { titles: string[]; step: number }) {
@@ -29,11 +31,14 @@ export function Steps({ titles, step }: { titles: string[]; step: number }) {
 /** A form in steps: the steps, the step that is open, and the buttons that move between them */
 export function Wizard({
   titles,
+  headings = titles,
   step,
   children,
   buttons,
 }: {
   titles: string[];
+  /** What each step is called over its fields, where that is not what the list of steps calls it */
+  headings?: string[];
   step: number;
   children: ReactNode;
   buttons: ReactNode;
@@ -45,12 +50,26 @@ export function Wizard({
           <Steps titles={titles} step={step} />
         </aside>
         <div className="ismWizard__body">
-          <h1 className="ismPageTitle">{titles[step - 1]}</h1>
+          <h1 className="ismPageTitle">{headings[step - 1]}</h1>
           {children}
         </div>
       </div>
       <div className="ismButtons">{buttons}</div>
     </div>
+  );
+}
+
+/** A panel of a form: its title over a line, and its fields */
+export function FormPanel({ title, actions, children }: { title: ReactNode; actions?: ReactNode; children: ReactNode }) {
+  return (
+    <Panel>
+      <div className="ismFormPanel__header">
+        <h2 className="ismPanel__heading">{title}</h2>
+        {actions}
+      </div>
+      <hr className="ismRule" />
+      <div className="ismFormPanel__body">{children}</div>
+    </Panel>
   );
 }
 
@@ -61,6 +80,8 @@ export function FieldRow({
   help,
   error,
   wide,
+  small,
+  minor,
   children,
 }: {
   title?: ReactNode;
@@ -69,11 +90,17 @@ export function FieldRow({
   error?: ReactNode;
   /** Takes the width it is given instead of that of a field */
   wide?: boolean;
+  /** The name is a small label, not a heading */
+  small?: boolean;
+  /** The name is a heading under those of the other rows */
+  minor?: boolean;
   children: ReactNode;
 }) {
   return (
     <div className={cx('ismRow', wide && 'ismRow--wide')}>
-      {title && (
+      {title && small && <div className="ismRow__label">{title}</div>}
+      {title && !small && minor && <h4 className="ismRow__title ismRow__title--minor">{title}</h4>}
+      {title && !small && !minor && (
         <h3 className="ismRow__title">
           {title}
           {optional && <i> – optional</i>}
@@ -83,6 +110,43 @@ export function FieldRow({
       {error && <div className="ismLabeled__error">{error}</div>}
       {help && <div className="ismLabeled__help">{help}</div>}
     </div>
+  );
+}
+
+/** The name of a job and what it is for; the name of a job that exists cannot be changed */
+export function ConfigureJob({
+  jobId,
+  jobIdError,
+  placeholder,
+  description,
+  isEdit,
+  onChangeName,
+  onChangeDescription,
+}: {
+  jobId: string;
+  jobIdError?: string;
+  placeholder: string;
+  description: string;
+  isEdit?: boolean;
+  onChangeName?: (name: string) => void;
+  onChangeDescription: (description: string) => void;
+}) {
+  return (
+    <FormPanel title="Job name and description">
+      <FieldRow title="Name" help="Specify a unique, descriptive name." error={jobIdError}>
+        <TextField
+          compact
+          value={jobId}
+          onChange={(name) => onChangeName?.(name)}
+          placeholder={placeholder}
+          invalid={Boolean(jobIdError)}
+          disabled={isEdit}
+        />
+      </FieldRow>
+      <FieldRow title="Description" optional>
+        <TextArea value={description} onChange={onChangeDescription} rows={3} testId="description" />
+      </FieldRow>
+    </FormPanel>
   );
 }
 
@@ -120,6 +184,52 @@ export async function loadNames(search: string): Promise<Answer<FoundNames>> {
     },
   };
 }
+
+/**
+ * The names a job can read from and write to, looked for again half a second after the typing
+ * stops: what was typed as a pattern, the data streams and the indexes to read from; the
+ * indexes to write to.
+ */
+export function useIndexNames(): {
+  sources: string[];
+  targets: string[];
+  loading: boolean;
+  onSearch: (text: string) => void;
+} {
+  const [sources, setSources] = useState<string[]>([]);
+  const [targets, setTargets] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const turn = useRef(0);
+
+  const search = useCallback((text: string) => {
+    const mine = (turn.current += 1);
+    setLoading(true);
+    setSources([]);
+    void loadNames(text).then((answer) => {
+      if (mine !== turn.current) return;
+      if (answer.ok && answer.response) {
+        const { dataStreams, indices } = answer.response;
+        setSources([...(text.trim() ? [wildcardOption(text)] : []), ...dataStreams, ...indices]);
+        setTargets(indices);
+      } else if (answer.error?.startsWith('[index_not_found_exception]')) {
+        toasts.danger('No index available');
+      } else {
+        toasts.danger(answer.error);
+      }
+      setLoading(false);
+    });
+  }, []);
+  useEffect(() => {
+    search('');
+    return () => {
+      turn.current += 1;
+    };
+  }, [search]);
+  return { sources, targets, loading, onSearch: useSpaced(search, 500) };
+}
+
+/** Names as the options of a field, each once */
+export const nameOptions = (names: string[]) => [...new Set(names)].map((name) => ({ value: name, label: name }));
 
 const FIELD_COLUMNS: Array<TableColumn<FieldItem>> = [
   { field: 'label', name: 'Field name', render: (field) => field.label },
