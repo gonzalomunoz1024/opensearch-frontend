@@ -20,6 +20,7 @@ import { HeatmapVis } from './heatmap_vis';
 import { MarkdownVis } from './markdown_vis';
 import { MetricVis } from './metric_vis';
 import { PieVis } from './pie_vis';
+import { RegionMapVis } from './region_map/region_map_vis';
 import { fetchVisData, type VisData, type VisInput } from './request';
 import { TableVis } from './table_vis';
 import { TagCloudVis } from './tag_cloud_vis';
@@ -66,6 +67,7 @@ const DRAWN: Record<string, (props: VisRenderProps) => ReactNode> = {
   gauge: (props) => <GaugeVis {...props} />,
   goal: (props) => <GaugeVis {...props} />,
   heatmap: (props) => <HeatmapVis {...props} />,
+  region_map: (props) => <RegionMapVis {...props} />,
   tagcloud: (props) => <TagCloudVis {...props} />,
   table: (props) => <TableVis {...props} />,
 };
