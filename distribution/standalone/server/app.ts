@@ -34,6 +34,7 @@ import { SavedObjectsRepository, type FindOptions } from './saved_objects';
 import { registerShortUrls } from './short_urls';
 import { registerSqlConsole } from './sql_console';
 import { contentSecurityPolicy, readBuild, renderPage, serveStatic } from './static';
+import { registerTsvbFields } from './tsvb_fields';
 import { UiSettings } from './ui_settings';
 
 export const PRODUCT_NAME = 'InfraDashboard';
@@ -389,6 +390,10 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
   // --- Index Management ------------------------------------------------------------------------
 
   registerIndexManagement(router, client);
+
+  // --- TSVB ------------------------------------------------------------------------------------
+
+  registerTsvbFields(router, client, repository, uiSettings);
 
   // --- Short URLs ------------------------------------------------------------------------------
 

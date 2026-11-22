@@ -29,6 +29,7 @@ import { SearchBar } from '../../shell/search_bar';
 import { showSearchError } from '../../shell/search_error';
 import { addRecentlyAccessed, currentGlobalParam, useAutoRefresh, useBreadcrumbs, useGlobalState } from '../../shell/state';
 import { resolveVisSource, visContext, type VisInput } from '../../vis/request';
+import type { TsvbData, TsvbTableData } from '../../vis/tsvb/data';
 import { specIndexPatterns } from '../../vis/vega/index_patterns';
 import { Visualization, canDraw, type VisInspectData } from '../../vis/visualization';
 import { DataTab } from './data_tab';
@@ -37,6 +38,8 @@ import { canAutoApply, dragWidths, editorHeading, initialWidths, keyWidths, sear
 import { optionTabs } from './options';
 import { setupRegionMap } from '../../vis/region_map/region_map_type';
 import { SidebarControls, SidebarTitle } from './sidebar';
+import { TsvbEditor } from './tsvb/editor';
+import { withTsvbDefaults } from './tsvb/model';
 
 export const VISUALIZE = '/app/visualize';
 
@@ -89,6 +92,8 @@ async function load(savedId: string | undefined, create: { type?: string; indexP
   }
   const indexId = vis.source.indexId ?? vis.parent?.indexId;
   const indexPattern = indexId ? await services.indexPatterns.get(indexId) : undefined;
+  // TSVB reads its saved params over the defaults of its type, as the product does
+  if (vis.type === 'metrics') vis = { ...vis, params: withTsvbDefaults(vis.params) };
   return { vis, indexPattern, searchTitle };
 }
 
@@ -114,6 +119,9 @@ export function VisEditor({ savedId }: { savedId?: string }) {
   const sidePanel = useRef<HTMLElement>(null);
   // Where the pointer was when the bar was last moved, while it is held
   const dragFrom = useRef<number>();
+  // What the TSVB editor needs of the chart it draws, and whether it holds changes not applied yet
+  const [tsvbData, setTsvbData] = useState<TsvbData | TsvbTableData>();
+  const [tsvbPending, setTsvbPending] = useState(false);
 
   const createType = location.hashParams.type;
   const createPattern = location.hashParams.indexPattern;
@@ -161,7 +169,8 @@ export function VisEditor({ savedId }: { savedId?: string }) {
     if (!saved) return undefined;
     const fromUrl = urlState.vis && (urlState.vis.type === undefined || urlState.vis.type === saved.type) ? urlState.vis : undefined;
     const aggs = fromUrl?.aggs ?? saved.aggs;
-    const params = fromUrl?.params ? { ...(saved.id ? {} : defaultParams(saved.type)), ...fromUrl.params } : saved.params;
+    let params = fromUrl?.params ? { ...(saved.id ? {} : defaultParams(saved.type)), ...fromUrl.params } : saved.params;
+    if (fromUrl?.params && saved.type === 'metrics') params = withTsvbDefaults(params);
     return stable({ aggs, params: fromUrl ? syncParams({ type: saved.type, aggs, params }, {}) : params });
   }, [saved, urlState.vis]);
   const applied = useMemo<Draft | undefined>(() => (appliedKey ? (JSON.parse(appliedKey) as Draft) : undefined), [appliedKey]);
@@ -232,10 +241,10 @@ export function VisEditor({ savedId }: { savedId?: string }) {
   }, [saved, applied, appliedKey, uiState, query, appFilters]);
 
   useEffect(() => {
-    if (!dirty && !(unsaved && saved?.id)) return undefined;
+    if (!dirty && !tsvbPending && !(unsaved && saved?.id)) return undefined;
     setLeaveGuard(() => window.confirm('Leave this visualization? Changes you made to it have not been saved.'));
     return () => setLeaveGuard(undefined);
-  }, [dirty, unsaved, saved?.id]);
+  }, [dirty, tsvbPending, unsaved, saved?.id]);
 
   const problems = useMemo(
     () => (saved && draft && aggBased ? visProblems({ type: saved.type, aggs: draft.aggs }, indexPattern) : {}),
@@ -355,7 +364,8 @@ export function VisEditor({ savedId }: { savedId?: string }) {
     }
   };
 
-  const hasRequests = aggBased || saved.type === 'metrics' || saved.type === 'vega';
+  // TSVB keeps no record of its requests for the inspector: Inspect is greyed out for it, as in the product
+  const hasRequests = aggBased || saved.type === 'vega';
   const navItems: TopNavItem[] = [
     {
       id: 'inspect',
@@ -390,6 +400,86 @@ export function VisEditor({ savedId }: { savedId?: string }) {
     setDraft(applied);
     setTried(false);
   };
+  const dialogs = (
+    <>
+      {dialog === 'save' && (
+        <SaveModal
+          objectType="visualization"
+          title={saved.title}
+          description={saved.description}
+          showDescription
+          existing={Boolean(saved.id)}
+          onSave={save}
+          onClose={() => setDialog(undefined)}
+        />
+      )}
+      {dialog === 'share' && (
+        <ShareModal
+          objectType="visualization"
+          savedUrl={saved.id ? `${window.location.origin}${href(appUrl(VISUALIZE, `/edit/${encodeURIComponent(saved.id)}`))}` : undefined}
+          onClose={() => setDialog(undefined)}
+        />
+      )}
+      {dialog === 'inspect' && (
+        <Inspector
+          title={saved.title || 'Visualization'}
+          requests={lastData.current?.requests ?? []}
+          table={lastData.current?.table}
+          vega={lastData.current?.vega}
+          onClose={() => setDialog(undefined)}
+        />
+      )}
+    </>
+  );
+
+  // TSVB has an editor of its own under its chart, and only the time picker above it
+  if (saved.type === 'metrics') {
+    return (
+      <div className="vzePage vzePage--metrics vzePage--tsvb" data-test-subj="visualizeEditor">
+        <TopNav items={navItems} />
+        <SearchBar
+          indexPatterns={[]}
+          query={query}
+          onQuerySubmit={(next) => writeApp({ query: next })}
+          filters={filters}
+          onFiltersChange={setFilters}
+          time={global.time}
+          refreshInterval={global.refreshInterval}
+          onTimeChange={setTime}
+          onRefreshChange={(refreshInterval) => setGlobal({ refreshInterval })}
+          onRefresh={refresh}
+          showQuery={bar.query}
+          showFilters={bar.filters}
+        />
+        <h1 className="atlScreenReaderOnly">{editorHeading(saved.title, kind?.title ?? saved.type, Boolean(saved.id))}</h1>
+        <TsvbEditor
+          key={saved.id ?? 'new'}
+          params={applied.params}
+          onApply={(params) => writeApp({ vis: { aggs: applied.aggs, params, title: saved.title, type: saved.type } })}
+          onPending={setTsvbPending}
+          chart={
+            // A TSVB panel shows its own failures in its body, with no toast
+            <Visualization
+              vis={shown}
+              input={input}
+              tick={tick}
+              uiState={uiState}
+              onUiState={(next) => writeApp({ uiState: next }, true)}
+              onFilter={addFilters}
+              onFiltersChange={setFilters}
+              onTimeChange={setTime}
+              onData={(data) => {
+                lastData.current = data;
+                setTsvbData(data.tsvb);
+              }}
+            />
+          }
+          data={tsvbData}
+        />
+        {dialogs}
+      </div>
+    );
+  }
 
   return (
     <div className={cx('vzePage', `vzePage--${saved.type}`)} data-test-subj="visualizeEditor">
@@ -526,33 +616,7 @@ export function VisEditor({ savedId }: { savedId?: string }) {
         </aside>
       </div>
 
-      {dialog === 'save' && (
-        <SaveModal
-          objectType="visualization"
-          title={saved.title}
-          description={saved.description}
-          showDescription
-          existing={Boolean(saved.id)}
-          onSave={save}
-          onClose={() => setDialog(undefined)}
-        />
-      )}
-      {dialog === 'share' && (
-        <ShareModal
-          objectType="visualization"
-          savedUrl={saved.id ? `${window.location.origin}${href(appUrl(VISUALIZE, `/edit/${encodeURIComponent(saved.id)}`))}` : undefined}
-          onClose={() => setDialog(undefined)}
-        />
-      )}
-      {dialog === 'inspect' && (
-        <Inspector
-          title={saved.title || 'Visualization'}
-          requests={lastData.current?.requests ?? []}
-          table={lastData.current?.table}
-          vega={lastData.current?.vega}
-          onClose={() => setDialog(undefined)}
-        />
-      )}
+      {dialogs}
     </div>
   );
 }

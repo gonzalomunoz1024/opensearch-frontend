@@ -40,6 +40,15 @@
   overflow-wrap: anywhere;
 }
 
+.visTsvbNoData {
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+}
+
+.visTsvbNoData p {
+  margin: 0;
+}
+
 /* A chart split into several */
 
 .visSplit {
@@ -478,6 +487,82 @@
   overflow: auto;
 }
 
+/*
+ * The frame the product draws a TSVB markdown panel and a failed panel in: the visualization's
+ * padding, then a transparent border that leaves the panel's background colour inside it
+ */
+.visTsvbFrame {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  margin: var(--space-2);
+  border: var(--space-2) solid transparent;
+}
+
+/* What a TSVB panel shows when its request failed: an alert, a title and the reason under it */
+.visTsvbError {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  text-align: center;
+}
+
+.visTsvbError__icon {
+  color: var(--color-critical);
+  vertical-align: middle;
+}
+
+.visTsvbError__spacer {
+  height: var(--space-2);
+}
+
+.visTsvbError__additional,
+.visTsvbError__stack {
+  margin-top: var(--space-2);
+}
+
+.visTsvbError__stack {
+  padding: var(--space-2);
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-code);
+  white-space: pre-wrap;
+}
+
+/* A TSVB markdown panel: its text at the top, middle or bottom, scrolling only when asked to */
+.visTsvbMarkdown {
+  position: relative;
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+}
+
+.visTsvbMarkdown__content {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.visTsvbMarkdown__content--middle {
+  justify-content: center;
+}
+
+.visTsvbMarkdown__content--bottom {
+  justify-content: flex-end;
+}
+
+.visTsvbMarkdown__content--scroll {
+  overflow: auto;
+}
+
 /* Controls: the original's input controls with the Atlas theme */
 
 .visControls {
@@ -730,6 +815,16 @@
   font-size: var(--font-size-s);
 }
 
+/* The name of the part of a split metric, under its values */
+.visTsvbMetric__additional {
+  max-width: 100%;
+  font-size: var(--font-size-xs);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .visTsvbTopN {
   flex: 1 1 auto;
   min-height: 0;
@@ -786,9 +881,46 @@
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * A metric or a gauge split by terms or filters: one for each part, as the product lays them out,
+ * at least a quarter of the width and 192 by 154 pixels each, spread over as many rows as they need
+ */
+.visTsvbSplit {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: stretch;
+  justify-content: space-around;
+  min-height: 0;
+  margin: var(--space-2);
+  overflow: auto;
+}
+
+.visTsvbSplit__part {
+  display: flex;
+  flex: 1 0 25%;
+  flex-direction: column;
+  min-width: 192px;
+  min-height: 154px;
+  border: var(--space-2) solid transparent;
+}
+
 .visTsvbTable__trend {
-  display: inline-block;
-  width: 1.4em;
   color: var(--color-text-secondary);
-  text-align: right;
+}
+
+.visTsvbTable__trend .atlIcon {
+  vertical-align: middle;
+}
+
+/* The arrow of the column a TSVB table is sorted by, and the room for one the other columns keep */
+.visTsvbTable__sort {
+  vertical-align: middle;
+}
+
+.visTsvbTable__noSort {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  vertical-align: middle;
 }

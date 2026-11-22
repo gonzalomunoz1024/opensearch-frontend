@@ -8,6 +8,7 @@
  */
 
 import { resolveInterval, resolveTimeRange, UNIT_MS, parseInterval, type AbsoluteRange } from '../../lib/dates';
+import { DEFAULT_FORMAT_SETTINGS } from '../../lib/field_formats';
 import { evaluateMath, type MathValue } from '../../lib/math_expression';
 import { formatNumber } from '../../lib/numeral';
 import { buildQuery, type BoolQuery } from '../../lib/query';
@@ -39,6 +40,9 @@ export interface TsvbMetric {
   order_by?: string;
   order?: string;
   agg_with?: string;
+  // A standard deviation's: how many of them, and which of its values is drawn
+  sigma?: number | string;
+  mode?: string;
 }
 
 export interface TsvbSeries {
@@ -76,6 +80,10 @@ export interface TsvbSeries {
   series_index_pattern?: string;
   series_time_field?: string;
   series_interval?: string;
+  /** The time range mode of a series that overrides the index pattern */
+  time_range_mode?: 'entire_time_range' | 'last_value';
+  /** Whether a series that overrides the index pattern drops its last bucket, when the panel does not say */
+  override_drop_last_bucket?: number;
   color_rules?: ColorRule[];
 }
 
@@ -138,12 +146,18 @@ export interface TsvbParams {
   markdown?: string;
   markdown_vertical_align?: string;
   markdown_scrollbars?: number;
+  markdown_openLinksInNewTab?: number;
+  /** The panel's custom style, as written in Less and as the CSS it compiled to */
+  markdown_less?: string;
+  markdown_css?: string;
   pivot_id?: string;
   pivot_label?: string;
   pivot_rows?: number | string;
   pivot_type?: string;
   drilldown_url?: string;
   annotations?: TsvbAnnotation[];
+  /** Set by the editor while one of its intervals is not valid */
+  isModelInvalid?: boolean;
 }
 
 export interface TsvbSeriesData {
@@ -153,7 +167,7 @@ export interface TsvbSeriesData {
   color: string;
   /** [time in milliseconds, value] */
   data: Array<[number, number | null]>;
-  /** The value the panels that show one number show */
+  /** The value the panels that show one number show: the last bucket's, or 0 when it has none */
   last: number | null;
   series: TsvbSeries;
   format: (value: number | null) => string;
@@ -189,10 +203,21 @@ const asQuery = (value: Query | string | undefined): Query | undefined => {
   return value;
 };
 
-/** How a series writes its values: a named format, or a pattern of its own, inside its template */
+/**
+ * How a series writes its values: a named format, or a pattern of its own, inside its template. A
+ * named format takes its pattern from the advanced settings, as the product's field formats do; a
+ * series that names none is written with the product's own default.
+ */
 export function seriesFormatter(formatter: string | undefined, template?: string): (value: number | null) => string {
+  const settings = services ? services.formatSettings() : DEFAULT_FORMAT_SETTINGS;
   const pattern =
-    formatter === 'bytes' ? '0.0b' : formatter === 'percent' ? '0.[00]%' : !formatter || formatter === 'number' ? '0,0.[00]' : formatter;
+    formatter === 'bytes'
+      ? settings.bytesPattern
+      : formatter === 'percent'
+        ? settings.percentPattern
+        : formatter === 'number'
+          ? settings.numberPattern
+          : formatter || '0,0.[00]';
   const duration = /^(ms|s|m|h|d|w|M|Y|ps|ns|us),(ms|s|m|h|d|w|M|Y|humanize),(\d*)$/.exec(formatter ?? '');
   return (value) => {
     if (value === null || value === undefined || Number.isNaN(value)) return '-';
@@ -303,6 +328,35 @@ export function metricLabel(series: TsvbSeries, metric: TsvbMetric | undefined =
   return `${name} of ${target ? metricLabel(series, target) : (metric.field ?? '')}`;
 }
 
+/**
+ * The parts a metric or a gauge whose series is split shows, one for each, as the product's do:
+ * each with the series of that part under the series' own name, the part's name to write under its
+ * value, and the series that is not split beside them.
+ */
+export function splitParts(params: TsvbParams, data: TsvbData): Array<{ key: string; label: string; data: TsvbData }> | undefined {
+  if (data.series.every((item) => item.id.split(':').length === 1)) return undefined;
+  const models = params.series ?? [];
+  // An object, as the product keeps them in: parts named by numbers come first, in their order
+  const parts: Record<string, { label: string; series: TsvbSeriesData[] }> = {};
+  for (const item of data.series) {
+    const [seriesId, splitId] = item.id.split(':');
+    const model = models.find((series) => series.id === seriesId);
+    if (!model || !splitId) continue;
+    parts[splitId] ??= { label: item.label, series: [] };
+    parts[splitId].series.push({ ...item, id: seriesId, color: item.color || model.color || '', label: model.label || metricLabel(model) });
+  }
+  const whole = data.series.find((item) => {
+    const model = models.find((series) => series.id === item.id);
+    return model?.split_mode === 'everything' || model?.split_mode === 'filter';
+  });
+  const wholeAt = whole ? models.findIndex((series) => series.id === whole.id) : -1;
+  return Object.keys(parts).map((key) => {
+    const { label, series } = parts[key];
+    const all = !whole ? series : wholeAt > 0 ? [...series, whole] : [whole, ...series];
+    return { key, label, data: { ...data, series: all } };
+  });
+}
+
 /** The colour a value gets from a panel's rules: the last rule that holds */
 export function ruleFor(rules: ColorRule[] | undefined, value: number | null): ColorRule | undefined {
   if (value === null || !rules) return undefined;
@@ -332,12 +386,36 @@ async function patternFor(title: string): Promise<IndexPattern | undefined> {
 const BASIC: Record<string, string> = { avg: 'avg', sum: 'sum', min: 'min', max: 'max', cardinality: 'cardinality', value_count: 'value_count' };
 const EXTENDED: Record<string, string> = { std_deviation: 'std_deviation', variance: 'variance', sum_of_squares: 'sum_of_squares' };
 
+/** The statistics of a standard deviation, a variance or a sum of squares, with the sigma it names */
+function extendedStats(metric: TsvbMetric): Dsl {
+  const stats: Dsl = { field: metric.field };
+  const sigma = parseInt(String(metric.sigma ?? ''), 10);
+  if (metric.sigma && !Number.isNaN(sigma)) stats.sigma = sigma;
+  return { extended_stats: stats };
+}
+
+/** Which value of its statistics a standard deviation draws: one of its bounds, or itself */
+const boundOf = (metric: TsvbMetric): string | undefined =>
+  metric.type === 'std_deviation' && (metric.mode === 'upper' || metric.mode === 'lower') ? `std_${metric.mode}` : undefined;
+
+/**
+ * What orders buckets by a measure, as the product asks for it: the measure worked out again in
+ * each bucket under `<id>-SORT`, and the path to its value. Count, and the measures worked out
+ * from others, order nothing this way.
+ */
+function sortBy(metric: TsvbMetric): { key: string; path: string; agg: Dsl } | undefined {
+  const key = `${metric.id}-SORT`;
+  if (BASIC[metric.type]) return { key, path: key, agg: { [BASIC[metric.type]]: { field: metric.field } } };
+  if (EXTENDED[metric.type]) return { key, path: `${key}[${boundOf(metric) ?? metric.type}]`, agg: extendedStats(metric) };
+  return undefined;
+}
+
 function metricAggs(metrics: TsvbMetric[], indexPattern: IndexPattern | undefined): Dsl {
   const aggs: Dsl = {};
   const config = services.queryConfig();
   for (const metric of metrics) {
     if (BASIC[metric.type] && metric.field) aggs[metric.id] = { [BASIC[metric.type]]: { field: metric.field } };
-    else if (EXTENDED[metric.type] && metric.field) aggs[metric.id] = { extended_stats: { field: metric.field } };
+    else if (EXTENDED[metric.type] && metric.field) aggs[metric.id] = extendedStats(metric);
     else if (metric.type === 'percentile' && metric.field) {
       const percents = (metric.percentiles ?? []).map((item) => toNumber(item.value, NaN)).filter((value) => !Number.isNaN(value));
       aggs[metric.id] = { percentiles: { field: metric.field, percents: percents.length ? percents : [50] } };
@@ -397,8 +475,14 @@ function metricValues(
       return buckets.map((bucket) => numeric((bucket[metric.id] as { value?: number } | undefined)?.value));
     case 'std_deviation':
     case 'variance':
-    case 'sum_of_squares':
-      return buckets.map((bucket) => numeric((bucket[metric.id] as Record<string, number> | undefined)?.[metric.type]));
+    case 'sum_of_squares': {
+      // A standard deviation set to its upper or lower bound draws that bound
+      const bound = boundOf(metric)?.slice(4);
+      return buckets.map((bucket) => {
+        const stats = bucket[metric.id] as (Record<string, unknown> & { std_deviation_bounds?: Record<string, unknown> }) | undefined;
+        return numeric(bound ? stats?.std_deviation_bounds?.[bound] : stats?.[metric.type]);
+      });
+    }
     case 'percentile':
     case 'percentile_rank':
       return buckets.map((bucket) => {
@@ -563,6 +647,8 @@ function baseQuery(params: TsvbParams, series: TsvbSeries | undefined, plan: Pla
 }
 
 function histogram(plan: Plan, shift: number, inner: Dsl): Dsl {
+  // The entire time range is one bucket, which OpenSearch makes as large as it needs to be
+  if (plan.entireRange) return { auto_date_histogram: { field: plan.timeField, buckets: 1 }, aggs: inner };
   const from = plan.range.from.getTime() - shift;
   const to = plan.range.to.getTime() - shift;
   return {
@@ -589,7 +675,9 @@ async function planFor(params: TsvbParams, series: TsvbSeries | undefined, input
   if (!range) throw new Error('The time range could not be read');
   const duration = range.to.getTime() - range.from.getTime();
   const kind = params.type ?? 'timeseries';
-  const entireRange = kind !== 'timeseries' && params.time_range_mode === 'entire_time_range';
+  // A time series always draws buckets; a series with its own index pattern has its own mode
+  const mode = override ? series?.time_range_mode : params.time_range_mode;
+  const entireRange = kind !== 'timeseries' && mode === 'entire_time_range';
   const requested = ((override && series?.series_interval) || params.interval || 'auto').trim();
   const atLeast = /^>=\s*(.+)$/.exec(requested);
   const auto = resolveInterval('auto', duration, { targetBuckets: 100, maxBuckets: 200 });
@@ -612,8 +700,9 @@ async function planFor(params: TsvbParams, series: TsvbSeries | undefined, input
     intervalMs,
     intervalExpression: expression,
     entireRange,
-    // The last bucket is still filling, so a line would dip at its end
-    dropLast: !entireRange && (params.drop_last_bucket ?? 1) === 1,
+    // The last bucket is still filling, so a line would dip at its end; the panel's choice holds,
+    // or else the series' own
+    dropLast: !entireRange && Boolean(params.drop_last_bucket ?? series?.override_drop_last_bucket ?? 1),
   };
 }
 
@@ -623,11 +712,10 @@ function finish(points: Array<[number, number | null]>, plan: Plan, shift: numbe
   return data;
 }
 
-function lastOf(data: Array<[number, number | null]>): number | null {
-  for (let index = data.length - 1; index >= 0; index -= 1) {
-    if (data[index][1] !== null) return data[index][1];
-  }
-  return null;
+/** The value of the last bucket, or 0 when it has none: a 0 counts as none, as in the product */
+export function getLastValue(data: Array<[number, number | null]>): number {
+  const last = data[data.length - 1];
+  return (last && last[1]) || 0;
 }
 
 const offsetOf = (series: TsvbSeries): number => {
@@ -641,7 +729,7 @@ async function fetchSeries(
   input: VisInput,
   requests: RequestRecord[],
   signal: AbortSignal | undefined,
-  pivot?: { field: string; size: number }
+  pivot?: TablePivot
 ): Promise<{ plan: Plan; groups: Array<{ key: string; made: TsvbSeriesData[] }> }> {
   const plan = await planFor(params, series, input);
   const shift = offsetOf(series);
@@ -651,15 +739,19 @@ async function fetchSeries(
   const mode = series.split_mode ?? 'everything';
   let split: Dsl;
   if (mode === 'terms' && series.terms_field) {
-    const orderBy = series.terms_order_by && series.terms_order_by !== '_count' && series.terms_order_by !== '_key' ? '_count' : (series.terms_order_by ?? '_count');
+    const direction = series.terms_direction ?? 'desc';
+    // The terms are ordered by a measure worked out again in each, as the product asks, or by
+    // their value or their count
+    const by = metrics.find((metric) => metric.id === series.terms_order_by);
+    const sort = by ? sortBy(by) : undefined;
     const terms: Dsl = {
       field: series.terms_field,
       size: toNumber(series.terms_size, 10),
-      order: { [orderBy]: series.terms_direction ?? 'desc' },
+      order: sort ? { [sort.path]: direction } : { [series.terms_order_by === '_key' ? '_key' : '_count']: direction },
     };
     if (series.terms_include) terms.include = series.terms_include;
     if (series.terms_exclude) terms.exclude = series.terms_exclude;
-    split = { terms, aggs: { timeseries } };
+    split = { terms, aggs: { ...(sort ? { [sort.key]: sort.agg } : {}), timeseries } };
   } else if (mode === 'filters' && series.split_filters?.length) {
     const filters: Record<string, BoolQuery> = {};
     for (const item of series.split_filters) {
@@ -669,7 +761,12 @@ async function fetchSeries(
   } else split = { filter: { match_all: {} }, aggs: { timeseries } };
 
   const aggs: Dsl = pivot
-    ? { pivot: { terms: { field: pivot.field, size: pivot.size }, aggs: { [series.id]: split } } }
+    ? {
+        pivot: {
+          terms: { field: pivot.field, size: pivot.size, ...(pivot.order ? { order: pivot.order } : {}) },
+          aggs: { ...pivot.sortAggs, [series.id]: split },
+        },
+      }
     : { [series.id]: split };
   const body = { size: 0, query: baseQuery(params, series, plan, input, shift), aggs };
   const record: RequestRecord = { name: series.label || 'Series', index: plan.index, body, startedAt: Date.now() };
@@ -683,7 +780,7 @@ async function fetchSeries(
     if (!found) return [];
     const make = (id: string, label: string, color: string, node: { timeseries?: { buckets: TimeBucket[] } }): TsvbSeriesData => {
       const data = finish(seriesValues(series, node.timeseries?.buckets ?? [], plan.intervalMs), plan, shift);
-      return { id, seriesId: series.id, label, color, data, last: lastOf(data), series, format };
+      return { id, seriesId: series.id, label, color, data, last: getLastValue(data), series, format };
     };
     if (mode === 'terms' && Array.isArray(found.buckets)) {
       const list = found.buckets as Array<{ key: string | number; key_as_string?: string; timeseries?: { buckets: TimeBucket[] } }>;
@@ -771,11 +868,47 @@ export async function fetchTsvb(params: TsvbParams, input: VisInput, signal?: Ab
   };
 }
 
+/** How the rows of a table are sorted, as its UI state keeps it: by the field it groups by ('_default_') or by a series */
+export interface TsvbTableSort {
+  column?: string;
+  order?: 'asc' | 'desc';
+}
+
+interface TablePivot {
+  field: string;
+  size: number;
+  order?: Record<string, 'asc' | 'desc'>;
+  sortAggs?: Dsl;
+}
+
+/** Whether a table can be sorted by a series: by its count or a measure worked out in each row, as in the product */
+export const isSortable = (metric: TsvbMetric | undefined): boolean =>
+  Boolean(metric && (metric.type === 'count' || BASIC[metric.type] || EXTENDED[metric.type]));
+
+/**
+ * The order the product asks OpenSearch for the rows of a table in: by count or by the metric of
+ * the series sorted by, or by the value of the field the rows are grouped by. Without a sort in
+ * its UI state, the rows come in OpenSearch's own order, the most documents first.
+ */
+export function tableSort(params: TsvbParams, sort: TsvbTableSort | undefined): Pick<TablePivot, 'order' | 'sortAggs'> {
+  if (!sort) return {};
+  const order = sort.order ?? 'asc';
+  const series = (params.series ?? []).find((item) => item.id === sort.column);
+  const metric = series?.metrics?.[series.metrics.length - 1];
+  if (metric?.type === 'count') return { order: { _count: order } };
+  const by = metric ? sortBy(metric) : undefined;
+  if (by) return { order: { [by.path]: order }, sortAggs: { [by.key]: by.agg } };
+  return { order: { _key: order } };
+}
+
 /** The data of the Table panel: a row for each value of the field it groups by, a column per series */
-export async function fetchTsvbTable(params: TsvbParams, input: VisInput, signal?: AbortSignal): Promise<TsvbTableData> {
-  if (!params.pivot_id) throw new Error('Choose a field to group the rows by');
+export async function fetchTsvbTable(params: TsvbParams, input: VisInput, signal?: AbortSignal, sort?: TsvbTableSort): Promise<TsvbTableData> {
+  // A table that groups by no field has no rows, and says it has no data, as the product's does
+  // while its group-by field is still to be chosen
+  if (!params.pivot_id) return { rows: [], requests: [] };
   const requests: RequestRecord[] = [];
-  const pivot = { field: params.pivot_id, size: toNumber(params.pivot_rows, 10) };
+  // Every series asks for the rows in the same order, so that they make the same rows
+  const pivot: TablePivot = { field: params.pivot_id, size: toNumber(params.pivot_rows, 10), ...tableSort(params, sort) };
   const shown = (params.series ?? []).filter((series) => !series.hidden);
   const fetched = await Promise.all(shown.map((series) => fetchSeries(params, { ...series, split_mode: 'everything' }, input, requests, signal, pivot)));
   const order: string[] = [];

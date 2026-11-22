@@ -216,8 +216,20 @@
 
 .chtMarkLine line {
   stroke: currentcolor;
-  stroke-dasharray: 3 3;
   stroke-width: 1;
+}
+
+/* An annotation's icon under its line, drawn as the kit's icons are */
+.chtMarkLine__icon {
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chtMarkLine__icon--filled {
+  fill: currentcolor;
 }
 
 .chtMarkLine circle {

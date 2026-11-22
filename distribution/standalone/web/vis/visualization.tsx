@@ -26,6 +26,7 @@ import { TableVis } from './table_vis';
 import { TagCloudVis } from './tag_cloud_vis';
 import { TileMapVis } from './tile_map/tile_map_vis';
 import { splitTables, visFailure, type VisFailure, type VisRenderProps } from './types';
+import type { TsvbData, TsvbTableData } from './tsvb/data';
 import { TsvbVis } from './tsvb/vis';
 import type { VegaDebugValues } from './vega/debug_view';
 import { VegaVis } from './vega/vega_vis';
@@ -33,11 +34,12 @@ import { XYVis } from './xy_vis';
 import { waitTurn, type Turn } from './turns';
 import '../styles/vis.css';
 
-/** What Inspect shows of a visualization */
+/** What Inspect shows of a visualization; for TSVB, the data it drew, which its editor reads */
 export interface VisInspectData {
   requests: RequestRecord[];
   table?: Table;
   vega?: VegaDebugValues;
+  tsvb?: TsvbData | TsvbTableData;
 }
 
 export interface VisualizationProps {
@@ -52,7 +54,7 @@ export interface VisualizationProps {
   /** Controls replace their own among the page's filters */
   onFiltersChange?: (filters: Filter[]) => void;
   onTimeChange?: (range: TimeRange) => void;
-  /** What Inspect shows: the requests made, and the table drawn or the Vega view */
+  /** What Inspect shows: the requests made, and the table drawn or the Vega view; for TSVB, the data it drew */
   onData?: (data: VisInspectData) => void;
   /** This chart's place among the charts of the page, when the page keeps one */
   turn?: Turn;
@@ -186,7 +188,17 @@ export function Visualization(props: VisualizationProps) {
   else if (vis.type === 'input_control_vis') {
     body = <ControlsVis vis={vis} input={props.input} onFiltersChange={props.onFiltersChange} tick={props.tick} />;
   } else if (vis.type === 'metrics') {
-    body = <TsvbVis vis={vis} input={props.input} tick={props.tick} onTimeChange={props.onTimeChange} onData={props.onData} />;
+    body = (
+      <TsvbVis
+        vis={vis}
+        input={props.input}
+        tick={props.tick}
+        uiState={props.uiState}
+        onUiState={props.onUiState}
+        onTimeChange={props.onTimeChange}
+        onData={props.onData}
+      />
+    );
   } else if (vis.type === 'vega') {
     body = (
       <VegaVis
