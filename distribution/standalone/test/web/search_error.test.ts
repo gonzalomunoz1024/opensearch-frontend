@@ -7,7 +7,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { afterEach, beforeEach, describe, it } from 'node:test';
+import { describe, it } from 'node:test';
 import { HttpFetchError } from '../../web/services/http';
 import { searchFailure } from '../../web/services/search';
 import { Toasts } from '../../web/services/toasts';
@@ -25,14 +25,14 @@ const ANSWER = {
 describe('a refused search, as the original names it', () => {
   it('takes the words of the answer\'s status, and keeps OpenSearch\'s answer', () => {
     const refused = new HttpFetchError(400, 'all shards failed: Failed to parse query [foo:(]', ANSWER, 'Bad Request');
-    const shown = searchFailure(refused);
+    const shown = searchFailure(refused) as HttpFetchError;
     assert.ok(shown instanceof HttpFetchError);
     assert.equal(shown.message, 'Bad Request');
     assert.equal(shown.name, 'Error');
     assert.equal(shown.status, 400);
     assert.equal(shown.body, ANSWER);
     assert.match(shown.stack ?? '', /^Error: Bad Request\n/);
-    assert.doesNotMatch(shown.stack ?? '', /HttpFetchError/);
+    assert.equal(/HttpFetchError/.test(shown.stack ?? ''), false);
   });
 
   it('knows the words of a status the answer left without them', () => {
@@ -57,52 +57,56 @@ describe('a refused search, as the original names it', () => {
 });
 
 describe('the toast service\'s errors, as the original\'s addError', () => {
-  let timers: number[];
-  const globals = globalThis as { window?: unknown };
-  beforeEach(() => {
-    timers = [];
-    globals.window = {
-      setTimeout: (_run: () => void, wait: number) => timers.push(wait),
-    };
-  });
-  afterEach(() => {
-    delete globals.window;
-  });
+  // The waits the service asks the browser for, which these tests only record
+  const withTimers = (run: (timers: number[]) => void) => {
+    const timers: number[] = [];
+    const globals = globalThis as { window?: unknown };
+    globals.window = { setTimeout: (_run: () => void, wait: number) => timers.push(wait) };
+    try {
+      run(timers);
+    } finally {
+      delete globals.window;
+    }
+  };
 
-  it('shows the error\'s message under the title, keeps the error and stays as long as errors do', () => {
-    const toasts = new Toasts();
-    toasts.lifetimes.critical = 300000;
-    const error = new Error('Expected AND, OR, whitespace, ")" but end of input found.');
-    toasts.addError(error, { title: 'Search Error', id: '12345' });
-    const [shown] = toasts.get();
-    assert.equal(shown.kind, 'critical');
-    assert.equal(shown.title, 'Search Error');
-    assert.equal(shown.text, error.message);
-    assert.equal(shown.error, error);
-    assert.deepEqual(timers, [300000]);
-  });
+  it('shows the error\'s message under the title, keeps the error and stays as long as errors do', () =>
+    withTimers((timers) => {
+      const toasts = new Toasts();
+      toasts.lifetimes.critical = 300000;
+      const error = new Error('Expected AND, OR, whitespace, ")" but end of input found.');
+      toasts.addError(error, { title: 'Search Error', id: '12345' });
+      const [shown] = toasts.get();
+      assert.equal(shown.kind, 'critical');
+      assert.equal(shown.title, 'Search Error');
+      assert.equal(shown.text, error.message);
+      assert.equal(shown.error, error);
+      assert.deepEqual(timers, [300000]);
+    }));
 
-  it('says toastMessage in place of the error\'s message when given one', () => {
-    const toasts = new Toasts();
-    toasts.addError(new Error('long'), { title: 'Saving failed', toastMessage: 'short' });
-    assert.equal(toasts.get()[0].text, 'short');
-  });
+  it('says toastMessage in place of the error\'s message when given one', () =>
+    withTimers(() => {
+      const toasts = new Toasts();
+      toasts.addError(new Error('long'), { title: 'Saving failed', toastMessage: 'short' });
+      assert.equal(toasts.get()[0].text, 'short');
+    }));
 
-  it('adds no second message for an id still showing, and a new one once it has gone', () => {
-    const toasts = new Toasts();
-    const first = toasts.addError(new Error('a'), { title: 'Search Error', id: 'same' });
-    assert.equal(toasts.addError(new Error('a'), { title: 'Search Error', id: 'same' }), first);
-    assert.equal(toasts.get().length, 1);
-    toasts.dismiss(first);
-    const again = toasts.addError(new Error('a'), { title: 'Search Error', id: 'same' });
-    assert.notEqual(again, first);
-    assert.equal(toasts.get().length, 1);
-  });
+  it('adds no second message for an id still showing, and a new one once it has gone', () =>
+    withTimers(() => {
+      const toasts = new Toasts();
+      const first = toasts.addError(new Error('a'), { title: 'Search Error', id: 'same' });
+      assert.equal(toasts.addError(new Error('a'), { title: 'Search Error', id: 'same' }), first);
+      assert.equal(toasts.get().length, 1);
+      toasts.dismiss(first);
+      const again = toasts.addError(new Error('a'), { title: 'Search Error', id: 'same' });
+      assert.notEqual(again, first);
+      assert.equal(toasts.get().length, 1);
+    }));
 
-  it('keeps a red message in a few words as long as a warning, as the original\'s addDanger', () => {
-    const toasts = new Toasts();
-    toasts.lifetimes.warning = 10000;
-    toasts.danger('Search Error', 'Error executing Painless script');
-    assert.deepEqual(timers, [10000]);
-  });
+  it('keeps a red message in a few words as long as a warning, as the original\'s addDanger', () =>
+    withTimers((timers) => {
+      const toasts = new Toasts();
+      toasts.lifetimes.warning = 10000;
+      toasts.danger('Search Error', 'Error executing Painless script');
+      assert.deepEqual(timers, [10000]);
+    }));
 });
