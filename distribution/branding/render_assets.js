@@ -138,9 +138,8 @@ const textWidth = (value, size) =>
   [...value].reduce((width, character) => width + advance(character) - 0.02, 0) * size;
 
 /**
- * Mark and name at the size of a title, for the wide slot the OpenSearch wordmark filled (the
- * sign-in page shows it). The picture is as wide as the name, so a name of any length sits
- * centred in the slot.
+ * Mark and name at the size of a title, for the wide slot the OpenSearch wordmark filled. The
+ * picture is as wide as the name, so a name of any length sits centred in the slot.
  */
 const familyLogo = (scheme) => {
   const p = palette(scheme);

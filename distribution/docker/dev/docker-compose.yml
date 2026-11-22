@@ -1,6 +1,6 @@
 # A local OpenSearch 3.9.0 for working on the Dashboards source (`yarn start`).
-# The security plugin is off here so the dev server needs no certificates or sign-in;
-# use ../docker-compose.yml to try the built distribution with sign-in as in production.
+# It runs without the security plugin, like the OpenSearch the product ships against;
+# ../docker-compose.yml adds the built image to try the distribution as a whole.
 #
 #   docker compose -f distribution/docker/dev/docker-compose.yml up -d
 #   yarn start --config distribution/config/dev.yml

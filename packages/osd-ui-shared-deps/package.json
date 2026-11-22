@@ -13,6 +13,7 @@
     "@elastic/eui": "npm:@opensearch-project/oui@1.24.2",
     "@elastic/numeral": "2.5.1",
     "@opensearch/datemath": "5.0.3",
+    "@osd/atlas-theme": "1.0.0",
     "@osd/i18n": "1.0.0",
     "@osd/monaco": "1.0.0",
     "axios": "^1.18.1",

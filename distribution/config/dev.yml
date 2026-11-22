@@ -5,3 +5,6 @@
 #
 # Nothing here is meant for a deployment.
 opensearch.hosts: ['http://localhost:9200']
+
+# One header bar, as in the image's settings and the chart's
+opensearchDashboards.branding.useExpandedHeader: false

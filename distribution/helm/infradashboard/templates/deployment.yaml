@@ -67,8 +67,9 @@ spec:
             - secretRef: { name: {{ . | quote }} }
             {{- end }}
           {{- end }}
-          # The status API answers only a signed-in user once the security plugin is on, so the
-          # probes check that the server listens.
+          # The probes check that the server listens. The status API is not used: it answers 503
+          # while OpenSearch is away, and a pod restarted or taken out of the Service for that
+          # could no longer show the page that says so.
           startupProbe:
             tcpSocket: { port: http }
             periodSeconds: 5

@@ -36,7 +36,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s:%s" $repo (toString (default .Chart.AppVersion .Values.image.tag)) -}}
 {{- end -}}
 
-{{/* opensearch_dashboards.yml: the chart's settings with .Values.config merged over them. A value that looks like a password fails the render. */}}
+{{/* opensearch_dashboards.yml: the chart's settings with .Values.config merged over them. A value that looks like a password, or a setting of the security plugin, fails the render. */}}
 {{- define "infradashboard.config" -}}
 {{- $os := .Values.opensearch -}}
 {{- if not (has (toString $os.sslVerificationMode) (list "full" "certificate" "none")) -}}
@@ -47,16 +47,14 @@ app.kubernetes.io/instance: {{ .Release.Name }}
       "server.port" 5601
       "opensearch.hosts" (required "opensearch.hosts lists the URLs of the OpenSearch cluster" $os.hosts)
       "opensearch.ssl.verificationMode" $os.sslVerificationMode
-      "opensearch.requestHeadersAllowlist" (list "authorization" "securitytenant")
-      "opensearch_security.multitenancy.enabled" true
-      "opensearch_security.multitenancy.tenants.preferred" (list "Private" "Global")
-      "opensearch_security.readonly_mode.roles" (list "kibana_read_only")
-      "opensearch_security.ui.basicauth.login.title" "Log in to InfraDashboard"
-      "opensearch_security.cookie.secure" (and .Values.ingress.enabled (not (empty .Values.ingress.tls))) -}}
+      "opensearchDashboards.branding.useExpandedHeader" false -}}
 {{- if $os.caSecret.name -}}
 {{- $_ := set $settings "opensearch.ssl.certificateAuthorities" (list "/etc/infradashboard/opensearch-ca/ca.crt") -}}
 {{- end -}}
 {{- range $key, $value := .Values.config -}}
+{{- if hasPrefix "opensearch_security." $key -}}
+{{- fail (printf "config.%s is a setting of the security plugin, which InfraDashboard does not ship: the server would stop at start. Remove it." $key) -}}
+{{- end -}}
 {{- if and (regexMatch "(?i)(password|secret|token|apikey|api_key)$" $key) (kindIs "string" $value) (not (regexMatch "^\\$\\{[A-Za-z_][A-Za-z0-9_]*\\}$" $value)) -}}
 {{- fail (printf "config.%s holds a secret: write ${NAME} there and give NAME a value from a Secret in secrets.env" $key) -}}
 {{- end -}}

@@ -25,7 +25,7 @@ on:
         type: number
 
 env:
-  OSD_OPTIMIZER_THEMES: v8light
+  OSD_OPTIMIZER_THEMES: atlaslight
   TEST_REPO: ${{ inputs.test_repo != '' && inputs.test_repo || 'opensearch-project/opensearch-dashboards-functional-test' }}
   # The branch of the test repository for the OpenSearch Dashboards release this is built from.
   # Upstream uses the name of the pull request's base branch, which there is a release line such

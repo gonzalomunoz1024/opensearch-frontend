@@ -2,15 +2,14 @@
 
 /**
  * Checks a running InfraDashboard the way a person would meet it: the server is up and green,
- * every plugin of distribution/plugins.json is loaded (one that ships switched off may be off),
- * the sign-in page carries our name, and a user can sign in and read saved objects.
+ * the plugins of distribution/plugins.json are loaded and the ones it leaves out are not, the
+ * product opens under our name without a sign-in, and saved objects can be read and written by
+ * whoever reaches it.
  *
- *   node distribution/scripts/smoke_test.js [--url http://localhost:5601] [--user admin]
- *                                           [--no-security] [--core-only] [--timeout 300]
+ *   node distribution/scripts/smoke_test.js [--url http://localhost:5601] [--core-only]
+ *                                           [--timeout 300]
  *
- * The password comes from SMOKE_TEST_PASSWORD, else OPENSEARCH_INITIAL_ADMIN_PASSWORD.
- * --no-security is for a cluster without the security plugin (docker/dev/docker-compose.yml);
- * --core-only skips the plugin list, for the Dashboards source run without plugins.
+ * --core-only skips the plugins that ship, for the Dashboards source run without plugins.
  */
 
 const fs = require('fs');
@@ -24,9 +23,6 @@ const option = (name, fallback) => {
 };
 
 const url = option('url', 'http://localhost:5601').replace(/\/$/, '');
-const user = option('user', 'admin');
-const password = process.env.SMOKE_TEST_PASSWORD || process.env.OPENSEARCH_INITIAL_ADMIN_PASSWORD;
-const secured = !flag('no-security');
 const timeoutSeconds = Number(option('timeout', '300'));
 
 const brand = JSON.parse(
@@ -40,11 +36,6 @@ const check = (ok, what, detail) => {
   if (!ok) failures.push(what);
 };
 
-const basicAuth = () =>
-  secured
-    ? { authorization: `Basic ${Buffer.from(`${user}:${password}`).toString('base64')}` }
-    : {};
-
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** The status document once the server answers with one, or the last failure after the timeout. */
@@ -53,12 +44,13 @@ async function waitForStatus() {
   let last = 'no answer';
   while (Date.now() < deadline) {
     try {
-      const response = await fetch(`${url}/api/status`, { headers: basicAuth() });
+      const response = await fetch(`${url}/api/status`);
       if (response.ok) {
         const body = await response.json();
         if (body.status.overall.state === 'green') return body;
         last = `overall state ${body.status.overall.state}`;
       } else {
+        // 401 here means something asks for a sign-in, which this distribution does not have
         last = `HTTP ${response.status}`;
       }
     } catch (error) {
@@ -70,27 +62,20 @@ async function waitForStatus() {
 }
 
 async function main() {
-  if (secured && !password) {
-    throw new Error(
-      'Set SMOKE_TEST_PASSWORD (or OPENSEARCH_INITIAL_ADMIN_PASSWORD), or pass --no-security'
-    );
-  }
-
   const status = await waitForStatus();
-  check(true, `server is green at ${url}`);
+  check(true, `server is green at ${url}, and says so to a caller who has not signed in`);
   check(
     status.version.number === manifest.dashboardsVersion,
     `version is ${manifest.dashboardsVersion}`,
     `got ${status.version.number}`
   );
 
+  // the server reports only the plugins that are on
+  const states = new Map(
+    status.status.statuses.map(({ id, state }) => [id.replace(/^plugin:|@.*$/g, ''), state])
+  );
   if (!flag('core-only')) {
-    const states = new Map(
-      status.status.statuses.map(({ id, state }) => [id.replace(/^plugin:|@.*$/g, ''), state])
-    );
     for (const { name, enabledBy } of manifest.plugins) {
-      if (!secured && name === 'securityDashboards') continue;
-      // the server reports only the plugins that are on
       if (enabledBy && !states.has(name)) {
         check(true, `plugin ${name} is off, as it ships (${enabledBy} turns it on)`);
         continue;
@@ -102,44 +87,54 @@ async function main() {
       );
     }
   }
+  const present = manifest.leftOut.map(({ name }) => name).filter((name) => states.has(name));
+  check(
+    present.length === 0,
+    `none of the ${manifest.leftOut.length} plugins the distribution leaves out is loaded`,
+    present.join(', ')
+  );
 
-  const page = await fetch(`${url}${secured ? '/app/login' : '/app/home'}`, {
-    headers: basicAuth(),
-  });
+  const page = await fetch(`${url}/app/home`, { redirect: 'manual' });
   const html = await page.text();
   const title = (html.match(/<title>([^<]*)<\/title>/) || [])[1];
   check(
-    page.ok && title === brand.name,
-    `page title is "${brand.name}"`,
-    `HTTP ${page.status}, "${title}"`
+    page.status === 200 && title === brand.name,
+    `the product opens without a sign-in, titled "${brand.name}"`,
+    `HTTP ${page.status}${page.headers.get('location') ? ` to ${page.headers.get('location')}` : ''}, "${title}"`
   );
 
   const favicon = await fetch(`${url}/ui/favicons/favicon.ico`);
   check(favicon.ok, 'favicon is served', `HTTP ${favicon.status}`);
 
-  let session = {};
-  if (secured) {
-    const signIn = await fetch(`${url}/auth/login`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'osd-xsrf': 'true' },
-      body: JSON.stringify({ username: user, password }),
-    });
-    const cookies = signIn.headers.getSetCookie().map((cookie) => cookie.split(';')[0]);
-    check(signIn.ok && cookies.length > 0, `${user} can sign in`, `HTTP ${signIn.status}`);
-    session = { cookie: cookies.join('; ') };
-
-    const refused = await fetch(`${url}/auth/login`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'osd-xsrf': 'true' },
-      body: JSON.stringify({ username: user, password: `${password}-wrong` }),
-    });
-    check(refused.status === 401, 'a wrong password is refused', `HTTP ${refused.status}`);
-  }
-
-  const savedObjects = await fetch(`${url}/api/saved_objects/_find?type=dashboard&per_page=1`, {
-    headers: session,
+  const signIn = await fetch(`${url}/auth/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'osd-xsrf': 'true' },
+    body: JSON.stringify({ username: 'admin', password: 'admin' }),
   });
+  check(signIn.status === 404, 'there is no sign-in to post to', `HTTP ${signIn.status}`);
+
+  const json = { 'content-type': 'application/json', 'osd-xsrf': 'true' };
+  const savedObjects = await fetch(`${url}/api/saved_objects/_find?type=dashboard&per_page=1`);
   check(savedObjects.ok, 'saved objects can be read', `HTTP ${savedObjects.status}`);
+
+  // written and removed again, so a check leaves nothing behind
+  const object = `${url}/api/saved_objects/query/infradashboard-smoke-test`;
+  const written = await fetch(`${object}?overwrite=true`, {
+    method: 'POST',
+    headers: json,
+    body: JSON.stringify({
+      attributes: {
+        title: 'InfraDashboard smoke test',
+        description: 'Written and removed by distribution/scripts/smoke_test.js',
+        query: { language: 'kuery', query: '' },
+      },
+    }),
+  });
+  check(written.ok, 'saved objects can be written', `HTTP ${written.status}`);
+  if (written.ok) {
+    const removed = await fetch(object, { method: 'DELETE', headers: json });
+    check(removed.ok, 'and removed again', `HTTP ${removed.status}`);
+  }
 
   if (failures.length) {
     throw new Error(`${failures.length} check(s) failed`);

@@ -22,8 +22,8 @@ const OSD_NEW_HEADER = `
  */
 `;
 
-// The distribution's own files (distribution/) are not contributions to OpenSearch Dashboards,
-// so they carry the licence line without the upstream copyright notice.
+// The distribution's own files (distribution/ and the Atlas theme package) are not contributions
+// to OpenSearch Dashboards, so they carry the licence line without the upstream copyright notice.
 const DISTRIBUTION_HEADER = `
 /* SPDX-License-Identifier: Apache-2.0 */
 `;
@@ -189,7 +189,7 @@ module.exports = defineConfig([
     },
   },
   {
-    files: ['distribution/**/*.{js,mjs,ts,tsx}'],
+    files: ['distribution/**/*.{js,mjs,ts,tsx}', 'packages/osd-atlas-theme/**/*.{js,mjs,ts,tsx}'],
 
     rules: {
       '@osd/eslint/require-license-header': [
