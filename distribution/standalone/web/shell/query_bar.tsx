@@ -60,7 +60,6 @@ function LanguageSwitch({ language, onChange }: { language: string; onChange: (l
       button={
         <Button
           variant="empty"
-          size="s"
           className="shlQuery__language"
           onClick={() => setOpen(!open)}
           testId="switchQueryLanguageButton"

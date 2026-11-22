@@ -14,6 +14,12 @@
   padding: var(--space-2);
 }
 
+/* The bar of the query, the time and the filters spans the page under the header, as in the
+   original: its own 8px are the page's margin */
+.dshPage > .shlSearchBar {
+  margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) 0;
+}
+
 .dshGrid {
   position: relative;
   width: 100%;
