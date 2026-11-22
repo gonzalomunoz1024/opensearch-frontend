@@ -498,6 +498,7 @@ export function TimePicker({
             if (changed) apply(draft);
             else if (!dirty) onRefresh();
           }}
+          className="shlTime__submit"
           testId="querySubmitButton"
         >
           {needsUpdate ? 'Update' : 'Refresh'}

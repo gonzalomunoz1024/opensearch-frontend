@@ -24,47 +24,6 @@ import {
   type Target,
 } from './model';
 
-// --- Work that goes on after its request -------------------------------------------------------------
-
-type Listener = () => void;
-const listeners = new Map<string, Set<Listener>>();
-
-/** Hears of work that finished in the background: an index opened, a reindex done */
-export function onJobDone(event: string, listener: Listener): () => void {
-  const set = listeners.get(event) ?? new Set<Listener>();
-  listeners.set(event, set);
-  set.add(listener);
-  return () => set.delete(listener);
-}
-
-export function jobDone(event: string) {
-  for (const listener of [...(listeners.get(event) ?? [])]) listener();
-}
-
-interface Task {
-  completed?: boolean;
-  error?: { reason?: string };
-  response?: Record<string, unknown>;
-}
-
-const POLL_MS = 3000;
-const GIVE_UP_MS = 60 * 60 * 1000;
-
-/**
- * Follows a task of OpenSearch until it is done, asking every three seconds for at most an
- * hour. `done` says whether the task's answer settles it; `timedOut` is told when it never did.
- */
-export function watchTask(taskId: string, done: (task: Task) => boolean, timedOut: () => void) {
-  const started = Date.now();
-  const look = async () => {
-    const answer = await ism.request<Task>('GET', `/_tasks/${taskId}`);
-    if (answer.ok && answer.response?.completed && done(answer.response)) return;
-    if (Date.now() - started > GIVE_UP_MS) timedOut();
-    else window.setTimeout(look, POLL_MS);
-  };
-  window.setTimeout(look, POLL_MS);
-}
-
 // --- Which of the chosen ones can be worked on ----------------------------------------------------------
 
 interface Split {

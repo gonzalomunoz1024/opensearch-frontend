@@ -1,0 +1,145 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/* The coordinate map: Leaflet.draw's toolbar as the Atlas theme draws it, and the heat map. */
+
+.leaflet-draw-section {
+  position: relative;
+}
+
+.leaflet-draw-toolbar {
+  margin-top: 12px;
+}
+
+.leaflet-draw-toolbar-top {
+  margin-top: 0;
+}
+
+.leaflet-draw a {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+}
+
+.leaflet-draw a .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+.visualization .leaflet-draw-toolbar a {
+  width: 30px;
+  height: 30px;
+  line-height: 30px;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-clip: padding-box;
+}
+
+.visualization .leaflet-draw-toolbar a + a {
+  border-top: 1px solid var(--color-border-light);
+}
+
+/* The glyphs of Leaflet.draw's sprite sheet, where its buttons show them */
+.visualization .leaflet-draw-toolbar .leaflet-draw-draw-polygon {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='30' viewBox='58 2 60 60'%3E%3Cpath fill='%23464646' d='M 100,24.565 97.904,39.395 83.07,42 76,28.773 86.463,18 Z'/%3E%3C/svg%3E");
+}
+
+.visualization .leaflet-draw-toolbar .leaflet-draw-draw-rectangle {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='30' viewBox='120 2 60 60'%3E%3Cpath fill='%23464646' d='m 140,20 20,0 0,20 -20,0 z'/%3E%3C/svg%3E");
+}
+
+.themeDark .visualization .leaflet-draw-toolbar a {
+  filter: invert(1);
+}
+
+.leaflet-draw-toolbar-notop a:first-child {
+  border-top-right-radius: 0 !important;
+}
+
+.leaflet-draw-toolbar-nobottom a:last-child {
+  border-bottom-right-radius: 0 !important;
+}
+
+.leaflet-draw-actions {
+  display: none;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: absolute;
+  left: 26px;
+  top: 0;
+  white-space: nowrap;
+}
+
+.leaflet-touch .leaflet-draw-actions {
+  left: 32px;
+}
+
+.leaflet-right .leaflet-draw-actions {
+  right: 26px;
+  left: auto;
+}
+
+.leaflet-draw-actions-top {
+  margin-top: 1px;
+}
+
+.leaflet-draw-actions-bottom {
+  margin-top: 0;
+}
+
+.leaflet-draw-actions li {
+  display: inline-block;
+}
+
+.visualization .leaflet-draw-actions a {
+  display: block;
+  height: 30px;
+  line-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+  border-left: 1px solid var(--color-border-light);
+}
+
+.visualization .leaflet-draw-actions li:first-child a {
+  border-left: 0;
+  border-top-left-radius: var(--radius-sm);
+  border-bottom-left-radius: var(--radius-sm);
+}
+
+.visualization .leaflet-draw-actions li:last-child a {
+  border-top-right-radius: var(--radius-sm);
+  border-bottom-right-radius: var(--radius-sm);
+}
+
+.leaflet-draw-drawing {
+  cursor: crosshair;
+}
+
+.leaflet-draw-guide-dash {
+  font-size: 1%;
+  opacity: 0.6;
+  position: absolute;
+  width: 5px;
+  height: 5px;
+}
+
+.leaflet-heatmap-layer {
+  pointer-events: none;
+}
+
+/* A slider with its value beside it */
+.vzeRangeValue {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vzeRangeValue > input {
+  flex: 1;
+}

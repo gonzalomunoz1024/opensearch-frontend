@@ -25,29 +25,31 @@
   z-index: 1000;
   display: flex;
   align-items: center;
-  gap: var(--space-2);
   height: var(--header-height);
-  padding: 0 var(--space-3) 0 0;
   border-bottom: 1px solid var(--color-border-light);
   background: var(--color-surface);
 }
 
 .shlHeader__menu {
-  width: var(--header-height);
-  height: var(--header-height);
+  width: calc(var(--header-height) - 1px);
+  height: calc(var(--header-height) - 1px);
   border-radius: var(--radius-md);
 }
 
-.shlHeader__menu .atlIcon {
-  width: 20px;
-  height: 20px;
-  stroke-width: 1.75;
-}
-
+/* The menu, the home link and the help menu are squares as high as the header, as the original's */
 .shlHeader__logo {
   display: inline-flex;
-  padding: var(--space-2);
-  margin-right: var(--space-2);
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--header-height) - 1px);
+  height: calc(var(--header-height) - 1px);
+}
+
+.shlHeader__help.atlButton {
+  flex: none;
+  width: calc(var(--header-height) - 1px);
+  height: calc(var(--header-height) - 1px);
 }
 
 .shlHeader__trail {
@@ -55,7 +57,9 @@
   align-items: center;
   flex: 1 1 0;
   min-width: 0;
-  font-size: var(--font-size-m);
+  margin: 0 var(--space-3);
+  font-size: var(--font-size-s);
+  line-height: 21px;
 }
 
 .shlCrumb {
@@ -87,11 +91,19 @@
 .shlHeader__actions {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-2);
+  margin-right: var(--space-2);
 }
 
+/* A page's links are the original's header links: small, in the accent colour */
 .shlHeader__actions .atlButton--empty {
-  font-size: var(--font-size-m);
+  height: var(--space-6);
+  padding: 0 9px;
+}
+
+/* Its main action is a button at least as wide as the original's */
+.shlHeader__actions > .atlButton:not(.atlButton--empty) {
+  min-width: 112px;
 }
 
 .shlNav__scrim {
@@ -225,11 +237,11 @@
 
 /* --- The bar of a data page: query, time, filters -------------------------------------------- */
 
+/* As tall as the original's: 8px around a row of 32px controls and a row of filters of 40px */
 .shlSearchBar {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-2) 0;
+  padding: var(--space-2);
 }
 
 .shlSearchBar__row {
@@ -249,21 +261,208 @@
 
 .shlQuery__saved {
   flex: none;
-  width: 34px;
+  width: 36px;
   height: 100%;
+  padding: 0;
   border-right: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md) 0 0 var(--radius-md);
+  border-radius: var(--radius-md);
   color: var(--color-accent);
+}
+
+/* Tinted while its list is open, as the original's is */
+.shlQuery__saved[aria-expanded="true"] {
+  background: var(--color-accent-tint);
+}
+
+/* The ring around the field is the query's; the button before it is not where one types */
+.shlQuery:has(.shlQuery__saved:focus) {
+  box-shadow: none;
+}
+
+.shlQuery:not(.atlField--invalid):has(.shlQuery__saved:focus) {
+  border-color: var(--color-border-light);
+}
+
+/* The list of saved queries under that button, as wide as its text up to the original's 400px */
+.shlSavedQueries {
+  display: flex;
+  flex-direction: column;
+  max-width: 400px;
+}
+
+.shlSavedQueries__title {
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--color-border-light);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+.shlSavedQueries__text {
+  margin: 0;
+  padding: var(--space-3) var(--space-3) 6px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+.shlSavedQueries__text--empty {
+  padding-bottom: var(--space-3);
+}
+
+.shlSavedQueries__list {
+  max-height: 416px;
+  margin: 0;
+  padding: 6px var(--space-1);
+  overflow-y: auto;
+  list-style: none;
+}
+
+.shlSavedQueries__item {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+}
+
+/* The Atlas theme's hover of a list item */
+.shlSavedQueries__item:hover {
+  background: var(--color-border-light);
+}
+
+.shlSavedQueries__item--selected,
+.shlSavedQueries__item--selected:hover {
+  background: var(--color-accent-tint);
+}
+
+.shlSavedQueries__load {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  min-height: 32px;
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  background: none;
+  color: var(--color-accent);
+  font: inherit;
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  text-align: left;
+  cursor: pointer;
+}
+
+.shlSavedQueries__label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.shlSavedQueries__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shlSavedQueries__load:hover .shlSavedQueries__name {
+  text-decoration: underline;
+}
+
+.shlSavedQueries__description {
+  display: inline-flex;
+  flex: none;
+}
+
+.shlSavedQueries__delete {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-right: var(--space-2);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: none;
+  color: var(--color-critical-text);
+  cursor: pointer;
+  opacity: 0;
+}
+
+/* The bin shows on the row the pointer or the focus is on */
+.shlSavedQueries__item:hover .shlSavedQueries__delete,
+.shlSavedQueries__delete:focus-visible {
+  opacity: 1;
+}
+
+.shlSavedQueries__delete:hover {
+  background: var(--color-critical-tint);
+}
+
+.shlSavedQueries__pages {
+  padding: 5px 0;
+}
+
+.shlSavedQueries__pages .atlPagination {
+  justify-content: center;
+}
+
+.shlSavedQueries__pages .atlPagination > .atlRow:empty {
+  display: none;
+}
+
+.shlSavedQueries__footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-direction: row-reverse;
+  padding: var(--space-3);
+  border-top: 1px solid var(--color-border-light);
+}
+
+.shlSavedQueries__clear {
+  padding: 0;
+}
+
+/* The short URL switch of the share dialog, its tip, and why a short URL could not be made */
+.shlShortUrl {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.shlShortUrl__switch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.shlShortUrl__tip {
+  display: inline-flex;
+  color: var(--color-text-secondary);
+}
+
+/* The form that saves a query */
+.shlSaveQuery__errors {
+  margin: 0;
+  padding-left: var(--space-5);
+}
+
+.shlSaveQuery__invalid {
+  color: var(--color-critical-text);
 }
 
 .shlQuery textarea {
   flex: 1 1 0;
   min-width: 0;
   height: 30px;
-  padding: 5px var(--space-2);
+  /* The original's text starts 4px under the top of the field: its box overlaps the border */
+  padding: 3px var(--space-2) 6px;
   border: 0;
   background: transparent;
-  line-height: 20px;
+  line-height: 21px;
   resize: none;
   outline: none;
   overflow: hidden;
@@ -275,10 +474,19 @@
   overflow: auto;
 }
 
+/* Inside the field's border, with the line the original's text box draws at its left */
 .shlQuery__language {
   flex: none;
+  height: calc(var(--control-height) - 2px);
+  border-left: 1px solid var(--color-border-light);
+  border-radius: 0;
   color: var(--color-accent);
   font-weight: var(--font-weight-medium);
+}
+
+/* The original's update button keeps its width whatever it says */
+.shlTime__submit {
+  min-width: 118px;
 }
 
 .shlQuery__suggestions {
@@ -361,6 +569,30 @@
   color: var(--color-text-tertiary);
 }
 
+/* The interval beside the button of a picker without dates */
+.shlTime__interval {
+  padding: 0 var(--space-2);
+  white-space: nowrap;
+}
+
+.shlRefreshEvery {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.shlRefreshEvery__row {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.shlRefreshEvery__row > .atlField {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 .shlTimeMenu {
   width: 400px;
   max-width: calc(100vw - 32px);
@@ -395,13 +627,23 @@
   width: 320px;
 }
 
+/* The original's row of filters: 40px, its controls 6px under the query and 4px apart */
 .shlFilters {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-1) var(--space-2);
-  min-height: 28px;
-  padding: 0 var(--space-1);
+  gap: var(--space-1);
+  min-height: 40px;
+  padding: 6px 0 2px;
+}
+
+/* The menu of all the filters sits against the first of them */
+.shlFilters > :first-child {
+  margin-right: calc(-1 * var(--space-1));
+}
+
+.shlFilters__actions.atlButton--icon {
+  width: 36px;
 }
 
 .shlFilter {
@@ -478,4 +720,33 @@
   .shlQuery {
     flex-basis: 100%;
   }
+}
+
+/* --- What a search says when it fails or looks written in Lucene ----------------------------- */
+
+.shlLuceneWarning p {
+  margin: 0;
+}
+
+.shlExternal {
+  white-space: nowrap;
+}
+
+.shlExternal > .atlIcon {
+  width: 12px;
+  height: 12px;
+  margin-left: 2px;
+  vertical-align: -1px;
+}
+
+.shlPainlessError {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  white-space: normal;
+}
+
+.shlQuery__syntax {
+  margin: 0;
+  font-size: var(--font-size-s);
 }

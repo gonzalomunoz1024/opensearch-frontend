@@ -11,7 +11,7 @@ import { mergeFilters } from '../../lib/query';
 import { parseSearchSource } from '../../lib/search_source';
 import type { Filter, IndexPattern, Query } from '../../lib/types';
 import { appUrl, decodeState, encodeState } from '../../lib/url';
-import { href, navigate, setHashParams, setLeaveGuard, useLocation } from '../../router';
+import { getLocation, href, navigate, setHashParams, setLeaveGuard, useLocation } from '../../router';
 import { services } from '../../services';
 import { errorMessage } from '../../services/http';
 import type { SavedObject } from '../../services/saved_objects';
@@ -21,6 +21,7 @@ import { Inspector } from '../../shell/inspect';
 import { Listing } from '../../shell/listing';
 import { defaultQueryLanguage } from '../../shell/query_bar';
 import { SaveModal, SavedObjectFinder, ShareModal } from '../../shell/saved_objects_ui';
+import { pageFiltersOf, savedQueryGlobalParam, type SavedQueryChange } from '../../shell/saved_query';
 import { SearchBar } from '../../shell/search_bar';
 import { addRecentlyAccessed, currentGlobalParam, setFullScreen, useAutoRefresh, useBreadcrumbs, useGlobalState } from '../../shell/state';
 import type { VisInput } from '../../vis/request';
@@ -40,6 +41,7 @@ import {
   type PanelState,
 } from './model';
 import { DashboardPanel, type LoadedObject, type PanelData } from './panel';
+import { VIS_BUILDER_TITLE, VIS_BUILDER_TYPE } from '../vis_builder/model';
 import '../../styles/dashboard.css';
 
 const BASE = '/app/dashboards';
@@ -49,10 +51,13 @@ interface UrlAppState {
   filters?: Filter[];
   viewMode?: 'view' | 'edit';
   fullScreenMode?: boolean;
+  /** The id of the saved query loaded into the search bar */
+  savedQuery?: string;
 }
 
 const FINDER_TYPES = [
   { type: 'visualization', name: 'Visualization', icon: 'visualize' as const },
+  { type: VIS_BUILDER_TYPE, name: VIS_BUILDER_TITLE, icon: 'visBuilder' as const },
   { type: 'search', name: 'Saved search', icon: 'discover' as const },
 ];
 
@@ -119,6 +124,12 @@ function DashboardPage({ savedId }: { savedId?: string }) {
     },
     [location.hashParams._a]
   );
+  const onSavedQueryChange = useCallback((change: SavedQueryChange) => {
+    const { savedQuery: _previous, ...latest } = decodeState<UrlAppState>(getLocation().hashParams._a);
+    const next: UrlAppState = { ...latest, query: change.query, filters: pageFiltersOf(change) };
+    if (change.id) next.savedQuery = change.id;
+    setHashParams({ _g: savedQueryGlobalParam(change), _a: encodeState(next) }, { replace: change.replace });
+  }, []);
 
   // --- Loading ---
   useEffect(() => {
@@ -429,6 +440,8 @@ function DashboardPage({ savedId }: { savedId?: string }) {
           onTimeChange={setTime}
           onRefreshChange={(refreshInterval) => setGlobal({ refreshInterval })}
           onRefresh={refresh}
+          savedQueryId={urlState.savedQuery}
+          onSavedQueryChange={onSavedQueryChange}
         />
       )}
       {draft.panels.length === 0 ? (
@@ -652,6 +665,7 @@ function DashboardPage({ savedId }: { savedId?: string }) {
           title={inspectedTitle}
           requests={panelData.current[inspected.panelIndex]?.requests ?? []}
           table={panelData.current[inspected.panelIndex]?.table}
+          vega={panelData.current[inspected.panelIndex]?.vega}
           onClose={() => setDialog(undefined)}
         />
       )}

@@ -3,37 +3,86 @@
 /* Visualize: the editor (chart at the left, data and settings at the right) and the dialog a
    new visualization starts from. Class prefix: vze. */
 
+/*
+ * The editor fills the page under the bar of the query, as OpenSearch Dashboards' default editor
+ * does: the chart, the bar that resizes, and the sidebar share its width by the percents the page
+ * sets on them; nothing is drawn as a card.
+ */
 .vzePage {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
   height: calc(100vh - var(--header-height));
   min-height: 420px;
-  padding: var(--space-2);
+}
+
+/* The heading kept for screen readers takes a pixel of the page, as the original's does */
+.vzePage > .atlScreenReaderOnly {
+  position: relative;
+  flex: none;
 }
 
 .vzeEditor {
   display: flex;
   flex: 1 1 auto;
-  gap: var(--space-2);
   min-height: 0;
 }
 
+/* The chart grows into what the sidebar leaves, 8px in from its edges */
 .vzeChart {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  padding: var(--space-3);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-lg);
+  padding: var(--space-2);
   background: var(--color-surface);
-  overflow: hidden;
+  overflow: auto;
 }
 
 .vzeChart > .atlEmpty {
   margin: auto;
+}
+
+/* The original's resizer: a 12px bar, tinted on hover and filled while it has the focus */
+.vzeResizer {
+  position: relative;
+  display: flex;
+  flex: 0 0 12px;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.vzeResizer:hover {
+  background: color-mix(in srgb, var(--color-accent) 20%, var(--color-surface));
+}
+
+:root.themeDark .vzeResizer:hover {
+  background: color-mix(in srgb, var(--color-accent) 40%, var(--color-surface));
+}
+
+.vzeResizer:focus {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  outline: none;
+}
+
+.vzeResizer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  cursor: ew-resize;
+}
+
+.vzeResizer--hidden {
+  display: none;
 }
 
 /* --- The sidebar --------------------------------------------------------------------------- */
@@ -41,91 +90,214 @@
 .vzeSide {
   position: relative;
   display: flex;
-  flex: 0 0 412px;
+  flex-shrink: 0;
+  min-width: 350px;
+  max-width: 100%;
+  min-height: 0;
+}
+
+@media (min-width: 1200px) {
+  .vzeSide {
+    max-width: 75%;
+  }
+}
+
+/* Folded, it keeps only the room of its button; what it held stays as it was */
+.vzeSide.vzeSide--collapsed {
+  width: 32px !important;
+  min-width: 0;
+}
+
+.vzeSide--collapsed .vzeSide__content {
+  display: none;
+}
+
+.vzeSide__content {
+  display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
-  width: 412px;
   min-width: 0;
   min-height: 0;
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface-secondary);
 }
 
-.vzeSide--collapsed {
-  flex-basis: 36px;
-  width: 36px;
-}
-
-.vzeSide__collapse {
+.vzeSide__collapse.atlButton {
   position: absolute;
   top: var(--space-2);
-  right: var(--space-2);
-  z-index: 1;
+  right: var(--space-1);
+  border-radius: 50%;
 }
 
-.vzeSide--collapsed .vzeSide__collapse {
-  right: 3px;
+.vzeSide__collapse.atlButton:hover {
+  background: color-mix(in srgb, var(--color-text-secondary) 10%, transparent);
 }
 
+/* What the visualization is drawn from; the right keeps room for the button that folds it */
 .vzeSide__title {
+  flex: none;
+  margin: 0;
+  padding: var(--space-2) var(--space-8) var(--space-2) var(--space-2);
+}
+
+.vzeSide__heading {
+  margin: 0;
+  font-size: var(--font-size-m);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+.vzeSide__title--linked {
   display: flex;
   align-items: center;
-  min-height: 44px;
-  padding: var(--space-2) var(--space-8) var(--space-2) var(--space-3);
-  font-size: var(--font-size-m);
+  gap: var(--space-1);
 }
 
-.vzeSide__title > * {
+.vzeSide__title--linked > .vzeSide__heading {
   min-width: 0;
 }
 
-.vzeSide__link {
-  display: flex;
-  max-width: 100%;
-  color: var(--color-accent);
+/* A kind that searches without an index pattern keeps the band empty */
+.vzeSide__title--placeholder {
+  min-height: 40px;
+  padding: 0;
+  border-bottom: 1px solid var(--color-border-light);
 }
 
-.vzeSide > .atlTabs {
-  flex: 0 0 auto;
-  padding: 0 var(--space-3);
+/* The menu of the link: a titled panel 260px wide, its paragraphs a line apart */
+.vzeLinked {
+  padding: var(--space-2);
+}
+
+.vzeLinked__title {
+  margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) var(--space-2);
+  padding: var(--space-3) var(--space-2);
+  border-bottom: 1px solid var(--color-border-light);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+.vzeLinked__body {
+  width: 260px;
+  line-height: 21px;
+}
+
+.vzeLinked__body p {
+  margin: 0 0 1.5em;
+}
+
+.vzeLinked__body p:last-child {
+  margin-bottom: 0;
+}
+
+.vzeLinked__view {
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--color-accent);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+.vzeLinked__view:hover {
+  text-decoration: underline;
+}
+
+/* The original's button that breaks the link is drawn in outline */
+.vzeLinked .atlButton--danger {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--color-critical);
+}
+
+.vzeLinked .atlButton--danger:hover {
+  background: var(--color-critical-tint);
+}
+
+/* The tabs of Atlas: the selected one on a soft fill, none underlined */
+.vzeSide__nav {
+  flex: none;
+}
+
+.vzeSide__nav .atlTabs {
+  gap: var(--space-1);
+  border-bottom: 0;
+}
+
+.vzeSide__nav .atlTab {
+  padding: var(--space-1) 10px;
+  border-radius: var(--radius-sm);
+  line-height: 21px;
+  transition:
+    color var(--duration-fast) ease-out,
+    background-color var(--duration-fast) ease-out;
+}
+
+.vzeSide__nav .atlTab[aria-selected="true"] {
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+}
+
+.vzeSide__nav .atlTab[aria-selected="true"]::after {
+  display: none;
 }
 
 .vzeSide__body {
   display: flex;
-  flex: 1 1 auto;
+  flex: 1 1 1px;
   flex-direction: column;
   gap: var(--space-2);
   min-height: 0;
   padding: var(--space-2);
-  overflow-y: auto;
+  overflow: auto;
 }
 
-.vzeSide__footer {
+/* Discard at the left and Update at the right, or the button of auto apply alone */
+.vzeSide__controls {
   display: flex;
-  flex: 0 0 auto;
-  flex-direction: column;
-  gap: var(--space-1);
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
   padding: var(--space-2);
   border-top: 1px solid var(--color-border-light);
 }
 
 .vzeSide__buttons {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-2);
+  display: flex;
+  flex: 1 1 auto;
+  justify-content: space-between;
+}
+
+.vzeSide__update {
+  min-width: 112px;
+}
+
+/* A filled button the original greys while there is nothing to apply */
+.vzeSide__update.atlButton--primary:disabled {
+  background: var(--color-border);
+}
+
+.vzeSide__invalid {
+  display: inline-flex;
+}
+
+.vzeSide__autoApply.atlButton {
+  width: 34px;
+  margin-left: var(--space-3);
 }
 
 /* --- A panel of the sidebar, and the fields in it ------------------------------------------- */
 
+/* The original's panels of the sidebar: a small padding on the page's surface, raised a little */
 .vzePanel {
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-3);
+  padding: var(--space-2);
   border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--color-surface);
+  box-shadow: var(--shadow-card);
 }
 
 .vzePanel--fill {
@@ -135,13 +307,21 @@
 
 .vzePanel__title {
   margin: 0;
-  font-size: var(--font-size-s);
+  font-size: var(--font-size-m);
   font-weight: var(--font-weight-semibold);
+  line-height: 20px;
 }
 
+/* "Add" sits 12px under the last aggregation, a small button in the size of the text */
 .vzePanel__add {
   display: flex;
   justify-content: center;
+  padding-top: var(--space-1);
+}
+
+.vzePanel__add .atlButton {
+  height: 24px;
+  font-size: var(--font-size-s);
 }
 
 .vzeFields {
@@ -216,29 +396,72 @@
   cursor: pointer;
 }
 
+/* The Markdown of a Markdown visualization: its title and help, 16px over the text that fills the rest */
+.vzeMarkdownPanel {
+  gap: var(--space-4);
+}
+
+.vzeMarkdownPanel__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.vzeMarkdownPanel__help {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-accent);
+  font-size: var(--font-size-xs);
+}
+
+.vzeMarkdownPanel__help:hover {
+  text-decoration: underline;
+}
+
+.vzeMarkdownPanel__external.atlIcon {
+  width: 12px;
+  height: 12px;
+  margin-left: var(--space-1);
+}
+
+/* A text that fills its panel: the Markdown, and the settings of a kind edited as JSON */
 .vzeMarkdown {
   flex: 1 1 auto;
   min-height: 200px;
   resize: vertical;
 }
 
+/* The original draws the field's line inside its 8px: the text starts 8px from the edge */
+.vzeMarkdownPanel textarea.vzeMarkdown {
+  min-height: 0;
+  padding: calc(var(--space-2) - 1px);
+  line-height: 21px;
+  resize: none;
+}
+
 /* --- An aggregation ------------------------------------------------------------------------- */
 
+/* An aggregation is a row on the panel's surface, as in the original: no frame of its own */
 .vzeAgg {
-  border: 1px solid var(--color-border-light);
   border-radius: var(--radius-sm);
-  background: var(--color-surface-secondary);
+  background: var(--color-surface);
 }
 
 .vzeAgg--error {
-  border-color: var(--color-critical);
+  box-shadow: inset 0 0 0 1px var(--color-critical);
 }
 
+/* The original's accordion: 8px around a line of text, or around its 32px round buttons */
 .vzeAgg__head {
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 2px var(--space-1) 2px 0;
+  padding: var(--space-2);
+}
+
+.vzeAgg__head .atlButton--icon {
+  width: var(--control-height);
+  height: var(--control-height);
+  border-radius: 50%;
 }
 
 .vzeAgg__toggle {
@@ -247,17 +470,22 @@
   align-items: center;
   gap: var(--space-1);
   min-width: 0;
-  padding: var(--space-2) var(--space-1) var(--space-2) var(--space-2);
+  padding: 0;
   border: 0;
   background: none;
   font-size: var(--font-size-s);
+  line-height: 21px;
   text-align: left;
   cursor: pointer;
 }
 
+.vzeAgg__toggle > .atlIcon {
+  margin: 0 var(--space-1);
+}
+
 .vzeAgg__toggle strong {
   flex: 0 0 auto;
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-regular);
 }
 
 .vzeAgg__label {
@@ -279,14 +507,12 @@
   color: var(--color-critical-text);
 }
 
-.vzeAgg__remove:hover:not(:disabled) {
+.vzeAgg__remove.atlButton {
   color: var(--color-critical-text);
 }
 
 .vzeAgg__body {
   padding: var(--space-2) var(--space-3) var(--space-3);
-  border-top: 1px solid var(--color-border-light);
-  background: var(--color-surface);
   border-radius: 0 0 var(--radius-sm) var(--radius-sm);
 }
 
@@ -386,7 +612,8 @@
   margin: 0;
 }
 
-@media (max-width: 900px) {
+/* On a narrow screen the sidebar goes under the chart, the whole width, as in the original */
+@media (max-width: 991px) {
   .vzePage {
     height: auto;
   }
@@ -396,15 +623,26 @@
   }
 
   .vzeChart {
+    flex: 0 0 auto;
+    width: 100% !important;
     height: 360px;
-    flex: 0 0 auto;
   }
 
-  .vzeSide {
-    flex: 0 0 auto;
-    width: auto;
+  .vzeResizer {
+    display: none;
   }
 
+  .vzeSide,
+  .vzeSide.vzeSide--collapsed {
+    width: 100% !important;
+  }
+
+  .vzeSide.vzeSide--collapsed {
+    height: 48px;
+  }
+}
+
+@media (max-width: 900px) {
   .vzeNew {
     grid-template-columns: 1fr;
   }

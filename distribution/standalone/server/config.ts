@@ -13,6 +13,7 @@
 
 import { readFileSync } from 'node:fs';
 import { flatten, parseYaml, type YamlValue } from './yaml';
+import { DEFAULT_MAP_CONFIG, type MapConfig } from '../common/map_config';
 
 export interface Config {
   server: {
@@ -39,8 +40,12 @@ export interface Config {
   savedObjects: { maxImportPayloadBytes: number; maxImportExportSize: number };
   uiSettings: { overrides: Record<string, unknown>; defaults: Record<string, unknown> };
   logging: { quiet: boolean; verbose: boolean };
-  /** Whether the map visualizations may ask a tile service the browser can reach */
-  map: { tileUrl: string; attribution: string };
+  /** The `map.*` settings of the maps_legacy, tile_map and region_map plugins */
+  map: MapConfig;
+  /** The sources `csp.allowed*Sources` add to the page's policy, as in OpenSearch Dashboards */
+  csp: { allowedConnectSources: string[]; allowedFrameAncestorSources: string[]; allowedImgSources: string[] };
+  /** vis_type_vega.enableExternalUrls: whether a Vega spec may load data from other addresses */
+  visTypeVega: { enableExternalUrls: boolean };
 }
 
 type Reader = (value: unknown, key: string) => unknown;
@@ -75,6 +80,40 @@ const map: Reader = (value, key) => {
   if (value !== null && typeof value === 'object' && !Array.isArray(value)) return value;
   throw new Error(`${key} must be a map`);
 };
+const numbers: Reader = (value, key) => {
+  if (!Array.isArray(value)) throw new Error(`${key} must be a list`);
+  return value.map((item) => number(item, key));
+};
+// map.regionmap.layers: a list of layers, each { name, url, attribution, format, meta, fields }
+const regionLayers: Reader = (value, key) => {
+  if (!Array.isArray(value)) throw new Error(`${key} must be a list`);
+  return value.map((item, index) => {
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) throw new Error(`${key}[${index}] must be a map`);
+    const layer = item as Record<string, unknown>;
+    const inner = (name: string) => (layer[name] && typeof layer[name] === 'object' ? (layer[name] as Record<string, unknown>) : {});
+    for (const required of ['url', 'attribution', 'name']) {
+      if (typeof layer[required] !== 'string') throw new Error(`${key}[${index}].${required} must be text`);
+    }
+    if (!Array.isArray(layer.fields)) throw new Error(`${key}[${index}].fields must be a list`);
+    return {
+      url: layer.url,
+      format: { type: typeof inner('format').type === 'string' ? inner('format').type : 'geojson' },
+      meta: {
+        feature_collection_path:
+          typeof inner('meta').feature_collection_path === 'string' ? inner('meta').feature_collection_path : 'data',
+      },
+      attribution: layer.attribution,
+      name: layer.name,
+      fields: (layer.fields as unknown[]).map((field, fieldIndex) => {
+        const f = (field ?? {}) as Record<string, unknown>;
+        if (typeof f.name !== 'string' || typeof f.description !== 'string') {
+          throw new Error(`${key}[${index}].fields[${fieldIndex}] must have a name and a description`);
+        }
+        return { name: f.name, description: f.description };
+      }),
+    };
+  });
+};
 const oneOf =
   (...allowed: string[]): Reader =>
   (value, key) => {
@@ -103,8 +142,35 @@ const SETTINGS: Record<string, Reader> = {
   'uiSettings.defaults': map,
   'logging.quiet': boolean,
   'logging.verbose': boolean,
-  'map.tileUrl': string,
-  'map.attribution': string,
+  'csp.allowedConnectSources': list,
+  'csp.allowedFrameAncestorSources': list,
+  'csp.allowedImgSources': list,
+  'vis_type_vega.enableExternalUrls': boolean,
+  'map.includeOpenSearchMapsService': boolean,
+  'map.proxyOpenSearchMapsServiceInMaps': boolean,
+  'map.showRegionDeniedWarning': boolean,
+  'map.tilemap.url': string,
+  'map.tilemap.options.attribution': string,
+  'map.tilemap.options.minZoom': number,
+  'map.tilemap.options.maxZoom': number,
+  'map.tilemap.options.tileSize': number,
+  'map.tilemap.options.subdomains': list,
+  'map.tilemap.options.errorTileUrl': string,
+  'map.tilemap.options.tms': boolean,
+  'map.tilemap.options.reuseTiles': boolean,
+  'map.tilemap.options.bounds': numbers,
+  'map.tilemap.options.default': boolean,
+  'map.regionmap.includeOpenSearchMapsService': boolean,
+  'map.regionmap.layers': regionLayers,
+  'map.manifestServiceUrl': string,
+  'map.opensearchManifestServiceUrl': string,
+  'map.emsFileApiUrl': string,
+  'map.emsTileApiUrl': string,
+  'map.emsLandingPageUrl': string,
+  'map.emsFontLibraryUrl': string,
+  'map.emsTileLayerId.bright': string,
+  'map.emsTileLayerId.desaturated': string,
+  'map.emsTileLayerId.dark': string,
 };
 
 // Maps whose keys are themselves dotted (`uiSettings.overrides.theme:darkMode`) arrive flattened
@@ -201,7 +267,51 @@ export function loadConfig(
       defaults: read('uiSettings.defaults', {}) as Record<string, unknown>,
     },
     logging: { quiet: read('logging.quiet', false), verbose: read('logging.verbose', false) },
-    map: { tileUrl: read('map.tileUrl', ''), attribution: read('map.attribution', '') },
+    map: readMapConfig(read),
+    csp: {
+      allowedConnectSources: read('csp.allowedConnectSources', [] as string[]),
+      allowedFrameAncestorSources: read('csp.allowedFrameAncestorSources', [] as string[]),
+      allowedImgSources: read('csp.allowedImgSources', [] as string[]),
+    },
+    visTypeVega: { enableExternalUrls: read('vis_type_vega.enableExternalUrls', false) },
   };
   return { config, ignored };
+}
+
+/** The map.* settings, with the defaults of OpenSearch Dashboards 3.9.0 */
+function readMapConfig(read: <T>(key: string, fallback: T) => T): MapConfig {
+  const d = DEFAULT_MAP_CONFIG;
+  const options: MapConfig['tilemap']['options'] = {
+    attribution: read('map.tilemap.options.attribution', d.tilemap.options.attribution),
+    minZoom: read('map.tilemap.options.minZoom', d.tilemap.options.minZoom),
+    maxZoom: read('map.tilemap.options.maxZoom', d.tilemap.options.maxZoom),
+  };
+  for (const name of ['tileSize', 'subdomains', 'errorTileUrl', 'tms', 'reuseTiles', 'bounds', 'default'] as const) {
+    const value = read<unknown>(`map.tilemap.options.${name}`, undefined);
+    if (value !== undefined) (options as Record<string, unknown>)[name] = value;
+  }
+  if (options.minZoom < 0) throw new Error('map.tilemap.options.minZoom must be 0 or more');
+  if (options.bounds?.some((bound) => bound < 2)) throw new Error('map.tilemap.options.bounds must be numbers of 2 or more');
+  const tilemapUrl = read<string | undefined>('map.tilemap.url', undefined);
+  return {
+    includeOpenSearchMapsService: read('map.includeOpenSearchMapsService', d.includeOpenSearchMapsService),
+    proxyOpenSearchMapsServiceInMaps: read('map.proxyOpenSearchMapsServiceInMaps', d.proxyOpenSearchMapsServiceInMaps),
+    showRegionDeniedWarning: read('map.showRegionDeniedWarning', d.showRegionDeniedWarning),
+    tilemap: tilemapUrl === undefined ? { options } : { url: tilemapUrl, options },
+    regionmap: {
+      includeOpenSearchMapsService: read('map.regionmap.includeOpenSearchMapsService', d.regionmap.includeOpenSearchMapsService),
+      layers: read('map.regionmap.layers', d.regionmap.layers),
+    },
+    manifestServiceUrl: read('map.manifestServiceUrl', d.manifestServiceUrl),
+    opensearchManifestServiceUrl: read('map.opensearchManifestServiceUrl', d.opensearchManifestServiceUrl),
+    emsFileApiUrl: read('map.emsFileApiUrl', d.emsFileApiUrl),
+    emsTileApiUrl: read('map.emsTileApiUrl', d.emsTileApiUrl),
+    emsLandingPageUrl: read('map.emsLandingPageUrl', d.emsLandingPageUrl),
+    emsFontLibraryUrl: read('map.emsFontLibraryUrl', d.emsFontLibraryUrl),
+    emsTileLayerId: {
+      bright: read('map.emsTileLayerId.bright', d.emsTileLayerId.bright),
+      desaturated: read('map.emsTileLayerId.desaturated', d.emsTileLayerId.desaturated),
+      dark: read('map.emsTileLayerId.dark', d.emsTileLayerId.dark),
+    },
+  };
 }

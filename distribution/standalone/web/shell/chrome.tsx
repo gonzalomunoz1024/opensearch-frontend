@@ -230,7 +230,7 @@ function HelpMenu() {
       onClose={close}
       align="right"
       padded
-      button={<IconButton icon="help" label="Help" onClick={() => setOpen(!open)} testId="helpMenuButton" />}
+      button={<IconButton icon="help" label="Help menu" onClick={() => setOpen(!open)} testId="helpMenuButton" className="shlHeader__help" />}
     >
       <div className="atlStack" style={{ width: 240 }}>
         <div className="atlRow">

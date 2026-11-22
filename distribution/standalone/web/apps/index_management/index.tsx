@@ -12,14 +12,31 @@ import { navigateHash, useLocation } from '../../router';
 import { Aliases } from './aliases';
 import { CreateDataStream, DataStreamDetail } from './data_stream_pages';
 import { DataStreams } from './data_streams';
+import { ForceMerge } from './force_merge';
 import { CreateIndex, IndexDetail } from './index_pages';
 import { Indices } from './indices';
 import { ChangePolicy, ManagedIndices } from './managed_indices';
 import { CreatePolicy, Policies, PolicyDetails } from './policies';
+import { CreateRollup } from './create_rollup';
+import { CreateSnapshotPolicy } from './create_snapshot_policy';
+import { CreateTransform } from './create_transform';
+import { Reindex } from './reindex';
+import { Repositories } from './repositories';
+import { ShrinkIndex, SplitIndex } from './resize_pages';
+import { EditRollup, RollupDetails } from './rollup_pages';
+import { Rollups } from './rollups';
+import { SnapshotPolicies, SnapshotPolicyDetails } from './snapshot_policies';
+import { Snapshots } from './snapshots';
+import { EditTransform, TransformDetails } from './transform_pages';
+import { NotificationSettings } from './notification_settings';
+import { Transforms } from './transforms';
+import { Rollover } from './rollover';
 import { ROUTES, SNAPSHOT_MANAGEMENT_PATH } from './routes';
 import { ComposableTemplateDetail, TemplateDetail } from './template_pages';
 import { ComposableTemplates, Templates } from './templates';
 import '../../styles/index_management.css';
+
+export { startJobs } from './job_handlers';
 
 interface NavItem {
   name: string;
@@ -120,6 +137,26 @@ const PAGES: Page[] = [
     // The address of a data stream ends with a word the page has no use for
     render: (rest) => (rest === '' ? <CreateDataStream /> : <DataStreamDetail name={rest.split('/')[0]} />),
   },
+  { route: ROUTES.FORCE_MERGE, render: (indexes) => <ForceMerge key={indexes} indexes={indexes} /> },
+  { route: ROUTES.ROLLOVER, render: (source) => <Rollover key={source} source={source} /> },
+  { route: ROUTES.SPLIT_INDEX, render: () => <SplitIndex /> },
+  { route: ROUTES.SHRINK_INDEX, render: () => <ShrinkIndex /> },
+  { route: ROUTES.REINDEX, render: () => <Reindex /> },
+  { route: ROUTES.ROLLUPS, render: () => <Rollups /> },
+  { route: ROUTES.CREATE_ROLLUP, render: () => <CreateRollup /> },
+  { route: ROUTES.EDIT_ROLLUP, render: () => <EditRollup /> },
+  { route: ROUTES.ROLLUP_DETAILS, render: () => <RollupDetails /> },
+  { route: ROUTES.TRANSFORMS, render: () => <Transforms /> },
+  { route: ROUTES.NOTIFICATIONS, render: () => <NotificationSettings /> },
+  { route: ROUTES.CREATE_TRANSFORM, render: () => <CreateTransform /> },
+  { route: ROUTES.EDIT_TRANSFORM, render: () => <EditTransform /> },
+  { route: ROUTES.TRANSFORM_DETAILS, render: () => <TransformDetails /> },
+  { route: ROUTES.SNAPSHOT_POLICIES, render: () => <SnapshotPolicies /> },
+  { route: ROUTES.SNAPSHOT_POLICY_DETAILS, render: () => <SnapshotPolicyDetails /> },
+  { route: ROUTES.CREATE_SNAPSHOT_POLICY, render: () => <CreateSnapshotPolicy isEdit={false} /> },
+  { route: ROUTES.EDIT_SNAPSHOT_POLICY, render: () => <CreateSnapshotPolicy isEdit /> },
+  { route: ROUTES.SNAPSHOTS, render: () => <Snapshots /> },
+  { route: ROUTES.REPOSITORIES, render: () => <Repositories /> },
 ];
 
 function findPage(hashPath: string): { page: Page; rest: string } | undefined {

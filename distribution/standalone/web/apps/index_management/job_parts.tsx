@@ -1,0 +1,301 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/* What the pages of rollup jobs and of transform jobs are both made of. */
+
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Button, Panel, cx } from '../../components/basic';
+import { TextArea, TextField } from '../../components/form';
+import { Modal } from '../../components/overlay';
+import { LocalTable, ism, toasts, type Answer, type TableColumn } from './common';
+import { useSpaced } from './index_select';
+import { wildcardOption, type FieldItem } from './rollup_model';
+
+/** The steps of a form at its left: the ones not reached yet are pale */
+export function Steps({ titles, step }: { titles: string[]; step: number }) {
+  return (
+    <ol className="ismSteps">
+      {titles.map((title, at) => (
+        <li
+          key={title}
+          className={cx('ismSteps__step', at + 1 > step && 'ismSteps__step--disabled')}
+          aria-current={at + 1 === step ? 'step' : undefined}
+        >
+          <span className="ismSteps__number">{at + 1}</span>
+          <span className="ismSteps__title">{title}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** A form in steps: the steps, the step that is open, and the buttons that move between them */
+export function Wizard({
+  titles,
+  headings = titles,
+  step,
+  children,
+  buttons,
+}: {
+  titles: string[];
+  /** What each step is called over its fields, where that is not what the list of steps calls it */
+  headings?: string[];
+  step: number;
+  children: ReactNode;
+  buttons: ReactNode;
+}) {
+  return (
+    <div className="ismPage ismPage--form">
+      <div className="ismWizard">
+        <aside className="ismWizard__steps">
+          <Steps titles={titles} step={step} />
+        </aside>
+        <div className="ismWizard__body">
+          <h1 className="ismPageTitle">{headings[step - 1]}</h1>
+          {children}
+        </div>
+      </div>
+      <div className="ismButtons">{buttons}</div>
+    </div>
+  );
+}
+
+/** A panel of a form: its title over a line, and its fields */
+export function FormPanel({ title, actions, children }: { title: ReactNode; actions?: ReactNode; children: ReactNode }) {
+  return (
+    <Panel>
+      <div className="ismFormPanel__header">
+        <h2 className="ismPanel__heading">{title}</h2>
+        {actions}
+      </div>
+      <hr className="ismRule" />
+      <div className="ismFormPanel__body">{children}</div>
+    </Panel>
+  );
+}
+
+/** A field under its name, with what is wrong with it and what it means below it */
+export function FieldRow({
+  title,
+  optional,
+  help,
+  error,
+  wide,
+  small,
+  minor,
+  children,
+}: {
+  title?: ReactNode;
+  optional?: boolean;
+  help?: ReactNode;
+  error?: ReactNode;
+  /** Takes the width it is given instead of that of a field */
+  wide?: boolean;
+  /** The name is a small label, not a heading */
+  small?: boolean;
+  /** The name is a heading under those of the other rows */
+  minor?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div className={cx('ismRow', wide && 'ismRow--wide')}>
+      {title && small && <div className="ismRow__label">{title}</div>}
+      {title && !small && minor && <h4 className="ismRow__title ismRow__title--minor">{title}</h4>}
+      {title && !small && !minor && (
+        <h3 className="ismRow__title">
+          {title}
+          {optional && <i> – optional</i>}
+        </h3>
+      )}
+      <div className="ismRow__field">{children}</div>
+      {error && <div className="ismLabeled__error">{error}</div>}
+      {help && <div className="ismLabeled__help">{help}</div>}
+    </div>
+  );
+}
+
+/** The name of a job and what it is for; the name of a job that exists cannot be changed */
+export function ConfigureJob({
+  jobId,
+  jobIdError,
+  placeholder,
+  description,
+  isEdit,
+  onChangeName,
+  onChangeDescription,
+}: {
+  jobId: string;
+  jobIdError?: string;
+  placeholder: string;
+  description: string;
+  isEdit?: boolean;
+  onChangeName?: (name: string) => void;
+  onChangeDescription: (description: string) => void;
+}) {
+  return (
+    <FormPanel title="Job name and description">
+      <FieldRow title="Name" help="Specify a unique, descriptive name." error={jobIdError}>
+        <TextField
+          compact
+          value={jobId}
+          onChange={(name) => onChangeName?.(name)}
+          placeholder={placeholder}
+          invalid={Boolean(jobIdError)}
+          disabled={isEdit}
+        />
+      </FieldRow>
+      <FieldRow title="Description" optional>
+        <TextArea value={description} onChange={onChangeDescription} rows={3} testId="description" />
+      </FieldRow>
+    </FormPanel>
+  );
+}
+
+/** A number and the unit it counts, side by side */
+export function Paired({ children }: { children: ReactNode }) {
+  return <div className="ismPaired">{children}</div>;
+}
+
+export interface FoundNames {
+  dataStreams: string[];
+  indices: string[];
+}
+
+/** The data streams and the first ten indexes whose names hold the text */
+export async function loadNames(search: string): Promise<Answer<FoundNames>> {
+  const [indices, dataStreams] = await Promise.all([
+    ism.get<{ indices: Array<{ index: string }> }>('_indices', {
+      from: 0,
+      size: 10,
+      search,
+      terms: search,
+      sortDirection: 'desc',
+      sortField: 'index',
+      showDataStreams: true,
+    }),
+    ism.get<{ dataStreams: Array<{ name: string }> }>('_data_streams', { search }),
+  ]);
+  if (!indices.ok) return { ok: false, error: indices.error };
+  if (!dataStreams.ok) return { ok: false, error: dataStreams.error };
+  return {
+    ok: true,
+    response: {
+      dataStreams: (dataStreams.response?.dataStreams ?? []).map((stream) => stream.name),
+      indices: (indices.response?.indices ?? []).map((index) => index.index),
+    },
+  };
+}
+
+/**
+ * The names a job can read from and write to, looked for again half a second after the typing
+ * stops: what was typed as a pattern, the data streams and the indexes to read from; the
+ * indexes to write to.
+ */
+export function useIndexNames(): {
+  sources: string[];
+  targets: string[];
+  loading: boolean;
+  onSearch: (text: string) => void;
+} {
+  const [sources, setSources] = useState<string[]>([]);
+  const [targets, setTargets] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const turn = useRef(0);
+
+  const search = useCallback((text: string) => {
+    const mine = (turn.current += 1);
+    setLoading(true);
+    setSources([]);
+    void loadNames(text).then((answer) => {
+      if (mine !== turn.current) return;
+      if (answer.ok && answer.response) {
+        const { dataStreams, indices } = answer.response;
+        setSources([...(text.trim() ? [wildcardOption(text)] : []), ...dataStreams, ...indices]);
+        setTargets(indices);
+      } else if (answer.error?.startsWith('[index_not_found_exception]')) {
+        toasts.danger('No index available');
+      } else {
+        toasts.danger(answer.error);
+      }
+      setLoading(false);
+    });
+  }, []);
+  useEffect(() => {
+    search('');
+    return () => {
+      turn.current += 1;
+    };
+  }, [search]);
+  return { sources, targets, loading, onSearch: useSpaced(search, 500) };
+}
+
+/** Names as the options of a field, each once */
+export const nameOptions = (names: string[]) => [...new Set(names)].map((name) => ({ value: name, label: name }));
+
+const FIELD_COLUMNS: Array<TableColumn<FieldItem>> = [
+  { field: 'label', name: 'Field name', render: (field) => field.label },
+  { field: 'type', name: 'Field type', render: (field) => field.type ?? '-' },
+];
+
+/** The fields of the source, to tick the ones to add */
+export function AddFieldsModal({
+  fields,
+  ticked,
+  selectable,
+  empty,
+  onClose,
+  onAdd,
+  cancelTestId,
+  addTestId,
+}: {
+  fields: FieldItem[];
+  /** The fields that are ticked as the dialog opens */
+  ticked: FieldItem[];
+  selectable?: (field: FieldItem) => boolean;
+  empty?: ReactNode;
+  onClose: () => void;
+  onAdd: (chosen: FieldItem[]) => void;
+  cancelTestId: string;
+  addTestId: string;
+}) {
+  const [chosen, setChosen] = useState<FieldItem[]>(() =>
+    fields.filter((field) => ticked.some((other) => other.label === field.label))
+  );
+  return (
+    <Modal
+      title="Add fields"
+      onClose={onClose}
+      wide
+      footer={
+        <>
+          <Button variant="empty" size="s" onClick={onClose} testId={cancelTestId}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            size="s"
+            onClick={() => {
+              onClose();
+              onAdd(chosen);
+            }}
+            testId={addTestId}
+          >
+            Add
+          </Button>
+        </>
+      }
+    >
+      <div className="ismAddFields">
+        <LocalTable
+          columns={FIELD_COLUMNS}
+          rows={fields}
+          rowId={(field) => field.label}
+          paged={false}
+          selected={chosen}
+          onSelect={setChosen}
+          selectable={selectable}
+          empty={empty}
+        />
+      </div>
+    </Modal>
+  );
+}

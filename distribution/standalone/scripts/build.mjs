@@ -1,7 +1,9 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
 // Builds dist/: the server as plain JavaScript files, and the browser side as one script and one
-// style sheet under dist/public. The only tools it uses are Node and the TypeScript compiler.
+// style sheet under dist/public, beside the browser builds of Vega and Vega-Lite, which the script
+// loads when it draws a Vega visualization. The only tools it uses are Node and the TypeScript
+// compiler.
 //
 //   node scripts/build.mjs            the product
 //   node scripts/build.mjs --tests    the product and the tests (dist/test, dist/web)
@@ -93,16 +95,79 @@ const assets = {
 write(join(publicDir, assets.script), script);
 write(join(publicDir, assets.styles), styles);
 
+// Vega and Vega-Lite as their packages build them for a browser: each sets a global (vega,
+// vegaLite) when it is loaded, Vega-Lite after Vega. The address of a source map is left out, as
+// the map is not shipped.
+const LIBRARIES = {
+  vega: 'vega/build/vega.min.js',
+  vegaLite: 'vega-lite/build/vega-lite.min.js',
+};
+for (const [name, path] of Object.entries(LIBRARIES)) {
+  const code = readFileSync(join(root, 'node_modules', path), 'utf8').replace(
+    /\n\/\/# sourceMappingURL=\S*\s*$/,
+    '\n'
+  );
+  assets[name] = `assets/${name}.${hashed(code)}.js`;
+  write(join(publicDir, assets[name]), code);
+}
+
 for (const file of walk(join(root, 'web', 'static'))) {
   const target = join(publicDir, relative(join(root, 'web', 'static'), file));
   mkdirSync(dirname(target), { recursive: true });
   copyFileSync(file, target);
 }
 
-// The licences of what is bundled into the browser script travel with the build
-for (const name of ['react', 'react-dom', 'scheduler']) {
-  const licence = join(root, 'node_modules', name, 'LICENSE');
-  if (existsSync(licence)) write(join(dist, 'licenses', `${name}.txt`), readFileSync(licence));
+// The licences of what is bundled into the browser scripts travel with the build: React's,
+// Leaflet's, and those of Vega, Vega-Lite and the packages their builds hold (not the ones of
+// their command line tools, which no browser build holds)
+const COMMAND_LINE_ONLY = new Set([
+  'ansi-regex',
+  'ansi-styles',
+  'cliui',
+  'commander',
+  'emoji-regex',
+  'escalade',
+  'get-caller-file',
+  'get-east-asian-width',
+  'iconv-lite',
+  'rw',
+  'safer-buffer',
+  'string-width',
+  'strip-ansi',
+  'wrap-ansi',
+  'y18n',
+  'yargs',
+  'yargs-parser',
+]);
+const lock = JSON.parse(readFileSync(join(root, 'package-lock.json'), 'utf8'));
+// Where each package is installed: npm may put a package below another one
+const installed = new Map();
+for (const [path, entry] of Object.entries(lock.packages)) {
+  const at = path.lastIndexOf('node_modules/');
+  if (at === -1) continue;
+  const name = path.slice(at + 'node_modules/'.length);
+  if (!installed.has(name)) installed.set(name, { path, entry });
+}
+const bundled = new Set(['react', 'react-dom', 'scheduler']);
+const follow = (name) => {
+  const found = installed.get(name);
+  if (!found || bundled.has(name) || COMMAND_LINE_ONLY.has(name) || name.startsWith('@types/')) {
+    return;
+  }
+  bundled.add(name);
+  Object.keys(found.entry.dependencies ?? {}).forEach(follow);
+};
+['vega', 'vega-lite', 'leaflet'].forEach(follow);
+for (const name of [...bundled].sort()) {
+  const directory = join(root, installed.get(name)?.path ?? join('node_modules', name));
+  const licence = ['LICENSE', 'LICENSE.md', 'LICENSE.txt', 'license']
+    .map((file) => join(directory, file))
+    .find((file) => existsSync(file));
+  if (licence) write(join(dist, 'licenses', `${name}.txt`), readFileSync(licence));
+}
+// and so do those of the packages whose code parts of the browser side are written after (NOTICE)
+for (const file of walk(join(root, 'licenses'))) {
+  write(join(dist, 'licenses', 'followed', relative(join(root, 'licenses'), file)), readFileSync(file));
 }
 for (const name of ['NOTICE', 'LICENSE']) {
   if (existsSync(join(root, name))) write(join(dist, name), readFileSync(join(root, name)));

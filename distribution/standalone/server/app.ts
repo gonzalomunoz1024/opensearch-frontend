@@ -26,12 +26,14 @@ import {
 } from './http';
 import { exportObjects, fileFromMultipart, importObjects } from './import_export';
 import { registerIndexManagement } from './index_management';
+import { registerGeospatial } from './geospatial';
 import { fieldsForWildcard } from './index_pattern_fields';
 import type { Logger } from './logger';
 import { OpenSearchClient, OpenSearchError, OpenSearchUnavailableError } from './opensearch';
 import { SavedObjectsRepository, type FindOptions } from './saved_objects';
+import { registerShortUrls } from './short_urls';
 import { registerSqlConsole } from './sql_console';
-import { CONTENT_SECURITY_POLICY, readBuild, renderPage, serveStatic } from './static';
+import { contentSecurityPolicy, readBuild, renderPage, serveStatic } from './static';
 import { registerTsvbFields } from './tsvb_fields';
 import { UiSettings } from './ui_settings';
 
@@ -381,6 +383,10 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
 
   registerSqlConsole(router, client);
 
+  // --- Region maps: the custom vector maps of indices named "*-map" -------------------------------
+
+  registerGeospatial(router, client);
+
   // --- Index Management ------------------------------------------------------------------------
 
   registerIndexManagement(router, client);
@@ -388,6 +394,10 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
   // --- TSVB ------------------------------------------------------------------------------------
 
   registerTsvbFields(router, client, repository, uiSettings);
+
+  // --- Short URLs ------------------------------------------------------------------------------
+
+  registerShortUrls(router, repository, { basePath: config.server.basePath, logger });
 
   // --- The pipeline every request goes through -------------------------------------------------
 
@@ -402,7 +412,7 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
     return {
       headers: {
         'content-type': 'text/html; charset=utf-8',
-        'content-security-policy': CONTENT_SECURITY_POLICY,
+        'content-security-policy': contentSecurityPolicy(config.map, config.csp),
         'cache-control': 'no-store',
       },
       body: renderPage({
@@ -418,6 +428,11 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
           settingsDefaults: config.uiSettings.defaults,
           settingsOverrides: config.uiSettings.overrides,
           map: config.map,
+          visTypeVega: config.visTypeVega,
+          libraries: {
+            vega: `${config.server.basePath}/${build.assets.vega ?? ''}`,
+            vegaLite: `${config.server.basePath}/${build.assets.vegaLite ?? ''}`,
+          },
         },
       }),
     };

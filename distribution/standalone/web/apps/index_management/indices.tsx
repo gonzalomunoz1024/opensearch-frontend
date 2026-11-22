@@ -31,7 +31,9 @@ import {
   type TableColumn,
 } from './common';
 import { SYSTEM_INDEX, matchesAny, orDash, searchClauses, withDataStreams } from './model';
-import { ClearCacheModal, FlushModal, RefreshModal, jobDone, onJobDone, watchTask } from './operations';
+import { addJob, clusterInfo, startedToast } from './job_handlers';
+import { onJobDone, type JobEvent } from './jobs';
+import { ClearCacheModal, FlushModal, RefreshModal } from './operations';
 import { CRUMBS } from './routes';
 
 export interface IndexRow {
@@ -255,38 +257,21 @@ export function ApplyPolicyModal({ indices, onClose }: { indices: string[]; onCl
   );
 }
 
-/** Starts opening indices, and tells when they are open */
-export async function openIndices(indices: string[]): Promise<boolean> {
+/** Starts opening indices; a job tells when they are open */
+export async function openIndices(indices: string[], firstRunTimeout?: number): Promise<boolean> {
   const payload = indices.join(',');
   const result = await ism.request<{ task?: string }>('POST', `/${payload}/_open?wait_for_completion=false`);
   if (!result.ok) {
     toasts.danger(result.error);
     return false;
   }
-  toasts.success(`Successfully started opening ${payload}.`);
-  const task = result.response?.task;
-  if (task) {
-    watchTask(
-      task,
-      (found) => {
-        const answer = found.response ?? {};
-        if (answer.acknowledged && answer.shards_acknowledged) {
-          jobDone('OPEN_COMPLETE');
-          toasts.success(`${indices.join(', ')} have been opened.`);
-          return true;
-        }
-        if (found.error?.reason) {
-          toasts.danger(`${indices.join(', ')} has failed to open.`, found.error.reason);
-          return true;
-        }
-        return false;
-      },
-      () =>
-        toasts.warning(
-          `Opening the index(es) ${indices.join(', ')} has timed out. Opening the index has taken more than one hour to complete. To see the latest status, use \`GET /_tasks/${task}\``
-        )
-    );
-  }
+  const toastId = startedToast(`Successfully started opening ${payload}.`);
+  addJob({
+    type: 'open',
+    extras: { clusterInfo: await clusterInfo(), toastId, taskId: result.response?.task, indexes: indices },
+    interval: 3000,
+    firstRunTimeout,
+  });
   return true;
 }
 
@@ -493,7 +478,8 @@ export function Indices() {
   reload.current = load;
   useEffect(() => {
     const again = () => void reload.current();
-    const stops = ['REINDEX_COMPLETE', 'SHRINK_COMPLETE', 'SPLIT_COMPLETE', 'OPEN_COMPLETE'].map((event) =>
+    const events: JobEvent[] = ['REINDEX_COMPLETE', 'SHRINK_COMPLETE', 'SPLIT_COMPLETE', 'OPEN_COMPLETE'];
+    const stops = events.map((event) =>
       onJobDone(event, again)
     );
     return () => stops.forEach((stop) => stop());

@@ -11,6 +11,9 @@
 import { METRIC_TYPES, BUCKET_TYPES, aggLabel, type AggConfig, type AggContext } from '../../lib/aggs';
 import type { Field, IndexPattern } from '../../lib/types';
 import { visType, type Vis, type VisType } from '../../lib/vis';
+import { tileMapDefaults } from '../../vis/tile_map/defaults';
+import { DEFAULT_VEGA_SPEC } from '../../vis/vega/default_spec';
+import { regionMapDefaults } from '../../vis/region_map/region_map_type';
 import { tsvbDefaults } from './tsvb/model';
 
 export type Schema = NonNullable<VisType['schemas']>[number];
@@ -196,6 +199,9 @@ const DEFAULT_PARAMS: Record<string, () => Record<string, unknown>> = {
   markdown: () => ({ fontSize: 12, openLinksInNewTab: false, markdown: '' }),
   input_control_vis: () => ({ controls: [], updateFiltersOnChange: false, useTimeFilter: false, pinFilters: false }),
   metrics: () => tsvbDefaults(),
+  vega: () => ({ spec: DEFAULT_VEGA_SPEC }),
+  region_map: () => regionMapDefaults(),
+  tile_map: () => tileMapDefaults(),
 };
 
 export const defaultParams = (type: string): Record<string, unknown> => DEFAULT_PARAMS[type]?.() ?? {};
@@ -241,7 +247,10 @@ const AGG_FILTERS: Record<string, Record<string, string[]>> = {
   tagcloud: { metric: ['!std_dev', '!percentiles', '!percentile_ranks', '!derivative'], segment: ['terms', 'significant_terms'] },
   table: {},
   tile_map: { metric: ['count', 'avg', 'sum', 'min', 'max', 'cardinality', 'top_hits'], segment: ['geohash_grid'] },
-  region_map: { metric: ['count', 'avg', 'sum', 'min', 'max', 'cardinality', 'top_hits'], segment: ['terms'] },
+  region_map: {
+    metric: ['count', 'avg', 'sum', 'min', 'max', 'cardinality', 'top_hits', 'sum_bucket', 'min_bucket', 'max_bucket', 'avg_bucket'],
+    segment: ['terms'],
+  },
 };
 
 const filterFamily = (type: string) =>
@@ -259,24 +268,24 @@ export function allowedAggs(type: string, schema: Schema): string[] {
 export const SIBLING_PIPELINES = ['avg_bucket', 'sum_bucket', 'min_bucket', 'max_bucket'];
 export const PARENT_PIPELINES = ['derivative', 'cumulative_sum', 'moving_avg', 'serial_diff'];
 
-/** The heading an aggregation is listed under in the editor's select */
+/** The heading an aggregation is listed under in the editor's select, cased as OpenSearch Dashboards cases each */
 export function aggGroup(type: string): string | undefined {
   if (SIBLING_PIPELINES.includes(type)) return 'Sibling pipeline aggregations';
-  if (PARENT_PIPELINES.includes(type)) return 'Parent pipeline aggregations';
-  return (METRIC_TYPES as readonly string[]).includes(type) ? 'Metric aggregations' : undefined;
+  if (PARENT_PIPELINES.includes(type)) return 'Parent Pipeline Aggregations';
+  return (METRIC_TYPES as readonly string[]).includes(type) ? 'Metric Aggregations' : undefined;
 }
 
 // --- Which fields an aggregation accepts ----------------------------------------------------------
 
-const FIELD_TYPES: Record<string, string[] | '*'> = {
+export const FIELD_TYPES: Record<string, string[] | '*'> = {
   avg: ['number'],
   sum: ['number'],
-  median: ['number'],
+  median: ['number', 'date'],
   min: ['number', 'date'],
   max: ['number', 'date'],
   std_dev: ['number'],
   cardinality: '*',
-  percentiles: ['number'],
+  percentiles: ['number', 'date'],
   percentile_ranks: ['number'],
   top_hits: '*',
   date_histogram: ['date'],

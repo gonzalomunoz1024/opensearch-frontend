@@ -13,6 +13,7 @@ import { AGG_TITLES, BUCKET_TYPES, aggLabel, dateInterval, fieldNameOf, type Agg
 import type { IndexPattern, Query } from '../../lib/types';
 import { defaultQueryLanguage } from '../../shell/query_bar';
 import { PARENT_PIPELINES, SIBLING_PIPELINES, aggGroup, changeAggType, fieldsFor, orderableMetric, takesField } from './defaults';
+import { GeohashParams } from './maps/geohash_params';
 
 export interface AggEditorProps {
   agg: AggConfig;
@@ -188,6 +189,7 @@ export function AggEditor({ agg, types, indexPattern, aggs, context, onChange, s
         single
         compact
         fullWidth
+        clearable={false}
         options={fieldOptions()}
         selected={fieldName ? [fieldName] : []}
         placeholder="Select a field"
@@ -527,11 +529,7 @@ export function AggEditor({ agg, types, indexPattern, aggs, context, onChange, s
       break;
     }
     case 'geohash_grid':
-      body = (
-        <FormRow label="Precision" full>
-          <NumberField compact min={1} max={12} value={typeof params.precision === 'number' ? params.precision : 2} onChange={(precision) => set({ precision: precision ?? 2 })} />
-        </FormRow>
-      );
+      body = <GeohashParams params={params} set={set} aggId={agg.id} />;
       break;
     case 'percentiles':
       body = <NumberList label="Percents" unit="percent" values={(params.percents as number[] | undefined) ?? []} onChange={(percents) => set({ percents })} />;
@@ -625,6 +623,7 @@ export function AggEditor({ agg, types, indexPattern, aggs, context, onChange, s
           single
           compact
           fullWidth
+          clearable={false}
           options={typeOptions}
           selected={agg.type ? [agg.type] : []}
           placeholder="Select an aggregation"
@@ -647,28 +646,31 @@ export function AggEditor({ agg, types, indexPattern, aggs, context, onChange, s
               testId="visEditorStringInput"
             />
           </FormRow>
-          <Accordion title="Advanced" initiallyOpen={Boolean(params.json || params.include || params.exclude)}>
-            <div className="vzeFields">
-              {agg.type === 'terms' && field?.type === 'string' && (
-                <>
-                  <FormRow label="Exclude" full>
-                    <TextField compact value={String(params.exclude ?? '')} onChange={(exclude) => set({ exclude })} />
-                  </FormRow>
-                  <FormRow label="Include" full>
-                    <TextField compact value={String(params.include ?? '')} onChange={(include) => set({ include })} />
-                  </FormRow>
-                </>
-              )}
-              <FormRow
-                label="JSON input"
-                full
-                help="Properties written here are merged into what this aggregation asks of OpenSearch."
-                error={jsonProblem(params.json)}
-              >
-                <TextArea code rows={2} value={typeof params.json === 'string' ? params.json : ''} onChange={(json) => set({ json })} testId="codeEditorContainer" />
-              </FormRow>
-            </div>
-          </Accordion>
+          {/* A count is asked as no aggregation at all: it has no JSON to merge */}
+          {agg.type !== 'count' && (
+            <Accordion title="Advanced" initiallyOpen={Boolean(params.json || params.include || params.exclude)}>
+              <div className="vzeFields">
+                {agg.type === 'terms' && field?.type === 'string' && (
+                  <>
+                    <FormRow label="Exclude" full>
+                      <TextField compact value={String(params.exclude ?? '')} onChange={(exclude) => set({ exclude })} />
+                    </FormRow>
+                    <FormRow label="Include" full>
+                      <TextField compact value={String(params.include ?? '')} onChange={(include) => set({ include })} />
+                    </FormRow>
+                  </>
+                )}
+                <FormRow
+                  label="JSON input"
+                  full
+                  help="Properties written here are merged into what this aggregation asks of OpenSearch."
+                  error={jsonProblem(params.json)}
+                >
+                  <TextArea code rows={2} value={typeof params.json === 'string' ? params.json : ''} onChange={(json) => set({ json })} testId="codeEditorContainer" />
+                </FormRow>
+              </div>
+            </Accordion>
+          )}
         </>
       )}
     </div>

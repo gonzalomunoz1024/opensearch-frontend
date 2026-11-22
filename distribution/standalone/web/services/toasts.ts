@@ -2,13 +2,26 @@
 
 /* The short messages in the corner: something was saved, something failed. */
 
+import type { ReactNode } from 'react';
 import { errorMessage } from './http';
 
 export interface Toast {
   id: number;
   kind: 'healthy' | 'warning' | 'critical' | 'info';
+  title: ReactNode;
+  text?: ReactNode;
+  /** While a message with a key shows, the same key adds no other */
+  key?: string;
+  /** An error whose whole text the message offers to show: "See the full error" */
+  error?: Error;
+}
+
+export interface ErrorToastOptions {
   title: string;
-  text?: string;
+  /** What the message says, when not the error's own message */
+  toastMessage?: string;
+  /** While a message with this id shows, the same error adds no other (the original's toast id) */
+  id?: string;
 }
 
 export class Toasts {
@@ -29,13 +42,23 @@ export class Toasts {
     for (const listener of [...this.listeners]) listener();
   }
 
-  add(kind: Toast['kind'], title: string, text?: string) {
+  /** `lifetime` keeps a message longer than its kind does: the news of work that takes hours */
+  add(kind: Toast['kind'], title: ReactNode, text?: ReactNode, lifetime?: number) {
+    return this.push({ kind, title, text }, lifetime);
+  }
+
+  private push(toast: Omit<Toast, 'id'>, lifetime?: number) {
+    if (toast.key !== undefined) {
+      const showing = this.items.find((item) => item.key === toast.key);
+      if (showing) return showing.id;
+    }
     const id = this.next;
     this.next += 1;
     // The same message again replaces the one still showing
-    const others = this.items.filter((item) => !(item.title === title && item.text === text));
-    this.change([...others, { id, kind, title, text }].slice(-5));
-    window.setTimeout(() => this.dismiss(id), this.lifetimes[kind]);
+    const others = this.items.filter((item) => !(item.title === toast.title && item.text === toast.text));
+    this.change([...others, { ...toast, id }].slice(-5));
+    // A timer cannot wait longer than some 24 days
+    window.setTimeout(() => this.dismiss(id), Math.min(lifetime ?? this.lifetimes[toast.kind], 2 ** 31 - 1));
     return id;
   }
   dismiss(id: number) {
@@ -44,20 +67,34 @@ export class Toasts {
     }
   }
 
-  success(title: string, text?: string) {
-    return this.add('healthy', title, text);
+  success(title: ReactNode, text?: ReactNode, lifetime?: number) {
+    return this.add('healthy', title, text, lifetime);
   }
-  info(title: string, text?: string) {
-    return this.add('info', title, text);
+  info(title: ReactNode, text?: ReactNode, lifetime?: number) {
+    return this.add('info', title, text, lifetime);
   }
-  warning(title: string, text?: string) {
-    return this.add('warning', title, text);
+  warning(title: ReactNode, text?: ReactNode, lifetime?: number) {
+    return this.add('warning', title, text, lifetime);
   }
-  danger(title: string, text?: string) {
-    return this.add('critical', title, text);
+  /** A failure told in a few words: it stays as long as a warning, as the original's addDanger */
+  danger(title: ReactNode, text?: ReactNode, lifetime?: number) {
+    return this.add('critical', title, text, lifetime ?? this.lifetimes.warning);
   }
   error(error: unknown, title = 'Something went wrong') {
     if ((error as Error)?.name === 'AbortError') return 0;
     return this.add('critical', title, errorMessage(error));
+  }
+  /**
+   * An error with a button that shows its whole text, as the original's addError: the message
+   * of the error (or `toastMessage`), kept as long as errors are.
+   */
+  addError(error: Error, options: ErrorToastOptions) {
+    return this.push({
+      kind: 'critical',
+      title: options.title,
+      text: options.toastMessage ?? error.message,
+      key: options.id,
+      error,
+    });
   }
 }

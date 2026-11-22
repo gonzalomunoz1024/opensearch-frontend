@@ -421,6 +421,20 @@
   "type": "number",
   "category": "visualization"
  },
+ "visualization:regionmap:customVectorMapMaxSize": {
+  "name": "Custom vector map size",
+  "value": 1000,
+  "description": "The maximum number of features to load from custom vector map. A higher number might have negative impact on browser rendering performance.",
+  "type": "number",
+  "category": "visualization"
+ },
+ "visualization:regionmap:showWarnings": {
+  "name": "Show region map warning",
+  "value": true,
+  "description": "Whether the region map shows a warning when terms cannot be joined to a shape on the map.",
+  "type": "boolean",
+  "category": "visualization"
+ },
  "visualization:tileMap:maxPrecision": {
   "name": "Maximum tile map precision",
   "value": 7,

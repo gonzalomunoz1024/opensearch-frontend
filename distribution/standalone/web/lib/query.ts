@@ -18,6 +18,8 @@ export interface QueryConfig {
   dateFormatTZ?: string;
   /** The setting courier:ignoreFilterIfFieldNotInIndex */
   ignoreFilterIfFieldNotInIndex?: boolean;
+  /** The setting query:allowLeadingWildcards: true unless it says otherwise */
+  allowLeadingWildcards?: boolean;
 }
 
 export interface BoolQuery {
@@ -93,21 +95,20 @@ export function buildQuery(
       if (query.query && Object.keys(query.query).length) bool.must.push(query.query);
       continue;
     }
-    const text = query.query.trim();
+    const text = query.query;
     if (query.language === 'lucene') {
-      bool.must.push(
-        text === ''
-          ? { match_all: {} }
-          : {
-              query_string: {
-                query: text,
-                ...(config.queryStringOptions ?? { analyze_wildcard: true }),
-                ...(config.dateFormatTZ ? { time_zone: config.dateFormatTZ } : {}),
-              },
-            }
-      );
-    } else if (text !== '') {
-      bool.filter.push(kueryToDsl(parseKuery(text), indexPattern, { dateFormatTZ: config.dateFormatTZ }));
+      if (text.trim() === '') {
+        bool.must.push({ match_all: {} });
+      } else {
+        // the options of query:queryString:options, and the time zone unless they name one
+        const queryString: Dsl = { query: text, ...(config.queryStringOptions ?? { analyze_wildcard: true }) };
+        if (config.dateFormatTZ && queryString.time_zone === undefined) queryString.time_zone = config.dateFormatTZ;
+        bool.must.push({ query_string: queryString });
+      }
+    } else if (query.language === 'kuery') {
+      // DQL as typed, an empty query too: it asks for everything, as in OpenSearch Dashboards
+      const node = parseKuery(text, { allowLeadingWildcards: config.allowLeadingWildcards ?? true });
+      bool.filter.push(kueryToDsl(node, indexPattern, { dateFormatTZ: config.dateFormatTZ }));
     }
   }
 
@@ -251,6 +252,15 @@ export function describeFilter(
     }
     case 'exists':
       return { key, value: 'exists' };
+    case 'geo_bounding_box':
+    case 'geo_polygon': {
+      // mapGeoBoundingBox and mapGeoPolygon, with the text a geo_point field shows an object as
+      const clause = (filter[meta.type] ?? {}) as Record<string, unknown>;
+      const params = (meta.params ?? clause[key]) as { top_left?: unknown; bottom_right?: unknown; points?: unknown[] } | undefined;
+      const pretty = (point: unknown) => JSON.stringify(point, null, 1).replace(/\n\s*/g, ' ');
+      if (meta.type === 'geo_polygon') return { key, value: (params?.points ?? []).map(pretty).join(', ') };
+      return { key, value: `${pretty(params?.top_left)} to ${pretty(params?.bottom_right)}` };
+    }
     case 'missing':
       return { key, value: 'missing' };
     default: {

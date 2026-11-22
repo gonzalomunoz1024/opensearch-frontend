@@ -54,22 +54,27 @@ export function AliasSelect({
   invalid,
   disabled,
   testId,
+  fromStart,
 }: {
   value: AliasMap | undefined;
   onChange: (value: AliasMap) => void;
   invalid?: boolean;
   disabled?: boolean;
   testId?: string;
+  /** Looks for the aliases that begin with what is typed, not for those that hold it */
+  fromStart?: boolean;
 }) {
   const [options, setOptions] = useState<ComboOption[]>([]);
   const [loading, setLoading] = useState(false);
   const turn = useRef(0);
+  const wanted = useRef('');
+  const timer = useRef<ReturnType<typeof setTimeout>>();
   const search = async (text: string) => {
     const mine = (turn.current += 1);
     setLoading(true);
     const answer = await ism.call<Array<{ alias: string }>>('cat.aliases', {
       format: 'json',
-      name: `*${text}*`,
+      name: fromStart ? `${text}*` : `*${text}*`,
       s: 'alias:desc',
     });
     if (mine !== turn.current) return;
@@ -80,8 +85,15 @@ export function AliasSelect({
     );
     setOptions(names.map((name) => ({ value: name, label: name })));
   };
+  // The cluster is asked once the typing has stopped for half a second
+  const later = (text: string) => {
+    wanted.current = text;
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => void search(text), 500);
+  };
   useEffect(() => {
     void search('');
+    return () => clearTimeout(timer.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -90,8 +102,12 @@ export function AliasSelect({
     <ComboBox
       options={[...options, ...chosen.filter((name) => !options.some((option) => option.value === name)).map((name) => ({ value: name, label: name }))]}
       selected={chosen}
-      onChange={(names) => onChange(Object.fromEntries(names.map((name) => [name, value?.[name] ?? {}])))}
-      onSearch={search}
+      onChange={(names) => {
+        onChange(Object.fromEntries(names.map((name) => [name, value?.[name] ?? {}])));
+        // What was typed is gone with the choice, and the list is whole again
+        if (wanted.current !== '') later('');
+      }}
+      onSearch={later}
       loading={loading}
       allowCustom
       placeholder="Select aliases or specify new aliases."
@@ -179,6 +195,7 @@ export function AdvancedSettings({
   title = 'Advanced settings',
   label = 'Specify advanced index settings',
   forTemplate,
+  nested,
   children,
 }: {
   value: Settings;
@@ -187,6 +204,8 @@ export function AdvancedSettings({
   isEdit?: boolean;
   readOnly?: boolean;
   forTemplate?: boolean;
+  /** The value is more than settings: what is nested in it stays nested */
+  nested?: boolean;
   title?: ReactNode;
   label?: ReactNode;
   children?: ReactNode;
@@ -229,7 +248,7 @@ export function AdvancedSettings({
               <ObjectEditor
                 value={value}
                 readOnly={readOnly}
-                onChange={(next) => onChange(flatten(next))}
+                onChange={(next) => onChange(nested ? next : flatten(next))}
                 testId="advancedSettingsEditor"
               />
             )}

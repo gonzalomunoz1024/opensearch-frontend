@@ -15,18 +15,24 @@ import { MenuButton, Modal, copyText, type MenuItem } from '../../components/ove
 import { Pagination } from '../../components/table';
 import { formatDate } from '../../lib/dates';
 import { tokenizeJson } from '../../lib/json_text';
-import { navigate, navigateHash, useLocation } from '../../router';
+import { getLocation, navigate, navigateHash, useLocation } from '../../router';
 import { services } from '../../services';
 import { errorMessage, type FetchOptions } from '../../services/http';
+import { SNAPSHOT_MANAGEMENT_PATH } from './routes';
 
 export const APP_PATH = '/app/opensearch_index_management_dashboards';
 
-/** The address of a page of Index Management: `to('/indices')`, `to('/policy-details', { id })` */
+/**
+ * The address of a page of Index Management: `to('/indices')`, `to('/policy-details', { id })`.
+ * The pages are one application under two addresses, and a page opened from under Snapshot
+ * Management stays there, as in the plugin.
+ */
 export function to(path: string, params: Record<string, string | undefined> = {}): string {
   const pairs = Object.entries(params)
     .filter((pair): pair is [string, string] => pair[1] !== undefined)
     .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
-  return `${APP_PATH}#${path}${pairs.length > 0 ? `?${pairs.join('&')}` : ''}`;
+  const app = getLocation().pathname === SNAPSHOT_MANAGEMENT_PATH ? SNAPSHOT_MANAGEMENT_PATH : APP_PATH;
+  return `${app}#${path}${pairs.length > 0 ? `?${pairs.join('&')}` : ''}`;
 }
 
 export const go = (path: string, params?: Record<string, string | undefined>) =>
@@ -69,9 +75,11 @@ export const ism = {
 };
 
 export const toasts = {
-  success: (title: string) => services.toasts.success(title),
-  danger: (title: string | undefined, text?: string) => services.toasts.danger(title || 'Error', text),
-  warning: (title: string) => services.toasts.warning(title),
+  success: (title: ReactNode, text?: ReactNode, lifetime?: number) => services.toasts.success(title, text, lifetime),
+  danger: (title: ReactNode | undefined, text?: ReactNode, lifetime?: number) =>
+    services.toasts.danger(title || 'Error', text, lifetime),
+  warning: (title: ReactNode, text?: ReactNode, lifetime?: number) => services.toasts.warning(title, text, lifetime),
+  remove: (id: number) => services.toasts.dismiss(id),
 };
 
 /** Loads something when the page opens and again when asked to */
@@ -234,13 +242,23 @@ export function PanelButton({
 }
 
 /** The "Actions" button and its menu */
-export function ActionsMenu({ items, label = 'Actions', testId = 'moreAction' }: { items: MenuItem[]; label?: string; testId?: string }) {
+export function ActionsMenu({
+  items,
+  label = 'Actions',
+  testId = 'moreAction',
+  disabled,
+}: {
+  items: MenuItem[];
+  label?: string;
+  testId?: string;
+  disabled?: boolean;
+}) {
   return (
     <MenuButton
       align="right"
       items={items}
       button={(toggle) => (
-        <Button size="s" icon="chevronDown" iconSide="right" onClick={toggle} testId={testId}>
+        <Button size="s" icon="chevronDown" iconSide="right" disabled={disabled} onClick={toggle} testId={testId}>
           {label}
         </Button>
       )}
@@ -850,29 +868,33 @@ export function LocalTable<Row>({
   rows,
   rowId,
   sortField,
+  sortDirection = 'asc',
   pageSize = 10,
   pageSizes = [10, 20, 50],
   paged = true,
   empty,
   selected,
   onSelect,
+  selectable,
 }: {
   columns: Array<TableColumn<Row>>;
   rows: Row[];
   rowId: (row: Row, index: number) => string;
   sortField?: string;
+  sortDirection?: 'asc' | 'desc';
   pageSize?: number;
   pageSizes?: number[];
   paged?: boolean;
   empty?: ReactNode;
   selected?: Row[];
   onSelect?: (rows: Row[]) => void;
+  selectable?: (row: Row) => boolean;
 }) {
   const [query, setQuery] = useState<Pick<ListQuery, 'from' | 'size' | 'sortField' | 'sortDirection'>>({
     from: 0,
     size: paged ? pageSize : Number.MAX_SAFE_INTEGER,
     sortField: sortField ?? '',
-    sortDirection: 'asc',
+    sortDirection,
   });
   const ids = useMemo(() => new Map(rows.map((row, index) => [row, rowId(row, index)])), [rows, rowId]);
   const page = query.sortField
@@ -891,6 +913,7 @@ export function LocalTable<Row>({
       paged={paged}
       selected={selected}
       onSelect={onSelect}
+      selectable={selectable}
     />
   );
 }

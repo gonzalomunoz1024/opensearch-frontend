@@ -348,6 +348,19 @@ export function mappingErrorMessage(error: string, editorText: string): string {
   return error;
 }
 
+/** A new index that takes the mapping, and the settings that can be taken, of an index there is */
+export function importedIndex(found: Record<string, unknown>, index: string): IndexItem {
+  const kept = { ...found };
+  delete kept.aliases;
+  delete kept.data_stream;
+  const from = isObject(found.settings) ? found.settings : {};
+  const settings: Record<string, unknown> = {};
+  for (const name of INDEX_IMPORT_SETTINGS) {
+    if (name in from) settings[name] = from[name];
+  }
+  return { ...kept, index, settings, mappings: localMappings(found.mappings) };
+}
+
 /** What a template says an index of a name would get, as the form holds an index */
 export function simulatedIndex(template: unknown, index: string): IndexItem {
   const all = isObject(template) ? template : {};
