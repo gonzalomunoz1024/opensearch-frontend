@@ -404,18 +404,17 @@ export class PPLQueryParser {
 
 export interface FileLayer {
   name: string;
-  [key: string]: unknown;
 }
 
 /** The maps service: its region files, and the address of one */
 export interface MapsServiceSettings {
   getFileLayers(): Promise<FileLayer[]>;
-  getUrlForRegionLayer(layer: FileLayer): Promise<string>;
+  getUrlForRegionLayer(layer: FileLayer): Promise<string | undefined>;
 }
 
 /** An address that the check of addresses lets through: the maps service's own */
 export interface TrustedUrl {
-  url: string;
+  url: string | undefined;
   bypassToken: symbol;
 }
 

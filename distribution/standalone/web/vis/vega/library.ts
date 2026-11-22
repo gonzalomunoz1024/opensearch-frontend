@@ -40,6 +40,8 @@ export interface VegaView {
   runAsync(): Promise<VegaView>;
   runAfter(callback: (view: VegaView) => void): VegaView;
   finalize(): VegaView;
+  logLevel(level: number): VegaView;
+  padding(padding: { left: number; right: number; top: number; bottom: number }): VegaView;
   width(): number;
   width(value: number): VegaView;
   height(): number;
@@ -56,6 +58,8 @@ export interface VegaView {
   _runtime: VegaRuntime;
   /** The visualization a view belongs to, for the functions specs call */
   _opensearchDashboardsView?: { vegaFunctionsHandler(name: string, ...args: unknown[]): unknown };
+  /** What setMapView() of a spec on a map calls: the map's own handler */
+  Leaflet_setMapViewHandler?: (...args: unknown[]) => void;
 }
 
 export interface VegaLibrary {

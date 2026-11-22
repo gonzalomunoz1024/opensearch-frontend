@@ -7,21 +7,22 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { ChartMessage } from '../../charts/core';
 import { resolveTimeRange, type TimeRange } from '../../lib/dates';
 import { buildQuery, type BoolQuery } from '../../lib/query';
 import type { Filter, Query } from '../../lib/types';
 import type { Vis } from '../../lib/vis';
+import { getServiceSettings } from '../../maps/service_settings';
 import { services } from '../../services';
 import { errorMessage } from '../../services/http';
 import type { RequestRecord } from '../../services/search';
 import type { VisInput } from '../request';
-import { TimeCache, type MapsServiceSettings, type VegaSearchApi, type VegaSearchRequest } from './data_parsers';
+import { TimeCache, type VegaSearchApi, type VegaSearchRequest } from './data_parsers';
 import type { VegaDebugValues } from './debug_view';
 import { loadVega } from './library';
 import { VegaParser } from './parser';
 import { extractIndexPatternTitles, findIndexPatternId } from './index_patterns';
-import { VegaChartView, VegaSignalStateManager, type VegaBaseView } from './view';
+import { VegaMapView } from './map_view';
+import { VegaChartView, VegaSignalStateManager, type VegaBaseView, type VegaViewOptions } from './view';
 import '../../styles/vega.css';
 
 export interface VegaVisProps {
@@ -87,12 +88,6 @@ function createSearchApi(records: RequestRecord[], signal: AbortSignal): VegaSea
   };
 }
 
-// The maps service is not reached by this build yet: it has no region files
-const NO_MAPS: MapsServiceSettings = {
-  getFileLayers: async () => [],
-  getUrlForRegionLayer: async () => '',
-};
-
 /** The page's queries without repeats, as the original merges them */
 function uniqueQueries(queries: Array<Query | undefined>): Query[] {
   const seen = new Set<string>();
@@ -124,9 +119,10 @@ export function VegaVis({ vis, input, tick, onFilter, onFiltersChange, onTimeCha
   const holder = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [failure, setFailure] = useState<string>();
-  // A spec drawn on a map: the map view is not part of this build yet
-  const [onMap, setOnMap] = useState(false);
   const view = useRef<VegaBaseView | null>(null);
+  // A map is drawn anew at a new size, as the original renders it again: what does that, and the size it was drawn at
+  const redrawMap = useRef<(() => Promise<void>) | null>(null);
+  const drawnSize = useRef('');
   const timeCache = useRef<TimeCache>();
   const signalState = useRef<{ spec?: unknown; manager: VegaSignalStateManager | null }>({ manager: null });
   const callbacks = useRef({ onFilter, onFiltersChange, onTimeChange, onData, input });
@@ -151,69 +147,74 @@ export function VegaVis({ vis, input, tick, onFilter, onFiltersChange, onTimeCha
       }
       timeCache.current.setTimeRange(input.time);
       const records: RequestRecord[] = [];
+      // the maps service, for files of shapes and for the base map of a spec on a map
+      const serviceSettings = getServiceSettings(services.boot.map, services.boot.version);
+      const darkMode = services.uiSettings.get<boolean>('theme:darkMode', false) === true;
       const parser = await new VegaParser(spec, {
         libraries,
         searchAPI: createSearchApi(records, controller.signal),
         timeCache: timeCache.current,
         filters: contextQuery(vis, input),
-        getServiceSettings: async () => NO_MAPS,
-        dark: services.uiSettings.get<boolean>('theme:darkMode', false) === true,
+        getServiceSettings: async () => serviceSettings,
+        dark: darkMode,
       }).parseAsync();
       if (!live || !holder.current) return;
+      redrawMap.current = null;
 
-      // a new view for new data: the old one is taken down first, keeping its signals' values
-      await view.current?.destroy();
-      view.current = null;
-      if (!live || !holder.current) return;
-      // a map is drawn by a view of its own; a spec that could not be read shows its error as any other
-      if (parser.useMap && !parser.error) {
-        holder.current.replaceChildren();
-        setOnMap(true);
-        setFailure(undefined);
-        setLoading(false);
-        callbacks.current.onData?.({ requests: records });
-        return;
-      }
-      setOnMap(false);
       const specText = typeof spec === 'string' ? spec : undefined;
       const state = signalState.current;
-      if (specText !== undefined && specText !== state.spec) {
-        state.manager?.clear();
-        state.spec = specText;
-      }
-      state.manager = parser.restoreSignalValuesOnRefresh ? (state.manager ?? new VegaSignalStateManager()) : null;
+      // the values of signals are kept for the same spec, and forgotten when it changes
+      const draw = async (newSpec: boolean) => {
+        // a new view for new data: the old one is taken down first, keeping its signals' values
+        await view.current?.destroy();
+        view.current = null;
+        const parentEl = holder.current;
+        if (!live || !parentEl) return;
+        if (newSpec && specText !== undefined && specText !== state.spec) {
+          state.manager?.clear();
+          state.spec = specText;
+        }
+        state.manager = parser.restoreSignalValuesOnRefresh ? (state.manager ?? new VegaSignalStateManager()) : null;
 
-      let debug: VegaDebugValues | undefined;
-      const created = new VegaChartView({
-        parentEl: holder.current,
-        parser,
-        libraries,
-        enableExternalUrls: false,
-        applyFilter: (event) => {
-          if ('range' in event) callbacks.current.onTimeChange?.(event.range);
-          else callbacks.current.onFilter?.(event.filters);
-        },
-        getFilters: () => callbacks.current.input.filters,
-        setFilters: (filters) => callbacks.current.onFiltersChange?.(filters),
-        findIndexPattern: (title) => findIndexPatternId(title),
-        findSpecIndexPattern: async () => {
-          for (const title of extractIndexPatternTitles(parser.isVegaLite ? parser.vlspec : parser.vegaSpec)) {
-            const id = await findIndexPatternId(title);
-            if (id) return id;
-          }
-          return undefined;
-        },
-        signalStateManager: state.manager,
-        onDebugValues: (values) => {
-          debug = values;
-        },
-      });
-      view.current = created;
-      await created.init();
-      if (!live) return;
-      setFailure(undefined);
-      setLoading(false);
-      callbacks.current.onData?.({ requests: records, vega: debug });
+        let debug: VegaDebugValues | undefined;
+        const options: VegaViewOptions = {
+          parentEl,
+          parser,
+          libraries,
+          enableExternalUrls: false,
+          applyFilter: (event) => {
+            if ('range' in event) callbacks.current.onTimeChange?.(event.range);
+            else callbacks.current.onFilter?.(event.filters);
+          },
+          getFilters: () => callbacks.current.input.filters,
+          setFilters: (filters) => callbacks.current.onFiltersChange?.(filters),
+          findIndexPattern: (title) => findIndexPatternId(title),
+          findSpecIndexPattern: async () => {
+            for (const title of extractIndexPatternTitles(parser.isVegaLite ? parser.vlspec : parser.vegaSpec)) {
+              const id = await findIndexPatternId(title);
+              if (id) return id;
+            }
+            return undefined;
+          },
+          signalStateManager: state.manager,
+          onDebugValues: (values) => {
+            debug = values;
+          },
+        };
+        // a spec on a map gets the map's view, as in the original
+        const created = parser.useMap
+          ? new VegaMapView({ ...options, serviceSettings, mapSettings: services.boot.map, darkMode })
+          : new VegaChartView(options);
+        view.current = created;
+        await created.init();
+        if (!live) return;
+        setFailure(undefined);
+        setLoading(false);
+        drawnSize.current = `${parentEl.clientWidth}x${parentEl.clientHeight}`;
+        callbacks.current.onData?.({ requests: records, vega: debug });
+      };
+      await draw(true);
+      if (live && parser.useMap) redrawMap.current = () => draw(false);
     })().catch((error: unknown) => {
       if (!live || (error as Error).name === 'AbortError') return;
       setFailure(errorMessage(error));
@@ -221,6 +222,7 @@ export function VegaVis({ vis, input, tick, onFilter, onFiltersChange, onTimeCha
     });
     return () => {
       live = false;
+      redrawMap.current = null;
       controller.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -241,6 +243,14 @@ export function VegaVis({ vis, input, tick, onFilter, onFiltersChange, onTimeCha
     const element = holder.current;
     if (!element || typeof ResizeObserver === 'undefined') return undefined;
     const observer = new ResizeObserver(() => {
+      const redraw = redrawMap.current;
+      if (redraw) {
+        // a map is made again, back where its spec starts, as the original does
+        if (`${element.clientWidth}x${element.clientHeight}` !== drawnSize.current) {
+          redraw().catch((error: unknown) => setFailure(errorMessage(error)));
+        }
+        return;
+      }
       void view.current?.resize();
     });
     observer.observe(element);
@@ -256,8 +266,8 @@ export function VegaVis({ vis, input, tick, onFilter, onFiltersChange, onTimeCha
           <span>{failure}</span>
         </div>
       )}
-      {onMap && <ChartMessage>Vega maps are not drawn by this build yet.</ChartMessage>}
-      <div className="vgaVis" ref={holder} data-test-subj="vegaVis" style={onMap ? { display: 'none' } : undefined} />
+      {/* "visualization" as the original's container of a visualization: the styles of maps apply under it */}
+      <div className="visualization vgaVis" ref={holder} data-test-subj="vegaVis" />
     </>
   );
 }
