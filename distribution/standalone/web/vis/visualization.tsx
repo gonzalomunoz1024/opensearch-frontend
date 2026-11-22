@@ -24,6 +24,7 @@ import { fetchVisData, type VisData, type VisInput } from './request';
 import { TableVis } from './table_vis';
 import { TagCloudVis } from './tag_cloud_vis';
 import { splitTables, type VisRenderProps } from './types';
+import { TimelineVis } from './timeline/timeline_vis';
 import { TsvbVis } from './tsvb/vis';
 import { XYVis } from './xy_vis';
 import { waitTurn, type Turn } from './turns';
@@ -65,7 +66,7 @@ const DRAWN: Record<string, (props: VisRenderProps) => ReactNode> = {
 const LEGEND_KINDS = new Set(['area', 'line', 'histogram', 'horizontal_bar', 'pie', 'heatmap']);
 
 /** Whether this product draws a kind of visualization */
-export const canDraw = (type: string) => type in DRAWN || type === 'markdown' || type === 'input_control_vis' || type === 'metrics';
+export const canDraw = (type: string) => type in DRAWN || type === 'markdown' || type === 'input_control_vis' || type === 'metrics' || type === 'timelion';
 
 /** Whether a kind of visualization takes colours from the page's memory, and so a turn */
 export const takesTurn = (type: string) => type in DRAWN;
@@ -153,6 +154,8 @@ export function Visualization(props: VisualizationProps) {
     body = <ControlsVis vis={vis} input={props.input} onFiltersChange={props.onFiltersChange} tick={props.tick} />;
   } else if (vis.type === 'metrics') {
     body = <TsvbVis vis={vis} input={props.input} tick={props.tick} onTimeChange={props.onTimeChange} onData={props.onData} />;
+  } else if (vis.type === 'timelion') {
+    body = <TimelineVis vis={vis} input={props.input} tick={props.tick} onTimeChange={props.onTimeChange} onData={props.onData} />;
   } else if (vis.type in DRAWN) body = <AggVisualization {...props} />;
   else {
     body = (

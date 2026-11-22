@@ -13,6 +13,7 @@ import { FormRow, NumberField, RangeField, Select, Switch, TextArea, TextField, 
 import { aggLabel, type AggConfig, type AggContext } from '../../lib/aggs';
 import { ControlsOptions, ControlsTab } from './controls_editor';
 import { axisName, nextAxisId, oppositeSide } from './defaults';
+import { TimelineOptions } from '../../vis/timeline/options';
 
 export interface OptionsProps {
   type: string;
@@ -734,6 +735,7 @@ const TABS: Record<string, OptionTab[]> = {
     { id: 'advanced', label: 'Data', render: (props) => <MarkdownData {...props} /> },
     { id: 'options', label: 'Options', render: (props) => <MarkdownOptions {...props} /> },
   ],
+  timelion: [{ id: 'options', label: 'Options', render: (props) => <TimelineOptions {...props} /> }],
   input_control_vis: [
     { id: 'controls', label: 'Controls', render: (props) => <ControlsTab {...props} /> },
     { id: 'options', label: 'Options', render: (props) => <ControlsOptions {...props} /> },
