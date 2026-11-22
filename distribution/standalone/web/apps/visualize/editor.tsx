@@ -26,6 +26,7 @@ import { defaultQueryLanguage } from '../../shell/query_bar';
 import { SaveModal, ShareModal, type SaveResult } from '../../shell/saved_objects_ui';
 import { pageFiltersOf, savedQueryGlobalParam, type SavedQueryChange } from '../../shell/saved_query';
 import { SearchBar } from '../../shell/search_bar';
+import { showSearchError } from '../../shell/search_error';
 import { addRecentlyAccessed, currentGlobalParam, useAutoRefresh, useBreadcrumbs, useGlobalState } from '../../shell/state';
 import { resolveVisSource, visContext, type VisInput } from '../../vis/request';
 import { specIndexPatterns } from '../../vis/vega/index_patterns';
@@ -440,6 +441,8 @@ export function VisEditor({ savedId }: { savedId?: string }) {
               onData={(data) => {
                 lastData.current = data;
               }}
+              // The editor tells a failed search as the original's does: "Search Error"
+              onError={(failure) => failure && showSearchError(failure.original)}
             />
           ) : (
             <EmptyPrompt icon="visualize" title={`${kind?.title ?? saved.type} visualizations are not drawn by this build yet`}>

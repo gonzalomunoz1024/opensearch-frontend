@@ -6,6 +6,7 @@ import type { Table, TableColumn, TableRow } from '../lib/aggs';
 import type { TimeRange } from '../lib/dates';
 import type { Filter } from '../lib/types';
 import type { UiState, Vis } from '../lib/vis';
+import { searchFailure } from '../services/search';
 import type { VisData } from './request';
 
 export interface VisRenderProps {
@@ -51,4 +52,20 @@ export function splitTables(table: Table): Array<{ label?: string; table: Table 
   }
   const columns = table.columns.filter((column) => column !== split);
   return [...groups.values()].map((group) => ({ label: group.label, table: { columns, rows: group.rows } }));
+}
+
+/**
+ * A visualization whose data could not be had, as the original's expression reports it to the
+ * panel or the editor around it
+ */
+export interface VisFailure {
+  /** With the function that failed, as the panel's "Error" badge shows it: `[opensearchaggs] > …` */
+  message: string;
+  /** The error itself, as the editor's "Search Error" shows it */
+  original: Error;
+}
+
+export function visFailure(fn: string, error: unknown): VisFailure {
+  const original = searchFailure(error instanceof Error ? error : new Error(String(error)));
+  return { message: `[${fn}] > ${original.message}`, original };
 }

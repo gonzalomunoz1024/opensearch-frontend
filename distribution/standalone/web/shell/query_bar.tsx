@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Button, cx } from '../components/basic';
 import { Switch } from '../components/form';
+import { Icon } from '../components/icon';
 import { Popover } from '../components/overlay';
 import {
   conjunctionSuggestions,
@@ -48,9 +49,13 @@ export async function fetchFieldValues(
   }
 }
 
+/** The documentation of DQL that the original's links lead to */
+export const DQL_DOCS = 'https://opensearch.org/docs/latest/dashboards/dql';
+
 function LanguageSwitch({ language, onChange }: { language: string; onChange: (language: string) => void }) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
+  // The popover stays open when the language is changed, as the original's does
   return (
     <Popover
       open={open}
@@ -63,26 +68,32 @@ function LanguageSwitch({ language, onChange }: { language: string; onChange: (l
           className="shlQuery__language"
           onClick={() => setOpen(!open)}
           testId="switchQueryLanguageButton"
+          aria-label="Change query language"
         >
           {language === 'kuery' ? 'DQL' : 'Lucene'}
         </Button>
       }
     >
-      <div className="atlStack" style={{ width: 320 }}>
+      <div className="atlStack" style={{ width: 350 }}>
         <div className="atlTitleXxs">Syntax options</div>
-        <span className="atlSubdued">
-          The Dashboards Query Language (DQL) offers a simplified query syntax and support for
-          scripted fields. Turn it off to write queries in the Lucene syntax of OpenSearch.
-        </span>
-        <Switch
-          checked={language === 'kuery'}
-          onChange={(on) => {
-            onChange(on ? 'kuery' : 'lucene');
-            close();
-          }}
-          label="Dashboards Query Language"
-          testId="languageToggle"
-        />
+        <p className="shlQuery__syntax">
+          The{' '}
+          <a className="shlExternal" href={DQL_DOCS} target="_blank" rel="noopener noreferrer">
+            OpenSearch Dashboards Query Language
+            <Icon name="external" title="External link" />
+          </a>{' '}
+          (DQL) offers a simplified query syntax and support for scripted fields. If you turn off DQL,
+          OpenSearch Dashboards uses Lucene.
+        </p>
+        <div className="atlFormRow">
+          <span className="atlFormRow__label">OpenSearch Dashboards Query Language</span>
+          <Switch
+            checked={language === 'kuery'}
+            onChange={(on) => onChange(on ? 'kuery' : 'lucene')}
+            label={language === 'kuery' ? 'On' : 'Off'}
+            testId="languageToggle"
+          />
+        </div>
       </div>
     </Popover>
   );

@@ -25,7 +25,7 @@ import { fetchVisData, type VisData, type VisInput } from './request';
 import { TableVis } from './table_vis';
 import { TagCloudVis } from './tag_cloud_vis';
 import { TileMapVis } from './tile_map/tile_map_vis';
-import { splitTables, type VisRenderProps } from './types';
+import { splitTables, visFailure, type VisFailure, type VisRenderProps } from './types';
 import { TsvbVis } from './tsvb/vis';
 import type { VegaDebugValues } from './vega/debug_view';
 import { VegaVis } from './vega/vega_vis';
@@ -56,6 +56,11 @@ export interface VisualizationProps {
   onData?: (data: VisInspectData) => void;
   /** This chart's place among the charts of the page, when the page keeps one */
   turn?: Turn;
+  /**
+   * Takes the failure of the visualization's data, and nothing once it draws again. The drawing
+   * then shows no error of its own and keeps what it last drew, as the original's does.
+   */
+  onError?: (failure: VisFailure | undefined) => void;
 }
 
 const DRAWN: Record<string, (props: VisRenderProps) => ReactNode> = {
@@ -84,7 +89,7 @@ export const canDraw = (type: string) =>
 /** Whether a kind of visualization takes colours from the page's memory, and so a turn */
 export const takesTurn = (type: string) => type in DRAWN;
 
-function AggVisualization({ vis: saved, input, tick, uiState, onUiState, onFilter, onTimeChange, onData, turn }: VisualizationProps) {
+function AggVisualization({ vis: saved, input, tick, uiState, onUiState, onFilter, onTimeChange, onData, turn, onError }: VisualizationProps) {
   // Params a drawing sets on an aggregation (a map's bounds and precision), until the aggregations change
   const [aggPatch, setAggPatch] = useState<{ aggs: string; params: Record<string, Record<string, unknown>> }>();
   const savedAggs = JSON.stringify(saved.aggs);
@@ -100,6 +105,8 @@ function AggVisualization({ vis: saved, input, tick, uiState, onUiState, onFilte
   const [loading, setLoading] = useState(true);
   const report = useRef(onData);
   report.current = onData;
+  const reportError = useRef(onError);
+  reportError.current = onError;
 
   const key = JSON.stringify([vis.type, vis.aggs, vis.source, vis.savedSearchId, vis.params.showMetricsAtAllLevels, vis.params.showPartialRows, input]);
   useEffect(() => {
@@ -112,12 +119,15 @@ function AggVisualization({ vis: saved, input, tick, uiState, onUiState, onFilte
         setData(answer);
         setError(undefined);
         setLoading(false);
+        reportError.current?.(undefined);
         report.current?.({ requests: answer.requests, table: answer.table });
       })
       .catch((failure) => {
         if ((failure as Error).name === 'AbortError') return;
-        setError(errorMessage(failure));
         setLoading(false);
+        // Told around the drawing, which keeps what it drew, as the original's esaggs
+        if (reportError.current) reportError.current(visFailure('opensearchaggs', failure));
+        else setError(errorMessage(failure));
       })
       .finally(() => turn?.done());
     return () => controller.abort();
@@ -187,6 +197,7 @@ export function Visualization(props: VisualizationProps) {
         onFiltersChange={props.onFiltersChange}
         onTimeChange={props.onTimeChange}
         onData={props.onData}
+        onError={props.onError}
       />
     );
   } else if (vis.type in DRAWN) body = <AggVisualization {...props} />;

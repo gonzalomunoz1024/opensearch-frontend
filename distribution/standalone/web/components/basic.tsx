@@ -22,6 +22,7 @@ export type ButtonVariant =
   | 'tint'
   | 'danger'
   | 'dangerFill'
+  | 'dangerOutline'
   | 'empty'
   | 'ghost';
 

@@ -709,3 +709,32 @@
     flex-basis: 100%;
   }
 }
+
+/* --- What a search says when it fails or looks written in Lucene ----------------------------- */
+
+.shlLuceneWarning p {
+  margin: 0;
+}
+
+.shlExternal {
+  white-space: nowrap;
+}
+
+.shlExternal > .atlIcon {
+  width: 12px;
+  height: 12px;
+  margin-left: 2px;
+  vertical-align: -1px;
+}
+
+.shlPainlessError {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  white-space: normal;
+}
+
+.shlQuery__syntax {
+  margin: 0;
+  font-size: var(--font-size-s);
+}

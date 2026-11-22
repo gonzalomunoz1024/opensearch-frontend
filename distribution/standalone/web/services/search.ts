@@ -106,3 +106,33 @@ export class SearchService {
 }
 
 export { messageOf };
+
+// The words of the statuses a search is refused with, for an answer that came without them
+const STATUS_TEXT: Record<number, string> = {
+  400: 'Bad Request',
+  401: 'Unauthorized',
+  403: 'Forbidden',
+  404: 'Not Found',
+  408: 'Request Timeout',
+  413: 'Payload Too Large',
+  429: 'Too Many Requests',
+  500: 'Internal Server Error',
+  502: 'Bad Gateway',
+  503: 'Service Unavailable',
+  504: 'Gateway Timeout',
+};
+
+/**
+ * The error as the original's client makes it of a refused search: named for the status of the
+ * answer ("Bad Request"), OpenSearch's answer kept for the whole text
+ */
+export function searchFailure(failure: Error): Error {
+  if (!(failure instanceof HttpFetchError) || failure.status < 400) return failure;
+  const message = failure.statusText || STATUS_TEXT[failure.status] || `${failure.status}`;
+  const shown = new HttpFetchError(failure.status, message, failure.body, failure.statusText);
+  shown.name = 'Error';
+  const head = `${failure.name}: ${failure.message}`;
+  const stack = failure.stack ?? '';
+  shown.stack = `Error: ${message}${stack.startsWith(head) ? stack.slice(head.length) : `\n${stack}`}`;
+  return shown;
+}

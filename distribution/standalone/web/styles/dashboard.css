@@ -125,6 +125,25 @@ body.dshDragging {
   opacity: 1;
 }
 
+/* The original's red "Error" badge: over the top of what the panel drew last, under its title */
+.dshPanel__label {
+  position: relative;
+  z-index: 2;
+  height: 0;
+}
+
+.dshPanel__label > .atlTooltipAnchor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding-left: var(--space-2);
+}
+
+/* What failed is not clicked on, as in the original */
+.dshPanel__body[data-error] {
+  pointer-events: none;
+}
+
 .dshPanel__body {
   position: relative;
   display: flex;

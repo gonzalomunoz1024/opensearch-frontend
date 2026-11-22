@@ -6,7 +6,9 @@ export class HttpFetchError extends Error {
   constructor(
     public readonly status: number,
     message: string,
-    public readonly body?: unknown
+    public readonly body?: unknown,
+    /** The words of the answer's status, "Bad Request" */
+    public readonly statusText = ''
   ) {
     super(message);
     this.name = 'HttpFetchError';
@@ -93,7 +95,7 @@ export class Http {
       }
     }
     if (!response.ok) {
-      throw new HttpFetchError(response.status, messageOf(parsed, response.status), parsed);
+      throw new HttpFetchError(response.status, messageOf(parsed, response.status), parsed, response.statusText);
     }
     return parsed as T;
   }

@@ -4,8 +4,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '../components/basic';
+import { Icon } from '../components/icon';
 import type { TimeRange } from '../lib/dates';
-import { KuerySyntaxError, parseKuery } from '../lib/kuery';
+import { hasLuceneSyntax } from '../lib/kuery';
 import {
   savedQueryAttributes,
   stateFromSavedQuery,
@@ -16,9 +17,10 @@ import type { Filter, IndexPattern, Query, RefreshInterval } from '../lib/types'
 import { services } from '../services';
 import { errorMessage } from '../services/http';
 import { FilterBar, isPinned } from './filter_bar';
-import { QueryBar, defaultQueryLanguage } from './query_bar';
+import { DQL_DOCS, QueryBar, defaultQueryLanguage } from './query_bar';
 import { RefreshPicker } from './refresh_picker';
 import { SaveQueryForm, SavedQueryManagement, saveFailureText, type SavedQueryChange } from './saved_query';
+import { readStored, writeStored } from './state';
 import { TimePicker } from './time_picker';
 
 export interface SearchBarProps {
@@ -49,15 +51,39 @@ export interface SearchBarProps {
   onSavedQueryChange?: (change: SavedQueryChange) => void;
 }
 
-/** Why a query cannot be run, or nothing when it can */
-export function queryError(query: Query): string | undefined {
-  if (query.language !== 'kuery' || typeof query.query !== 'string') return undefined;
-  try {
-    parseKuery(query.query);
-    return undefined;
-  } catch (error) {
-    return error instanceof KuerySyntaxError ? error.message : String(error);
-  }
+const LUCENE_OPT_OUT = 'luceneSyntaxWarningOptOut';
+
+/**
+ * The original's "Lucene syntax warning": a DQL query that looks written in Lucene is run all the
+ * same, and the person is told, each time it is submitted, until they ask not to be.
+ */
+export function warnOfLuceneSyntax(query: Query) {
+  if (query.language !== 'kuery' || typeof query.query !== 'string') return;
+  if (readStored(LUCENE_OPT_OUT, false) || !hasLuceneSyntax(query.query)) return;
+  const id = services.toasts.warning(
+    'Lucene syntax warning',
+    <div className="shlLuceneWarning">
+      <p>
+        It looks like you may be trying to use Lucene query syntax, although you have
+        opensearchDashboards Query Language (DQL) selected. Please review the DQL docs{' '}
+        <a className="shlExternal" href={DQL_DOCS} target="_blank" rel="noopener noreferrer">
+          here
+          <Icon name="external" title="External link" />
+        </a>
+        .
+      </p>
+      <div className="atlToast__actions">
+        <Button
+          onClick={() => {
+            writeStored(LUCENE_OPT_OUT, true);
+            services.toasts.dismiss(id);
+          }}
+        >
+          Don&apos;t show again
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 export function SearchBar({
@@ -86,13 +112,11 @@ export function SearchBar({
   useEffect(() => setDraft(committed), [committed]);
   useEffect(() => setLanguage(query?.language ?? 'kuery'), [query?.language]);
 
+  // A query that cannot be read is run all the same, as in the original: the search fails and
+  // says why
   const submit = (text: string, withLanguage = language) => {
     const next = { query: text, language: withLanguage };
-    const problem = queryError(next);
-    if (problem) {
-      services.toasts.danger('The query cannot be read', problem);
-      return;
-    }
+    warnOfLuceneSyntax(next);
     if (text === committed && withLanguage === query?.language) onRefresh();
     else onQuerySubmit?.(next);
   };

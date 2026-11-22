@@ -16,6 +16,7 @@ import { services } from '../../services';
 import { errorMessage } from '../../services/http';
 import type { RequestRecord } from '../../services/search';
 import type { VisInput } from '../request';
+import { visFailure, type VisFailure } from '../types';
 import { TimeCache, type VegaSearchApi, type VegaSearchRequest } from './data_parsers';
 import type { VegaDebugValues } from './debug_view';
 import { loadVega } from './library';
@@ -33,6 +34,8 @@ export interface VegaVisProps {
   onFiltersChange?: (filters: Filter[]) => void;
   onTimeChange?: (range: TimeRange) => void;
   onData?: (data: { requests: RequestRecord[]; vega?: VegaDebugValues }) => void;
+  /** Takes the failure of the page's query, which the original's vega function fails with */
+  onError?: (failure: VisFailure | undefined) => void;
 }
 
 /** The answer of PPL as rows: one object per row, keyed by the names of the schema */
@@ -115,7 +118,7 @@ export function contextQuery(vis: Vis, input: VisInput): BoolQuery {
   return query;
 }
 
-export function VegaVis({ vis, input, tick, onFilter, onFiltersChange, onTimeChange, onData }: VegaVisProps) {
+export function VegaVis({ vis, input, tick, onFilter, onFiltersChange, onTimeChange, onData, onError }: VegaVisProps) {
   const holder = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [failure, setFailure] = useState<string>();
@@ -125,14 +128,26 @@ export function VegaVis({ vis, input, tick, onFilter, onFiltersChange, onTimeCha
   const drawnSize = useRef('');
   const timeCache = useRef<TimeCache>();
   const signalState = useRef<{ spec?: unknown; manager: VegaSignalStateManager | null }>({ manager: null });
-  const callbacks = useRef({ onFilter, onFiltersChange, onTimeChange, onData, input });
-  callbacks.current = { onFilter, onFiltersChange, onTimeChange, onData, input };
+  const callbacks = useRef({ onFilter, onFiltersChange, onTimeChange, onData, onError, input });
+  callbacks.current = { onFilter, onFiltersChange, onTimeChange, onData, onError, input };
 
   const spec = vis.params.spec;
   const key = JSON.stringify([spec, input, vis.source.query, vis.source.filters]);
   useEffect(() => {
     const controller = new AbortController();
     let live = true;
+    // The page's query and filters, read before the spec as the original's request handler does:
+    // a query that cannot be read fails the visualization, which keeps what it drew
+    let filters: BoolQuery;
+    try {
+      filters = contextQuery(vis, input);
+    } catch (error) {
+      setLoading(false);
+      const report = callbacks.current.onError;
+      if (report) report(visFailure('vega', error));
+      else setFailure(errorMessage(error));
+      return undefined;
+    }
     setLoading(true);
     (async () => {
       const libraries = await loadVega();
@@ -154,7 +169,7 @@ export function VegaVis({ vis, input, tick, onFilter, onFiltersChange, onTimeCha
         libraries,
         searchAPI: createSearchApi(records, controller.signal),
         timeCache: timeCache.current,
-        filters: contextQuery(vis, input),
+        filters,
         getServiceSettings: async () => serviceSettings,
         dark: darkMode,
       }).parseAsync();
@@ -211,6 +226,7 @@ export function VegaVis({ vis, input, tick, onFilter, onFiltersChange, onTimeCha
         if (!live) return;
         setFailure(undefined);
         setLoading(false);
+        callbacks.current.onError?.(undefined);
         drawnSize.current = `${parentEl.clientWidth}x${parentEl.clientHeight}`;
         callbacks.current.onData?.({ requests: records, vega: debug });
       };

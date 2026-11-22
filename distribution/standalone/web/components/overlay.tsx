@@ -14,7 +14,8 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { services } from '../services';
-import { Button, IconButton, cx } from './basic';
+import type { Toast } from '../services/toasts';
+import { Button, CallOut, CodeBlock, IconButton, cx } from './basic';
 import { Icon, type IconName } from './icon';
 
 export function Portal({ children }: { children: ReactNode }) {
@@ -266,6 +267,7 @@ export function Modal({
   onClose,
   wide,
   testId,
+  className,
 }: {
   title: ReactNode;
   children: ReactNode;
@@ -273,6 +275,7 @@ export function Modal({
   onClose: () => void;
   wide?: boolean;
   testId?: string;
+  className?: string;
 }) {
   useEscape(onClose);
   const box = useRef<HTMLDivElement>(null);
@@ -292,7 +295,7 @@ export function Modal({
       >
         <div
           ref={box}
-          className={cx('atlModal', wide && 'atlModal--wide')}
+          className={cx('atlModal', wide && 'atlModal--wide', className)}
           role="dialog"
           aria-modal="true"
           tabIndex={-1}
@@ -399,37 +402,153 @@ export function Flyout({
   );
 }
 
+// The original's icons: a check, an i, a question mark in a ring, and a triangle for what failed
 const TOAST_ICONS: Record<string, IconName> = {
-  healthy: 'checkCircle',
+  healthy: 'check',
   info: 'info',
-  warning: 'warning',
-  critical: 'error',
+  warning: 'help',
+  critical: 'warning',
 };
 
 export function ToastList() {
   const { toasts } = services;
   const items = useSyncExternalStore(toasts.subscribe, toasts.get);
-  if (items.length === 0) return null;
+  // The whole error stays open when its message goes, as the original's does
+  const [full, setFull] = useState<{ title: ReactNode; error: Error }>();
   return (
-    <Portal>
-      <div className="atlToasts" role="region" aria-live="polite" data-test-subj="globalToastList">
-        {items.map((toast) => (
-          <div key={toast.id} className={`atlToast atlMaterial atlToast--${toast.kind}`}>
-            <Icon name={TOAST_ICONS[toast.kind]} />
-            <div className="atlToast__body">
-              <div className="atlToast__title">{toast.title}</div>
-              {toast.text && <div className="atlToast__text">{toast.text}</div>}
-            </div>
-            <IconButton
-              icon="cross"
-              label="Dismiss"
-              size="s"
-              onClick={() => toasts.dismiss(toast.id)}
-            />
+    <>
+      {items.length > 0 && (
+        <Portal>
+          <div className="atlToasts" role="region" aria-live="polite" data-test-subj="globalToastList">
+            {items.map((toast) => (
+              <div key={toast.id} className={`atlToast atlMaterial atlToast--${toast.kind}`}>
+                <div className="atlToast__header">
+                  <Icon name={TOAST_ICONS[toast.kind]} />
+                  <div className="atlToast__title">{toast.title}</div>
+                </div>
+                <ToastText toast={toast} onFullError={setFull} />
+                <IconButton
+                  icon="cross"
+                  label="Dismiss toast"
+                  size="s"
+                  className="atlToast__close"
+                  onClick={() => toasts.dismiss(toast.id)}
+                  testId="toastCloseButton"
+                />
+              </div>
+            ))}
           </div>
-        ))}
+        </Portal>
+      )}
+      {full && <FullError title={full.title} error={full.error} onClose={() => setFull(undefined)} />}
+    </>
+  );
+}
+
+function ToastText({ toast, onFullError }: { toast: Toast; onFullError: (full: { title: ReactNode; error: Error }) => void }) {
+  const { error } = toast;
+  if (!error) return toast.text ? <div className="atlToast__text">{toast.text}</div> : null;
+  return (
+    <>
+      <p className="atlToast__text atlToast__message" data-test-subj="errorToastMessage">
+        {toast.text}
+      </p>
+      <div className="atlToast__actions">
+        <Button variant="dangerOutline" onClick={() => onFullError({ title: toast.title, error })}>
+          See the full error
+        </Button>
       </div>
-    </Portal>
+    </>
+  );
+}
+
+/**
+ * What a failed request was refused for, as OpenSearch answered: the first lines of the whole
+ * error, as the original writes them from the `caused_by` of the answer
+ */
+function requestCause(error: Error): string {
+  const body = (error as { body?: unknown }).body;
+  const answer = body && typeof body === 'object' ? (body as { error?: unknown }).error : undefined;
+  const cause = answer && typeof answer === 'object' ? (answer as { caused_by?: { type?: unknown; reason?: unknown } }).caused_by : undefined;
+  return cause ? `${String(cause.type)}\n${String(cause.reason)}\n\n` : '';
+}
+
+/** "See the full error": the message, then what OpenSearch said and the stack, to copy */
+function FullError({ title, error, onClose }: { title: ReactNode; error: Error; onClose: () => void }) {
+  const text = `${requestCause(error)}${error.stack ?? ''}`;
+  return (
+    <Modal
+      title={title}
+      onClose={onClose}
+      className="atlFullError"
+      testId="fullErrorModal"
+      footer={
+        <Button variant="primary" onClick={onClose}>
+          Close
+        </Button>
+      }
+    >
+      <CallOut tone="critical" title={error.message} />
+      {text && <CopyableCode>{text}</CopyableCode>}
+    </Modal>
+  );
+}
+
+/** Code in a box, with a button that copies it */
+export function CopyableCode({ children }: { children: string }) {
+  return (
+    <div className="atlCodeCopy">
+      <CodeBlock>{children}</CodeBlock>
+      <IconButton icon="copy" label="Copy" size="s" onClick={() => copyText(children)} />
+    </div>
+  );
+}
+
+/** A short text shown over what the pointer or the focus is on */
+export function Tooltip({ content, children, testId }: { content: ReactNode; children: ReactNode; testId?: string }) {
+  const anchor = useRef<HTMLSpanElement>(null);
+  const [place, setPlace] = useState<{ left: number; top: number }>();
+  const box = useRef<HTMLDivElement>(null);
+  const [shown, setShown] = useState(false);
+  useLayoutEffect(() => {
+    if (!shown || !anchor.current || !box.current) return;
+    const target = anchor.current.getBoundingClientRect();
+    const own = box.current.getBoundingClientRect();
+    const left = Math.max(8, Math.min(target.left + target.width / 2 - own.width / 2, window.innerWidth - own.width - 8));
+    // Above, as the original's, unless there is no room
+    const top = target.top - own.height - 8 >= 8 ? target.top - own.height - 8 : target.bottom + 8;
+    setPlace({ left, top });
+  }, [shown, content]);
+  return (
+    <span
+      ref={anchor}
+      className="atlTooltipAnchor"
+      onMouseEnter={() => setShown(true)}
+      onMouseLeave={() => {
+        setShown(false);
+        setPlace(undefined);
+      }}
+      onFocus={() => setShown(true)}
+      onBlur={() => {
+        setShown(false);
+        setPlace(undefined);
+      }}
+    >
+      {children}
+      {shown && (
+        <Portal>
+          <div
+            ref={box}
+            className="atlTooltip atlMaterial"
+            role="tooltip"
+            data-test-subj={testId}
+            style={{ left: place?.left ?? -9999, top: place?.top ?? -9999 }}
+          >
+            {content}
+          </div>
+        </Portal>
+      )}
+    </span>
   );
 }
 
