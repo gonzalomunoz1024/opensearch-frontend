@@ -12,6 +12,8 @@ on:
   pull_request:
     paths:
       - 'distribution/**'
+      # the standalone product has a workflow of its own and nothing of this build
+      - '!distribution/standalone/**'
       - 'packages/osd-atlas-theme/**'
       - 'src/core/server/core_app/assets/**'
       - '.github/workflows/distribution.yml'

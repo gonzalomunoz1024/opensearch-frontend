@@ -27,6 +27,7 @@ A change goes where it will not collide with upstream:
 | `src/core/server/rendering/**/__snapshots__/*.snap` | Regenerated | They record the title. |
 | `src/core/server/core_app/assets/logos/*`, `default_branding/*`, `favicons/*` | Written by `distribution/branding/render_assets.js` | Our mark in place of the OpenSearch one, which is a trademark we may not ship as ours. File names are kept. |
 | `eslint.config.js` | One block for `distribution/**` and `packages/osd-atlas-theme/**` | Our files carry the licence line without the upstream copyright notice. |
+| `eslint.config.js` | One ignore, `distribution/standalone` | The standalone product is a project of its own, with its own compiler settings and tests; the rules of the Dashboards tree are not written for it. |
 | `src/dev/precommit_hook/casing_check_config.js` | One ignore pattern, `distribution/helm/**/*` | Helm decides the names of a chart's files. |
 | `README.md`, `CLAUDE.md` | Rewritten or extended | They describe this distribution. |
 | `.github/pull_request_template.md` | Rewritten | Ours. |

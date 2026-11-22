@@ -825,6 +825,9 @@ module.exports = defineConfig([
     },
   },
   globalIgnores([
+    // The standalone product is a project of its own, checked by its own compiler settings and
+    // tests (.github/workflows/standalone.yml); the rules here are those of the Dashboards tree
+    'distribution/standalone',
     '**/eslint.config.mjs',
     '**/*.js.snap',
     '.opensearch',

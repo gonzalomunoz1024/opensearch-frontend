@@ -99,6 +99,15 @@ for (const file of walk(join(root, 'web', 'static'))) {
   copyFileSync(file, target);
 }
 
+// The licences of what is bundled into the browser script travel with the build
+for (const name of ['react', 'react-dom', 'scheduler']) {
+  const licence = join(root, 'node_modules', name, 'LICENSE');
+  if (existsSync(licence)) write(join(dist, 'licenses', `${name}.txt`), readFileSync(licence));
+}
+for (const name of ['NOTICE', 'LICENSE']) {
+  if (existsSync(join(root, name))) write(join(dist, name), readFileSync(join(root, name)));
+}
+
 // What the server needs to know about the build: the names of the two files, and the version
 write(
   join(dist, 'build.json'),
