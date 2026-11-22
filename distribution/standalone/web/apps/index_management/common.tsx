@@ -236,13 +236,23 @@ export function PanelButton({
 }
 
 /** The "Actions" button and its menu */
-export function ActionsMenu({ items, label = 'Actions', testId = 'moreAction' }: { items: MenuItem[]; label?: string; testId?: string }) {
+export function ActionsMenu({
+  items,
+  label = 'Actions',
+  testId = 'moreAction',
+  disabled,
+}: {
+  items: MenuItem[];
+  label?: string;
+  testId?: string;
+  disabled?: boolean;
+}) {
   return (
     <MenuButton
       align="right"
       items={items}
       button={(toggle) => (
-        <Button size="s" icon="chevronDown" iconSide="right" onClick={toggle} testId={testId}>
+        <Button size="s" icon="chevronDown" iconSide="right" disabled={disabled} onClick={toggle} testId={testId}>
           {label}
         </Button>
       )}
@@ -858,6 +868,7 @@ export function LocalTable<Row>({
   empty,
   selected,
   onSelect,
+  selectable,
 }: {
   columns: Array<TableColumn<Row>>;
   rows: Row[];
@@ -869,6 +880,7 @@ export function LocalTable<Row>({
   empty?: ReactNode;
   selected?: Row[];
   onSelect?: (rows: Row[]) => void;
+  selectable?: (row: Row) => boolean;
 }) {
   const [query, setQuery] = useState<Pick<ListQuery, 'from' | 'size' | 'sortField' | 'sortDirection'>>({
     from: 0,
@@ -893,6 +905,7 @@ export function LocalTable<Row>({
       paged={paged}
       selected={selected}
       onSelect={onSelect}
+      selectable={selectable}
     />
   );
 }

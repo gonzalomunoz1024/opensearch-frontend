@@ -45,7 +45,7 @@ export async function loadIndexOptions(search: string, withBackingIndexes = true
 }
 
 /** Runs at once, and once more after the wait with the latest of what came in between */
-function useSpaced<T>(run: (value: T) => void, wait: number): (value: T) => void {
+export function useSpaced<T>(run: (value: T) => void, wait: number): (value: T) => void {
   const latest = useRef(run);
   latest.current = run;
   const state = useRef<{ timer?: number; pending?: { value: T } }>({});
