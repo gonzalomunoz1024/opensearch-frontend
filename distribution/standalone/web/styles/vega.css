@@ -89,56 +89,84 @@
   margin: 0;
   padding: var(--space-2);
   font-family: var(--font-family-code);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-s);
+  line-height: 1.5;
   white-space: pre-wrap;
 }
 
+/* The original's colours: the status colour tinted (shaded in dark mode) behind it, and the status
+   colour made dark (light) enough to read on that */
 .vgaVis__message--warn .vgaVis__messageCode {
-  background-color: color-mix(in srgb, var(--color-warning) 10%, #ffffff);
-  color: var(--color-warning-text);
+  background-color: rgb(255 244.4 229.5);
+  color: rgb(157.5 97.3 13.4);
 }
 
 .vgaVis__message--err .vgaVis__messageCode {
-  background-color: color-mix(in srgb, var(--color-critical) 10%, #ffffff);
-  color: var(--color-critical-text);
+  background-color: rgb(255 235.4 234.3);
+  color: rgb(195.1 51.1 43.5);
 }
 
 .themeDark .vgaVis__message--warn .vgaVis__messageCode {
-  background-color: color-mix(in srgb, var(--color-warning) 30%, #000000);
+  background-color: rgb(96.8 68 24.7);
+  color: rgb(255 163.8 22.3);
 }
 
 .themeDark .vgaVis__message--err .vgaVis__messageCode {
-  background-color: color-mix(in srgb, var(--color-critical) 30%, #000000);
+  background-color: rgb(96.8 41 39.1);
+  color: hsl(3.35deg 100% 73.03%);
 }
 
-/* The tooltip of marks: one element on the page, placed beside the mark or the pointer */
+/* The tooltip of marks: one element on the page, placed beside the mark or the pointer, in the
+   glass of the Atlas tooltip */
 .vgaVis__tooltip {
   position: fixed;
-  z-index: 6000;
+  z-index: 9000;
   max-width: 100%;
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
-  background: var(--color-text-primary);
-  box-shadow: var(--shadow-md);
-  color: var(--color-surface);
+  background-color: var(--color-surface);
+  box-shadow:
+    inset 0 0.5px 0 0 var(--material-highlight),
+    0 0 0 1px var(--material-keyline),
+    var(--shadow-lg);
+  color: var(--color-text-primary);
   font-size: var(--font-size-xs);
-  pointer-events: none;
+  line-height: 1.5;
+  animation: vgaTooltipIn 90ms ease-out forwards;
+}
+
+@supports (backdrop-filter: blur(1px)) {
+  .vgaVis__tooltip {
+    background-color: var(--material-background);
+    backdrop-filter: saturate(180%) blur(24px);
+  }
+}
+
+@keyframes vgaTooltipIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 .vgaVis__tooltip h2 {
   margin: 0 0 var(--space-2);
-  font-size: var(--font-size-s);
+  font-size: inherit;
+  font-weight: inherit;
 }
 
 .vgaVis__tooltip table {
   border-collapse: collapse;
+  border-spacing: 0;
 }
 
 .vgaVis__tooltip td {
   max-width: 100%;
   overflow: hidden;
-  padding-top: var(--space-1);
-  padding-bottom: var(--space-1);
+  padding: var(--space-1) 0;
   text-overflow: ellipsis;
   white-space: nowrap;
   overflow-wrap: normal;
@@ -168,7 +196,8 @@
 
 /* --- The spec editor in the Visualize sidebar ------------------------------------------------ */
 
-/* Colours of the original's HJSON editor (its Ace theme as the Atlas theme sets it) */
+/* Colours of the original's HJSON editor (its Ace theme as the Atlas theme sets it; the theme's own
+   colours for invalid text are not valid CSS, so the editor's red on pink shows in both modes) */
 .vgaEditor {
   --vga-gutter-border: #e9e9eb;
   --vga-guide: #86868b;
@@ -183,16 +212,14 @@
 }
 
 .themeDark .vgaEditor {
-  --vga-gutter-border: #2c2c2e;
+  --vga-gutter-border: #38383a;
   --vga-guide: #636366;
-  --vga-key: #6fb6dd;
-  --vga-constant: #ff8b8b;
-  --vga-number: #6fb6dd;
-  --vga-escape: #a3a6ff;
-  --vga-string: #7ccd8f;
-  --vga-comment: #8db8a2;
-  --vga-invalid: #ff6961;
-  --vga-invalid-background: rgba(255, 0, 0, 0.1);
+  --vga-key: hsl(196deg 47.83% 57.37%);
+  --vga-constant: hsl(0deg 42.86% 70.73%);
+  --vga-number: hsl(196deg 47.83% 57.37%);
+  --vga-escape: rgb(149.7 152.3 249.3);
+  --vga-string: rgb(76.9 183.8 103.5);
+  --vga-comment: hsl(151deg 20.13% 59.2%);
 }
 
 /* The help and format menus sit at the top of the sidebar, beside the button that folds it */
