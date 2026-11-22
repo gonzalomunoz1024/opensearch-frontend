@@ -40,6 +40,7 @@ import {
   type PanelState,
 } from './model';
 import { DashboardPanel, type LoadedObject, type PanelData } from './panel';
+import { VIS_BUILDER_TITLE, VIS_BUILDER_TYPE } from '../vis_builder/model';
 import '../../styles/dashboard.css';
 
 const BASE = '/app/dashboards';
@@ -53,6 +54,7 @@ interface UrlAppState {
 
 const FINDER_TYPES = [
   { type: 'visualization', name: 'Visualization', icon: 'visualize' as const },
+  { type: VIS_BUILDER_TYPE, name: VIS_BUILDER_TITLE, icon: 'visBuilder' as const },
   { type: 'search', name: 'Saved search', icon: 'discover' as const },
 ];
 

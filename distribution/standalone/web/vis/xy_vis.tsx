@@ -8,7 +8,7 @@ import { XYChart, type XYAxis, type XYCategoryAxis, type XYPoint, type XYSeries 
 import { bucketFilter, type TableColumn } from '../lib/aggs';
 import { rangeFilter } from '../lib/query';
 import type { Filter } from '../lib/types';
-import { bucketColumns, keyText, metricColumns, numberOf, type VisRenderProps } from './types';
+import { bucketColumns, keyText, metricColumns, numberOf, pointsAlong, type VisRenderProps } from './types';
 
 interface SeriesParam {
   show?: boolean | string;
@@ -109,12 +109,20 @@ export function XYVis({ vis, data, uiState, onFilter, onTimeChange }: VisRenderP
       });
     }
     if (continuous) xValues.sort((a, b) => (a as number) - (b as number));
-    // A series with no bucket at a place on the axis counts as zero there, so that stacks and
-    // lines keep their shape; this is what OpenSearch Dashboards does
+    // A stacked series with no bucket at a place on the axis counts as zero there, so that the
+    // stack keeps its shape; a series that is not stacked joins the places it has. This is what
+    // OpenSearch Dashboards does: it stacks a series in the stacked mode or on an axis whose
+    // scale piles its series up (percentage, wiggle, silhouette)
     if (xColumn) {
+      const piled = new Set(
+        (params.valueAxes ?? [])
+          .filter((axis) => !['normal', 'grouped', undefined].includes(axis.scale?.mode))
+          .map((axis) => axis.id)
+      );
       for (const series of made.values()) {
-        const have = new Map(series.points.map((point) => [point.x, point]));
-        series.points = xValues.map((x) => have.get(x) ?? { x, y: 0 });
+        const stacked = series.mode === 'stacked' || piled.has(series.axisId);
+        series.points = pointsAlong(series.points, xValues, stacked);
+        series.joinMissing = !stacked;
       }
     }
 

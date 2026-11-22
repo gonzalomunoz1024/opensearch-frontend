@@ -52,6 +52,8 @@ export interface XYSeries {
   fillOpacity?: number;
   /** The radius of the points, when they are all the same size */
   pointSize?: number;
+  /** Draw the line or area on through a place the series has no point at, instead of breaking */
+  joinMissing?: boolean;
 }
 
 export interface XYAxis {
@@ -500,7 +502,7 @@ export function XYChart({
         };
         spans.forEach((span, at) => {
           if (span && span.y !== null) run.push(at);
-          else flush();
+          else if (span || !item.joinMissing) flush();
         });
         flush();
       }
@@ -509,7 +511,7 @@ export function XYChart({
           <path
             key={`${item.id}-line`}
             className={className}
-            d={linePath(tops, item.interpolate, horizontal)}
+            d={linePath(item.joinMissing ? tops.filter((_, at) => spans[at] !== undefined) : tops, item.interpolate, horizontal)}
             fill="none"
             stroke={item.color}
             strokeWidth={item.lineWidth ?? 2}

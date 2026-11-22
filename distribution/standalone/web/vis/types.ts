@@ -2,6 +2,7 @@
 
 /* What every kind of visualization is given to draw itself. */
 
+import type { XYPoint } from '../charts/xy';
 import type { Table, TableColumn, TableRow } from '../lib/aggs';
 import type { TimeRange } from '../lib/dates';
 import type { Filter } from '../lib/types';
@@ -32,6 +33,15 @@ export const numberOf = (row: TableRow, column: TableColumn): number | null => {
 /** A stable text for a bucket's key, to tell buckets apart */
 export const keyText = (key: unknown): string =>
   key !== null && typeof key === 'object' ? JSON.stringify(key) : String(key);
+
+/**
+ * The points of a series in the order of the axis: a stacked one gets a zero where it has no
+ * bucket, one that is not stacked only the places it has
+ */
+export function pointsAlong(points: XYPoint[], xValues: Array<number | string>, stacked: boolean): XYPoint[] {
+  const have = new Map(points.map((point) => [point.x, point]));
+  return stacked ? xValues.map((x) => have.get(x) ?? { x, y: 0 }) : xValues.flatMap((x) => have.get(x) ?? []);
+}
 
 /** The tables of a chart split into several: one per value of the `split` column */
 export function splitTables(table: Table): Array<{ label?: string; table: Table }> {

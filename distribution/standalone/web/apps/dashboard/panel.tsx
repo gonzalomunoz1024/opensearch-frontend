@@ -12,7 +12,7 @@ import type { RawHit } from '../../lib/docs';
 import { phraseFilter } from '../../lib/query';
 import { parseSearchSource } from '../../lib/search_source';
 import type { Filter, IndexPattern, Query } from '../../lib/types';
-import { visFromSavedObject, type UiState, type VisualizationAttributes } from '../../lib/vis';
+import { visFromSavedObject, type UiState, type Vis, type VisualizationAttributes } from '../../lib/vis';
 import { services } from '../../services';
 import { errorMessage } from '../../services/http';
 import type { SavedObject } from '../../services/saved_objects';
@@ -21,6 +21,14 @@ import type { VisInput } from '../../vis/request';
 import type { Turn } from '../../vis/turns';
 import { Visualization, takesTurn } from '../../vis/visualization';
 import { DocTable, type SortPair } from '../discover/doc_table';
+import {
+  VIS_BUILDER_TYPE,
+  schemaProblem,
+  visBuilderEditUrl,
+  visBuilderFromSavedObject,
+  visFromVisBuilder,
+  type VisBuilderAttributes,
+} from '../vis_builder/model';
 import { DocDetails } from '../discover/doc_viewer';
 import { buildDiscoverRequest } from '../discover/search';
 import { normalizeSort } from '../discover/sort';
@@ -172,7 +180,6 @@ export interface DashboardPanelProps {
 }
 
 const TYPE_NAMES: Record<string, string> = {
-  'visualization-visbuilder': 'VisBuilder visualizations',
   map: 'Maps',
   'observability-visualization': 'Observability visualizations',
 };
@@ -198,16 +205,27 @@ export const DashboardPanel = memo(function DashboardPanel({
 }: DashboardPanelProps) {
   const id = panel.panelIndex;
   const object = loaded?.object;
-  const vis = useMemo(
-    () => (object && panel.type === 'visualization' ? visFromSavedObject(object as unknown as SavedObject<VisualizationAttributes>) : undefined),
-    [object, panel.type]
-  );
-  // What was changed on the panel lies over what the visualization was saved with
+  const visBuilder = panel.type === VIS_BUILDER_TYPE;
+  // A VisBuilder object is drawn as the visualization of Visualize it stands for
+  const { vis, visError } = useMemo<{ vis?: Vis; visError?: string }>(() => {
+    if (!object) return {};
+    if (panel.type === 'visualization') return { vis: visFromSavedObject(object as unknown as SavedObject<VisualizationAttributes>) };
+    if (!visBuilder) return {};
+    try {
+      const saved = visBuilderFromSavedObject(object as unknown as SavedObject<VisBuilderAttributes>);
+      const problem = schemaProblem(saved.state.visualization);
+      return problem ? { visError: problem } : { vis: visFromVisBuilder(saved) };
+    } catch (failure) {
+      return { visError: errorMessage(failure) };
+    }
+  }, [object, panel.type, visBuilder]);
+  // What was changed on the panel lies over what the visualization was saved with; a VisBuilder
+  // panel keeps it under `uiState`
   const uiState = useMemo<UiState | undefined>(() => {
     if (!vis) return undefined;
-    const config = panel.embeddableConfig as UiState;
+    const config = (visBuilder ? (panel.embeddableConfig.uiState ?? {}) : panel.embeddableConfig) as UiState;
     return { ...vis.uiState, ...config, vis: { ...vis.uiState.vis, ...config.vis } };
-  }, [vis, panel.embeddableConfig]);
+  }, [vis, visBuilder, panel.embeddableConfig]);
 
   // A panel that takes no colours from the page's memory lets the next one go at once
   const waits = Boolean(vis && takesTurn(vis.type));
@@ -221,11 +239,11 @@ export const DashboardPanel = memo(function DashboardPanel({
 
   let body: ReactNode;
   if (!loaded) body = null;
-  else if (loaded.error || !object) {
+  else if (loaded.error || !object || visError) {
     body = (
       <div className="visError" role="alert" data-test-subj="embeddableError">
         <strong>This panel could not be loaded</strong>
-        <span>{loaded.error ?? 'Its saved object was not found'}</span>
+        <span>{loaded.error ?? visError ?? 'Its saved object was not found'}</span>
       </div>
     );
   } else if (vis) {
@@ -235,7 +253,7 @@ export const DashboardPanel = memo(function DashboardPanel({
         input={input}
         tick={tick}
         uiState={uiState}
-        onUiState={(next) => onConfig(id, { ...panel.embeddableConfig, ...next })}
+        onUiState={(next) => onConfig(id, visBuilder ? { ...panel.embeddableConfig, uiState: next } : { ...panel.embeddableConfig, ...next })}
         onFilter={onFilter}
         onFiltersChange={onFiltersChange}
         onTimeChange={onTimeChange}
@@ -259,7 +277,15 @@ export const DashboardPanel = memo(function DashboardPanel({
 
   const items: MenuItem[] = [
     ...(editing && vis && vis.id
-      ? [{ id: 'edit', label: 'Edit visualization', icon: 'pencil' as const, to: `/app/visualize#/edit/${encodeURIComponent(vis.id)}`, testId: 'embeddablePanelAction-editPanel' }]
+      ? [
+          {
+            id: 'edit',
+            label: 'Edit visualization',
+            icon: 'pencil' as const,
+            to: visBuilder ? visBuilderEditUrl(vis.id) : `/app/visualize#/edit/${encodeURIComponent(vis.id)}`,
+            testId: 'embeddablePanelAction-editPanel',
+          },
+        ]
       : []),
     ...(editing ? [{ id: 'rename', label: 'Edit panel title', icon: 'text' as const, onClick: () => onAction('rename', id) }] : []),
     { id: 'inspect', label: 'Inspect', icon: 'inspect', onClick: () => onAction('inspect', id), testId: 'embeddablePanelAction-openInspector' },

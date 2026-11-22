@@ -17,6 +17,7 @@ import { Listing, type Listed } from '../../shell/listing';
 import { SavedObjectFinder } from '../../shell/saved_objects_ui';
 import { currentGlobalParam, useBreadcrumbs } from '../../shell/state';
 import { canDraw } from '../../vis/visualization';
+import { VIS_BUILDER_TITLE, VIS_BUILDER_TYPE, visBuilderEditUrl } from '../vis_builder/model';
 import { VISUALIZE, VisEditor } from './editor';
 import '../../styles/visualize.css';
 
@@ -29,12 +30,19 @@ const SOURCE_TYPES = [
 const EXPERIMENTAL = new Set(['input_control_vis', 'vega']);
 
 const typeOf = (object: Listed): string => {
+  if (object.type === VIS_BUILDER_TYPE) return VIS_BUILDER_TYPE;
   try {
     return (JSON.parse((object.attributes as { visState?: string }).visState ?? '{}') as { type?: string }).type ?? '';
   } catch {
     return '';
   }
 };
+
+// What VisBuilder made opens in VisBuilder
+const editUrl = (object: Listed) =>
+  object.type === VIS_BUILDER_TYPE ? visBuilderEditUrl(object.id) : appUrl(VISUALIZE, `/edit/${encodeURIComponent(object.id)}`);
+
+const typeTitle = (type: string) => (type === VIS_BUILDER_TYPE ? VIS_BUILDER_TITLE : (visType(type)?.title ?? type));
 
 export function Visualize() {
   const { hashPath, hashParams } = useLocation();
@@ -55,12 +63,12 @@ function VisualizeList({ creating }: { creating: boolean }) {
         title="Visualizations"
         entity="visualization"
         entities="visualizations"
-        types={['visualization']}
+        types={[VIS_BUILDER_TYPE, 'visualization']}
         fields={['title', 'description', 'visState']}
         createLabel="Create visualization"
         onCreate={() => setDialog(true)}
-        linkTo={(object) => appUrl(VISUALIZE, `/edit/${encodeURIComponent(object.id)}`)}
-        editTo={(object) => appUrl(VISUALIZE, `/edit/${encodeURIComponent(object.id)}`)}
+        linkTo={editUrl}
+        editTo={editUrl}
         extraColumns={[
           {
             id: 'type',
@@ -70,12 +78,12 @@ function VisualizeList({ creating }: { creating: boolean }) {
               const type = typeOf(object);
               return (
                 <span className="atlRow">
-                  <Icon name={visIcon(type) as IconName} />
-                  {visType(type)?.title ?? type}
+                  <Icon name={type === VIS_BUILDER_TYPE ? 'visBuilder' : (visIcon(type) as IconName)} />
+                  {typeTitle(type)}
                 </span>
               );
             },
-            sortValue: (object) => visType(typeOf(object))?.title ?? typeOf(object),
+            sortValue: (object) => typeTitle(typeOf(object)),
           },
         ]}
         emptyBody="You can create different visualizations based on your data."

@@ -1,0 +1,289 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+process.env.TZ = 'UTC';
+
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+import {
+  VIS_BUILDER_TYPES,
+  defaultsDeep,
+  schemaProblem,
+  validateState,
+  visBuilderEditUrl,
+  visBuilderFromSavedObject,
+  visBuilderToSavedObject,
+  visFromVisBuilder,
+  type VisBuilderAttributes,
+} from '../../web/apps/vis_builder/model';
+import { pointsAlong } from '../../web/vis/types';
+
+const INDEX = '90943e30-9a47-11e8-b64d-95841ca0b247';
+const REFERENCES = [{ id: INDEX, name: 'kibanaSavedObjectMeta.searchSourceJSON.index', type: 'index-pattern' }];
+const SEARCH_SOURCE = '{"indexRefName":"kibanaSavedObjectMeta.searchSourceJSON.index"}';
+
+const DATE_HISTOGRAM = {
+  id: '1',
+  enabled: true,
+  type: 'date_histogram',
+  params: {
+    field: '@timestamp',
+    useNormalizedOpenSearchInterval: true,
+    scaleMetricValues: false,
+    interval: 'auto',
+    drop_partials: false,
+    min_doc_count: 1,
+    extended_bounds: {},
+  },
+  schema: 'segment',
+};
+
+/** A saved object as the sample data has them: the kind, its aggregations and its settings */
+function object(name: string, aggs: unknown[], style: Record<string, unknown>, extra: Partial<VisBuilderAttributes> = {}) {
+  return {
+    id: 'vb-1',
+    attributes: {
+      title: '(VB) Avg bytes over time',
+      description: '',
+      visualizationState: JSON.stringify({ searchField: '', activeVisualization: { name, aggConfigParams: aggs } }),
+      styleState: JSON.stringify(style),
+      uiState: '{}',
+      version: 3,
+      kibanaSavedObjectMeta: { searchSourceJSON: SEARCH_SOURCE },
+      ...extra,
+    },
+    references: REFERENCES,
+  };
+}
+
+const lineStyle = { addTooltip: true, addLegend: true, legendPosition: 'right', type: 'line' };
+
+describe('a saved VisBuilder visualization', () => {
+  it('is read with its index pattern from the references', () => {
+    const saved = visBuilderFromSavedObject(
+      object('line', [DATE_HISTOGRAM, { id: '2', enabled: true, type: 'avg', params: { field: 'bytes' }, schema: 'metric' }], lineStyle)
+    );
+    assert.equal(saved.title, '(VB) Avg bytes over time');
+    assert.equal(saved.state.visualization.indexPattern, INDEX);
+    assert.equal(saved.state.visualization.searchField, '');
+    assert.equal(saved.state.visualization.activeVisualization?.name, 'line');
+    assert.deepEqual(saved.state.style, lineStyle);
+    assert.deepEqual(saved.state.ui, {});
+  });
+
+  it('is refused as OpenSearch Dashboards refuses it', () => {
+    assert.throws(
+      () => visBuilderFromSavedObject(object('line', [], lineStyle, { styleState: '{not json' })),
+      /Something went wrong while loading your saved object/
+    );
+    assert.throws(
+      () => visBuilderFromSavedObject(object('line', [], lineStyle, { visualizationState: '{"searchField":"","other":1}' })),
+      { message: "/visualizationState Unrecognized key(s) in object: 'other'" }
+    );
+    assert.throws(
+      () => visBuilderFromSavedObject({ ...object('line', [], lineStyle), references: [] }),
+      { message: 'The saved object is missing an index pattern' }
+    );
+  });
+
+  it('is checked for what its state holds', () => {
+    assert.equal(validateState({}, { searchField: '' }, {}), undefined);
+    assert.equal(validateState([], { searchField: '' }, {}), '/styleState Expected object, received array');
+    assert.equal(validateState({}, { searchField: 1 }, {}), '/visualizationState/searchField Required');
+    assert.equal(
+      validateState({}, { searchField: '', activeVisualization: { name: 'line' } }, {}),
+      '/visualizationState/activeVisualization/aggConfigParams Required'
+    );
+  });
+
+  it('is written with the index pattern as a reference and nothing being edited', () => {
+    const saved = visBuilderFromSavedObject(object('metric', [{ id: '1', enabled: true, type: 'count', params: {}, schema: 'metric' }], {}));
+    const count = { id: '1', enabled: true, type: 'count', params: {}, schema: 'metric' };
+    const draftAgg = { id: '9', enabled: true, type: 'avg', schema: 'metric', params: {} };
+    const written = visBuilderToSavedObject({
+      ...saved,
+      title: 'zz-agent-copy',
+      state: {
+        ...saved.state,
+        visualization: { ...saved.state.visualization, activeVisualization: { name: 'metric', aggConfigParams: [count], draftAgg } },
+      },
+    });
+    assert.equal(written.attributes.kibanaSavedObjectMeta?.searchSourceJSON, SEARCH_SOURCE);
+    assert.deepEqual(written.references, REFERENCES);
+    assert.equal(written.attributes.version, 3);
+    assert.equal(written.attributes.title, 'zz-agent-copy');
+    assert.deepEqual(JSON.parse(written.attributes.visualizationState ?? ''), {
+      searchField: '',
+      activeVisualization: { name: 'metric', aggConfigParams: [{ id: '1', enabled: true, type: 'count', params: {}, schema: 'metric' }] },
+    });
+    // and read back as it was
+    const again = visBuilderFromSavedObject({ id: 'vb-2', ...written });
+    assert.deepEqual(again.state.visualization, saved.state.visualization);
+  });
+
+  it('opens in VisBuilder', () => {
+    assert.equal(visBuilderEditUrl('a b'), '/app/vis-builder/edit/a%20b');
+  });
+});
+
+describe('what a VisBuilder state needs', () => {
+  it('is a kind VisBuilder has and the fields its parts require', () => {
+    assert.equal(schemaProblem({ searchField: '', activeVisualization: { name: 'pie', aggConfigParams: [] } }), 'Invalid visualization type pie');
+    assert.equal(
+      schemaProblem({ searchField: '', activeVisualization: { name: 'metric', aggConfigParams: [] } }),
+      'The metric visualization needs at least 1 field(s) in the agg type "metric"'
+    );
+    assert.equal(
+      schemaProblem({
+        searchField: '',
+        activeVisualization: { name: 'metric', aggConfigParams: [{ id: '1', enabled: true, type: 'count', params: {}, schema: 'metric' }] },
+      }),
+      undefined
+    );
+  });
+
+  it('offers the kinds in the order VisBuilder registers them', () => {
+    assert.deepEqual(
+      VIS_BUILDER_TYPES.map((type) => type.title),
+      ['Bar', 'Line', 'Area', 'Metric', 'Table']
+    );
+  });
+});
+
+describe('a VisBuilder chart drawn as Visualize draws it', () => {
+  const draw = (name: string, aggs: unknown[], style: Record<string, unknown>) =>
+    visFromVisBuilder(visBuilderFromSavedObject(object(name, aggs, style)));
+
+  it('has a value axis titled with its metric, on the defaults of a new chart of its kind', () => {
+    const vis = draw('line', [DATE_HISTOGRAM, { id: '2', enabled: true, type: 'avg', params: { field: 'bytes' }, schema: 'metric' }], lineStyle);
+    assert.equal(vis.type, 'line');
+    assert.equal(vis.source.indexId, INDEX);
+    const axes = vis.params.valueAxes as Array<Record<string, unknown>>;
+    assert.equal(axes.length, 1);
+    assert.deepEqual(axes[0], {
+      id: 'ValueAxis-1',
+      labels: { show: true, rotate: 0, filter: false, truncate: 100 },
+      name: 'ValueAxis-1',
+      position: 'left',
+      scale: { type: 'linear', mode: 'normal' },
+      show: true,
+      style: {},
+      title: { text: 'Average bytes' },
+      type: 'value',
+    });
+    assert.equal((vis.params.categoryAxes as unknown[]).length, 1);
+    assert.equal(vis.params.addTimeMarker, false);
+  });
+
+  it('draws a metric with no settings of its own as a series of the kind, not stacked', () => {
+    const vis = draw(
+      'area',
+      [{ id: '4', enabled: true, type: 'count', params: {}, schema: 'metric' }, { ...DATE_HISTOGRAM, id: '5' }],
+      { ...lineStyle, type: 'area' }
+    );
+    assert.deepEqual(vis.params.seriesParams, [
+      {
+        show: true,
+        type: 'area',
+        mode: 'normal',
+        interpolate: 'linear',
+        drawLinesBetweenPoints: true,
+        showCircles: true,
+        lineWidth: 2,
+        data: { id: '4', label: 'Count' },
+        valueAxis: 'ValueAxis-1',
+      },
+    ]);
+  });
+
+  it('draws the metric with the id of the first series with that series, stacked bars too', () => {
+    const vis = draw(
+      'histogram',
+      [
+        { id: '1', enabled: true, type: 'count', params: {}, schema: 'metric' },
+        { id: '2', enabled: true, type: 'terms', params: { field: 'geo.dest', order: 'desc', size: 5 }, schema: 'segment' },
+      ],
+      { ...lineStyle, type: 'histogram' }
+    );
+    const [series] = vis.params.seriesParams as Array<Record<string, unknown>>;
+    assert.equal(series.mode, 'stacked');
+    assert.equal(series.type, 'histogram');
+    assert.deepEqual(series.data, { label: 'Count', id: '1' });
+  });
+
+  it('gives each value of a metric its own axis', () => {
+    const vis = draw(
+      'line',
+      [DATE_HISTOGRAM, { id: '2', enabled: true, type: 'percentiles', params: { field: 'bytes', percents: [50, 95] }, schema: 'metric' }],
+      lineStyle
+    );
+    const axes = vis.params.valueAxes as Array<{ title: { text: string } }>;
+    assert.deepEqual(
+      axes.map((axis) => axis.title.text),
+      ['50th percentile of bytes', '95th percentile of bytes']
+    );
+  });
+
+  it('splits a table into rows or columns as Visualize says it', () => {
+    const vis = draw(
+      'table',
+      [
+        { id: '1', enabled: true, type: 'count', params: {}, schema: 'metric' },
+        { id: '2', enabled: true, type: 'terms', params: { field: 'a' }, schema: 'split_row' },
+        { id: '3', enabled: true, type: 'terms', params: { field: 'b' }, schema: 'split_column' },
+      ],
+      { perPage: 20 }
+    );
+    assert.deepEqual(
+      vis.aggs.map((agg) => [agg.schema, agg.params?.row]),
+      [
+        ['metric', undefined],
+        ['split', true],
+        ['split', false],
+      ]
+    );
+    assert.deepEqual(vis.params, { perPage: 20, showPartialRows: false, showMetricsAtAllLevels: false });
+  });
+
+  it('keeps the settings of a metric, filled in where it lacks one', () => {
+    const vis = draw('metric', [{ id: '1', enabled: true, type: 'cardinality', params: { field: 'clientip' }, schema: 'metric' }], {
+      metric: { style: { fontSize: 40 } },
+    });
+    const metric = vis.params.metric as { style: { fontSize: number; bgFill: string }; colorSchema: string };
+    assert.equal(metric.style.fontSize, 40);
+    assert.equal(metric.style.bgFill, '#000');
+    assert.equal(metric.colorSchema, 'Green to Red');
+  });
+});
+
+describe('filling in settings', () => {
+  it('keeps what is there, fills what is missing and goes through arrays place by place', () => {
+    const defaults = { a: 1, b: { c: 2, d: 3 }, list: [{ x: 1, y: 2 }, { x: 3 }] };
+    const out = defaultsDeep({ b: { c: 5 }, list: [{ x: 9 }] }, defaults);
+    assert.deepEqual(out, { a: 1, b: { c: 5, d: 3 }, list: [{ x: 9, y: 2 }, { x: 3 }] });
+    out.list[1].x = 7;
+    assert.equal(defaults.list[1].x, 3, 'the defaults are copied, not shared');
+    assert.equal(defaultsDeep('kept', { a: 1 }), 'kept');
+  });
+});
+
+describe('the points of a series along the axis', () => {
+  const points = [
+    { x: 3, y: 30 },
+    { x: 1, y: 10 },
+  ];
+
+  it('count a missing bucket as zero when stacked', () => {
+    assert.deepEqual(pointsAlong(points, [1, 2, 3], true), [
+      { x: 1, y: 10 },
+      { x: 2, y: 0 },
+      { x: 3, y: 30 },
+    ]);
+  });
+
+  it('keep only the places a series has when it is not stacked', () => {
+    assert.deepEqual(pointsAlong(points, [1, 2, 3], false), [
+      { x: 1, y: 10 },
+      { x: 3, y: 30 },
+    ]);
+  });
+});
