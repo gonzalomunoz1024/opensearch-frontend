@@ -17,6 +17,8 @@ export interface Column<Row> {
   align?: 'left' | 'right';
   /** Cut long text short on one line */
   truncate?: boolean;
+  /** Sort text letter by letter as it is written (capitals and signs first), not as a dictionary would */
+  plainOrder?: boolean;
 }
 
 export interface Sort {
@@ -80,6 +82,9 @@ export function DataTable<Row>({
       // Rows without a value stay last either way
       if (left === undefined || left === null || left === '') return right === left ? 0 : 1;
       if (right === undefined || right === null || right === '') return -1;
+      if (column.plainOrder && typeof left === 'string' && typeof right === 'string') {
+        return (left < right ? -1 : left > right ? 1 : 0) * direction;
+      }
       return compare(left, right) * direction;
     });
   }, [rows, columns, sort]);

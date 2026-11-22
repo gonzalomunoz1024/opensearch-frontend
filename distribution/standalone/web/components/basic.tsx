@@ -70,7 +70,7 @@ export function Button({
   );
   if (to !== undefined && !rest.disabled) {
     return (
-      <a className={classes} href={toHref(to)} data-test-subj={testId} title={rest.title}>
+      <a className={classes} href={toHref(to)} data-test-subj={testId} title={rest.title} aria-label={rest['aria-label']}>
         {content}
       </a>
     );

@@ -267,7 +267,7 @@ export function Sidebar({
           <ComboBox
             single
             clearable={false}
-            options={indexPatterns.map((pattern) => ({ value: pattern.id, label: pattern.title }))}
+            options={indexPatterns.map((pattern) => ({ value: pattern.id, label: pattern.displayName || pattern.title }))}
             selected={[indexPattern.id]}
             onChange={([id]) => id && onIndexPatternChange(id)}
             testId="indexPattern-switch-link"

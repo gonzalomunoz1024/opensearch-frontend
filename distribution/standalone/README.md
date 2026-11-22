@@ -90,7 +90,7 @@ The last two lines only give back what this server does not need: it holds about
 | Visualizations drawn: area, line, bar, horizontal bar, pie, metric, gauge, goal, heat map, tag cloud, data table, markdown, controls, TSVB | done |
 | Inspect (requests, responses, the table behind a chart) | done |
 | Visualize: the list and the editor of a visualization | not yet |
-| Management: index patterns, saved objects, advanced settings | server side done; pages not yet |
+| Management: index patterns (create, fields, formats, scripted fields, source filters), saved objects (export, import, relationships, inspect), advanced settings | done |
 | Dev Tools console, Query Workbench, Index Management | not yet |
 | Vega, Timeline, coordinate and region maps, VisBuilder objects | not drawn yet; the panel says so |
 

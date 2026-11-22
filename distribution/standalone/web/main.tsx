@@ -10,6 +10,7 @@ import { App, registerRoute } from './app';
 import { setColorMapping } from './charts/core';
 import { Dashboards } from './apps/dashboard';
 import { Discover } from './apps/discover';
+import { Management } from './apps/management';
 import { startRouter } from './router';
 import { createServices, type BootData } from './services';
 
@@ -53,6 +54,7 @@ services.uiSettings.subscribe(applyTheme);
 registerRoute({ paths: ['/app/data-explorer/discover', '/app/data-explorer'], render: () => <Discover basePath="/app/data-explorer/discover" /> });
 registerRoute({ paths: ['/app/dashboards', '/app/dashboard'], render: () => <Dashboards /> });
 registerRoute({ paths: ['/app/discover'], render: () => <Discover basePath="/app/discover" /> });
+registerRoute({ paths: ['/app/management', '/app/indexPatterns', '/app/objects', '/app/settings'], render: () => <Management /> });
 
 const root = document.getElementById('root');
 if (root) createRoot(root).render(<App />);

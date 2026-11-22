@@ -249,7 +249,7 @@ function FilterEditor({
           <Select
             value={indexPattern?.id ?? ''}
             onChange={(indexId) => patch({ indexId, fieldName: '' })}
-            options={indexPatterns.map((pattern) => ({ value: pattern.id, label: pattern.title }))}
+            options={indexPatterns.map((pattern) => ({ value: pattern.id, label: pattern.displayName || pattern.title }))}
           />
         </FormRow>
       )}

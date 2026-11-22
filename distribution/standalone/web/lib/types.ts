@@ -26,6 +26,8 @@ export interface FieldFormatSpec {
 export interface IndexPattern {
   id: string;
   title: string;
+  /** A name shown in place of the pattern */
+  displayName?: string;
   timeFieldName?: string;
   fields: Field[];
   fieldFormatMap: Record<string, FieldFormatSpec>;

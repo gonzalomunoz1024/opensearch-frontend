@@ -12,6 +12,7 @@ import type { UiSettingsClient } from './ui_settings';
 
 export interface IndexPatternAttributes {
   title: string;
+  displayName?: string;
   timeFieldName?: string;
   fields?: string;
   fieldFormatMap?: string;
@@ -33,6 +34,7 @@ export function indexPatternFromSavedObject(object: SavedObject<IndexPatternAttr
   return {
     id: object.id,
     title: attributes.title,
+    displayName: attributes.displayName || undefined,
     timeFieldName: attributes.timeFieldName || undefined,
     fields: parseJson<Field[]>(attributes.fields, []),
     fieldFormatMap: parseJson<Record<string, FieldFormatSpec>>(attributes.fieldFormatMap, {}),
@@ -43,6 +45,7 @@ export function indexPatternFromSavedObject(object: SavedObject<IndexPatternAttr
 export function indexPatternAttributes(pattern: IndexPattern): IndexPatternAttributes {
   return {
     title: pattern.title,
+    displayName: pattern.displayName,
     timeFieldName: pattern.timeFieldName,
     fields: JSON.stringify(pattern.fields),
     fieldFormatMap:
@@ -51,9 +54,13 @@ export function indexPatternAttributes(pattern: IndexPattern): IndexPatternAttri
   };
 }
 
+/** What an index pattern is called on screen: its display name, or else the pattern itself */
+export const patternName = (pattern: { title: string; displayName?: string }) => pattern.displayName || pattern.title;
+
 export interface IndexPatternSummary {
   id: string;
   title: string;
+  displayName?: string;
   timeFieldName?: string;
 }
 
@@ -90,7 +97,7 @@ export class IndexPatterns {
     this.summaries ??= this.savedObjects
       .find<IndexPatternAttributes>({
         type: 'index-pattern',
-        fields: ['title', 'timeFieldName'],
+        fields: ['title', 'timeFieldName', 'displayName'],
         perPage: 10000,
       })
       .then((found) =>
@@ -98,6 +105,7 @@ export class IndexPatterns {
           .map((object) => ({
             id: object.id,
             title: object.attributes.title,
+            displayName: object.attributes.displayName || undefined,
             timeFieldName: object.attributes.timeFieldName || undefined,
           }))
           .sort((a, b) => a.title.localeCompare(b.title))
@@ -129,9 +137,13 @@ export class IndexPatterns {
 
   async save(pattern: IndexPattern, options: { create?: boolean } = {}): Promise<IndexPattern> {
     const attributes = indexPatternAttributes(pattern);
+    // An update is laid over what is stored, so what was taken away has to be said: null
+    const cleared = Object.fromEntries(
+      Object.entries(attributes).map(([key, value]) => [key, value === undefined ? null : value])
+    );
     const saved = options.create
       ? await this.savedObjects.create('index-pattern', attributes, { id: pattern.id || undefined })
-      : await this.savedObjects.update('index-pattern', pattern.id, attributes);
+      : await this.savedObjects.update('index-pattern', pattern.id, cleared);
     this.clear(saved.id);
     return { ...pattern, id: saved.id };
   }
