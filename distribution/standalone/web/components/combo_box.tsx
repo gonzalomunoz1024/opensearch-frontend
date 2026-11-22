@@ -14,6 +14,8 @@ export interface ComboOption {
   prepend?: ReactNode;
   disabled?: boolean;
   group?: string;
+  /** Said after the label in the list only: the field shows the label alone */
+  detail?: string;
 }
 
 export interface ComboBoxProps {
@@ -96,7 +98,17 @@ export function ComboBox({
     forget();
   }, [forget]);
 
-  useEffect(() => setActive(0), [text, open]);
+  // The option Enter takes: what the arrow keys or the pointer went to, else what was typed out in
+  // full wherever the list has it, else the first
+  const moved = useRef(false);
+  const exact = shown.findIndex((option) => !option.disabled && option.label === text.trim());
+  const first = exact === -1 ? 0 : exact + (custom ? 1 : 0);
+  useEffect(() => {
+    moved.current = false;
+  }, [text, open]);
+  useEffect(() => {
+    if (!moved.current) setActive(first);
+  }, [first, text, open]);
   useEffect(() => {
     list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
   }, [active]);
@@ -118,9 +130,13 @@ export function ComboBox({
     if (event.key === 'ArrowDown') {
       event.preventDefault();
       if (!open) setOpen(true);
-      else setActive((index) => Math.min(index + 1, count - 1));
+      else {
+        moved.current = true;
+        setActive((index) => Math.min(index + 1, count - 1));
+      }
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
+      moved.current = true;
       setActive((index) => Math.max(index - 1, 0));
     } else if (event.key === 'Enter') {
       if (!open) return;
@@ -242,11 +258,17 @@ export function ComboBox({
                 aria-selected={position === active}
                 disabled={option.disabled}
                 onMouseDown={(event) => event.preventDefault()}
-                onMouseEnter={() => setActive(position)}
+                onMouseEnter={() => {
+                  moved.current = true;
+                  setActive(position);
+                }}
                 onClick={() => choose(option.value)}
               >
                 {option.prepend}
-                <span className="atlGrow atlTruncate">{option.label}</span>
+                <span className="atlGrow atlTruncate">
+                  {option.label}
+                  {option.detail ? ` ${option.detail}` : ''}
+                </span>
                 {single && selected[0] === option.value && <Icon name="check" />}
               </button>
             </div>

@@ -1,0 +1,482 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+import {
+  HALF_HOURS,
+  MIN_COUNT_ERROR,
+  POLICY_ERRORS,
+  activityInfoWord,
+  buildCron,
+  buildPolicy,
+  changeCron,
+  clockTime,
+  countOf,
+  dayTime,
+  defaultPolicy,
+  distinct,
+  failedStage,
+  failureSentence,
+  fieldValues,
+  humanCron,
+  indexCountText,
+  isOn,
+  latestActivities,
+  minCountError,
+  newPolicyForm,
+  newRestoreForm,
+  notRestorable,
+  notifiedActivities,
+  notifies,
+  parseCron,
+  parseDayTime,
+  policyError,
+  policyFormOf,
+  policyIndices,
+  policyListParams,
+  policyListQuery,
+  repositoryBody,
+  restoreBody,
+  restoreErrors,
+  restoreFailureText,
+  restoreProgress,
+  retainedCount,
+  setAt,
+  snapshotCountsWarning,
+  snapshotStatusText,
+  snapshotStatusTone,
+  stageTone,
+  truncate,
+  withFieldValues,
+  zoneOffset,
+  type SMPolicy,
+} from '../../web/apps/index_management/snapshot_model';
+
+describe('the words of Snapshot Management', () => {
+  it('cuts a text to a length with the three dots counted in it', () => {
+    assert.equal(truncate('abcdefghij', 30), 'abcdefghij');
+    assert.equal(truncate('abcdefghij', 8), 'abcde...');
+    assert.equal(truncate(undefined), '');
+  });
+
+  it('reads and writes the values a filter button puts into a search', () => {
+    assert.deepEqual(fieldValues('type:(fs or url)', 'type'), ['fs', 'url']);
+    assert.deepEqual(fieldValues('abc type:fs', 'type'), ['fs']);
+    assert.deepEqual(fieldValues('abc', 'type'), []);
+    assert.equal(withFieldValues('', 'type', ['fs']), 'type:(fs)');
+    assert.equal(withFieldValues('abc', 'type', ['fs', 's3']), 'abc type:(fs or s3)');
+    assert.equal(withFieldValues('abc type:(fs)', 'type', []), 'abc');
+    assert.equal(withFieldValues('type:(fs) abc', 'type', ['my repo']), 'type:("my repo") abc');
+  });
+
+  it('lists the values of a column each once', () => {
+    assert.deepEqual(distinct(['fs', undefined, 'fs', 'url', '']), ['fs', 'url']);
+  });
+});
+
+describe('the schedules of snapshot policies', () => {
+  it('reads what a cron expression says as the form shows it', () => {
+    assert.equal(parseCron('0 20 * * *').frequencyType, 'daily');
+    assert.equal(parseCron('30 * * * *').frequencyType, 'hourly');
+    assert.deepEqual(parseCron('15 6 * * TUE'), {
+      minute: 15,
+      hour: 6,
+      dayOfWeek: 'TUE',
+      dayOfMonth: 1,
+      frequencyType: 'weekly',
+    });
+    assert.equal(parseCron('0 8 * * 0').dayOfWeek, 'SUN');
+    assert.equal(parseCron('0 8 * * 2').dayOfWeek, 'TUE');
+    assert.equal(parseCron('0 12 15 * *').dayOfMonth, 15);
+    assert.equal(parseCron('0 12 15 * *').frequencyType, 'monthly');
+    assert.equal(parseCron('0 12 1 1 *').frequencyType, 'custom');
+    assert.equal(parseCron('').frequencyType, 'custom');
+  });
+
+  it('writes the expression of what the form shows, a custom one as it was typed', () => {
+    const parts = { minute: 5, hour: 7, dayOfWeek: 'FRI', dayOfMonth: 3 };
+    assert.equal(buildCron({ ...parts, frequencyType: 'hourly' }, ''), '5 * * * *');
+    assert.equal(buildCron({ ...parts, frequencyType: 'daily' }, ''), '5 7 * * *');
+    assert.equal(buildCron({ ...parts, frequencyType: 'weekly' }, ''), '5 7 * * FRI');
+    assert.equal(buildCron({ ...parts, frequencyType: 'monthly' }, ''), '5 7 3 * *');
+    assert.equal(buildCron({ ...parts, frequencyType: 'custom' }, '1 2 3 4 *'), '1 2 3 4 *');
+  });
+
+  it('keeps the time of a schedule when its frequency changes', () => {
+    assert.equal(changeCron('30 20 * * *', 'weekly'), '30 20 * * SUN');
+    assert.equal(changeCron('30 20 * * TUE', 'monthly'), '30 20 1 * *');
+    assert.equal(changeCron('30 20 * * *', 'hourly', { minute: 0 }), '0 * * * *');
+    assert.equal(changeCron('0 20 * * *', 'daily', { hour: 9, minute: 30 }), '30 9 * * *');
+  });
+
+  it('says a time of day both ways and reads one typed', () => {
+    assert.equal(clockTime(20, 5), '8:05 pm');
+    assert.equal(clockTime(0, 0), '12:00 am');
+    assert.equal(clockTime(12, 30), '12:30 pm');
+    assert.equal(dayTime(7, 5), '07:05');
+    assert.deepEqual(parseDayTime('7:5'), { hour: 7, minute: 5 });
+    assert.deepEqual(parseDayTime(' 23:59 '), { hour: 23, minute: 59 });
+    assert.equal(parseDayTime('24:00'), undefined);
+    assert.equal(parseDayTime('noon'), undefined);
+    assert.equal(HALF_HOURS.length, 48);
+    assert.equal(HALF_HOURS[0], '00:00');
+    assert.equal(HALF_HOURS[41], '20:30');
+  });
+
+  it('says how far a time zone is from UTC', () => {
+    const winter = new Date(Date.UTC(2026, 0, 15));
+    assert.equal(zoneOffset('UTC', winter), '+00:00');
+    assert.equal(zoneOffset('America/Chicago', winter), '-06:00');
+    assert.equal(zoneOffset('Asia/Kolkata', winter), '+05:30');
+    assert.equal(zoneOffset('Nowhere/Else', winter), '');
+  });
+
+  it('puts a schedule in words as the list of policies does', () => {
+    assert.equal(humanCron('0 20 * * *', 'UTC'), '8:00 pm (UTC)');
+    assert.equal(humanCron('30 20 * * TUE', 'UTC'), 'TUE, 8:30 pm (UTC)');
+    assert.equal(humanCron('0 8 3 * *', 'UTC'), 'Day 3, 8:00 am (UTC)');
+    assert.equal(humanCron('0 12 1 1 *', 'America/Chicago'), '0 12 1 1 * (America/Chicago)');
+    // As upstream: an hourly schedule is read with the hour it does not have
+    assert.equal(humanCron('0 * * * *', 'UTC'), '8:00 pm (UTC)');
+  });
+});
+
+describe('repositories', () => {
+  it('registers a shared file system with its location in the settings', () => {
+    assert.deepEqual(repositoryBody('fs', '/mnt/snapshots', '{"compress": true}'), {
+      type: 'fs',
+      settings: { compress: true, location: '/mnt/snapshots' },
+    });
+  });
+
+  it('takes the type and the settings of a custom configuration from what was written', () => {
+    assert.deepEqual(
+      repositoryBody('custom', '', '{"type":"s3","settings":{"bucket":"b"},"other":1}'),
+      { type: 's3', settings: { bucket: 'b' } }
+    );
+  });
+
+  it('registers nothing when the settings are not JSON', () => {
+    assert.equal(repositoryBody('fs', '/x', '{ nope'), undefined);
+    assert.equal(repositoryBody('fs', '/x', '3'), undefined);
+  });
+
+  it('warns of the snapshots that go with the repositories deleted', () => {
+    const one = { id: 'a', type: 'fs', snapshotCount: 2 };
+    const two = { id: 'b', type: 'fs', snapshotCount: 0 };
+    assert.equal(snapshotCountsWarning([one]), 'You have 2 snapshots in the repository.');
+    assert.equal(
+      snapshotCountsWarning([one, two]),
+      'You have 2, 0 snapshots in these repositories respectively.'
+    );
+  });
+});
+
+describe('snapshots', () => {
+  const row = (status: string) => ({ id: 'snap', status, repository: 'repo' });
+
+  it('writes a status as the list shows it, with its colour', () => {
+    assert.equal(snapshotStatusText('IN_PROGRESS'), 'In progress');
+    assert.equal(snapshotStatusText('SUCCESS'), 'Success');
+    assert.equal(snapshotStatusTone('FAILED'), 'warning');
+    assert.equal(snapshotStatusTone('PARTIAL'), 'critical');
+    // As upstream: a snapshot still being taken is drawn as one that is done
+    assert.equal(snapshotStatusTone('IN_PROGRESS'), 'healthy');
+  });
+
+  it('says why a snapshot cannot be restored yet', () => {
+    assert.equal(notRestorable(row('SUCCESS')), undefined);
+    assert.deepEqual(notRestorable(row('IN_PROGRESS')), {
+      title: 'snap is not available for restore',
+      text: 'This snapshot is still being created. Try again once the snapshot has been completed.',
+    });
+    assert.equal(
+      notRestorable(row('FAILED'))?.text,
+      'This shapshot is incomplete. Pick another snapshot to restore.'
+    );
+  });
+
+  it('repeats the sentence of a failure of OpenSearch', () => {
+    const error = JSON.stringify({
+      error: {
+        root_cause: [
+          { reason: '[repo:snap] snapshot with the same name is already in-progress. More' },
+        ],
+      },
+    });
+    assert.equal(failureSentence(error), ' snapshot with the same name is already in-progress.');
+    assert.equal(failureSentence('plain words'), 'plain words');
+  });
+});
+
+describe('restoring a snapshot', () => {
+  const form = newRestoreForm({ indices: ['a', 'b'], include_global_state: true });
+
+  it('restores everything with a prefix unless told otherwise', () => {
+    assert.deepEqual(restoreBody(form), {
+      indices: 'a,b',
+      ignore_unavailable: false,
+      include_global_state: true,
+      rename_pattern: '(.+)',
+      rename_replacement: 'restored_$1',
+      include_aliases: true,
+      partial: false,
+    });
+  });
+
+  it('sends what was asked for, and no renaming when indices keep their names', () => {
+    const body = restoreBody({
+      ...form,
+      restoreSpecific: true,
+      selected: ['b'],
+      rename: 'do_not_rename',
+      customIndexSettings: '{"index.number_of_replicas":0}',
+      ignoreIndexSettings: 'index.refresh_interval',
+    });
+    assert.deepEqual(body, {
+      indices: 'b',
+      index_settings: { 'index.number_of_replicas': 0 },
+      ignore_index_settings: 'index.refresh_interval',
+      ignore_unavailable: false,
+      include_global_state: true,
+      include_aliases: true,
+      partial: false,
+    });
+    assert.deepEqual(Object.keys(restoreBody({ ...form, rename: 'rename_indices' })).slice(3, 5), [
+      'rename_pattern',
+      'rename_replacement',
+    ]);
+  });
+
+  it('finds what is wrong with a restore before it is sent', () => {
+    assert.deepEqual(restoreErrors(form), {
+      badPattern: false,
+      badRename: false,
+      badJSON: false,
+      badIgnore: false,
+      noIndicesSelected: false,
+    });
+    const wrong = restoreErrors({
+      ...form,
+      rename: 'rename_indices',
+      renamePattern: '(',
+      renameReplacement: 'nothing',
+      restoreSpecific: true,
+      customIndexSettings: '{"index.blocks.write":true}',
+      ignoreIndexSettings: 'index.blocks.write',
+    });
+    assert.deepEqual(wrong, {
+      badPattern: true,
+      badRename: true,
+      badJSON: false,
+      badIgnore: true,
+      noIndicesSelected: true,
+    });
+    assert.equal(restoreErrors({ ...form, customIndexSettings: '{' }).badJSON, true);
+  });
+
+  it('suggests another prefix when the index is there already', () => {
+    assert.equal(
+      restoreFailureText('cannot restore index [x] because an open index with same name exists'),
+      'You have an index with the same name. Try a different prefix. cannot restore index [x] because an open index with same name exists'
+    );
+    assert.equal(restoreFailureText('other'), ' other');
+  });
+
+  it('follows a restore through the recoveries of the cluster', () => {
+    const recovery = {
+      restored_a: {
+        shards: [
+          {
+            stage: 'DONE',
+            start_time_in_millis: 2000,
+            stop_time_in_millis: 2500,
+            source: { index: 'a', snapshot: 'snap' },
+          },
+        ],
+      },
+      restored_b: {
+        shards: [
+          { stage: 'INDEX', start_time_in_millis: 2100, source: { index: 'b', snapshot: 'snap' } },
+        ],
+      },
+      older: { shards: [{ stage: 'DONE', start_time_in_millis: 10 }] },
+      '.kibana_1': { shards: [{ stage: 'DONE', start_time_in_millis: 3000 }] },
+    };
+    const progress = restoreProgress(recovery, 'snap', 1000, ['a', 'b', 'c'], 9000);
+    assert.deepEqual(progress, {
+      indices: [
+        { index: 'a', restore_status: 'Completed' },
+        { index: 'b', restore_status: 'Copying' },
+        { index: 'c', restore_status: 'Pending' },
+      ],
+      startTime: 2000,
+      stopTime: 9000,
+      stage: 'Copying (33%)',
+    });
+    // As upstream: before anything recovers, the restore is said to be copying
+    assert.equal(restoreProgress({}, 'snap', 1000, ['a'], 9000).stage, 'Copying (0%)');
+    const unknown = { x: { shards: [{ stage: 'ELSEWHERE', start_time_in_millis: 2000 }] } };
+    assert.equal(restoreProgress(unknown, 'snap', 1000, ['a'], 9000).stage, undefined);
+  });
+
+  it('says how far a restore came and how it ended', () => {
+    assert.equal(failedStage('Copying (50%)'), 'Failed (50%)');
+    assert.equal(stageTone('Completed (100%)'), 'healthy');
+    assert.equal(stageTone('Failed (50%)'), 'critical');
+    assert.equal(stageTone('Copying (50%)'), 'warning');
+    assert.equal(indexCountText(1), '1 Index');
+    assert.equal(indexCountText(3), '3 Indices');
+  });
+});
+
+describe('snapshot policies', () => {
+  const policy = (more: Partial<SMPolicy> = {}): SMPolicy => ({
+    ...defaultPolicy(),
+    name: '',
+    snapshot_config: { repository: 'repo' },
+    ...more,
+  });
+
+  it('sets a value deep in a policy without changing the policy it was given', () => {
+    const before = policy();
+    const after = setAt(before, 'notification.conditions.failure', true);
+    assert.equal(isOn(after, 'notification.conditions.failure'), true);
+    assert.equal(before.notification, undefined);
+    assert.equal(isOn({ snapshot_config: { partial: 'true' } }, 'snapshot_config.partial'), true);
+    assert.equal(notifies(after), true);
+    assert.equal(notifies(before), false);
+  });
+
+  it('sends a policy without what the form switched off', () => {
+    assert.deepEqual(buildPolicy(policy(), newPolicyForm()), {
+      name: '',
+      description: '',
+      enabled: true,
+      creation: { schedule: { cron: { expression: '0 20 * * *', timezone: 'UTC' } } },
+      snapshot_config: { repository: 'repo' },
+    });
+    const kept = buildPolicy(
+      policy({
+        deletion: { schedule: { cron: { expression: '0 3 * * *' } }, condition: { min_count: 2 } },
+        notification: { conditions: { creation: false } },
+      }),
+      { ...newPolicyForm(), retention: true, maxAgeNumber: 7, maxAgeUnit: 'h' }
+    );
+    assert.deepEqual(kept.deletion, { condition: { min_count: 2, max_age: '7h' } });
+    assert.equal(kept.notification, undefined);
+  });
+
+  it('deletes on a schedule of its own in the time zone snapshots are taken in', () => {
+    const built = buildPolicy(
+      policy({ deletion: { schedule: { cron: { expression: '0 3 * * *' } } } }),
+      { ...newPolicyForm(), retention: true, deletionSchedule: true }
+    );
+    assert.deepEqual(built.deletion, {
+      schedule: { cron: { expression: '0 3 * * *', timezone: 'UTC' } },
+      condition: { max_age: '1d' },
+    });
+    // A deletion schedule without retention is not sent, unlike upstream
+    assert.equal(
+      buildPolicy(policy(), { ...newPolicyForm(), deletionSchedule: true }).deletion,
+      undefined
+    );
+  });
+
+  it('reads the form of a policy that is there already', () => {
+    const form = policyFormOf(
+      policy({
+        creation: { schedule: { cron: { expression: '0 20 * * TUE', timezone: 'UTC' } } },
+        deletion: {
+          schedule: { cron: { expression: '0 20 15 * *', timezone: 'UTC' } },
+          condition: { max_age: '12h' },
+        },
+      })
+    );
+    assert.deepEqual(form, {
+      creationFrequency: 'weekly',
+      deletionFrequency: 'monthly',
+      deletionOnly: false,
+      retention: true,
+      deletionSchedule: true,
+      maxAgeNumber: 12,
+      maxAgeUnit: 'h',
+    });
+    assert.equal(policyFormOf(policy()).retention, false);
+    assert.deepEqual(policyIndices(policy({ snapshot_config: { indices: 'a,b*' } })), ['a', 'b*']);
+    assert.deepEqual(policyIndices(policy()), []);
+  });
+
+  it('says the first thing missing before a policy can be saved', () => {
+    const form = newPolicyForm();
+    assert.deepEqual(policyError(' ', policy(), form), { field: 'name', text: POLICY_ERRORS.NAME });
+    assert.deepEqual(policyError('p', policy({ snapshot_config: { repository: '' } }), form), {
+      field: 'repository',
+      text: POLICY_ERRORS.REPO,
+    });
+    const noZone = policy({ creation: { schedule: { cron: { expression: '0 20 * * *' } } } });
+    assert.equal(policyError('p', noZone, form)?.field, 'timezone');
+    assert.equal(policyError('p', noZone, { ...form, deletionOnly: true }), undefined);
+    assert.equal(policyError('p', policy(), form), undefined);
+  });
+
+  it('keeps what the list shows in its address', () => {
+    assert.deepEqual(policyListQuery({}), {
+      from: 0,
+      size: 20,
+      sortField: 'name',
+      sortOrder: 'desc',
+      queryString: '',
+    });
+    const query = policyListQuery({ from: '20', size: 'x', sortOrder: 'asc', queryString: 'p*' });
+    assert.deepEqual(query, {
+      from: 20,
+      size: 20,
+      sortField: 'name',
+      sortOrder: 'asc',
+      queryString: 'p*',
+    });
+    assert.deepEqual(Object.keys(policyListParams(query)), [
+      'from',
+      'queryString',
+      'size',
+      'sortField',
+      'sortOrder',
+    ]);
+  });
+
+  it('checks and shows the numbers of snapshots kept', () => {
+    assert.equal(retainedCount(undefined), '-');
+    assert.equal(retainedCount(0), '0');
+    assert.equal(minCountError(undefined), MIN_COUNT_ERROR);
+    assert.equal(minCountError(0), MIN_COUNT_ERROR);
+    assert.equal(minCountError(1), '');
+    assert.equal(countOf('7'), 7);
+    assert.equal(countOf(''), undefined);
+  });
+
+  it('lists the last things a policy did and what it tells of', () => {
+    assert.deepEqual(latestActivities(undefined), [{ activityType: 'Creation' }]);
+    const activities = latestActivities({
+      creation: { latest_execution: { status: 'SUCCESS', start_time: 1 } },
+      deletion: { latest_execution: { status: 'FAILED', info: { cause: 'x' } } },
+    });
+    assert.deepEqual(
+      activities.map((item) => [item.activityType, item.status]),
+      [
+        ['Creation', 'SUCCESS'],
+        ['Deletion', 'FAILED'],
+      ]
+    );
+    assert.equal(activityInfoWord({ cause: 'x', message: 'y' }), 'cause');
+    assert.equal(activityInfoWord({ message: 'y' }), 'message');
+    assert.equal(activityInfoWord(undefined), '-');
+    assert.equal(notifiedActivities(policy()), 'None');
+    assert.equal(
+      notifiedActivities(
+        policy({ notification: { conditions: { creation: true, deletion: false, failure: true } } })
+      ),
+      'creation, failure'
+    );
+  });
+});

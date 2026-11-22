@@ -342,6 +342,9 @@ export function Flyout({
   onClose,
   wide,
   testId,
+  hideClose,
+  mask,
+  className,
 }: {
   title: ReactNode;
   children: ReactNode;
@@ -349,18 +352,24 @@ export function Flyout({
   onClose: () => void;
   wide?: boolean;
   testId?: string;
+  /** No cross in the header: the buttons at the foot close it */
+  hideClose?: boolean;
+  /** The page behind is dimmed, and a click on it closes the flyout */
+  mask?: boolean;
+  className?: string;
 }) {
   useEscape(onClose);
   return (
     <Portal>
+      {mask && <div className="atlFlyoutMask" onMouseDown={onClose} />}
       <aside
-        className={cx('atlFlyout', wide && 'atlFlyout--wide')}
+        className={cx('atlFlyout', wide && 'atlFlyout--wide', className)}
         role="dialog"
         data-test-subj={testId}
       >
         <div className="atlFlyout__header">
           <h2 className="atlTitleM atlTruncate">{title}</h2>
-          <IconButton icon="cross" label="Close" onClick={onClose} testId="flyoutCloseButton" />
+          {!hideClose && <IconButton icon="cross" label="Close" onClick={onClose} testId="flyoutCloseButton" />}
         </div>
         <div className="atlFlyout__body">{children}</div>
         {footer && <div className="atlFlyout__footer">{footer}</div>}

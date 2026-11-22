@@ -18,11 +18,15 @@ import { Indices } from './indices';
 import { ChangePolicy, ManagedIndices } from './managed_indices';
 import { CreatePolicy, Policies, PolicyDetails } from './policies';
 import { CreateRollup } from './create_rollup';
+import { CreateSnapshotPolicy } from './create_snapshot_policy';
 import { CreateTransform } from './create_transform';
 import { Reindex } from './reindex';
+import { Repositories } from './repositories';
 import { ShrinkIndex, SplitIndex } from './resize_pages';
 import { EditRollup, RollupDetails } from './rollup_pages';
 import { Rollups } from './rollups';
+import { SnapshotPolicies, SnapshotPolicyDetails } from './snapshot_policies';
+import { Snapshots } from './snapshots';
 import { EditTransform, TransformDetails } from './transform_pages';
 import { NotificationSettings } from './notification_settings';
 import { Transforms } from './transforms';
@@ -147,6 +151,12 @@ const PAGES: Page[] = [
   { route: ROUTES.CREATE_TRANSFORM, render: () => <CreateTransform /> },
   { route: ROUTES.EDIT_TRANSFORM, render: () => <EditTransform /> },
   { route: ROUTES.TRANSFORM_DETAILS, render: () => <TransformDetails /> },
+  { route: ROUTES.SNAPSHOT_POLICIES, render: () => <SnapshotPolicies /> },
+  { route: ROUTES.SNAPSHOT_POLICY_DETAILS, render: () => <SnapshotPolicyDetails /> },
+  { route: ROUTES.CREATE_SNAPSHOT_POLICY, render: () => <CreateSnapshotPolicy isEdit={false} /> },
+  { route: ROUTES.EDIT_SNAPSHOT_POLICY, render: () => <CreateSnapshotPolicy isEdit /> },
+  { route: ROUTES.SNAPSHOTS, render: () => <Snapshots /> },
+  { route: ROUTES.REPOSITORIES, render: () => <Repositories /> },
 ];
 
 function findPage(hashPath: string): { page: Page; rest: string } | undefined {

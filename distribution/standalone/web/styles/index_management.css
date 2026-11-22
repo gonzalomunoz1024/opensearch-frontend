@@ -1890,3 +1890,298 @@
   grid-template-columns: repeat(2, minmax(0, 200px));
   gap: var(--space-3);
 }
+
+/* --- Snapshot Management ------------------------------------------------------------------------ */
+
+.ismSnapshotFlyout {
+  width: min(600px, 100vw);
+}
+
+.ismFlyoutFooter {
+  justify-content: flex-end;
+  width: 100%;
+}
+
+.ismSnapshotForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.ismSnapshotForm h3,
+.ismSnapshotForm h5 {
+  margin: 0;
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-semibold);
+}
+
+.ismSnapshotForm .ismLabeled + .ismLabeled {
+  margin-top: 0;
+}
+
+.ismSnapshotForm .ismLabeled__field > .atlField,
+.ismSnapshotForm .ismLabeled__field > span,
+.ismSnapshotForm .ismLabeled__field > .atlSelect {
+  width: 100%;
+  max-width: 400px;
+}
+
+.ismSnapshotForm__note {
+  margin: calc(var(--space-2) * -1) 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.ismSnapshotForm__repository {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+.ismSnapshotForm__repository > .ismLabeled {
+  flex: 0 1 400px;
+  min-width: 0;
+}
+
+.ismSnapshotForm__small {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-width: 400px;
+}
+
+.ismSnapshotForm__label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.ismSnapshotForm__minor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.ismTickLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ismTickLabel small {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.ismTicks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.ismTicks--inset {
+  padding: var(--space-3) var(--space-1) 0;
+}
+
+.ismTicks .atlCheckbox {
+  align-items: flex-start;
+}
+
+.ismRestoreSummary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.ismRestoreSummary p {
+  margin: 0;
+}
+
+.ismIndexList__title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ismIndexList__back {
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent);
+  cursor: pointer;
+}
+
+.ismToastAction {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
+.ismToastAction > span {
+  align-self: flex-start;
+}
+
+.ismRestoreError {
+  margin: 0;
+  color: var(--color-critical-text);
+  overflow-wrap: anywhere;
+}
+
+.ismFilterGroup {
+  display: inline-flex;
+  gap: var(--space-2);
+}
+
+.ismTabbed {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* What a snapshot is: the names of its facts are as dark as the facts */
+.ismSnapshotDetails {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.ismSnapshotDetails .ismDetails {
+  gap: var(--space-5);
+}
+
+.ismSnapshotDetails .ismDetail dt {
+  color: inherit;
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-semibold);
+}
+
+.ismSnapshotForm__minor .ismLabeled {
+  max-width: 400px;
+}
+
+/* --- A snapshot policy: its form and what it shows ------------------------------------------------- */
+
+.ismSnapshotPolicy .ismSnapshotForm h3 {
+  font-size: var(--font-size-l);
+  line-height: 1.3;
+}
+
+.ismSnapshotPolicy .ismLabeled__title i,
+.ismSnapshotFlyout .ismLabeled__title i {
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-secondary);
+}
+
+.ismCron {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.ismCron__row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-6);
+}
+
+.ismCron__start {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 400px;
+}
+
+.ismCron__zone {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 250px;
+}
+
+.ismCron__text {
+  margin: 0;
+  font-size: var(--font-size-s);
+}
+
+.ismCron__days {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+  white-space: nowrap;
+}
+
+.ismCron__monthly {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.ismTimeList {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.ismTimeList .atlMenu__item[aria-selected='true'] {
+  background: var(--color-accent);
+  color: var(--color-surface);
+}
+
+.ismSnapshotPolicy__age {
+  display: grid;
+  grid-template-columns: 236px 100px;
+  gap: var(--space-6);
+  width: 100%;
+}
+
+.ismSnapshotPolicy__more {
+  padding-top: var(--space-3);
+}
+
+.ismSnapshotPolicy__text {
+  margin: 0;
+  font-size: var(--font-size-s);
+}
+
+.ismSnapshotPolicy__counts {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-6);
+}
+
+.ismSnapshotPolicy__counts > .ismLabeled {
+  flex: 0 0 236px;
+}
+
+.ismSnapshotPolicy__channels {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.ismSnapshotPolicy__channels > select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ismSnapshotPolicy__channels > button {
+  flex: 0 0 auto;
+  min-width: 32px;
+}
+
+.ismPage--form.ismSnapshotPolicy .ismLabeled:has(.ismSnapshotPolicy__channels) > .ismLabeled__body {
+  max-width: 600px;
+}
+
+.ismSnapshotPolicy__fold {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.ismSnapshotPolicy .ismDetail dt {
+  color: inherit;
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-semibold);
+}

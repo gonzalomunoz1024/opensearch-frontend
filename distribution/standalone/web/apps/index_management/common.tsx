@@ -15,18 +15,24 @@ import { MenuButton, Modal, copyText, type MenuItem } from '../../components/ove
 import { Pagination } from '../../components/table';
 import { formatDate } from '../../lib/dates';
 import { tokenizeJson } from '../../lib/json_text';
-import { navigate, navigateHash, useLocation } from '../../router';
+import { getLocation, navigate, navigateHash, useLocation } from '../../router';
 import { services } from '../../services';
 import { errorMessage, type FetchOptions } from '../../services/http';
+import { SNAPSHOT_MANAGEMENT_PATH } from './routes';
 
 export const APP_PATH = '/app/opensearch_index_management_dashboards';
 
-/** The address of a page of Index Management: `to('/indices')`, `to('/policy-details', { id })` */
+/**
+ * The address of a page of Index Management: `to('/indices')`, `to('/policy-details', { id })`.
+ * The pages are one application under two addresses, and a page opened from under Snapshot
+ * Management stays there, as in the plugin.
+ */
 export function to(path: string, params: Record<string, string | undefined> = {}): string {
   const pairs = Object.entries(params)
     .filter((pair): pair is [string, string] => pair[1] !== undefined)
     .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
-  return `${APP_PATH}#${path}${pairs.length > 0 ? `?${pairs.join('&')}` : ''}`;
+  const app = getLocation().pathname === SNAPSHOT_MANAGEMENT_PATH ? SNAPSHOT_MANAGEMENT_PATH : APP_PATH;
+  return `${app}#${path}${pairs.length > 0 ? `?${pairs.join('&')}` : ''}`;
 }
 
 export const go = (path: string, params?: Record<string, string | undefined>) =>
@@ -862,6 +868,7 @@ export function LocalTable<Row>({
   rows,
   rowId,
   sortField,
+  sortDirection = 'asc',
   pageSize = 10,
   pageSizes = [10, 20, 50],
   paged = true,
@@ -874,6 +881,7 @@ export function LocalTable<Row>({
   rows: Row[];
   rowId: (row: Row, index: number) => string;
   sortField?: string;
+  sortDirection?: 'asc' | 'desc';
   pageSize?: number;
   pageSizes?: number[];
   paged?: boolean;
@@ -886,7 +894,7 @@ export function LocalTable<Row>({
     from: 0,
     size: paged ? pageSize : Number.MAX_SAFE_INTEGER,
     sortField: sortField ?? '',
-    sortDirection: 'asc',
+    sortDirection,
   });
   const ids = useMemo(() => new Map(rows.map((row, index) => [row, rowId(row, index)])), [rows, rowId]);
   const page = query.sortField

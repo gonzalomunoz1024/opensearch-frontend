@@ -886,6 +886,14 @@ select.atlField {
   animation: atlSlide var(--duration-normal) var(--ease-out-quint);
 }
 
+.atlFlyoutMask {
+  position: fixed;
+  inset: 0;
+  z-index: 3400;
+  background: var(--scrim);
+  animation: atlFade var(--duration-fast) linear;
+}
+
 .atlFlyout--wide {
   width: min(840px, 100vw);
 }
