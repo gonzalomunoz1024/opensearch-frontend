@@ -349,6 +349,7 @@ export function VisEditor({ savedId }: { savedId?: string }) {
           onRefreshChange={(refreshInterval) => setGlobal({ refreshInterval })}
           onRefresh={refresh}
           showQuery={aggBased || saved.type === 'metrics'}
+          showFilters={saved.type !== 'timelion'}
         />
       )}
       <div className="vzeEditor">
