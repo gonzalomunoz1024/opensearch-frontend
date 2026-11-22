@@ -91,6 +91,16 @@ type Fetch = (url: string) => Promise<Response>;
 const escapeHtml = (text: string) =>
   text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c);
 
+/** What the original's document.createElement('a') gives as outerHTML for an attribution */
+export function anchorHtml(label: string, url: string): string {
+  const text = label.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\u00a0/g, '&nbsp;');
+  const href =
+    url.startsWith('http://') || url.startsWith('https://')
+      ? ` href="${url.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/\u00a0/g, '&nbsp;')}"`
+      : '';
+  return `<a rel="noreferrer noopener"${href}>${text}</a>`;
+}
+
 /** markdown-it's rendering of an attribution (html off, linkify on), for one paragraph */
 export function renderAttributionMarkdown(markdown: string): string {
   if (markdown.trim() === '') return '';
@@ -297,16 +307,7 @@ export class ServiceSettings {
   }
 
   private attributionString(attribution: Attribution[]): string {
-    return attribution
-      .map((item) => {
-        const url = this.value(item.url);
-        const anchor = document.createElement('a');
-        anchor.setAttribute('rel', 'noreferrer noopener');
-        if (url.startsWith('http://') || url.startsWith('https://')) anchor.setAttribute('href', url);
-        anchor.textContent = this.value(item.label);
-        return anchor.outerHTML;
-      })
-      .join(' | ');
+    return attribution.map((item) => anchorHtml(this.value(item.label), this.value(item.url))).join(' | ');
   }
 
   private fileLayerSettings(layer: FileLayerConfig): FileLayer {
