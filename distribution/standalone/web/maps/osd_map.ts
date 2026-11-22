@@ -472,7 +472,8 @@ export class OsdMap extends Emitter {
   }
 
   private getTMSBaseLayer(options: BaseLayerOptions): TileLayer {
-    return L.tileLayer(String(options.url ?? ''), {
+    // Passed as it is: without an address (an unreachable maps service) Leaflet throws as it does in the original
+    return L.tileLayer(options.url as string, {
       minZoom: options.minZoom,
       maxZoom: options.maxZoom,
       subdomains: options.subdomains || [],
