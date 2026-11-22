@@ -286,6 +286,8 @@ export interface TableProps<Row> {
   empty?: ReactNode;
   testId?: string;
   pageSizes?: number[];
+  /** Whether the rows come in pages; a table that shows them all has no pager */
+  paged?: boolean;
 }
 
 export function Table<Row>({
@@ -302,6 +304,7 @@ export function Table<Row>({
   empty,
   testId,
   pageSizes = PAGE_SIZES,
+  paged = true,
 }: TableProps<Row>) {
   const ids = new Set((selected ?? []).map(rowId));
   const tickable = rows.filter((row) => (selectable ? selectable(row) : true));
@@ -396,7 +399,7 @@ export function Table<Row>({
           </tbody>
         </table>
       </div>
-      {total > 0 && (
+      {paged && total > 0 && (
         <Pagination
           page={page}
           pages={pages}
@@ -744,12 +747,25 @@ export function SubmitError({ error }: { error?: string }) {
 // --- Dialogs many pages open -----------------------------------------------------------------------------------
 
 /** Shows something as JSON */
-export function JSONModal({ title, json, onClose }: { title: string; json: unknown; onClose: () => void }) {
-  const text = JSON.stringify(json, null, 4);
+export function JSONModal({
+  title,
+  json,
+  onClose,
+  indent = 4,
+  testId,
+}: {
+  title: string;
+  json: unknown;
+  onClose: () => void;
+  indent?: number;
+  testId?: string;
+}) {
+  const text = JSON.stringify(json, null, indent);
   return (
     <Modal
       title={title}
       onClose={onClose}
+      testId={testId}
       wide
       footer={
         <>
@@ -836,6 +852,7 @@ export function LocalTable<Row>({
   sortField,
   pageSize = 10,
   pageSizes = [10, 20, 50],
+  paged = true,
   empty,
   selected,
   onSelect,
@@ -846,13 +863,14 @@ export function LocalTable<Row>({
   sortField?: string;
   pageSize?: number;
   pageSizes?: number[];
+  paged?: boolean;
   empty?: ReactNode;
   selected?: Row[];
   onSelect?: (rows: Row[]) => void;
 }) {
   const [query, setQuery] = useState<Pick<ListQuery, 'from' | 'size' | 'sortField' | 'sortDirection'>>({
     from: 0,
-    size: pageSize,
+    size: paged ? pageSize : Number.MAX_SAFE_INTEGER,
     sortField: sortField ?? '',
     sortDirection: 'asc',
   });
@@ -870,35 +888,83 @@ export function LocalTable<Row>({
       rowId={(row) => ids.get(row) ?? ''}
       empty={empty}
       pageSizes={pageSizes}
+      paged={paged}
       selected={selected}
       onSelect={onSelect}
     />
   );
 }
 
-/** A field under its name and what the name means */
+/** A field under its name and what the name means; `across` puts the field beside them */
 export function Labeled({
   title,
   help,
   optional,
   error,
+  across,
+  testId,
   children,
 }: {
   title: ReactNode;
   help?: ReactNode;
   optional?: boolean;
-  error?: string;
+  error?: ReactNode;
+  across?: boolean;
+  testId?: string;
   children: ReactNode;
 }) {
   return (
-    <div className="ismLabeled">
-      <div className="ismLabeled__title">
-        {title}
-        {optional && <i className="atlSubdued"> – optional</i>}
+    <div className={cx('ismLabeled', across && 'ismLabeled--across')} data-test-subj={testId}>
+      <div className="ismLabeled__head">
+        <div className="ismLabeled__title">
+          {title}
+          {optional && <i> – optional</i>}
+        </div>
+        {help && <div className="ismLabeled__help">{help}</div>}
       </div>
-      {help && <div className="ismLabeled__help">{help}</div>}
-      <div className="ismLabeled__field">{children}</div>
-      {error && <div className="ismLabeled__error">{error}</div>}
+      <div className="ismLabeled__body">
+        <div className="ismLabeled__field">{children}</div>
+        {error && <div className="ismLabeled__error">{error}</div>}
+      </div>
+    </div>
+  );
+}
+
+/** The bar that says a form has changes that are not saved yet, with the buttons that drop or save them */
+export function UnsavedBar({
+  count,
+  errors = 0,
+  busy,
+  onCancel,
+  onSave,
+  testId,
+  cancelTestId,
+  extra,
+}: {
+  count: number;
+  errors?: number;
+  busy?: boolean;
+  onCancel: () => void;
+  onSave: () => void;
+  testId?: string;
+  cancelTestId?: string;
+  /** What stands between the two buttons */
+  extra?: ReactNode;
+}) {
+  return (
+    <div className="ismUnsaved">
+      {errors > 0 ? (
+        <span className="ismUnsaved__text ismUnsaved__text--danger">{errors} form errors.</span>
+      ) : (
+        <span className="ismUnsaved__text">{count} unsaved changes.</span>
+      )}
+      <Button variant="ghost" size="s" icon="cross" onClick={onCancel} testId={cancelTestId}>
+        Cancel
+      </Button>
+      {extra}
+      <Button variant="primary" size="s" icon="check" loading={busy} disabled={busy} onClick={onSave} testId={testId}>
+        Save
+      </Button>
     </div>
   );
 }

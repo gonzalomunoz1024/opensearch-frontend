@@ -295,10 +295,13 @@ type Dialog = 'apply' | 'close' | 'open' | 'delete' | 'clearCache' | 'flush' | '
 export function IndicesActions({
   selected,
   onChange,
+  onDelete = onChange,
 }: {
   selected: IndexRow[];
   /** Called when the indexes are no longer what the list shows */
   onChange: () => void;
+  /** Called when the indexes are gone; a page about one of them has nothing left to show */
+  onDelete?: () => void;
 }) {
   const [dialog, setDialog] = useState<Dialog>();
   const names = selected.map((item) => item.index);
@@ -344,7 +347,7 @@ export function IndicesActions({
     if (result.ok) {
       toasts.success(`Delete [${payload}] successfully`);
       close();
-      onChange();
+      onDelete();
     } else {
       toasts.danger(result.error || '');
     }

@@ -167,7 +167,7 @@ function AssociatedComponentsModal({
   );
 }
 
-function DeleteTemplateModal({ names, onClose, onDelete }: { names: string[]; onClose: () => void; onDelete: () => void }) {
+export function DeleteTemplateModal({ names, onClose, onDelete }: { names: string[]; onClose: () => void; onDelete: () => void }) {
   const remove = async () => {
     const result = await ism.request('DELETE', `/_index_template/${names.join(',')}`);
     if (result.ok) {
@@ -431,13 +431,13 @@ function AssociatedTemplatesModal({
   );
 }
 
-function DeleteComponentModal({
+export function DeleteComponentModal({
   row,
   templates,
   onClose,
   onDelete,
 }: {
-  row: ComponentRow;
+  row: Pick<ComponentRow, 'name' | 'associated'>;
   templates: Array<IndexTemplate & { name: string }>;
   onClose: () => void;
   onDelete: () => void;

@@ -27,15 +27,15 @@ import { pageChanges, pageQuery } from './model';
 import { ClearCacheModal, FlushModal, RefreshModal } from './operations';
 import { CRUMBS, ROUTES } from './routes';
 
-const DATA_STREAM_DOCS = 'https://opensearch.org/docs/latest/opensearch/data-streams/';
+export const DATA_STREAM_DOCS = 'https://opensearch.org/docs/latest/opensearch/data-streams/';
 
-const HEALTH_TIPS: Record<string, string> = {
+export const HEALTH_TIPS: Record<string, string> = {
   green: 'All shards are assigned.',
   yellow: 'All primary shards are assigned, but one or more replica shards are unassigned.',
   red: 'One or more primary shards are unassigned, so some data is unavailable.',
 };
 
-const HEALTH_TONES: Record<string, Tone> = { green: 'healthy', yellow: 'warning', red: 'critical' };
+export const HEALTH_TONES: Record<string, Tone> = { green: 'healthy', yellow: 'warning', red: 'critical' };
 
 export interface DataStream {
   name: string;
@@ -62,13 +62,89 @@ function compare(left: unknown, right: unknown): number {
   return left < right ? -1 : 1;
 }
 
+/** What can be done to data streams, with the dialogs that do it */
+export function DataStreamsActions({
+  selected,
+  onDelete,
+}: {
+  selected: DataStream[];
+  /** Called once the data streams are gone */
+  onDelete: () => void;
+}) {
+  const [dialog, setDialog] = useState<Dialog>();
+  const names = selected.map((item) => item.name);
+  const operands = selected.map((item) => ({
+    name: item.name,
+    indices: (item.indices ?? []).map((index) => index.index_name),
+  }));
+  const none = selected.length === 0;
+  const close = () => setDialog(undefined);
+
+  const items: MenuItem[] = [
+    {
+      id: 'forceMerge',
+      label: 'Force merge',
+      testId: 'ForceMergeAction',
+      onClick: () => go(`${ROUTES.FORCE_MERGE}/${names.join(',')}`),
+    },
+    {
+      id: 'rollover',
+      label: 'Roll over',
+      disabled: selected.length > 1,
+      testId: 'rolloverAction',
+      onClick: () => go(none ? ROUTES.ROLLOVER : `${ROUTES.ROLLOVER}/${names[0]}`),
+    },
+    { id: 'clearCache', label: 'Clear cache', disabled: none, testId: 'ClearCacheAction', separated: true, onClick: () => setDialog('clearCache') },
+    { id: 'flush', label: 'Flush', disabled: none, testId: 'Flush Action', onClick: () => setDialog('flush') },
+    { id: 'refresh', label: 'Refresh', disabled: none, testId: 'refreshAction', onClick: () => setDialog('refresh') },
+    { id: 'delete', label: 'Delete', disabled: none, testId: 'deleteAction', separated: true, onClick: () => setDialog('delete') },
+  ];
+
+  const deleteDataStreams = async () => {
+    const result = await ism.request('DELETE', `/_data_stream/${names.join(',')}`);
+    if (result.ok) {
+      toasts.success(`Delete [${names.join(',')}] successfully`);
+      close();
+      onDelete();
+    } else {
+      toasts.danger(result.error || '');
+    }
+  };
+
+  return (
+    <>
+      <ActionsMenu items={items} />
+      {dialog === 'delete' && (
+        <TypeToConfirmModal
+          title="Delete data streams"
+          label="Delete"
+          word="delete"
+          danger
+          onClose={close}
+          onConfirm={deleteDataStreams}
+          inputTestId="deleteInput"
+          confirmTestId="deleteConfirmButton"
+        >
+          <p>
+            The following data streams will be permanently deleted. The backing indexes belonging to the data streams
+            will also be deleted.
+          </p>
+          <Names names={names} />
+        </TypeToConfirmModal>
+      )}
+      {dialog === 'clearCache' && <ClearCacheModal items={operands} target="data streams" onClose={close} />}
+      {dialog === 'flush' && <FlushModal items={operands} target="data streams" onClose={close} />}
+      {dialog === 'refresh' && <RefreshModal items={operands} target="data streams" onClose={close} />}
+    </>
+  );
+}
+
 export function DataStreams() {
   useBreadcrumbs([CRUMBS.INDEX_MANAGEMENT, CRUMBS.DATA_STREAMS]);
   const [query, setQuery] = useListQuery({ sortField: 'name' });
   const [all, setAll] = useState<DataStreamRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<DataStreamRow[]>([]);
-  const [dialog, setDialog] = useState<Dialog>();
   const turn = useRef(0);
 
   const load = async () => {
@@ -106,11 +182,6 @@ export function DataStreams() {
     return query.sortDirection === 'asc' ? order : -order;
   });
   const rows = sorted.slice(query.from * query.size, (query.from + 1) * query.size);
-  const names = selected.map((item) => item.name);
-  const operands = selected.map((item) => ({ name: item.name, indices: item.indices.map((index) => index.index_name) }));
-  const none = selected.length === 0;
-  const close = () => setDialog(undefined);
-
   const columns: Array<TableColumn<DataStreamRow>> = [
     {
       field: 'name',
@@ -141,37 +212,6 @@ export function DataStreams() {
     { field: 'store_size_bytes', name: 'Total size', sortable: true, align: 'right', render: (row) => row.store_size || '' },
   ];
 
-  const items: MenuItem[] = [
-    {
-      id: 'forceMerge',
-      label: 'Force merge',
-      testId: 'ForceMergeAction',
-      onClick: () => go(`${ROUTES.FORCE_MERGE}/${names.join(',')}`),
-    },
-    {
-      id: 'rollover',
-      label: 'Roll over',
-      disabled: selected.length > 1,
-      testId: 'rolloverAction',
-      onClick: () => go(none ? ROUTES.ROLLOVER : `${ROUTES.ROLLOVER}/${names[0]}`),
-    },
-    { id: 'clearCache', label: 'Clear cache', disabled: none, testId: 'ClearCacheAction', separated: true, onClick: () => setDialog('clearCache') },
-    { id: 'flush', label: 'Flush', disabled: none, testId: 'Flush Action', onClick: () => setDialog('flush') },
-    { id: 'refresh', label: 'Refresh', disabled: none, testId: 'refreshAction', onClick: () => setDialog('refresh') },
-    { id: 'delete', label: 'Delete', disabled: none, testId: 'deleteAction', separated: true, onClick: () => setDialog('delete') },
-  ];
-
-  const deleteDataStreams = async () => {
-    const result = await ism.request('DELETE', `/_data_stream/${names.join(',')}`);
-    if (result.ok) {
-      toasts.success(`Delete [${names.join(',')}] successfully`);
-      close();
-      await load();
-    } else {
-      toasts.danger(result.error || '');
-    }
-  };
-
   const filtered = query.search !== '';
   return (
     <ContentPanel
@@ -185,7 +225,7 @@ export function DataStreams() {
       }
       actions={
         <>
-          <ActionsMenu items={items} />
+          <DataStreamsActions selected={selected} onDelete={load} />
           <PanelButton text="Create data stream" variant="primary" icon="plus" to={to(ROUTES.CREATE_DATA_STREAM)} />
         </>
       }
@@ -222,27 +262,6 @@ export function DataStreams() {
           }
         />
       </div>
-      {dialog === 'delete' && (
-        <TypeToConfirmModal
-          title="Delete data streams"
-          label="Delete"
-          word="delete"
-          danger
-          onClose={close}
-          onConfirm={deleteDataStreams}
-          inputTestId="deleteInput"
-          confirmTestId="deleteConfirmButton"
-        >
-          <p>
-            The following data streams will be permanently deleted. The backing indexes belonging to the data streams
-            will also be deleted.
-          </p>
-          <Names names={names} />
-        </TypeToConfirmModal>
-      )}
-      {dialog === 'clearCache' && <ClearCacheModal items={operands} target="data streams" onClose={close} />}
-      {dialog === 'flush' && <FlushModal items={operands} target="data streams" onClose={close} />}
-      {dialog === 'refresh' && <RefreshModal items={operands} target="data streams" onClose={close} />}
     </ContentPanel>
   );
 }

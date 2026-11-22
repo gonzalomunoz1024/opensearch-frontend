@@ -10,11 +10,14 @@ import { useEffect, type ReactNode } from 'react';
 import { EmptyPrompt, cx } from '../../components/basic';
 import { navigateHash, useLocation } from '../../router';
 import { Aliases } from './aliases';
+import { CreateDataStream, DataStreamDetail } from './data_stream_pages';
 import { DataStreams } from './data_streams';
+import { CreateIndex, IndexDetail } from './index_pages';
 import { Indices } from './indices';
 import { ChangePolicy, ManagedIndices } from './managed_indices';
 import { CreatePolicy, Policies, PolicyDetails } from './policies';
 import { ROUTES, SNAPSHOT_MANAGEMENT_PATH } from './routes';
+import { ComposableTemplateDetail, TemplateDetail } from './template_pages';
 import { ComposableTemplates, Templates } from './templates';
 import '../../styles/index_management.css';
 
@@ -104,10 +107,19 @@ const PAGES: Page[] = [
   { route: ROUTES.MANAGED_INDICES, render: () => <ManagedIndices /> },
   { route: ROUTES.CHANGE_POLICY, render: () => <ChangePolicy /> },
   { route: ROUTES.INDICES, render: () => <Indices /> },
+  { route: ROUTES.CREATE_INDEX, render: () => <CreateIndex /> },
+  { route: ROUTES.INDEX_DETAIL, render: (index) => <IndexDetail index={index} /> },
   { route: ROUTES.ALIASES, render: () => <Aliases /> },
   { route: ROUTES.TEMPLATES, render: () => <Templates /> },
+  { route: ROUTES.CREATE_TEMPLATE, render: (name) => <TemplateDetail name={name} /> },
+  { route: ROUTES.CREATE_COMPOSABLE_TEMPLATE, render: (name) => <ComposableTemplateDetail name={name} /> },
   { route: ROUTES.COMPOSABLE_TEMPLATES, render: () => <ComposableTemplates /> },
   { route: ROUTES.DATA_STREAMS, render: () => <DataStreams /> },
+  {
+    route: ROUTES.CREATE_DATA_STREAM,
+    // The address of a data stream ends with a word the page has no use for
+    render: (rest) => (rest === '' ? <CreateDataStream /> : <DataStreamDetail name={rest.split('/')[0]} />),
+  },
 ];
 
 function findPage(hashPath: string): { page: Page; rest: string } | undefined {
