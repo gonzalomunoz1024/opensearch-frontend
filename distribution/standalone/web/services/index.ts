@@ -9,6 +9,7 @@ import type { FieldFormatSpec } from '../lib/types';
 import { Http } from './http';
 import { IndexPatterns } from './index_patterns';
 import { SavedObjectsClient } from './saved_objects';
+import { SavedQueryService } from './saved_queries';
 import { SearchService } from './search';
 import { Toasts } from './toasts';
 import { UiSettingsClient } from './ui_settings';
@@ -32,6 +33,7 @@ export interface Services {
   http: Http;
   uiSettings: UiSettingsClient;
   savedObjects: SavedObjectsClient;
+  savedQueries: SavedQueryService;
   indexPatterns: IndexPatterns;
   search: SearchService;
   toasts: Toasts;
@@ -108,6 +110,7 @@ export function createServices(boot: BootData): Services {
     http,
     uiSettings,
     savedObjects,
+    savedQueries: new SavedQueryService(savedObjects),
     indexPatterns,
     search,
     toasts,

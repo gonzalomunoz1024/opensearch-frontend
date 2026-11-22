@@ -24,6 +24,7 @@ import { isPinned, splitFilters } from '../../shell/filter_bar';
 import { Inspector } from '../../shell/inspect';
 import { defaultQueryLanguage } from '../../shell/query_bar';
 import { OpenFlyout, SaveModal, ShareModal } from '../../shell/saved_objects_ui';
+import { pageFiltersOf, savedQueryGlobalParam, type SavedQueryChange } from '../../shell/saved_query';
 import { SearchBar } from '../../shell/search_bar';
 import { addRecentlyAccessed, currentGlobalParam, useAutoRefresh, useBreadcrumbs, useGlobalState } from '../../shell/state';
 import { DocDetails } from './doc_viewer';
@@ -45,7 +46,7 @@ interface SavedSearchAttributes {
 }
 
 interface UrlAppState {
-  discover?: { columns?: string[]; sort?: unknown; interval?: string; isDirty?: boolean };
+  discover?: { columns?: string[]; sort?: unknown; interval?: string; isDirty?: boolean; savedQuery?: string };
   metadata?: { indexPattern?: string; view?: string };
   // The shape of older addresses
   columns?: string[];
@@ -54,6 +55,7 @@ interface UrlAppState {
   index?: string;
   query?: Query;
   filters?: Filter[];
+  savedQuery?: string;
 }
 
 interface UrlQueryState {
@@ -139,21 +141,41 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
     [urlQuery, urlApp, savedSource]
   );
   const filters = useMemo(() => [...global.filters, ...appFilters.filter((filter) => !isPinned(filter))], [global.filters, appFilters]);
+  // The saved query loaded into the search bar; an older address keeps it beside the columns
+  const savedQueryId = urlApp.discover?.savedQuery ?? urlApp.savedQuery;
 
-  const writeApp = useCallback(
-    (changes: { columns?: string[]; sort?: SortPair[]; interval?: string; indexPattern?: string }, replace = false) => {
-      const next = {
+  const appParam = useCallback(
+    (changes: { columns?: string[]; sort?: SortPair[]; interval?: string; indexPattern?: string; savedQuery?: string }) =>
+      encodeState({
         discover: {
           columns: changes.columns ?? columns,
           interval: changes.interval ?? interval,
           isDirty: Boolean(savedId),
+          savedQuery: 'savedQuery' in changes ? changes.savedQuery : savedQueryId,
           sort: changes.sort ?? sort,
         },
         metadata: { indexPattern: changes.indexPattern ?? indexPatternId, view: 'discover' },
-      };
-      setHashParams({ _a: encodeState(next) }, { replace });
+      }),
+    [columns, interval, sort, indexPatternId, savedId, savedQueryId]
+  );
+  const writeApp = useCallback(
+    (changes: { columns?: string[]; sort?: SortPair[]; interval?: string; indexPattern?: string }, replace = false) => {
+      setHashParams({ _a: appParam(changes) }, { replace });
     },
-    [columns, interval, sort, indexPatternId, savedId]
+    [appParam]
+  );
+  const onSavedQueryChange = useCallback(
+    (change: SavedQueryChange) => {
+      setHashParams(
+        {
+          _g: savedQueryGlobalParam(change),
+          _a: appParam({ savedQuery: change.id }),
+          _q: encodeState({ filters: pageFiltersOf(change), query: change.query }),
+        },
+        { replace: change.replace }
+      );
+    },
+    [appParam]
   );
   const writeQuery = useCallback(
     (changes: { query?: Query; filters?: Filter[] }) => {
@@ -473,7 +495,10 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
         onIndexPatternChange={(id) => {
           setResult(undefined);
           setHashParams({
-            _a: encodeState({ discover: { columns: ['_source'], interval: 'auto', isDirty: false, sort: [] }, metadata: { indexPattern: id, view: 'discover' } }),
+            _a: encodeState({
+              discover: { columns: ['_source'], interval: 'auto', isDirty: false, savedQuery: savedQueryId, sort: [] },
+              metadata: { indexPattern: id, view: 'discover' },
+            }),
             _q: encodeState({ filters: [], query }),
           });
         }}
@@ -510,6 +535,8 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
           onRefresh={refresh}
           loading={loading}
           showTime={Boolean(indexPattern.timeFieldName)}
+          savedQueryId={savedQueryId}
+          onSavedQueryChange={onSavedQueryChange}
         />
         <Panel flush className="dscCanvas">
           {loading && <div className="atlProgress" />}

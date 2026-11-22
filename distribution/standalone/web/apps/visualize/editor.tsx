@@ -16,7 +16,7 @@ import { mergeFilters } from '../../lib/query';
 import type { Filter, IndexPattern, Query } from '../../lib/types';
 import { appUrl, decodeState, encodeState } from '../../lib/url';
 import { visFromSavedObject, visToSavedObject, visType, type UiState, type Vis, type VisualizationAttributes } from '../../lib/vis';
-import { href, navigate, setHashParams, setLeaveGuard, useLocation } from '../../router';
+import { getLocation, href, navigate, setHashParams, setLeaveGuard, useLocation } from '../../router';
 import { services } from '../../services';
 import { errorMessage } from '../../services/http';
 import { patternName } from '../../services/index_patterns';
@@ -25,6 +25,7 @@ import { isPinned, splitFilters } from '../../shell/filter_bar';
 import { Inspector } from '../../shell/inspect';
 import { defaultQueryLanguage } from '../../shell/query_bar';
 import { SaveModal, ShareModal, type SaveResult } from '../../shell/saved_objects_ui';
+import { pageFiltersOf, savedQueryGlobalParam, type SavedQueryChange } from '../../shell/saved_query';
 import { SearchBar } from '../../shell/search_bar';
 import { addRecentlyAccessed, currentGlobalParam, useAutoRefresh, useBreadcrumbs, useGlobalState } from '../../shell/state';
 import { resolveVisSource, visContext, type VisInput } from '../../vis/request';
@@ -57,6 +58,8 @@ interface UrlAppState {
   query?: Query;
   filters?: Filter[];
   linked?: boolean;
+  /** The id of the saved query loaded into the search bar */
+  savedQuery?: string;
   uiState?: UiState;
   vis?: { aggs?: AggConfig[]; params?: Record<string, unknown>; title?: string; type?: string };
 }
@@ -138,6 +141,12 @@ export function VisEditor({ savedId }: { savedId?: string }) {
     },
     [location.hashParams._a]
   );
+  const onSavedQueryChange = useCallback((change: SavedQueryChange) => {
+    const { savedQuery: _previous, ...latest } = decodeState<UrlAppState>(getLocation().hashParams._a);
+    const next: UrlAppState = { ...latest, query: change.query, filters: pageFiltersOf(change) };
+    if (change.id) next.savedQuery = change.id;
+    setHashParams({ _g: savedQueryGlobalParam(change), _a: encodeState(next) }, { replace: change.replace });
+  }, []);
 
   const context = useMemo<AggContext>(() => (indexPattern ? visContext(indexPattern, global.time) : {}), [indexPattern, global.time]);
 
@@ -333,7 +342,9 @@ export function VisEditor({ savedId }: { savedId?: string }) {
       navigate(appUrl(VISUALIZE, `/edit/${encodeURIComponent(stored.id)}`, { _g: currentGlobalParam() }), { force: true });
     } else {
       setLoaded({ ...loaded, vis: { ...vis, id: stored.id, version: stored.version, source: vis.source, references } });
-      setHashParams({ _a: undefined }, { replace: true });
+      // The changes the address held are saved now; the saved query loaded into the bar stays
+      const { savedQuery } = decodeState<UrlAppState>(getLocation().hashParams._a);
+      setHashParams({ _a: savedQuery ? encodeState({ savedQuery }) : undefined }, { replace: true });
     }
   };
 
@@ -383,6 +394,8 @@ export function VisEditor({ savedId }: { savedId?: string }) {
           onRefreshChange={(refreshInterval) => setGlobal({ refreshInterval })}
           onRefresh={refresh}
           showQuery={aggBased || saved.type === 'metrics' || saved.type === 'vega'}
+          savedQueryId={urlState.savedQuery}
+          onSavedQueryChange={onSavedQueryChange}
         />
       )}
       <div className="vzeEditor">

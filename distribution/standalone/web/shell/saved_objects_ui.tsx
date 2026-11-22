@@ -8,7 +8,10 @@ import { Checkbox, FormRow, RadioGroup, SearchField, Switch, TextArea, TextField
 import { Icon, type IconName } from '../components/icon';
 import { Flyout, Modal, copyText } from '../components/overlay';
 import { Pagination } from '../components/table';
+import { useLocation } from '../router';
 import { services } from '../services';
+import { errorMessage } from '../services/http';
+import { shortenUrl } from '../services/short_urls';
 import type { SavedObject } from '../services/saved_objects';
 
 export interface SaveResult {
@@ -269,6 +272,13 @@ export function OpenFlyout({
 }
 
 /** Share: the address of what is on screen, or of the saved object behind it */
+/** The original's advice on short URLs, behind the question mark beside the switch */
+const SHORT_URL_TIP =
+  "We recommend sharing shortened snapshot URLs for maximum compatibility. Internet Explorer has URL length restrictions, and some wiki and markup parsers don't do well with the full-length version of the snapshot URL, but the short URL should work great.";
+
+/** The address of a page as another page shows it inside its own */
+const embeddable = (url: string) => `${url}${url.includes('?') ? '&' : '?'}embed=true`;
+
 export function ShareModal({
   objectType,
   savedUrl,
@@ -281,9 +291,50 @@ export function ShareModal({
 }) {
   const [kind, setKind] = useState<'snapshot' | 'saved'>('snapshot');
   const [embed, setEmbed] = useState(false);
+  // The short URLs made while the dialog is open, by the address each one opens
+  const [shortUrls, setShortUrls] = useState<Record<string, string>>({});
+  const [useShort, setUseShort] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [shortError, setShortError] = useState<string>();
+  useLocation();
   const snapshot = window.location.href;
-  const link = kind === 'saved' && savedUrl ? savedUrl : snapshot;
-  const shown = embed ? `<iframe src="${link}${link.includes('?') ? '&' : '?'}embed=true" height="600" width="800"></iframe>` : link;
+  // The page moved on: its short URLs open what it was, so they are forgotten as in the original
+  useEffect(() => {
+    setShortUrls({});
+    setUseShort(false);
+  }, [snapshot]);
+
+  const target = (embedded: boolean) => (embedded ? embeddable(snapshot) : snapshot);
+  const makeShort = async (address: string) => {
+    setCreating(true);
+    setShortError(undefined);
+    try {
+      const short = await shortenUrl(services.http, address);
+      setShortUrls((known) => ({ ...known, [address]: short }));
+      setUseShort(true);
+    } catch (failure) {
+      setUseShort(false);
+      setShortError(`Unable to create short URL. Error: ${errorMessage(failure)}`);
+    } finally {
+      setCreating(false);
+    }
+  };
+  const onShortChange = (checked: boolean) => {
+    if (!checked || shortUrls[target(embed)]) setUseShort(checked);
+    else void makeShort(target(embed));
+  };
+  const onEmbedChange = (checked: boolean) => {
+    setEmbed(checked);
+    // The page shown inside another has a short URL of its own, made as the switch is still on
+    if (useShort && !shortUrls[target(checked)]) {
+      setUseShort(false);
+      void makeShort(target(checked));
+    }
+  };
+
+  const short = useShort ? shortUrls[target(embed)] : undefined;
+  const link = kind === 'saved' && savedUrl ? (embed ? embeddable(savedUrl) : savedUrl) : (short ?? target(embed));
+  const shown = embed ? `<iframe src="${link}" height="600" width="800"></iframe>` : link;
   return (
     <Modal
       title={`Share this ${objectType}`}
@@ -293,6 +344,7 @@ export function ShareModal({
         <Button
           variant="primary"
           icon="copy"
+          disabled={creating}
           onClick={() => {
             copyText(shown, embed ? 'The embed code was copied' : 'The link was copied');
             onClose();
@@ -319,7 +371,20 @@ export function ShareModal({
             ]}
           />
         </FormRow>
-        <Checkbox checked={embed} onChange={setEmbed} label="As code to embed in another page" />
+        {/* Only a snapshot is shortened: the address of a saved object is short already */}
+        {kind === 'snapshot' && (
+          <div className="shlShortUrl" data-test-subj="createShortUrl">
+            <span className="shlShortUrl__switch">
+              <Switch checked={useShort} onChange={onShortChange} label="Short URL" testId="useShortUrl" />
+              {creating && <span className="atlSpinner" />}
+              <span className="shlShortUrl__tip" title={SHORT_URL_TIP}>
+                <Icon name="help" title={SHORT_URL_TIP} />
+              </span>
+            </span>
+            {shortError && <span className="atlFormRow__help">{shortError}</span>}
+          </div>
+        )}
+        <Checkbox checked={embed} onChange={onEmbedChange} label="As code to embed in another page" />
         <TextArea value={shown} onChange={() => undefined} readOnly rows={4} code />
       </div>
     </Modal>
