@@ -1,12 +1,40 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
 /*
- * A place to write JSON, a query or a request: a text area with line numbers that keeps
- * indentation, closes brackets and indents with the Tab key's two spaces.
+ * A place to write JSON, a query or a request. The text is drawn line by line, numbered and in
+ * colour, and a text area of the same size lies over it with its own text unseen: what is typed
+ * goes to the text area, what is read is the drawing. It keeps indentation, closes brackets and
+ * indents with the Tab key's two spaces.
  */
 
-import { useLayoutEffect, useMemo, useRef, type KeyboardEvent } from 'react';
+import {
+  memo,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  type ClipboardEvent,
+  type KeyboardEvent,
+  type ReactNode,
+  type Ref,
+} from 'react';
 import { cx } from './basic';
+
+/** A run of text of one kind: `kind` is the end of a `tok…` class (Key, String, Number…) */
+export interface CodeToken {
+  text: string;
+  kind?: string;
+}
+
+export interface CodeEditorHandle {
+  /** Where a line starts, in pixels from the top of the text */
+  lineTop(line: number): number | undefined;
+  /** Where a place in the text is in the window, for a menu that opens at the cursor */
+  coordinates(line: number, column: number): { left: number; top: number; bottom: number } | undefined;
+  focus(): void;
+  select(start: number, end?: number): void;
+  selection(): [number, number];
+}
 
 export interface CodeEditorProps {
   value: string;
@@ -20,14 +48,47 @@ export interface CodeEditorProps {
   ariaLabel?: string;
   onKeyDown?: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   /** Called with the place of the cursor as it moves: Dev Tools runs the request under it */
-  onCursor?: (offset: number) => void;
+  onCursor?: (offset: number, end: number) => void;
+  onPaste?: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
   testId?: string;
   className?: string;
   wrap?: boolean;
+  /** The text as lines of coloured runs; without it the text is drawn plain */
+  tokenize?: (text: string) => CodeToken[][];
+  /** Lines drawn on a band, from the first to the last, counted from 0 */
+  markedLines?: [number, number];
+  fontSize?: number;
+  /** What is drawn over the text and moves with it */
+  overlay?: ReactNode;
+  handle?: Ref<CodeEditorHandle>;
+  /** Called with how far the text is scrolled down */
+  onScroll?: (top: number) => void;
 }
 
 const PAIRS: Record<string, string> = { '{': '}', '[': ']', '(': ')', '"': '"' };
 const LINE_HEIGHT = 18;
+
+const sameTokens = (a: CodeToken[], b: CodeToken[]) =>
+  a.length === b.length && a.every((token, index) => token.text === b[index].text && token.kind === b[index].kind);
+
+const Line = memo(
+  function Line({ tokens, marked }: { tokens: CodeToken[]; marked: boolean }) {
+    return (
+      <div className={marked ? 'atlCodeEditor__line atlCodeEditor__line--marked' : 'atlCodeEditor__line'}>
+        {tokens.map((token, index) =>
+          token.kind ? (
+            <span key={index} className={`tok${token.kind}`}>
+              {token.text}
+            </span>
+          ) : (
+            token.text
+          )
+        )}
+      </div>
+    );
+  },
+  (before, after) => before.marked === after.marked && sameTokens(before.tokens, after.tokens)
+);
 
 export function CodeEditor({
   value,
@@ -40,23 +101,82 @@ export function CodeEditor({
   ariaLabel,
   onKeyDown,
   onCursor,
+  onPaste,
   testId,
   className,
   wrap,
+  tokenize,
+  markedLines,
+  fontSize,
+  overlay,
+  handle,
+  onScroll,
 }: CodeEditorProps) {
   const area = useRef<HTMLTextAreaElement>(null);
-  const gutter = useRef<HTMLDivElement>(null);
+  const frame = useRef<HTMLDivElement>(null);
+  const paint = useRef<HTMLPreElement>(null);
   // Where the cursor goes once React has written a value this editor changed itself
   const pending = useRef<[number, number] | undefined>(undefined);
-  const lines = useMemo(() => value.split('\n').length, [value]);
-  const numbers = useMemo(
-    () => Array.from({ length: lines }, (_item, index) => index + 1).join('\n'),
-    [lines]
+  const lines = useMemo<CodeToken[][]>(
+    () => (tokenize ? tokenize(value) : value.split('\n').map((text) => [{ text }])),
+    [tokenize, value]
+  );
+  const lineHeight = fontSize ? Math.round(fontSize * 1.3) : LINE_HEIGHT;
+
+  // Keeps the line the cursor is on inside the frame, which is what scrolls
+  const reveal = (offset: number) => {
+    const box = frame.current;
+    const line = paint.current?.children[value.slice(0, offset).split('\n').length - 1] as HTMLElement | undefined;
+    if (!box || !line) return;
+    if (line.offsetTop < box.scrollTop) box.scrollTop = line.offsetTop;
+    else if (line.offsetTop + line.offsetHeight > box.scrollTop + box.clientHeight) {
+      box.scrollTop = line.offsetTop + line.offsetHeight - box.clientHeight;
+    }
+  };
+
+  useImperativeHandle(
+    handle,
+    () => ({
+      lineTop: (line) => (paint.current?.children[line] as HTMLElement | undefined)?.offsetTop,
+      coordinates: (line, column) => {
+        const element = paint.current?.children[line] as HTMLElement | undefined;
+        if (!element) return undefined;
+        // The place is found in the drawing, which is laid out as the text area is
+        let left = column;
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+        let node = walker.nextNode();
+        while (node) {
+          const length = node.textContent?.length ?? 0;
+          if (left <= length) {
+            const range = document.createRange();
+            range.setStart(node, left);
+            range.setEnd(node, left);
+            const rect = range.getClientRects()[0] ?? range.getBoundingClientRect();
+            return { left: rect.left, top: rect.top, bottom: rect.bottom };
+          }
+          left -= length;
+          node = walker.nextNode();
+        }
+        const rect = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        return { left: rect.left + Number.parseFloat(style.paddingLeft), top: rect.top, bottom: rect.top + lineHeight };
+      },
+      focus: () => area.current?.focus(),
+      select: (start, end = start) => {
+        pending.current = [start, end];
+        area.current?.setSelectionRange(start, end);
+        reveal(end);
+      },
+      selection: () => [area.current?.selectionStart ?? 0, area.current?.selectionEnd ?? 0],
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [value, lineHeight]
   );
 
   useLayoutEffect(() => {
     if (pending.current && area.current) {
       area.current.setSelectionRange(pending.current[0], pending.current[1]);
+      reveal(pending.current[1]);
       pending.current = undefined;
     }
   });
@@ -127,35 +247,51 @@ export function CodeEditor({
     }
   };
 
-  const shownLines = Math.max(minLines, Math.min(maxLines, lines));
+  const shownLines = Math.max(minLines, Math.min(maxLines, lines.length));
+  const [markFrom, markTo] = markedLines ?? [-1, -1];
   return (
     <div
-      className={cx('atlCodeEditor', className)}
-      style={{ height: height ?? shownLines * LINE_HEIGHT + 18 }}
+      ref={frame}
+      className={cx('atlCodeEditor', wrap && 'atlCodeEditor--wrap', readOnly && 'atlCodeEditor--readOnly', className)}
+      style={{
+        height: height ?? shownLines * lineHeight + 18,
+        ...(fontSize ? { fontSize, lineHeight: `${lineHeight}px` } : {}),
+      }}
+      tabIndex={readOnly ? 0 : undefined}
+      onScroll={onScroll ? (event) => onScroll(event.currentTarget.scrollTop) : undefined}
+      aria-label={readOnly ? ariaLabel : undefined}
+      data-test-subj={readOnly ? testId : undefined}
     >
-      <div ref={gutter} className="atlCodeEditor__gutter" aria-hidden>
-        {numbers}
+      <div className="atlCodeEditor__body">
+        <pre ref={paint} className="atlCodeEditor__paint" aria-hidden={!readOnly}>
+          {lines.map((tokens, index) => (
+            <Line key={index} tokens={tokens} marked={index >= markFrom && index <= markTo} />
+          ))}
+        </pre>
+        {!readOnly && (
+          <textarea
+            ref={area}
+            className="atlCodeEditor__input"
+            value={value}
+            placeholder={placeholder}
+            aria-label={ariaLabel}
+            spellCheck={false}
+            autoCapitalize="off"
+            autoCorrect="off"
+            wrap={wrap ? 'soft' : 'off'}
+            data-test-subj={testId}
+            onChange={(event) => onChange?.(event.target.value)}
+            onKeyDown={handleKeyDown}
+            onPaste={onPaste}
+            onSelect={(event) => {
+              const { selectionStart, selectionEnd, selectionDirection } = event.currentTarget;
+              reveal(selectionDirection === 'backward' ? selectionStart : selectionEnd);
+              onCursor?.(selectionStart, selectionEnd);
+            }}
+          />
+        )}
+        {overlay}
       </div>
-      <textarea
-        ref={area}
-        className="atlCodeEditor__input"
-        style={wrap ? { whiteSpace: 'pre-wrap' } : undefined}
-        value={value}
-        readOnly={readOnly}
-        placeholder={placeholder}
-        aria-label={ariaLabel}
-        spellCheck={false}
-        autoCapitalize="off"
-        autoCorrect="off"
-        wrap={wrap ? 'soft' : 'off'}
-        data-test-subj={testId}
-        onChange={(event) => onChange?.(event.target.value)}
-        onKeyDown={handleKeyDown}
-        onScroll={(event) => {
-          if (gutter.current) gutter.current.scrollTop = event.currentTarget.scrollTop;
-        }}
-        onSelect={(event) => onCursor?.(event.currentTarget.selectionStart)}
-      />
     </div>
   );
 }

@@ -1,0 +1,341 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/* Dev Tools: the console and the Grok debugger. */
+
+.dvtPage {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: calc(100vh - var(--header-height));
+  padding: var(--space-2) var(--space-2) 0;
+}
+
+.dvtPage > .atlTabs {
+  flex: none;
+}
+
+.dvtTight {
+  gap: var(--space-2);
+}
+
+/* --- Console ------------------------------------------------------------------------------- */
+
+.dvtConsole {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.dvtMenu {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-1);
+}
+
+.dvtMenu__item {
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.dvtMenu__item:hover,
+.dvtMenu__item[aria-pressed='true'] {
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+}
+
+.dvtMenu__item:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.dvtMenu__status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 22px;
+}
+
+.dvtPanes {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.dvtPane {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+.dvtEditor.atlCodeEditor {
+  border-radius: 0;
+  border-color: var(--color-border-light);
+}
+
+.dvtEditor.atlCodeEditor:focus-within,
+.dvtEditor.atlCodeEditor--readOnly:focus-visible {
+  box-shadow: none;
+}
+
+.dvtResizer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 14px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  cursor: col-resize;
+  user-select: none;
+}
+
+.dvtResizer:hover {
+  background: var(--color-surface-secondary);
+}
+
+/* The buttons of the request the cursor is in, at the end of its first line */
+.dvtActions {
+  position: absolute;
+  right: var(--space-4);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.dvtActions button {
+  display: inline-flex;
+  padding: 2px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: none;
+  cursor: pointer;
+}
+
+.dvtActions button:hover {
+  background: color-mix(in srgb, var(--color-text-primary) 10%, transparent);
+}
+
+.dvtActions__send {
+  color: var(--color-healthy);
+}
+
+.dvtActions__more {
+  color: var(--color-accent);
+}
+
+.tokMethod {
+  color: var(--code-string);
+}
+
+.tokUrl {
+  color: var(--code-number);
+}
+
+/* --- What could be typed next -------------------------------------------------------------- */
+
+.dvtSuggest {
+  position: fixed;
+  z-index: 3000;
+  min-width: 220px;
+  max-width: 420px;
+  max-height: 240px;
+  margin: 0;
+  padding: var(--space-1);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+  font-family: var(--font-family-code);
+  font-size: var(--font-size-xs);
+  list-style: none;
+  overflow-y: auto;
+}
+
+.dvtSuggest__item {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+
+.dvtSuggest__item--active {
+  background: var(--color-accent-tint);
+}
+
+.dvtSuggest__meta {
+  color: var(--color-text-tertiary);
+}
+
+/* --- History ------------------------------------------------------------------------------- */
+
+.dvtHistory {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  gap: var(--space-2);
+  padding: var(--space-2);
+}
+
+.dvtHistory__body {
+  display: flex;
+  gap: var(--space-3);
+  height: 240px;
+}
+
+.dvtHistory__list {
+  flex: 0 0 50%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  list-style: none;
+  overflow-y: auto;
+}
+
+.dvtHistory__list:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.dvtHistory__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-bottom: 1px solid var(--color-border-light);
+  cursor: pointer;
+}
+
+.dvtHistory__item .atlIcon {
+  flex: none;
+  visibility: hidden;
+}
+
+.dvtHistory__item:hover,
+.dvtHistory__item--selected {
+  background: var(--color-surface-secondary);
+}
+
+.dvtHistory__item--selected .atlIcon,
+.dvtHistory__item:hover .atlIcon {
+  visibility: visible;
+}
+
+.dvtHistory__viewer {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.dvtHistory__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* --- Help ---------------------------------------------------------------------------------- */
+
+.dvtKeys {
+  margin: 0;
+}
+
+.dvtKeys > div {
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.dvtKeys dt {
+  font-weight: var(--font-weight-semibold, 600);
+}
+
+.dvtKeys dd {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.dvtTips {
+  margin: 0;
+  padding-left: var(--space-5);
+}
+
+/* --- Grok debugger ------------------------------------------------------------------------- */
+
+.dvtGrok {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-6);
+  padding: var(--space-6);
+  overflow: auto;
+}
+
+.dvtGrok__form {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.dvtGrok__docs {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.dvtGrok__advanced {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+}
+
+.dvtGrok__result {
+  flex: 1 1 0;
+  min-width: 0;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.dvtGrok__resultHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-secondary);
+}
+
+.dvtGrok__resultBody {
+  padding: var(--space-4);
+}
+
+.dvtGrok__matched {
+  color: var(--color-healthy-text);
+}
+
+.dvtGrok__failed {
+  color: var(--color-critical-text);
+}
+
+@media (max-width: 760px) {
+  .dvtGrok {
+    flex-direction: column;
+  }
+
+  .dvtGrok__form,
+  .dvtGrok__result {
+    flex: none;
+    width: 100%;
+  }
+}

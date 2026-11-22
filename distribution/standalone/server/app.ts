@@ -370,6 +370,8 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
   };
   const proxyOptions = { maxBytes: config.savedObjects.maxImportPayloadBytes };
   router.post('/api/console/proxy', proxy, proxyOptions);
+  // The address "Copy as cURL" writes: the first OpenSearch this server talks to
+  router.get('/api/console/opensearch_config', () => ({ body: { host: config.opensearch.hosts[0] } }));
   router.post('/internal/opensearch', proxy, proxyOptions);
 
   // --- The pipeline every request goes through -------------------------------------------------
