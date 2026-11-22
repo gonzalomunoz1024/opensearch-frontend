@@ -17,6 +17,7 @@ import { services } from '../services';
 import { errorMessage } from '../services/http';
 import { FilterBar, isPinned } from './filter_bar';
 import { QueryBar, defaultQueryLanguage } from './query_bar';
+import { RefreshPicker } from './refresh_picker';
 import { SaveQueryForm, SavedQueryManagement, saveFailureText, type SavedQueryChange } from './saved_query';
 import { TimePicker } from './time_picker';
 
@@ -36,6 +37,8 @@ export interface SearchBarProps {
   showFilters?: boolean;
   /** Whether a time range means anything here: not for an index pattern without a time field */
   showTime?: boolean;
+  /** The picker without its dates: only how often the page refreshes (the original's "auto refresh only") */
+  refreshOnly?: boolean;
   placeholder?: string;
   /** The saved query the page has loaded, by the id its address keeps */
   savedQueryId?: string;
@@ -72,6 +75,7 @@ export function SearchBar({
   showQuery = true,
   showFilters = true,
   showTime = true,
+  refreshOnly = false,
   placeholder,
   savedQueryId,
   onSavedQueryChange,
@@ -209,7 +213,12 @@ export function SearchBar({
           />
         )}
         {!showQuery && <div className="atlGrow" />}
-        {showTime && time && refreshInterval && onTimeChange && onRefreshChange ? (
+        {showTime && refreshOnly && refreshInterval && onRefreshChange ? (
+          <>
+            <RefreshPicker refreshInterval={refreshInterval} onRefreshChange={onRefreshChange} />
+            <TimePickerLess loading={loading} dirty={dirty} onClick={() => (dirty ? submit(draft) : onRefresh())} />
+          </>
+        ) : showTime && time && refreshInterval && onTimeChange && onRefreshChange ? (
           <TimePicker
             time={time}
             refreshInterval={refreshInterval}
@@ -240,7 +249,6 @@ export function SearchBar({
   );
 }
 
-
 function TimePickerLess({ loading, dirty, onClick }: { loading?: boolean; dirty?: boolean; onClick: () => void }) {
   return (
     <Button
@@ -248,6 +256,7 @@ function TimePickerLess({ loading, dirty, onClick }: { loading?: boolean; dirty?
       icon={dirty ? 'arrowRight' : 'refresh'}
       loading={loading && !dirty}
       onClick={onClick}
+      className="shlTime__submit"
       testId="querySubmitButton"
     >
       {dirty ? 'Update' : 'Refresh'}

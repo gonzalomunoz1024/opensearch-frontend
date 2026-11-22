@@ -22,6 +22,13 @@ describe('Markdown', () => {
     assert.match(out, /<ul[^>]*><li[^>]*>one<\/li><li[^>]*>two<\/li><\/ul>/);
   });
 
+  it('keeps a list tight when a list of the other kind follows it after a blank line', () => {
+    const out = html('- one\n- two\n\n1. first\n2. second');
+    assert.match(out, /<ul><li>one<\/li><li>two<\/li><\/ul><ol><li>first<\/li><li>second<\/li><\/ol>/);
+    // A blank line between two items of one list still makes it loose
+    assert.match(html('- one\n\n- two'), /<ul><li><p>one<\/p><\/li><li><p>two<\/p><\/li><\/ul>/);
+  });
+
   it('shows HTML as the text it is', () => {
     const out = html('before <script>alert(1)</script> <img src=x onerror=alert(1)> after');
     assert.ok(!out.includes('<script'));

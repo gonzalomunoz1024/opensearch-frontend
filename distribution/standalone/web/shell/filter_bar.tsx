@@ -481,8 +481,8 @@ export function FilterBar({ filters, onChange, indexPatterns }: FilterBarProps) 
           <IconButton
             icon="filter"
             label="Change all filters"
-            size="s"
-            style={{ color: 'var(--color-accent)' }}
+            variant="empty"
+            className="shlFilters__actions"
             onClick={() => setOptionsOpen(!optionsOpen)}
             testId="showFilterActions"
           />
@@ -504,7 +504,7 @@ export function FilterBar({ filters, onChange, indexPatterns }: FilterBarProps) 
         onClose={closeAdding}
         padded
         button={
-          <Button variant="empty" size="s" icon="plusCircle" onClick={() => setAdding(!adding)} testId="addFilter" disabled={indexPatterns.length === 0}>
+          <Button variant="empty" icon="plusCircle" onClick={() => setAdding(!adding)} testId="addFilter" disabled={indexPatterns.length === 0}>
             Add filter
           </Button>
         }

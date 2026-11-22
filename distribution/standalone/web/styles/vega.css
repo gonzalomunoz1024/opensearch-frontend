@@ -313,20 +313,3 @@
   vertical-align: top;
   background: linear-gradient(to left, var(--vga-guide) 0, var(--vga-guide) 1px, transparent 1px, transparent 100%);
 }
-
-/* The placeholder at the top of the sidebar, where the original names an index pattern */
-.vzeSide__title.vzeSide__title--placeholder {
-  min-height: 40px;
-  padding: 0;
-  border-bottom: 1px solid var(--color-border-light);
-}
-
-/* Auto apply: a button of its own after Discard and Update, or alone while it is on */
-.vzeSide__buttons.vzeSide__buttons--auto {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.vzeSide__buttons--auto > .atlButton:not(.vzeSide__autoApply) {
-  flex: 1 1 0;
-}

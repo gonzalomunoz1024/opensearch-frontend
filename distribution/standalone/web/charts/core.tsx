@@ -443,14 +443,29 @@ export function useSize<T extends HTMLElement>(): [RefObject<T>, Size] {
 
 let measureContext: CanvasRenderingContext2D | null | undefined;
 
-/** The width a text takes in the chart's face */
-export function textWidth(text: string, fontSize = 11, weight = 400): number {
+/** A canvas set to the chart's face, to measure text with; none outside a browser */
+function measurer(fontSize: number, weight: number): CanvasRenderingContext2D | null {
   if (measureContext === undefined) {
     measureContext = typeof document === 'undefined' ? null : document.createElement('canvas').getContext('2d');
   }
-  if (!measureContext) return text.length * fontSize * 0.58;
-  measureContext.font = `${weight} ${fontSize}px -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif`;
-  return measureContext.measureText(text).width;
+  if (measureContext) {
+    measureContext.font = `${weight} ${fontSize}px -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif`;
+  }
+  return measureContext;
+}
+
+/** The width a text takes in the chart's face */
+export function textWidth(text: string, fontSize = 11, weight = 400): number {
+  const context = measurer(fontSize, weight);
+  return context ? context.measureText(text).width : text.length * fontSize * 0.58;
+}
+
+/** How far a line of the chart's face reaches above and below its baseline */
+export function fontMetrics(fontSize = 11): { size: number; ascent: number; descent: number } {
+  const metrics = measurer(fontSize, 400)?.measureText('0');
+  return metrics && Number.isFinite(metrics.fontBoundingBoxAscent) && Number.isFinite(metrics.fontBoundingBoxDescent)
+    ? { size: fontSize, ascent: metrics.fontBoundingBoxAscent, descent: metrics.fontBoundingBoxDescent }
+    : { size: fontSize, ascent: fontSize, descent: fontSize * 0.27 };
 }
 
 /** A text cut to a width, with an ellipsis */

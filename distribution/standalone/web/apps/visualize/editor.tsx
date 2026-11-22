@@ -8,8 +8,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, EmptyPrompt, IconButton, Link, Loading, Tabs, cx } from '../../components/basic';
-import { Popover } from '../../components/overlay';
+import { Button, EmptyPrompt, IconButton, Loading, Tabs, cx } from '../../components/basic';
+import { Icon } from '../../components/icon';
 import type { AggConfig, AggContext } from '../../lib/aggs';
 import type { TimeRange } from '../../lib/dates';
 import { mergeFilters } from '../../lib/query';
@@ -19,7 +19,6 @@ import { visFromSavedObject, visToSavedObject, visType, type UiState, type Vis, 
 import { getLocation, href, navigate, setHashParams, setLeaveGuard, useLocation } from '../../router';
 import { services } from '../../services';
 import { errorMessage } from '../../services/http';
-import { patternName } from '../../services/index_patterns';
 import { TopNav, type TopNavItem } from '../../shell/chrome';
 import { isPinned, splitFilters } from '../../shell/filter_bar';
 import { Inspector } from '../../shell/inspect';
@@ -33,13 +32,12 @@ import { specIndexPatterns } from '../../vis/vega/index_patterns';
 import { Visualization, canDraw, type VisInspectData } from '../../vis/visualization';
 import { DataTab } from './data_tab';
 import { defaultParams, newVis, syncParams, visProblems } from './defaults';
+import { canAutoApply, dragWidths, editorHeading, initialWidths, keyWidths, searchBarParts, type SplitWidths } from './editor_layout';
 import { optionTabs } from './options';
 import { setupRegionMap } from '../../vis/region_map/region_map_type';
+import { SidebarControls, SidebarTitle } from './sidebar';
 
 export const VISUALIZE = '/app/visualize';
-
-// The kinds whose changes can be applied as they are made
-const AUTO_APPLY = new Set(['markdown', 'vega']);
 
 // The same text for the same state, whatever order its keys came in: the address sorts them
 const stable = (value: unknown): string =>
@@ -103,11 +101,18 @@ export function VisEditor({ savedId }: { savedId?: string }) {
   const [collapsed, setCollapsed] = useState(false);
   const [tick, setTick] = useState(0);
   const [tried, setTried] = useState(false);
-  const [dialog, setDialog] = useState<'save' | 'share' | 'inspect' | 'link'>();
+  const [dialog, setDialog] = useState<'save' | 'share' | 'inspect'>();
   const lastData = useRef<VisInspectData>();
   const [autoApply, setAutoApply] = useState(false);
-  // The index patterns of the page's filters, for a kind that names them in its own settings
+  // The index patterns of the page's filters, for a kind drawn from no index pattern
   const [usedPatterns, setUsedPatterns] = useState<IndexPattern[]>([]);
+  // The shares of the width the chart and the sidebar take, once the bar between them has moved
+  const [widths, setWidths] = useState<SplitWidths>();
+  const split = useRef<HTMLDivElement>(null);
+  const chartPanel = useRef<HTMLDivElement>(null);
+  const sidePanel = useRef<HTMLElement>(null);
+  // Where the pointer was when the bar was last moved, while it is held
+  const dragFrom = useRef<number>();
 
   const createType = location.hashParams.type;
   const createPattern = location.hashParams.indexPattern;
@@ -163,13 +168,15 @@ export function VisEditor({ savedId }: { savedId?: string }) {
     if (appliedKey) setDraft(JSON.parse(appliedKey) as Draft);
   }, [appliedKey]);
 
-  // A Vega spec names the indices it searches: the filter bar offers their fields, or else the default pattern's
+  // Without an index pattern the filter bar offers the fields of the indices a Vega spec names,
+  // or else those of the default pattern, as the original does
   const vegaSpec = saved?.type === 'vega' ? applied?.params.spec : undefined;
+  const needsPatterns = Boolean(saved) && !indexPattern;
   useEffect(() => {
-    if (saved?.type !== 'vega') return undefined;
+    if (!needsPatterns) return undefined;
     let live = true;
     (async () => {
-      let patterns = await specIndexPatterns(vegaSpec);
+      let patterns = saved?.type === 'vega' ? await specIndexPatterns(vegaSpec) : [];
       if (!patterns.length) {
         const fallback = await services.indexPatterns.defaultId();
         patterns = fallback ? [await services.indexPatterns.get(fallback)] : [];
@@ -179,7 +186,7 @@ export function VisEditor({ savedId }: { savedId?: string }) {
     return () => {
       live = false;
     };
-  }, [saved?.type, vegaSpec]);
+  }, [needsPatterns, saved?.type, vegaSpec]);
 
   const query: Query = useMemo(
     () => urlState.query ?? saved?.source.query ?? { query: '', language: defaultQueryLanguage() },
@@ -294,7 +301,6 @@ export function VisEditor({ savedId }: { savedId?: string }) {
   }
   if (!saved || !applied || !draft || !shown) return <Loading />;
 
-  const linked = Boolean(saved.savedSearchId);
   const unlink = () => {
     const parent = saved.parent;
     setLoaded({
@@ -311,7 +317,7 @@ export function VisEditor({ savedId }: { savedId?: string }) {
     const ownQuery = typeof query.query === 'string' && query.query.trim() !== '' ? query : (parent?.query ?? query);
     writeApp({ linked: false, query: ownQuery, filters: [...(parent?.filters ?? []), ...appFilters] }, true);
     setDialog(undefined);
-    services.toasts.success(`Unlinked from saved search “${loaded?.searchTitle ?? ''}”`);
+    services.toasts.success(`Unlinked from saved search '${loaded?.searchTitle ?? ''}'`);
   };
 
   const save = async ({ title: newTitle, description, asNew }: SaveResult) => {
@@ -371,35 +377,56 @@ export function VisEditor({ savedId }: { savedId?: string }) {
     },
   ];
 
-  const tabs = [...(aggBased ? [{ id: 'data', label: 'Data' }] : []), ...optionTabs(saved.type).map((item) => ({ id: item.id, label: item.label }))];
+  const tabs = [...(aggBased ? [{ id: 'data', label: 'Data' }] : []), ...optionTabs(saved.type).map((item) => ({ id: item.id, label: item.label }))].map(
+    (item) => ({ ...item, testId: `visEditorTab__${item.id}` })
+  );
   const selected = tabs.some((item) => item.id === tab) ? (tab as string) : tabs[0].id;
-  const optionTab = optionTabs(saved.type).find((item) => item.id === selected);
   const setParams = (params: Record<string, unknown>) => setDraft({ ...draft, params });
   const setAggs = (aggs: AggConfig[]) => setDraft({ aggs, params: syncParams({ type: saved.type, aggs, params: draft.params }, context) });
-  const showBar = saved.type !== 'markdown';
+  const bar = searchBarParts(saved.type, indexPattern);
+  const shares = widths ?? initialWidths(saved.type);
+  const discard = () => {
+    setDraft(applied);
+    setTried(false);
+  };
 
   return (
-    <div className="vzePage" data-test-subj="visualizeEditor">
+    <div className={cx('vzePage', `vzePage--${saved.type}`)} data-test-subj="visualizeEditor">
       <TopNav items={navItems} />
-      {showBar && (
-        <SearchBar
-          indexPatterns={indexPattern ? [indexPattern] : saved.type === 'vega' ? usedPatterns : []}
-          query={query}
-          onQuerySubmit={(next) => writeApp({ query: next })}
-          filters={filters}
-          onFiltersChange={setFilters}
-          time={global.time}
-          refreshInterval={global.refreshInterval}
-          onTimeChange={setTime}
-          onRefreshChange={(refreshInterval) => setGlobal({ refreshInterval })}
-          onRefresh={refresh}
-          showQuery={aggBased || saved.type === 'metrics' || saved.type === 'vega'}
-          savedQueryId={urlState.savedQuery}
-          onSavedQueryChange={onSavedQueryChange}
-        />
-      )}
-      <div className="vzeEditor">
-        <div className="vzeChart" data-test-subj="visualizationLoader">
+      <SearchBar
+        indexPatterns={indexPattern ? [indexPattern] : usedPatterns}
+        query={query}
+        onQuerySubmit={(next) => writeApp({ query: next })}
+        filters={filters}
+        onFiltersChange={setFilters}
+        time={global.time}
+        refreshInterval={global.refreshInterval}
+        onTimeChange={setTime}
+        onRefreshChange={(refreshInterval) => setGlobal({ refreshInterval })}
+        onRefresh={refresh}
+        showQuery={bar.query}
+        showFilters={bar.filters}
+        refreshOnly={!bar.datePicker}
+        savedQueryId={urlState.savedQuery}
+        onSavedQueryChange={onSavedQueryChange}
+      />
+      <h1 className="atlScreenReaderOnly">{editorHeading(saved.title, kind?.title ?? saved.type, Boolean(saved.id))}</h1>
+      <div
+        className="vzeEditor"
+        ref={split}
+        onMouseMove={(event) => {
+          if (dragFrom.current === undefined) return;
+          const editorWidth = split.current?.getBoundingClientRect().width ?? 0;
+          const chartWidth = chartPanel.current?.getBoundingClientRect().width ?? 0;
+          const sideWidth = sidePanel.current?.getBoundingClientRect().width ?? 0;
+          setWidths(dragWidths(chartWidth, sideWidth, event.clientX - dragFrom.current, editorWidth));
+          dragFrom.current = event.clientX;
+        }}
+        onMouseUp={() => {
+          dragFrom.current = undefined;
+        }}
+      >
+        <div className="vzeChart" ref={chartPanel} style={{ width: `${shares.chart}%` }}>
           {canDraw(saved.type) || aggBased ? (
             <Visualization
               vis={shown}
@@ -420,105 +447,78 @@ export function VisEditor({ savedId }: { savedId?: string }) {
             </EmptyPrompt>
           )}
         </div>
-        <aside className={cx('vzeSide', collapsed && 'vzeSide--collapsed')} aria-label="Visualization editor">
+        {/* The bar between the chart and the sidebar: dragged, or moved by its arrow keys */}
+        <button
+          type="button"
+          className={cx('vzeResizer', collapsed && 'vzeResizer--hidden')}
+          aria-label="Press left/right to adjust panels size"
+          onMouseDown={(event) => {
+            dragFrom.current = event.clientX;
+          }}
+          onKeyDown={(event) => {
+            const next = keyWidths(shares, event.key);
+            if (!next) return;
+            event.preventDefault();
+            setWidths(next);
+          }}
+          data-test-subj="splitPanelResizer"
+        >
+          <Icon name="grabHorizontal" />
+        </button>
+        <aside
+          className={cx('vzeSide', collapsed && 'vzeSide--collapsed')}
+          ref={sidePanel}
+          style={{ width: `${shares.side}%` }}
+          aria-label="Visualization editor"
+        >
+          <div className="vzeSide__content">
+            <SidebarTitle
+              type={saved.type}
+              indexPattern={indexPattern}
+              searchId={saved.savedSearchId}
+              searchTitle={loaded?.searchTitle}
+              onUnlink={unlink}
+            />
+            {tabs.length > 1 && (
+              <div className="vzeSide__nav">
+                <Tabs tabs={tabs} selected={selected} onSelect={setTab} />
+              </div>
+            )}
+            <div className={cx('vzeSide__body', saved.type === 'vega' && 'vzeSide__body--flush')}>
+              {selected === 'data' && aggBased ? (
+                <DataTab
+                  type={saved.type}
+                  aggs={draft.aggs}
+                  onChange={setAggs}
+                  indexPattern={indexPattern}
+                  context={context}
+                  problems={problems}
+                  showProblems={tried}
+                />
+              ) : (
+                optionTabs(saved.type)
+                  .find((item) => item.id === selected)
+                  ?.render({ type: saved.type, params: draft.params, setParams, aggs: draft.aggs, context })
+              )}
+            </div>
+            <SidebarControls
+              dirty={dirty}
+              invalid={tried && hasProblems}
+              canAutoApply={canAutoApply(saved.type)}
+              autoApply={autoApply}
+              onAutoApply={setAutoApply}
+              onDiscard={discard}
+              onUpdate={update}
+            />
+          </div>
           <IconButton
             className="vzeSide__collapse"
-            icon={collapsed ? 'chevronLeft' : 'chevronRight'}
-            size="s"
+            icon={collapsed ? 'menuLeft' : 'menuRight'}
             label="Toggle sidebar"
             aria-expanded={!collapsed}
             onClick={() => setCollapsed(!collapsed)}
             testId="collapseSideBarButton"
           />
-          {!collapsed && (
-            <>
-              {saved.type === 'vega' && !linked && <div className="vzeSide__title vzeSide__title--placeholder" />}
-              {(indexPattern || linked) && (
-                <div className="vzeSide__title">
-                  {linked ? (
-                    <Popover
-                      open={dialog === 'link'}
-                      onClose={() => setDialog(undefined)}
-                      padded
-                      button={
-                        <button type="button" className="atlLinkButton vzeSide__link" onClick={() => setDialog(dialog === 'link' ? undefined : 'link')} title="Link to saved search. Click to learn more or break link.">
-                          <strong className="atlTruncate">{loaded?.searchTitle ?? 'Saved search'}</strong>
-                        </button>
-                      }
-                    >
-                      <div className="atlStack" style={{ maxWidth: 280 }}>
-                        <strong>Linked to saved search</strong>
-                        <p className="atlSmall">
-                          This visualization is drawn from the saved search “{loaded?.searchTitle}”. A change to that search changes this
-                          visualization too.
-                        </p>
-                        <Link to={`/app/data-explorer/discover#/view/${encodeURIComponent(saved.savedSearchId ?? '')}`}>Open the saved search</Link>
-                        <Button size="s" variant="danger" onClick={unlink} testId="showUnlinkSavedSearchPopover">
-                          Break the link to the saved search
-                        </Button>
-                      </div>
-                    </Popover>
-                  ) : (
-                    <strong className="atlTruncate" title={`Index pattern: ${indexPattern ? patternName(indexPattern) : ''}`}>
-                      {indexPattern ? patternName(indexPattern) : ''}
-                    </strong>
-                  )}
-                </div>
-              )}
-              {tabs.length > 1 && <Tabs tabs={tabs} selected={selected} onSelect={setTab} />}
-              <div className={cx('vzeSide__body', saved.type === 'vega' && 'vzeSide__body--flush')}>
-                {selected === 'data' && aggBased ? (
-                  <DataTab
-                    type={saved.type}
-                    aggs={draft.aggs}
-                    onChange={setAggs}
-                    indexPattern={indexPattern}
-                    context={context}
-                    problems={problems}
-                    showProblems={tried}
-                  />
-                ) : (
-                  optionTab?.render({ type: saved.type, params: draft.params, setParams, aggs: draft.aggs, context })
-                )}
-              </div>
-              <div className="vzeSide__footer">
-                {tried && hasProblems && <span className="atlFormRow__error">Errors in the highlighted fields need to be resolved.</span>}
-                <div className={cx('vzeSide__buttons', AUTO_APPLY.has(saved.type) && 'vzeSide__buttons--auto')}>
-                  {!autoApply && (
-                    <>
-                      <Button
-                        variant="empty"
-                        icon="cross"
-                        disabled={!dirty}
-                        onClick={() => {
-                          setDraft(applied);
-                          setTried(false);
-                        }}
-                        testId="visualizeEditorResetButton"
-                      >
-                        Discard
-                      </Button>
-                      <Button variant="primary" icon="refresh" disabled={!dirty} onClick={update} testId="visualizeEditorRenderButton">
-                        Update
-                      </Button>
-                    </>
-                  )}
-                  {AUTO_APPLY.has(saved.type) && (
-                    <Button
-                      className="vzeSide__autoApply"
-                      variant={autoApply ? 'primary' : 'default'}
-                      icon="refresh"
-                      aria-label="Auto apply editor changes"
-                      aria-pressed={autoApply}
-                      title={`${autoApply ? 'Auto apply is on' : 'Auto apply is off'}\nAuto updates the visualization on every change.`}
-                      onClick={() => setAutoApply(!autoApply)}
-                      testId="visualizeEditorAutoButton"
-                    />
-                  )}
-                </div>
-              </div>
-            </>
-          )}
         </aside>
       </div>
 

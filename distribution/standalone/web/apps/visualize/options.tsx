@@ -9,6 +9,7 @@
 import type { ReactNode } from 'react';
 import { RAMP_NAMES } from '../../charts/core';
 import { Accordion, Button, IconButton, Segments } from '../../components/basic';
+import { Icon } from '../../components/icon';
 import { FormRow, NumberField, RangeField, Select, Switch, TextArea, TextField, type SelectOption } from '../../components/form';
 import { aggLabel, type AggConfig, type AggContext } from '../../lib/aggs';
 import { ControlsOptions, ControlsTab } from './controls_editor';
@@ -652,35 +653,43 @@ function TableOptions(props: OptionsProps) {
   );
 }
 
+/** The text of a Markdown visualization, written in the proportional face as in the original */
 function MarkdownData({ params, setParams }: OptionsProps) {
   return (
-    <section className="vzePanel vzePanel--fill">
-      <div className="atlRowBetween">
-        <h3 className="vzePanel__title">Markdown</h3>
-        <span className="atlSubdued atlXs">Headings, lists, links, tables and code, in GitHub’s flavour</span>
+    <section className="vzePanel vzePanel--fill vzeMarkdownPanel">
+      <div className="vzeMarkdownPanel__head">
+        <h2 className="vzePanel__title">
+          <label htmlFor="markdownVisInput">Markdown</label>
+        </h2>
+        <a className="vzeMarkdownPanel__help" href="https://help.github.com/articles/github-flavored-markdown/" target="_blank" rel="noopener noreferrer">
+          Help <Icon name="external" className="vzeMarkdownPanel__external" title="External link" />
+          <span className="atlScreenReaderOnly">(opens in a new tab or window)</span>
+        </a>
       </div>
       <TextArea
+        id="markdownVisInput"
         className="vzeMarkdown"
-        code
         value={typeof params.markdown === 'string' ? params.markdown : ''}
         onChange={(markdown) => setParams({ ...params, markdown })}
-        aria-label="Markdown"
         testId="markdownTextarea"
       />
     </section>
   );
 }
 
+/** The original's panel of settings has no title */
 function MarkdownOptions(props: OptionsProps) {
   const { params, setParams } = props;
   const fields = useFields(props);
   return (
-    <Group title="Options">
-      <FormRow label="Base font size in points" full>
-        <RangeField min={8} max={36} value={Number(params.fontSize ?? 12)} onChange={(fontSize) => setParams({ ...params, fontSize })} />
-      </FormRow>
-      {fields.toggle('Open links in new tab', ['openLinksInNewTab'], { testId: 'markdownEditorOpenLinksInNewTab' })}
-    </Group>
+    <section className="vzePanel">
+      <div className="vzeFields">
+        <FormRow label="Base font size in points" full>
+          <RangeField min={8} max={36} value={Number(params.fontSize ?? 12)} onChange={(fontSize) => setParams({ ...params, fontSize })} />
+        </FormRow>
+        {fields.toggle('Open links in new tab', ['openLinksInNewTab'], { testId: 'markdownEditorOpenLinksInNewTab' })}
+      </div>
+    </section>
   );
 }
 

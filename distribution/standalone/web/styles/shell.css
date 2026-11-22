@@ -225,11 +225,11 @@
 
 /* --- The bar of a data page: query, time, filters -------------------------------------------- */
 
+/* As tall as the original's: 8px around a row of 32px controls and a row of filters of 40px */
 .shlSearchBar {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-2) 0;
+  padding: var(--space-2);
 }
 
 .shlSearchBar__row {
@@ -446,10 +446,11 @@
   flex: 1 1 0;
   min-width: 0;
   height: 30px;
-  padding: 5px var(--space-2);
+  /* The original's text starts 4px under the top of the field: its box overlaps the border */
+  padding: 3px var(--space-2) 6px;
   border: 0;
   background: transparent;
-  line-height: 20px;
+  line-height: 21px;
   resize: none;
   outline: none;
   overflow: hidden;
@@ -461,10 +462,19 @@
   overflow: auto;
 }
 
+/* Inside the field's border, with the line the original's text box draws at its left */
 .shlQuery__language {
   flex: none;
+  height: calc(var(--control-height) - 2px);
+  border-left: 1px solid var(--color-border-light);
+  border-radius: 0;
   color: var(--color-accent);
   font-weight: var(--font-weight-medium);
+}
+
+/* The original's update button keeps its width whatever it says */
+.shlTime__submit {
+  min-width: 118px;
 }
 
 .shlQuery__suggestions {
@@ -547,6 +557,30 @@
   color: var(--color-text-tertiary);
 }
 
+/* The interval beside the button of a picker without dates */
+.shlTime__interval {
+  padding: 0 var(--space-2);
+  white-space: nowrap;
+}
+
+.shlRefreshEvery {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.shlRefreshEvery__row {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.shlRefreshEvery__row > .atlField {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 .shlTimeMenu {
   width: 400px;
   max-width: calc(100vw - 32px);
@@ -581,13 +615,23 @@
   width: 320px;
 }
 
+/* The original's row of filters: 40px, its controls 6px under the query and 4px apart */
 .shlFilters {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-1) var(--space-2);
-  min-height: 28px;
-  padding: 0 var(--space-1);
+  gap: var(--space-1);
+  min-height: 40px;
+  padding: 6px 0 2px;
+}
+
+/* The menu of all the filters sits against the first of them */
+.shlFilters > :first-child {
+  margin-right: calc(-1 * var(--space-1));
+}
+
+.shlFilters__actions.atlButton--icon {
+  width: 36px;
 }
 
 .shlFilter {
