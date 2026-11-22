@@ -9,7 +9,7 @@ import { Icon } from '../../components/icon';
 import { formatDate, scaledDateFormat, type TimeRange } from '../../lib/dates';
 import { Markdown } from '../../lib/markdown';
 import { renderTemplate, TemplateError } from '../../lib/template';
-import type { Vis } from '../../lib/vis';
+import type { UiState, Vis } from '../../lib/vis';
 import { services } from '../../services';
 import type { RequestRecord } from '../../services/search';
 import type { VisInput } from '../request';
@@ -17,6 +17,7 @@ import {
   fetchTsvb,
   fetchTsvbTable,
   metricLabel,
+  isSortable,
   ruleFor,
   seriesFormatter,
   splitParts,
@@ -423,24 +424,52 @@ function columnLabel(series: TsvbSeries): string {
   return label;
 }
 
-function PivotTable({ params, data, sort = { column: '_default_', order: 'asc' } }: { params: TsvbParams; data: TsvbTableData; sort?: TsvbTableSort }) {
+function PivotTable({
+  params,
+  data,
+  sort = { column: '_default_', order: 'asc' },
+  onSort,
+}: {
+  params: TsvbParams;
+  data: TsvbTableData;
+  sort?: TsvbTableSort;
+  onSort?: (sort: TsvbTableSort) => void;
+}) {
   if (data.rows.length === 0) return <ChartMessage>No results found</ChartMessage>;
   const columns = (params.series ?? []).filter((series) => !series.hidden);
-  // The column the rows are sorted by shows an arrow; the rows' own column does when nothing else is sorted
-  const arrow = (column: string) =>
-    sort.column === column ? <Icon name={sort.order === 'desc' ? 'sortDown' : 'sortUp'} className="visTsvbTable__sort" /> : null;
+  // The column the rows are sorted by shows an arrow, and the others that could sort them room for
+  // one; a click on one sorts by it, or the other way round when it already does, as the product's
+  const header = (column: string, label: string, sortable: boolean) => {
+    const arrow =
+      sort.column === column ? (
+        <Icon name={sort.order === 'desc' ? 'sortDown' : 'sortUp'} className="visTsvbTable__sort" />
+      ) : sortable ? (
+        <span className="visTsvbTable__noSort" />
+      ) : null;
+    if (!sortable || !onSort) {
+      return (
+        <>
+          {label} {arrow}
+        </>
+      );
+    }
+    const order = sort.column === column && sort.order === 'asc' ? 'desc' : 'asc';
+    return (
+      <button type="button" className="atlTable__sort" onClick={() => onSort({ column, order })}>
+        {label} {arrow}
+      </button>
+    );
+  };
   return (
     <div className="visTable" data-test-subj="tsvbTable">
       <div className="visTable__scroll">
         <table className="atlTable atlTable--compact">
           <thead>
             <tr>
-              <th>
-                {params.pivot_label || params.pivot_id} {arrow('_default_')}
-              </th>
+              <th>{header('_default_', params.pivot_label || params.pivot_id || '', true)}</th>
               {columns.map((series) => (
                 <th key={series.id} className="atlTable__numeric">
-                  {columnLabel(series)} {arrow(series.id)}
+                  {header(series.id, columnLabel(series), isSortable(series.metrics?.[series.metrics.length - 1]))}
                 </th>
               ))}
             </tr>
@@ -495,12 +524,18 @@ export function TsvbVis({
   vis,
   input,
   tick,
+  uiState,
+  onUiState,
   onTimeChange,
   onData,
 }: {
   vis: Vis;
   input: VisInput;
   tick?: number;
+  /** The panel's UI state, where it differs from the visualization's own (on a dashboard) */
+  uiState?: UiState;
+  /** Takes the UI state a click on a table's column gives: the table sorted by that column */
+  onUiState?: (next: UiState) => void;
   onTimeChange?: (range: TimeRange) => void;
   onData?: (data: { requests: RequestRecord[]; tsvb?: TsvbData | TsvbTableData }) => void;
 }) {
@@ -511,8 +546,14 @@ export function TsvbVis({
   const [loading, setLoading] = useState(true);
   const report = useRef(onData);
   report.current = onData;
+  const state = uiState ?? vis.uiState;
+  const sort = kind === 'table' ? tableSortOf(state) : undefined;
+  // A click on a column of a table keeps its sort under `table.sort`, as the product does
+  const onSort = onUiState
+    ? (next: TsvbTableSort) => onUiState({ ...state, table: { ...(state?.table && typeof state.table === 'object' ? state.table : {}), sort: next } })
+    : undefined;
 
-  const key = JSON.stringify([params, input]);
+  const key = JSON.stringify([params, input, sort]);
   useEffect(() => {
     // While its editor holds an interval OpenSearch would refuse, the panel is not asked for
     if (params.isModelInvalid) {
@@ -523,7 +564,7 @@ export function TsvbVis({
     setLoading(true);
     const work =
       kind === 'table'
-        ? fetchTsvbTable(params, input, controller.signal, tableSortOf(vis.uiState)).then((table) => ({ kind, table, requests: table.requests }))
+        ? fetchTsvbTable(params, input, controller.signal, sort).then((table) => ({ kind, table, requests: table.requests }))
         : fetchTsvb(params, input, controller.signal).then((series) => ({ kind, series, requests: series.requests }));
     work
       .then((answer) => {
@@ -554,7 +595,7 @@ export function TsvbVis({
   } else if (data && data.kind === kind) {
     // A panel none of whose series drew anything says so, whatever its kind
     if (kind === 'table' ? !data.table?.rows.length : !data.series?.series.length) body = <NoData />;
-    else if (kind === 'table' && data.table) body = <PivotTable params={params} data={data.table} sort={tableSortOf(vis.uiState)} />;
+    else if (kind === 'table' && data.table) body = <PivotTable params={params} data={data.table} sort={sort} onSort={onSort} />;
     else if (data.series && PANELS[kind]) body = PANELS[kind]({ params, data: data.series, onTimeChange });
     else body = <ChartMessage>This kind of TSVB panel is not drawn by this build.</ChartMessage>;
   }

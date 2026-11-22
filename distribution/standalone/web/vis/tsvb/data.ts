@@ -881,6 +881,10 @@ interface TablePivot {
   sortAggs?: Dsl;
 }
 
+/** Whether a table can be sorted by a series: by its count or a measure worked out in each row, as in the product */
+export const isSortable = (metric: TsvbMetric | undefined): boolean =>
+  Boolean(metric && (metric.type === 'count' || BASIC[metric.type] || EXTENDED[metric.type]));
+
 /**
  * The order the product asks OpenSearch for the rows of a table in: by count or by the metric of
  * the series sorted by, or by the value of the field the rows are grouped by. Without a sort in

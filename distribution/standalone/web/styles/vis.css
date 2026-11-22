@@ -830,7 +830,14 @@
   vertical-align: middle;
 }
 
-/* The arrow of the column a TSVB table is sorted by */
+/* The arrow of the column a TSVB table is sorted by, and the room for one the other columns keep */
 .visTsvbTable__sort {
+  vertical-align: middle;
+}
+
+.visTsvbTable__noSort {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
   vertical-align: middle;
 }
