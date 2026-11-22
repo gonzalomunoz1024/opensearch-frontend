@@ -11,34 +11,22 @@ import { Badge, Button, CallOut, IconButton, cx } from '../../components/basic';
 import { ComboBox } from '../../components/combo_box';
 import { Checkbox } from '../../components/form';
 import { Labeled, ism, to, toasts } from './common';
+import {
+  ACTION_NAMES,
+  CHANNELS_LABEL,
+  CHANNELS_REQUIRED,
+  OPERATION_TITLES,
+  hasDefaultNotification,
+  lronPath,
+  type ActionType,
+  type ChannelRef,
+  type LronConfig,
+  type OperationType,
+} from './notification_model';
 import { ROUTES } from './routes';
 
-export type ActionType = 'REINDEX' | 'RESIZE' | 'FORCEMERGE' | 'OPEN';
-export type OperationType = ActionType | 'SHRINK' | 'SPLIT' | 'CLONE';
-
-/** The operations by the names OpenSearch has for them */
-export const ACTION_NAMES: Record<ActionType, string> = {
-  REINDEX: 'indices:data/write/reindex',
-  RESIZE: 'indices:admin/resize',
-  FORCEMERGE: 'indices:admin/forcemerge',
-  OPEN: 'indices:admin/open',
-};
-
-export const ACTION_TITLES: Record<ActionType, string> = {
-  REINDEX: 'reindex',
-  RESIZE: 'shrink, split, clone',
-  FORCEMERGE: 'force merge',
-  OPEN: 'open',
-};
-
-const OPERATION_TITLES: Record<OperationType, string> = {
-  ...ACTION_TITLES,
-  SHRINK: 'shrink',
-  SPLIT: 'split',
-  CLONE: 'clone',
-};
-
-export const CHANNELS_REQUIRED = 'One or more channels is required.';
+export { ACTION_NAMES, ACTION_TITLES, CHANNELS_REQUIRED, hasDefaultNotification } from './notification_model';
+export type { ActionType, LronConfig, OperationType } from './notification_model';
 
 export interface Channel {
   config_id: string;
@@ -46,20 +34,17 @@ export interface Channel {
   config_type?: string;
 }
 
-export interface LronConfig {
-  lron_condition?: { success?: boolean; failure?: boolean };
-  action_name?: string;
-  channels?: Array<{ id: string }>;
-}
-
-const lronPath = (name: string) => `/_plugins/_im/lron/${encodeURIComponent(`LRON:${name}`)}`;
-
-/** The notification channels there are; none where the cluster has no notifications */
-export function useChannels(): { channels: Channel[]; loading: boolean } {
+/**
+ * The notification channels there are; none where the cluster has no notifications. They are
+ * asked for when they are first wanted, and again when they are wanted after a while of not.
+ */
+export function useChannels(wanted = true): { channels: Channel[]; loading: boolean } {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
+    if (!wanted) return undefined;
     let gone = false;
+    setLoading(true);
     void ism.get<{ channel_list?: Channel[] }>('_notifications/channels').then((answer) => {
       if (gone) return;
       if (answer.ok) setChannels(answer.response?.channel_list ?? []);
@@ -68,7 +53,7 @@ export function useChannels(): { channels: Channel[]; loading: boolean } {
     return () => {
       gone = true;
     };
-  }, []);
+  }, [wanted]);
   return { channels, loading };
 }
 
@@ -80,26 +65,25 @@ export async function canSetNotifications(): Promise<boolean> {
   return answer.ok;
 }
 
-export const hasDefaultNotification = (config: LronConfig | undefined): boolean =>
-  Boolean(config?.lron_condition?.failure || config?.lron_condition?.success);
-
 export function ChannelSelect({
   channels,
   loading,
   value,
   onChange,
   invalid,
+  width = 300,
   testId,
 }: {
   channels: Channel[];
   loading?: boolean;
-  value: Array<{ id: string }>;
-  onChange: (value: Array<{ id: string }>) => void;
+  value: ChannelRef[];
+  onChange: (value: ChannelRef[]) => void;
   invalid?: boolean;
+  width?: number;
   testId?: string;
 }) {
   return (
-    <div style={{ width: 300, flex: 'none' }} data-test-subj={testId}>
+    <div style={{ width, maxWidth: '100%', flex: 'none' }} data-test-subj={testId}>
       <ComboBox
         compact
         placeholder="Select channel"
@@ -300,7 +284,7 @@ export const NotificationConfig = forwardRef<
           </Labeled>
           {(condition.failure || condition.success) && (
             <div className={cx('ismNotifications__channels', error && 'ismNotifications__channels--invalid')}>
-              <Labeled title="Notification channels" error={error}>
+              <Labeled title={CHANNELS_LABEL} error={error}>
                 <div className="atlRow" style={{ gap: 'var(--space-4)', alignItems: 'center' }}>
                   <ChannelSelect
                     channels={channels}

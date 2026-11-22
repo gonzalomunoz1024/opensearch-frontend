@@ -253,7 +253,19 @@ export function ComboBox({
           );
         })}
         {shown.length === 0 && !custom && (
-          <div className="atlCombo__empty">{loading ? 'Loading' : 'Nothing matches'}</div>
+          <div className="atlCombo__empty">
+            {loading ? (
+              'Loading options'
+            ) : text.trim() !== '' ? (
+              <>
+                <strong>{text}</strong> doesn&apos;t match any options
+              </>
+            ) : options.length > 0 && !single && options.every((option) => selected.includes(option.value)) ? (
+              "You've selected all available options"
+            ) : (
+              "There aren't any options available"
+            )}
+          </div>
         )}
         {matches.length > MAX_SHOWN && (
           <div className="atlCombo__empty">

@@ -24,6 +24,7 @@ import { ShrinkIndex, SplitIndex } from './resize_pages';
 import { EditRollup, RollupDetails } from './rollup_pages';
 import { Rollups } from './rollups';
 import { EditTransform, TransformDetails } from './transform_pages';
+import { NotificationSettings } from './notification_settings';
 import { Transforms } from './transforms';
 import { Rollover } from './rollover';
 import { ROUTES, SNAPSHOT_MANAGEMENT_PATH } from './routes';
@@ -142,6 +143,7 @@ const PAGES: Page[] = [
   { route: ROUTES.EDIT_ROLLUP, render: () => <EditRollup /> },
   { route: ROUTES.ROLLUP_DETAILS, render: () => <RollupDetails /> },
   { route: ROUTES.TRANSFORMS, render: () => <Transforms /> },
+  { route: ROUTES.NOTIFICATIONS, render: () => <NotificationSettings /> },
   { route: ROUTES.CREATE_TRANSFORM, render: () => <CreateTransform /> },
   { route: ROUTES.EDIT_TRANSFORM, render: () => <EditTransform /> },
   { route: ROUTES.TRANSFORM_DETAILS, render: () => <TransformDetails /> },

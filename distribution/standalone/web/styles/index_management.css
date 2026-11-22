@@ -1819,3 +1819,74 @@
 .ismTransformStatus__dot--pale {
   background: var(--color-border);
 }
+
+/* --- Notification settings ------------------------------------------------------------------------ */
+
+.ismSettingsPage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  /* The bar of unsaved changes does not cover the last row */
+  padding-bottom: 72px;
+}
+
+.ismSettingsPage__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.ismSettingsPage__header .atlButton {
+  flex: 0 0 auto;
+}
+
+.ismSettingsPage__description {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.ismNotificationDefaults {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ismNotificationDefaults .atlCallOut ul {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-5);
+}
+
+.ismNotificationDefaults .ismLabeled--across h3 {
+  margin: 0;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.ismNotificationDefaults .ismLabeled--across > .ismLabeled__body {
+  max-width: none;
+}
+
+.ismNotificationDefaults__row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: 100%;
+}
+
+/* The names of the fields of a row are small beside the name of the row */
+.ismNotificationDefaults__row .ismLabeled__title {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.ismNotificationDefaults__row .ismNotifications__channels--invalid .ismLabeled__title {
+  color: var(--color-critical);
+}
+
+.ismNotificationDefaults__ticks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 200px));
+  gap: var(--space-3);
+}
