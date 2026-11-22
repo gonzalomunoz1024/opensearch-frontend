@@ -692,6 +692,7 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
       {dialog === 'save' && (
         <SaveModal
           objectType="search"
+          intro="Save your Discover search so you can use it in visualizations and dashboards"
           title={saved?.attributes.title ?? ''}
           existing={Boolean(saved)}
           onSave={save}

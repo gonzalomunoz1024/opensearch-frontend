@@ -151,6 +151,14 @@
   transform: none;
 }
 
+/* A filled button that cannot be pressed keeps a fill, the border's colour, as the theme's */
+.atlButton--primary:disabled,
+.atlButton--primary[aria-disabled="true"],
+.atlButton--dangerFill:disabled,
+.atlButton--dangerFill[aria-disabled="true"] {
+  background: var(--color-border);
+}
+
 .atlButton--empty:disabled,
 .atlButton--ghost:disabled {
   background: transparent;
@@ -243,7 +251,7 @@ select.atlField {
 .atlFormRow {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1);
   max-width: 400px;
 }
 
@@ -251,10 +259,12 @@ select.atlField {
   max-width: none;
 }
 
+/* As the original's labels of a field: medium weight, in the secondary colour */
 .atlFormRow__label {
   font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
+  line-height: 18px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
 }
 
 .atlFormRow__help {
@@ -452,15 +462,29 @@ select.atlField {
   color: var(--color-accent);
 }
 
+/* The title in the colour of its kind, as the original's */
 .atlCallOut__title {
+  color: var(--color-accent);
   font-weight: var(--font-weight-semibold);
+}
+
+/* The original's small call-out */
+.atlCallOut--s {
+  padding: var(--space-2);
+}
+
+.atlCallOut--s .atlCallOut__title {
+  margin-top: 1px;
+  font-size: var(--font-size-s);
+  line-height: 20px;
 }
 
 .atlCallOut--healthy {
   background: var(--color-healthy-tint);
 }
 
-.atlCallOut--healthy > .atlIcon {
+.atlCallOut--healthy > .atlIcon,
+.atlCallOut--healthy .atlCallOut__title {
   color: var(--color-healthy-text);
 }
 
@@ -468,7 +492,8 @@ select.atlField {
   background: var(--color-warning-tint);
 }
 
-.atlCallOut--warning > .atlIcon {
+.atlCallOut--warning > .atlIcon,
+.atlCallOut--warning .atlCallOut__title {
   color: var(--color-warning-text);
 }
 
@@ -476,7 +501,8 @@ select.atlField {
   background: var(--color-critical-tint);
 }
 
-.atlCallOut--critical > .atlIcon {
+.atlCallOut--critical > .atlIcon,
+.atlCallOut--critical .atlCallOut__title {
   color: var(--color-critical-text);
 }
 
@@ -825,9 +851,35 @@ select.atlField {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--space-4);
+  /* As the original's mask: the dialog held a tenth of the window above the middle */
+  padding: 0 var(--space-4) 10vh;
   background: var(--scrim);
   animation: atlFade var(--duration-fast) linear;
+}
+
+/* The page behind blurred, as the theme's mask blurs it: from nothing, once the scrim is up */
+.atlScrim::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  backdrop-filter: blur(4px);
+  animation:
+    atlScrimBlurShow 0s linear var(--duration-fast) backwards,
+    atlScrimBlurIn var(--duration-normal) var(--ease-out-quint) var(--duration-fast) backwards;
+}
+
+@keyframes atlScrimBlurShow {
+  from {
+    visibility: hidden;
+  }
+}
+
+@keyframes atlScrimBlurIn {
+  from {
+    backdrop-filter: blur(0);
+  }
 }
 
 @keyframes atlFade {
@@ -837,19 +889,33 @@ select.atlField {
 }
 
 .atlModal {
+  position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
   max-width: 480px;
-  max-height: calc(100vh - 32px);
+  max-height: 75vh;
+  border: 1px solid var(--color-border-light);
   border-radius: var(--radius-xl);
   background: var(--color-surface);
   box-shadow: var(--shadow-lg);
+  overflow: hidden;
   animation: atlRise var(--duration-normal) var(--ease-out-quint);
 }
 
 .atlModal--wide {
   max-width: 800px;
+}
+
+/* The original's save dialog: 400 px, a line on what saving is for above the title */
+.atlSaveModal {
+  max-width: 400px;
+}
+
+.atlSaveModal__intro {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-s);
+  line-height: 21px;
 }
 
 /* "See the full error": as wide as the original's, the stack in a box with a copy button */
@@ -879,6 +945,19 @@ select.atlField {
   right: var(--space-2);
 }
 
+/* The small one of the original's error dialog */
+.atlCodeCopy--s > .atlCode {
+  padding: var(--space-2) calc(var(--space-2) + var(--control-height-s)) var(--space-2) var(--space-2);
+}
+
+.atlCodeCopy--s > .atlButton {
+  top: calc(var(--space-2) + 1px);
+  right: calc(var(--space-2) + 1px);
+  width: var(--space-6);
+  height: var(--space-6);
+  border-radius: 50%;
+}
+
 @keyframes atlRise {
   from {
     opacity: 0;
@@ -889,23 +968,51 @@ select.atlField {
 .atlModal__header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-3);
-  padding: var(--space-5) var(--space-6) var(--space-2);
+  padding: var(--space-5) calc(var(--space-6) * 2) var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+/* The theme's dialog title; a save dialog's is the larger title of a page */
+.atlModal__title {
+  font-size: 20px;
+  line-height: 25px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.02em;
+}
+
+/* The close button in the corner, as the original's */
+.atlModal__close.atlButton {
+  position: absolute;
+  top: var(--space-1);
+  right: var(--space-1);
+  width: var(--space-6);
+  height: var(--space-6);
+  border-radius: 50%;
 }
 
 .atlModal__body {
   flex: 1 1 auto;
   min-height: 0;
-  padding: var(--space-2) var(--space-6);
+  padding: var(--space-5) var(--space-6);
   overflow: auto;
 }
 
 .atlModal__footer {
   display: flex;
   justify-content: flex-end;
-  gap: var(--space-2);
-  padding: var(--space-4) var(--space-6) var(--space-5);
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-6);
+  border-top: 1px solid var(--color-border-light);
+}
+
+/* The original's buttons are never narrower than this; its empty ones are */
+.atlModal__footer > .atlButton:not(.atlButton--empty, .atlButton--ghost) {
+  min-width: 112px;
+}
+
+.atlModal__footer > .atlButton--empty {
+  border: 1px solid transparent;
 }
 
 .atlFlyout {

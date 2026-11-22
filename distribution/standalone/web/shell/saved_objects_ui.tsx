@@ -27,6 +27,7 @@ export function SaveModal({
   title: initialTitle,
   description: initialDescription,
   showDescription,
+  intro,
   existing,
   children,
   onSave,
@@ -39,6 +40,8 @@ export function SaveModal({
   title: string;
   description?: string;
   showDescription?: boolean;
+  /** A line under the title on what saving is for, as Discover's (when no description is asked for) */
+  intro?: string;
   /** Whether it has been saved before: then it can also be saved as a new one */
   existing: boolean;
   children?: ReactNode;
@@ -82,8 +85,10 @@ export function SaveModal({
   return (
     <Modal
       title={`Save ${objectType}`}
+      titleSize="l"
       onClose={onClose}
       testId="savedObjectSaveModal"
+      className="atlSaveModal"
       footer={
         <>
           <Button variant="empty" onClick={onClose} testId="saveCancelButton">
@@ -96,7 +101,7 @@ export function SaveModal({
             onClick={() => void save(duplicate)}
             testId="confirmSaveSavedObjectButton"
           >
-            {duplicate ? 'Save anyway' : 'Save'}
+            Save
           </Button>
         </>
       }
@@ -109,10 +114,13 @@ export function SaveModal({
         }}
       >
         {duplicate && (
-          <CallOut tone="warning" title={`A ${objectType} with the title “${title.trim()}” already exists`}>
-            Saving it again makes a second one with the same title.
-          </CallOut>
+          <div data-test-subj="titleDupicateWarnMsg">
+            <CallOut tone="warning" title={`This ${objectType} already exists`}>
+              <p>Saving &apos;{title}&apos; creates a duplicate title.</p>
+            </CallOut>
+          </div>
         )}
+        {!showDescription && intro && <p className="atlSubdued atlSaveModal__intro">{intro}</p>}
         {existing && (
           <Switch
             checked={asNew}
@@ -128,14 +136,14 @@ export function SaveModal({
               setTitle(value);
               setDuplicate(false);
             }}
-            invalid={title.trim() === ''}
+            invalid={title.trim() === '' || duplicate}
             testId="savedObjectTitle"
             autoFocus
           />
         </FormRow>
         {showDescription && (
           <FormRow label="Description" full>
-            <TextArea value={description} onChange={setDescription} rows={3} testId="savedObjectDescription" />
+            <TextArea value={description} onChange={setDescription} rows={3} testId="viewDescription" />
           </FormRow>
         )}
         {children}

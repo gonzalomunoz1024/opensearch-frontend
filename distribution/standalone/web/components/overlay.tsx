@@ -268,6 +268,7 @@ export function Modal({
   wide,
   testId,
   className,
+  titleSize = 'm',
 }: {
   title: ReactNode;
   children: ReactNode;
@@ -276,6 +277,8 @@ export function Modal({
   wide?: boolean;
   testId?: string;
   className?: string;
+  /** 'l': the larger title the original's save dialogs have */
+  titleSize?: 'm' | 'l';
 }) {
   useEscape(onClose);
   const box = useRef<HTMLDivElement>(null);
@@ -302,9 +305,9 @@ export function Modal({
           data-test-subj={testId}
         >
           <div className="atlModal__header">
-            <h2 className="atlTitleM">{title}</h2>
-            <IconButton icon="cross" label="Close" onClick={onClose} />
+            <h2 className={titleSize === 'l' ? 'atlTitleM' : 'atlModal__title'}>{title}</h2>
           </div>
+          <IconButton icon="cross" label="Closes this modal window" onClick={onClose} className="atlModal__close" />
           <div className="atlModal__body">{children}</div>
           {footer && <div className="atlModal__footer">{footer}</div>}
         </div>
@@ -488,16 +491,16 @@ function FullError({ title, error, onClose }: { title: ReactNode; error: Error; 
         </Button>
       }
     >
-      <CallOut tone="critical" title={error.message} />
-      {text && <CopyableCode>{text}</CopyableCode>}
+      <CallOut tone="critical" size="s" icon="warning" title={error.message} />
+      {text && <CopyableCode size="s">{text}</CopyableCode>}
     </Modal>
   );
 }
 
 /** Code in a box, with a button that copies it */
-export function CopyableCode({ children }: { children: string }) {
+export function CopyableCode({ children, size = 'm' }: { children: string; size?: 's' | 'm' }) {
   return (
-    <div className="atlCodeCopy">
+    <div className={size === 's' ? 'atlCodeCopy atlCodeCopy--s' : 'atlCodeCopy'}>
       <CodeBlock>{children}</CodeBlock>
       <IconButton icon="copy" label="Copy" size="s" onClick={() => copyText(children)} />
     </div>
