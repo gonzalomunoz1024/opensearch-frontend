@@ -82,6 +82,11 @@ export function navGroups(): NavGroup[] {
           path: '/app/opensearch_index_management_dashboards',
         },
         {
+          id: 'snapshotManagement',
+          label: 'Snapshot Management',
+          path: '/app/opensearch_snapshot_management_dashboards',
+        },
+        {
           id: 'management',
           label: 'Dashboards Management',
           path: '/app/management',

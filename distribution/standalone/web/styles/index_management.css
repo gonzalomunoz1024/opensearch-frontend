@@ -1,0 +1,542 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/* Index Management: the menu of its lists beside its pages. Class prefix: ism. */
+
+.ismFrame {
+  display: flex;
+  align-items: flex-start;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ismNav {
+  flex: 0 0 216px;
+  position: sticky;
+  top: var(--header-height);
+  padding: var(--space-6) var(--space-4);
+}
+
+.ismNav__group + .ismNav__group {
+  margin-top: var(--space-6);
+}
+
+.ismNav__title {
+  display: block;
+  margin-bottom: var(--space-3);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-m);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: none;
+}
+
+.ismNav ul {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ismNav ul.ismNav__inner {
+  margin-top: 2px;
+  padding-left: var(--space-4);
+}
+
+.ismNav__link {
+  display: block;
+  padding: var(--space-1) 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  text-decoration: none;
+}
+
+.ismNav__link:hover {
+  color: var(--color-text-primary);
+}
+
+.ismNav__link--selected,
+.ismNav__link--selected:hover {
+  color: var(--color-accent);
+  font-weight: var(--font-weight-medium);
+}
+
+.ismBody {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-6);
+}
+
+/* --- The panel around a list or a part of a form ------------------------------------------------ */
+
+.ismPanel,
+.ismSection {
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.ismPanel__header,
+.ismSection__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.ismPanel__title {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.25;
+}
+
+.ismSection__title {
+  margin: 0;
+  font-size: var(--font-size-l);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.3;
+}
+
+.ismPanel__description {
+  max-width: 100ch;
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+}
+
+.ismPanel__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+.ismSection__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+}
+
+.ismPageTitle {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+}
+
+.ismPageHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.ismBottomBar {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+.ismExternal {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+/* --- The search box and the table --------------------------------------------------------------- */
+
+.ismSearchRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-2);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.ismFilterCount {
+  margin-left: var(--space-1);
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent);
+  color: var(--color-surface);
+  font-size: var(--font-size-xs);
+}
+
+.ismTable__scroll {
+  overflow-x: auto;
+}
+
+.ismTable th {
+  background: var(--color-surface-secondary);
+}
+
+.ismTable th > span,
+.ismTable th .atlTable__sort > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ismTable td {
+  overflow-wrap: anywhere;
+}
+
+.ismTable--loading tbody {
+  opacity: 0.6;
+}
+
+.ismTable .atlPagination {
+  padding: var(--space-2) var(--space-3);
+}
+
+.ismTable__empty,
+.ismEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  max-width: 45em;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4);
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.ismEmpty {
+  padding: 0;
+}
+
+.ismEmpty p {
+  margin: 0;
+}
+
+.ismIndexName {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
+.ismIndexName .atlButton {
+  flex: none;
+  margin-top: -4px;
+}
+
+.ismCapital::first-letter,
+.ismCapital .atlHealth::first-letter {
+  text-transform: uppercase;
+}
+
+.ismCapital {
+  display: inline-block;
+}
+
+/* --- Dialogs ------------------------------------------------------------------------------------ */
+
+.ismDialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  line-height: 1.5;
+}
+
+.ismDialog p {
+  margin: 0;
+}
+
+.ismDialog__word {
+  color: var(--color-text-primary);
+}
+
+.ismNames {
+  margin: 0;
+  padding-left: var(--space-5);
+  list-style: disc;
+  overflow-wrap: anywhere;
+}
+
+/* --- Details ------------------------------------------------------------------------------------ */
+
+.ismDetails {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+}
+
+.ismDetail dt {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.ismDetail dd {
+  margin: var(--space-1) 0 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .ismFrame {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ismNav {
+    position: static;
+    flex: none;
+  }
+
+  .ismDetails {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+/* --- Pages that create, edit or show one thing --- */
+
+.ismPage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: 0 var(--space-5);
+}
+
+.ismPage--details {
+  padding: 0 var(--space-6);
+}
+
+.ismPage--loading {
+  align-items: center;
+  margin-top: 100px;
+}
+
+.ismLabeled {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-width: 100%;
+}
+
+.ismLabeled + .ismLabeled {
+  margin-top: var(--space-3);
+}
+
+.ismLabeled__title {
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-semibold);
+}
+
+.ismLabeled__help {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.ismLabeled__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.ismLabeled__field > .atlField,
+.ismLabeled__field > .atlCombo,
+.ismLabeled__field > .atlCodeEditor,
+.ismLabeled__field > .atlRow,
+.ismLabeled__field > .ismDraggables,
+.ismLabeled__field > textarea {
+  width: 100%;
+}
+
+.ismLabeled__error {
+  font-size: var(--font-size-xs);
+  color: var(--color-critical, #b42318);
+}
+
+.ismForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.ismForm > .ismLabeled + .ismLabeled {
+  margin-top: 0;
+}
+
+.ismRule {
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--color-border-light);
+  margin: var(--space-2) 0;
+}
+
+.ismIndent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-5);
+}
+
+/* The two ways to write a policy */
+.ismChoices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+.ismChoice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.ismChoice--selected {
+  border-color: var(--color-accent);
+}
+
+.ismChoice__help {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+/* States */
+.ismState {
+  border-bottom: 1px solid var(--color-border-light);
+  padding: var(--space-3) var(--space-2);
+}
+
+.ismState__title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.ismState__initial {
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+}
+
+.ismCount {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.ismCount b {
+  display: inline-block;
+  min-width: 16px;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-tertiary);
+  text-align: center;
+  font-weight: var(--font-weight-medium);
+}
+
+.ismState__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+}
+
+.ismState__body h5,
+.ismTemplates h5 {
+  margin: 0;
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-semibold);
+}
+
+.ismState__body p {
+  margin: 0;
+}
+
+.ismChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.ismChip {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font-size: var(--font-size-s);
+}
+
+.ismChip dt {
+  font-weight: var(--font-weight-semibold);
+}
+
+.ismChip dd {
+  margin: 0 0 var(--space-1);
+}
+
+.ismInitial {
+  display: flex;
+  align-items: center;
+  max-width: 300px;
+  margin-bottom: var(--space-3);
+}
+
+.ismInitial__label {
+  flex: none;
+  padding: 0 var(--space-3);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+}
+
+.ismTemplates {
+  display: grid;
+  grid-template-columns: minmax(0, 400px) 120px auto;
+  gap: var(--space-3) var(--space-5);
+  align-items: center;
+  justify-content: start;
+  padding: var(--space-3) 0 var(--space-3) var(--space-3);
+}
+
+.ismDraggables {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.ismDraggable {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font-size: var(--font-size-s);
+}
+
+.ismDraggable__handle {
+  display: inline-flex;
+  color: var(--color-text-tertiary);
+  cursor: grab;
+}
+
+/* A row of buttons above a panel, at its right */
+.ismAbove {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.ismPage--narrow {
+  max-width: 1200px;
+}

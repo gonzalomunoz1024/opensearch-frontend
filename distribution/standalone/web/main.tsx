@@ -10,6 +10,7 @@ import { App, registerRoute } from './app';
 import { setColorMapping } from './charts/core';
 import { Dashboards } from './apps/dashboard';
 import { DevTools } from './apps/dev_tools';
+import { IndexManagement } from './apps/index_management';
 import { QueryWorkbench } from './apps/query_workbench';
 import { Discover } from './apps/discover';
 import { Visualize } from './apps/visualize';
@@ -61,6 +62,10 @@ registerRoute({ paths: ['/app/visualize'], render: () => <Visualize /> });
 registerRoute({ paths: ['/app/management', '/app/indexPatterns', '/app/objects', '/app/settings'], render: () => <Management /> });
 registerRoute({ paths: ['/app/dev_tools'], render: () => <DevTools /> });
 registerRoute({ paths: ['/app/opensearch-query-workbench'], render: () => <QueryWorkbench /> });
+registerRoute({
+  paths: ['/app/opensearch_index_management_dashboards', '/app/opensearch_snapshot_management_dashboards'],
+  render: () => <IndexManagement />,
+});
 
 const root = document.getElementById('root');
 if (root) createRoot(root).render(<App />);

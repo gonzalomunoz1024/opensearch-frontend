@@ -93,7 +93,7 @@ The last two lines only give back what this server does not need: it holds about
 | Management: index patterns (create, fields, formats, scripted fields, source filters), saved objects (export, import, relationships, inspect), advanced settings | done |
 | Dev Tools: the console (several requests, send, auto indent, copy as cURL, paste cURL, history, settings, import, export) and the Grok debugger | done; suggestions cover methods, paths, index names and the body of a search, not every API; no folding of a body |
 | Query Workbench: SQL and PPL, the list of indices, results a page at a time with rows that open, search, downloads (JDBC, CSV, text), Explain, full screen; the plugin's `/api/sql_console` routes | done; the "Output" tab also says why a query failed, where the plugin leaves that out; `pplcsv` and `ppltext` answer the text, where the plugin answers 400 with the text as its message; no Spark or S3 data sources |
-| Index Management | not yet |
+| Index Management: the plugin's `/api/ism` routes; indexes with their actions; state management policies (list, JSON editor, visual editor, details); policy managed indexes and change policy; aliases; templates and component templates; data streams | lists and policies done; the pages that create an index, a template, a component template or a data stream, the index operations (reindex, shrink, split, force merge, roll over), rollup and transform jobs, notification settings and Snapshot Management are not yet |
 | Vega, Timeline, coordinate and region maps, VisBuilder objects | not drawn yet; the panel says so |
 
 Until the pages in the lower half exist, the fork's build does those jobs on the same saved
@@ -103,7 +103,7 @@ objects.
 
 ```
 server/    Node.js: HTTP, the OpenSearch client, saved objects, settings, import and export,
-           the routes of Query Workbench
+           the routes of Query Workbench and of Index Management
 common/    what both sides share
 web/       the browser side
   components/  the Atlas kit: buttons, forms, tables, overlays      (class prefix atl)
@@ -111,8 +111,9 @@ web/       the browser side
   charts/      SVG charts: axes, scales, legends, tooltips           (cht)
   vis/         one file per kind of visualization, and TSVB          (vis)
   apps/        home, discover (dsc), dashboard (dsh), visualize (vze), management (mgt),
-               dev_tools (dvt), query_workbench (qwb)
-  lib/         DQL, rison, date math, number and date formats, aggregations, markdown
+               dev_tools (dvt), query_workbench (qwb), index_management (ism)
+  lib/         DQL, rison, date math, number and date formats, aggregations, markdown,
+               the syntax of a search box
 scripts/   build.mjs (TypeScript compiler and a small bundler), the two registry checks
 registry/  the packages the target registry could not serve, as it reported them
 ```
