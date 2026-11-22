@@ -111,10 +111,26 @@ export function mapOrigins(map: MapConfig): string[] {
   return [...origins].filter((origin) => origin !== 'null');
 }
 
-/** The page's policy: the browser may fetch from the server and from the map services of map.* */
-export function contentSecurityPolicy(map?: MapConfig): string {
-  const connect = ["'self'", ...(map ? mapOrigins(map) : [])];
-  return BASE_POLICY.map((rule) => (rule === 'CONNECT' ? `connect-src ${connect.join(' ')}` : rule)).join('; ');
+/** What `csp.allowedConnectSources`, `csp.allowedFrameAncestorSources` and `csp.allowedImgSources` add */
+export interface AllowedSources {
+  allowedConnectSources?: string[];
+  allowedFrameAncestorSources?: string[];
+  allowedImgSources?: string[];
+}
+
+/**
+ * The page's policy: the browser may fetch from the server and from the map services of map.*,
+ * and each csp.allowed*Sources setting adds its sources to its rule, as in OpenSearch Dashboards
+ */
+export function contentSecurityPolicy(map?: MapConfig, allowed: AllowedSources = {}): string {
+  const connect = ["'self'", ...(map ? mapOrigins(map) : []), ...(allowed.allowedConnectSources ?? [])];
+  const add = (rule: string, sources?: string[]) => (sources?.length ? `${rule} ${sources.join(' ')}` : rule);
+  return BASE_POLICY.map((rule) => {
+    if (rule === 'CONNECT') return `connect-src ${connect.join(' ')}`;
+    if (rule.startsWith('frame-ancestors ')) return add(rule, allowed.allowedFrameAncestorSources);
+    if (rule.startsWith('img-src ')) return add(rule, allowed.allowedImgSources);
+    return rule;
+  }).join('; ');
 }
 
 export const CONTENT_SECURITY_POLICY = contentSecurityPolicy();

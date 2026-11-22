@@ -181,7 +181,8 @@ export function VegaVis({ vis, input, tick, onFilter, onFiltersChange, onTimeCha
           parentEl,
           parser,
           libraries,
-          enableExternalUrls: false,
+          // vis_type_vega.enableExternalUrls, false unless the server's settings say otherwise
+          enableExternalUrls: services.boot.visTypeVega?.enableExternalUrls === true,
           applyFilter: (event) => {
             if ('range' in event) callbacks.current.onTimeChange?.(event.range);
             else callbacks.current.onFilter?.(event.filters);

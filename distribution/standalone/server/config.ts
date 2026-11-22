@@ -42,6 +42,10 @@ export interface Config {
   logging: { quiet: boolean; verbose: boolean };
   /** The `map.*` settings of the maps_legacy, tile_map and region_map plugins */
   map: MapConfig;
+  /** The sources `csp.allowed*Sources` add to the page's policy, as in OpenSearch Dashboards */
+  csp: { allowedConnectSources: string[]; allowedFrameAncestorSources: string[]; allowedImgSources: string[] };
+  /** vis_type_vega.enableExternalUrls: whether a Vega spec may load data from other addresses */
+  visTypeVega: { enableExternalUrls: boolean };
 }
 
 type Reader = (value: unknown, key: string) => unknown;
@@ -138,6 +142,10 @@ const SETTINGS: Record<string, Reader> = {
   'uiSettings.defaults': map,
   'logging.quiet': boolean,
   'logging.verbose': boolean,
+  'csp.allowedConnectSources': list,
+  'csp.allowedFrameAncestorSources': list,
+  'csp.allowedImgSources': list,
+  'vis_type_vega.enableExternalUrls': boolean,
   'map.includeOpenSearchMapsService': boolean,
   'map.proxyOpenSearchMapsServiceInMaps': boolean,
   'map.showRegionDeniedWarning': boolean,
@@ -260,7 +268,12 @@ export function loadConfig(
     },
     logging: { quiet: read('logging.quiet', false), verbose: read('logging.verbose', false) },
     map: readMapConfig(read),
-
+    csp: {
+      allowedConnectSources: read('csp.allowedConnectSources', [] as string[]),
+      allowedFrameAncestorSources: read('csp.allowedFrameAncestorSources', [] as string[]),
+      allowedImgSources: read('csp.allowedImgSources', [] as string[]),
+    },
+    visTypeVega: { enableExternalUrls: read('vis_type_vega.enableExternalUrls', false) },
   };
   return { config, ignored };
 }

@@ -402,7 +402,7 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
     return {
       headers: {
         'content-type': 'text/html; charset=utf-8',
-        'content-security-policy': contentSecurityPolicy(config.map),
+        'content-security-policy': contentSecurityPolicy(config.map, config.csp),
         'cache-control': 'no-store',
       },
       body: renderPage({
@@ -418,6 +418,7 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
           settingsDefaults: config.uiSettings.defaults,
           settingsOverrides: config.uiSettings.overrides,
           map: config.map,
+          visTypeVega: config.visTypeVega,
           libraries: {
             vega: `${config.server.basePath}/${build.assets.vega ?? ''}`,
             vegaLite: `${config.server.basePath}/${build.assets.vegaLite ?? ''}`,
