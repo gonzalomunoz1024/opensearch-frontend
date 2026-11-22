@@ -1,0 +1,31 @@
+{
+  "name": "infradashboard",
+  "version": "3.9.0",
+  "private": true,
+  "description": "InfraDashboard: a standalone dashboard for OpenSearch, with the Atlas design",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc -p tsconfig.server.json && tsc -p tsconfig.web.json",
+    "test": "node scripts/build.mjs --tests && node --test \"dist/test/**/*.test.js\"",
+    "start": "node dist/server/main.js",
+    "preflight": "node scripts/preflight.mjs"
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.17",
+    "@types/react": "18.3.27",
+    "@types/react-dom": "18.3.7",
+    "typescript": "6.0.2"
+  },
+  "overrides": {
+    "@types/prop-types": "15.7.4",
+    "csstype": "3.2.3"
+  }
+}

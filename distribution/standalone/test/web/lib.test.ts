@@ -1,0 +1,308 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+import {
+  formatDate,
+  parseDateMath,
+  parseInterval,
+  resolveInterval,
+  resolveTimeRange,
+} from '../../web/lib/dates';
+import { createFormatter } from '../../web/lib/field_formats';
+import { KuerySyntaxError, kueryToDsl, parseKuery } from '../../web/lib/kuery';
+import { formatNumber } from '../../web/lib/numeral';
+import { buildQuery, describeFilter, phraseFilter, rangeFilter } from '../../web/lib/query';
+import { decode, encode } from '../../web/lib/rison';
+import type { IndexPattern } from '../../web/lib/types';
+
+describe('rison', () => {
+  it('reads the state OpenSearch Dashboards writes into an address', () => {
+    assert.deepEqual(
+      decode("(filters:!(),refreshInterval:(pause:!t,value:0),time:(from:now-7d,to:now))"),
+      { filters: [], refreshInterval: { pause: true, value: 0 }, time: { from: 'now-7d', to: 'now' } }
+    );
+    assert.deepEqual(decode("(query:(language:kuery,query:'response:200 and it!'s'),n:!n,x:-1.5e3)"), {
+      query: { language: 'kuery', query: "response:200 and it's" },
+      n: null,
+      x: -1500,
+    });
+  });
+
+  it('writes what it reads', () => {
+    const state = {
+      columns: ['_source'],
+      index: 'ff959d40-b880-11e8-a6d9-e546fe2bba5f',
+      interval: 'auto',
+      query: { language: 'kuery', query: '' },
+      sort: [['order_date', 'desc']],
+      on: true,
+      count: 12,
+    };
+    const text = encode(state);
+    assert.equal(
+      text,
+      "(columns:!(_source),count:12,index:ff959d40-b880-11e8-a6d9-e546fe2bba5f,interval:auto,on:!t,query:(language:kuery,query:''),sort:!(!(order_date,desc)))"
+    );
+    assert.deepEqual(decode(text), state);
+  });
+
+  it('quotes what would not read back as text', () => {
+    assert.equal(encode('2024'), "'2024'");
+    assert.equal(encode('a b'), "'a b'");
+    assert.equal(encode("it's"), "'it!'s'");
+    assert.equal(encode('now-7d'), 'now-7d');
+    assert.throws(() => decode('(a:'), /rison/);
+  });
+});
+
+describe('dates', () => {
+  const now = new Date(2026, 10, 22, 3, 52, 10, 500);
+
+  it('reads the expressions of the time picker', () => {
+    assert.equal(parseDateMath('now', { now })!.getTime(), now.getTime());
+    assert.equal(parseDateMath('now-15m', { now })!.getTime(), now.getTime() - 15 * 60000);
+    assert.equal(parseDateMath('now/d', { now })!.getTime(), new Date(2026, 10, 22).getTime());
+    assert.equal(
+      parseDateMath('now/d', { now, roundUp: true })!.getTime(),
+      new Date(2026, 10, 23).getTime() - 1
+    );
+    assert.equal(parseDateMath('now-1M/M', { now })!.getTime(), new Date(2026, 9, 1).getTime());
+    assert.equal(parseDateMath('now/w', { now })!.getDay(), 0);
+    assert.equal(parseDateMath('now/w', { now, weekStart: 1 })!.getDay(), 1);
+    assert.equal(parseDateMath('2026-01-01T00:00:00.000Z||+1d')!.toISOString(), '2026-01-02T00:00:00.000Z');
+    assert.equal(parseDateMath('now-banana', { now }), undefined);
+    assert.equal(parseDateMath('not a date'), undefined);
+  });
+
+  it('resolves a range with its end rounded up', () => {
+    const range = resolveTimeRange({ from: 'now/d', to: 'now/d' }, { now })!;
+    assert.equal(range.to.getTime() - range.from.getTime(), 86400000 - 1);
+  });
+
+  it('writes dates with the tokens of the date settings', () => {
+    const date = new Date(Date.UTC(2026, 10, 22, 1, 37, 55, 7));
+    assert.equal(formatDate(date, 'MMM D, YYYY @ HH:mm:ss.SSS', 'UTC'), 'Nov 22, 2026 @ 01:37:55.007');
+    assert.equal(formatDate(date, 'dddd, MMMM Do YYYY, h:mm a', 'UTC'), 'Sunday, November 22nd 2026, 1:37 am');
+    assert.equal(formatDate(date, '[at] HH [h]', 'UTC'), 'at 01 h');
+    assert.equal(formatDate(date, 'YYYY-MM-DD HH:mm Z', 'America/Chicago'), '2026-11-21 19:37 -06:00');
+    assert.equal(formatDate(date, 'YYYY-MM-DD HH:mm', 'Asia/Kolkata'), '2026-11-22 07:07');
+  });
+
+  it('gives a histogram the interval OpenSearch Dashboards gives it', () => {
+    const day = 86400000;
+    assert.equal(resolveInterval('auto', 7 * day).expression, '3h');
+    assert.equal(resolveInterval('auto', 15 * 60000).expression, '30s');
+    assert.equal(resolveInterval('auto', day).expression, '30m');
+    assert.equal(resolveInterval('auto', 30 * day).expression, '12h');
+    assert.equal(resolveInterval('auto', 365 * day).expression, '1w');
+    assert.equal(resolveInterval('auto', 5 * 365 * day).expression, '1M');
+    assert.equal(resolveInterval('auto', 7 * day).description, '3 hours');
+    // an interval that would give more than 100 bars is widened, and says so
+    const scaled = resolveInterval('1m', 7 * day);
+    assert.equal(scaled.expression, '1h');
+    assert.equal(scaled.scaled, true);
+    assert.equal(resolveInterval('1d', 7 * day).scaled, false);
+    assert.equal(parseInterval('1M')!.calendar, true);
+    assert.equal(parseInterval('2w')!.calendar, false);
+  });
+});
+
+describe('numbers', () => {
+  it('follows the patterns of the number formats', () => {
+    assert.equal(formatNumber(1234.5678, '0,0.[000]'), '1,234.568');
+    assert.equal(formatNumber(1234, '0,0.[000]'), '1,234');
+    assert.equal(formatNumber(79302.356, '$0,0.00'), '$79,302.36');
+    assert.equal(formatNumber(0.4804, '0.[00]%'), '48.04%');
+    assert.equal(formatNumber(0.5, '0,0.[000]%'), '50%');
+    assert.equal(formatNumber(1536, '0,0.[0]b'), '1.5KB');
+    assert.equal(formatNumber(5 * 1024 ** 3, '0,0.[0]b'), '5GB');
+    assert.equal(formatNumber(1234567, '0.0a'), '1.2m');
+    assert.equal(formatNumber(-12.3, '0.00'), '-12.30');
+    assert.equal(formatNumber(-0.001, '0.00'), '0.00');
+    assert.equal(formatNumber(-5, '(0)'), '(5)');
+    assert.equal(formatNumber(3, '0o'), '3rd');
+    assert.equal(formatNumber(2.16, '0.00'), '2.16');
+    assert.equal(formatNumber(141, '0'), '141');
+  });
+
+  it('formats a field by its format', () => {
+    assert.equal(createFormatter({ id: 'number' })(1234.5).text, '1,234.5');
+    assert.equal(createFormatter({ id: 'bytes' })(2048).text, '2KB');
+    assert.equal(createFormatter({ id: 'string', params: { transform: 'upper' } })('abc').text, 'ABC');
+    assert.equal(createFormatter({ id: 'string' })(['a', 'b']).text, 'a, b');
+    assert.equal(createFormatter({ id: 'string' })(null).text, '-');
+    assert.equal(createFormatter({ id: 'boolean' })(1).text, 'true');
+    assert.equal(createFormatter({ id: 'ip' })(3232235777).text, '192.168.1.1');
+    const link = createFormatter({ id: 'url', params: { urlTemplate: 'https://x.test/?q={{value}}' } })('a b');
+    assert.equal(link.href, 'https://x.test/?q=a%20b');
+    assert.equal(createFormatter({ id: 'url' })('javascript:alert(1)').href, undefined);
+    const coloured = createFormatter({
+      id: 'color',
+      params: { fieldType: 'number', colors: [{ range: '500:', text: '#fff', background: '#f00' }] },
+    })(503);
+    assert.equal(coloured.background, '#f00');
+  });
+});
+
+const pattern: IndexPattern = {
+  id: 'logs',
+  title: 'logs-*',
+  timeFieldName: '@timestamp',
+  fieldFormatMap: {},
+  fields: [
+    { name: '@timestamp', type: 'date', searchable: true, aggregatable: true },
+    { name: 'response', type: 'string', esTypes: ['keyword'], searchable: true, aggregatable: true },
+    { name: 'bytes', type: 'number', searchable: true, aggregatable: true },
+    { name: 'machine.os', type: 'string', searchable: true, aggregatable: true },
+    { name: 'machine.ram', type: 'number', searchable: true, aggregatable: true },
+    {
+      name: 'items.name',
+      type: 'string',
+      searchable: true,
+      aggregatable: true,
+      subType: { nested: { path: 'items' } },
+    },
+  ],
+};
+
+describe('DQL', () => {
+  it('reads fields, values and the words between them', () => {
+    assert.deepEqual(parseKuery(''), { type: 'all' });
+    assert.deepEqual(parseKuery('response:200'), {
+      type: 'is',
+      field: 'response',
+      value: { text: '200', quoted: false },
+    });
+    assert.deepEqual(parseKuery('response:200 and not bytes > 1000'), {
+      type: 'and',
+      children: [
+        { type: 'is', field: 'response', value: { text: '200', quoted: false } },
+        {
+          type: 'not',
+          child: { type: 'range', field: 'bytes', operator: 'gt', value: { text: '1000', quoted: false } },
+        },
+      ],
+    });
+    const list = parseKuery('extension:(php or css) or "quick fox"');
+    assert.equal(list.type, 'or');
+    assert.throws(() => parseKuery('response:(200'), KuerySyntaxError);
+    assert.throws(() => parseKuery('response:'), KuerySyntaxError);
+  });
+
+  it('keeps "or" and "and" inside a word', () => {
+    assert.deepEqual(parseKuery('order'), { type: 'is', field: null, value: { text: 'order', quoted: false } });
+    assert.deepEqual(parseKuery('android'), {
+      type: 'is',
+      field: null,
+      value: { text: 'android', quoted: false },
+    });
+  });
+
+  it('turns them into the queries OpenSearch Dashboards sends', () => {
+    assert.deepEqual(kueryToDsl(parseKuery('response:200'), pattern), {
+      bool: { should: [{ match: { response: '200' } }], minimum_should_match: 1 },
+    });
+    assert.deepEqual(kueryToDsl(parseKuery('response:"200"'), pattern), {
+      bool: { should: [{ match_phrase: { response: '200' } }], minimum_should_match: 1 },
+    });
+    assert.deepEqual(kueryToDsl(parseKuery('bytes >= 1000'), pattern), {
+      bool: { should: [{ range: { bytes: { gte: '1000' } } }], minimum_should_match: 1 },
+    });
+    assert.deepEqual(kueryToDsl(parseKuery('response:*'), pattern), {
+      bool: { should: [{ exists: { field: 'response' } }], minimum_should_match: 1 },
+    });
+    assert.deepEqual(kueryToDsl(parseKuery('fox'), pattern), {
+      multi_match: { type: 'best_fields', query: 'fox', lenient: true },
+    });
+    assert.deepEqual(kueryToDsl(parseKuery('"quick fox"'), pattern), {
+      multi_match: { type: 'phrase', query: 'quick fox', lenient: true },
+    });
+    assert.deepEqual(kueryToDsl(parseKuery('response:20*'), pattern), {
+      bool: {
+        should: [{ query_string: { fields: ['response'], query: '20*' } }],
+        minimum_should_match: 1,
+      },
+    });
+    // a wildcard in the field name asks every field it matches
+    const expanded = kueryToDsl(parseKuery('machine.*:win'), pattern) as { bool: { should: unknown[] } };
+    assert.equal(expanded.bool.should.length, 2);
+    assert.deepEqual(kueryToDsl(parseKuery('not response:200'), pattern), {
+      bool: {
+        must_not: { bool: { should: [{ match: { response: '200' } }], minimum_should_match: 1 } },
+      },
+    });
+    assert.deepEqual(kueryToDsl(parseKuery('items.name:shoe'), pattern), {
+      bool: {
+        should: [
+          { nested: { path: 'items', query: { match: { 'items.name': 'shoe' } }, score_mode: 'none' } },
+        ],
+        minimum_should_match: 1,
+      },
+    });
+    assert.deepEqual(kueryToDsl(parseKuery('items:{ name:shoe }'), pattern), {
+      nested: {
+        path: 'items',
+        query: { bool: { should: [{ match: { 'items.name': 'shoe' } }], minimum_should_match: 1 } },
+        score_mode: 'none',
+      },
+    });
+    assert.deepEqual(kueryToDsl(parseKuery('@timestamp:"2026-01-01"'), pattern, { dateFormatTZ: 'UTC' }), {
+      bool: {
+        should: [{ range: { '@timestamp': { gte: '2026-01-01', lte: '2026-01-01', time_zone: 'UTC' } } }],
+        minimum_should_match: 1,
+      },
+    });
+  });
+});
+
+describe('the query of a page', () => {
+  it('combines the search bar and the filters', () => {
+    const negated = phraseFilter({ name: 'machine.os' }, 'ios', 'logs');
+    negated.meta.negate = true;
+    const disabled = phraseFilter({ name: 'response' }, '500', 'logs');
+    disabled.meta.disabled = true;
+    const query = buildQuery(pattern, { query: 'response:200', language: 'kuery' }, [
+      rangeFilter({ name: 'bytes' }, { gte: 100, lt: 200 }, 'logs'),
+      negated,
+      disabled,
+    ]);
+    assert.deepEqual(query, {
+      bool: {
+        must: [],
+        filter: [
+          { bool: { should: [{ match: { response: '200' } }], minimum_should_match: 1 } },
+          { range: { bytes: { gte: 100, lt: 200 } } },
+        ],
+        should: [],
+        must_not: [{ match_phrase: { 'machine.os': 'ios' } }],
+      },
+    });
+  });
+
+  it('sends Lucene as a query string', () => {
+    assert.deepEqual(buildQuery(pattern, { query: 'response:200 OR fox', language: 'lucene' }).bool.must, [
+      { query_string: { query: 'response:200 OR fox', analyze_wildcard: true } },
+    ]);
+    assert.deepEqual(buildQuery(pattern, { query: '', language: 'lucene' }).bool.must, [{ match_all: {} }]);
+    assert.deepEqual(buildQuery(pattern, { query: '', language: 'kuery' }).bool.filter, []);
+  });
+
+  it('reads a phrase filter saved in the old form', () => {
+    const old = {
+      meta: { key: 'response', negate: false, disabled: false },
+      query: { match: { response: { query: '200', type: 'phrase' } } },
+    };
+    assert.deepEqual(buildQuery(pattern, undefined, [old]).bool.filter, [
+      { match_phrase: { response: { query: '200' } } },
+    ]);
+  });
+
+  it('describes a filter for its pill', () => {
+    assert.deepEqual(describeFilter(phraseFilter({ name: 'response' }, '200')), { key: 'response', value: '200' });
+    assert.deepEqual(describeFilter(rangeFilter({ name: 'bytes' }, { gte: 1, lt: 5 })), {
+      key: 'bytes',
+      value: '1 to 5',
+    });
+  });
+});

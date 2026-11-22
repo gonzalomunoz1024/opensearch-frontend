@@ -1,0 +1,143 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/*
+ * The Atlas design language as variables: the tokens of the kit (packages/ui of
+ * infrastructure-automation, docs/design-language.md), light and dark. Every colour, radius,
+ * type size, shadow and duration a style sheet here uses is one of these; none is invented in
+ * a component.
+ */
+
+:root {
+  /* Surfaces, separators and text */
+  --color-surface: #ffffff;
+  --color-surface-secondary: #f5f5f7;
+  --color-surface-tertiary: #fbfbfd;
+  --color-border: #d2d2d7;
+  --color-border-light: #e8e8ed;
+  --color-text-primary: #1d1d1f;
+  --color-text-secondary: #6e6e73;
+  --color-text-tertiary: #86868b;
+
+  /* The one accent and the three states */
+  --color-accent: #007aff;
+  --color-healthy: #34c759;
+  --color-warning: #ff9500;
+  --color-critical: #ff3b30;
+  /* The state colours are too light to read as text on the surface */
+  --color-healthy-text: #007871;
+  --color-warning-text: #83650a;
+  --color-critical-text: #bd271e;
+  --color-on-accent: #ffffff;
+
+  /* A colour as a soft fill */
+  --tint-opacity: 10%;
+  --color-accent-tint: color-mix(in srgb, var(--color-accent) var(--tint-opacity), transparent);
+  --color-healthy-tint: color-mix(in srgb, var(--color-healthy) var(--tint-opacity), transparent);
+  --color-warning-tint: color-mix(in srgb, var(--color-warning) var(--tint-opacity), transparent);
+  --color-critical-tint: color-mix(in srgb, var(--color-critical) var(--tint-opacity), transparent);
+  --color-highlight: color-mix(in srgb, var(--color-warning) 25%, var(--color-surface));
+  --color-focus-ring: color-mix(in srgb, var(--color-accent) 25%, transparent);
+  --color-hover: color-mix(in srgb, var(--color-text-primary) 5%, transparent);
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 4%);
+  --shadow-md: 0 4px 12px rgb(0 0 0 / 8%);
+  --shadow-lg: 0 8px 24px rgb(0 0 0 / 12%);
+  --shadow-card: 0 2px 8px rgb(0 0 0 / 4%), 0 0 1px rgb(0 0 0 / 8%);
+  --material-background: rgb(255 255 255 / 78%);
+  --material-highlight: rgb(255 255 255 / 60%);
+  --material-keyline: rgb(0 0 0 / 6%);
+  --scrim: rgb(0 0 0 / 30%);
+
+  /* Syntax colours: Atlas names none, these are the component library's */
+  --code-comment: #6a717d;
+  --code-string: #a2255c;
+  --code-name: #006bb4;
+  --code-number: #00756c;
+  --code-keyword: #6b4fa8;
+
+  /* Type: the system face, on the sizes Atlas takes from the HIG */
+  --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter UI",
+    "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-family-code: "SF Mono", ui-monospace, Menlo, "Source Code Pro", Consolas, monospace;
+  --font-size-xs: 12px;
+  --font-size-s: 14px;
+  --font-size-m: 15px;
+  --font-size-l: 17px;
+  --font-size-xl: 22px;
+  --font-size-xxl: 28px;
+  --font-size-chart: 11px;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+
+  --radius-xs: 5px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+
+  --ease-out-quint: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 400ms;
+
+  /* Spacing on a 4px grid */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  --header-height: 48px;
+  --nav-width: 260px;
+  --control-height: 32px;
+  --control-height-s: 28px;
+
+  /* Chart series: the component library's colour-blind-safe palette. Atlas names one series
+     colour, the accent, which a series given no colour takes. */
+  --chart-line: var(--color-border-light);
+  --chart-band: var(--color-surface-secondary);
+
+  color-scheme: light;
+}
+
+:root.themeDark {
+  --color-surface: #000000;
+  --color-surface-secondary: #1c1c1e;
+  --color-surface-tertiary: #2c2c2e;
+  --color-border: #38383a;
+  --color-border-light: #2c2c2e;
+  --color-text-primary: #f5f5f7;
+  --color-text-secondary: #98989d;
+  --color-text-tertiary: #636366;
+
+  --color-accent: #0a84ff;
+  --color-healthy: #30d158;
+  --color-warning: #ff9f0a;
+  --color-critical: #ff453a;
+  --color-healthy-text: #7dded8;
+  --color-warning-text: #f3d371;
+  --color-critical-text: #f86b63;
+
+  --tint-opacity: 15%;
+  --color-hover: color-mix(in srgb, var(--color-text-primary) 8%, transparent);
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 30%);
+  --shadow-md: 0 4px 12px rgb(0 0 0 / 40%);
+  --shadow-lg: 0 8px 24px rgb(0 0 0 / 50%);
+  --shadow-card: 0 2px 8px rgb(0 0 0 / 25%), 0 0 1px rgb(0 0 0 / 35%);
+  --material-background: rgb(28 28 30 / 72%);
+  --material-highlight: rgb(255 255 255 / 8%);
+  --material-keyline: rgb(255 255 255 / 6%);
+  --scrim: rgb(0 0 0 / 55%);
+
+  --code-comment: #838b93;
+  --code-string: #d0809b;
+  --code-name: #6ab0f1;
+  --code-number: #10b688;
+  --code-keyword: #b174fc;
+
+  color-scheme: dark;
+}
