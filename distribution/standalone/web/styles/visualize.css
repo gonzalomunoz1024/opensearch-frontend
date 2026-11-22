@@ -418,9 +418,15 @@
   margin-left: var(--space-1);
 }
 
-/* The original draws the field's line inside its 8px: the text starts 8px from the edge */
-textarea.vzeMarkdown {
+/* A text that fills its panel: the Markdown, and the settings of a kind edited as JSON */
+.vzeMarkdown {
   flex: 1 1 auto;
+  min-height: 200px;
+  resize: vertical;
+}
+
+/* The original draws the field's line inside its 8px: the text starts 8px from the edge */
+.vzeMarkdownPanel textarea.vzeMarkdown {
   min-height: 0;
   padding: calc(var(--space-2) - 1px);
   line-height: 21px;
