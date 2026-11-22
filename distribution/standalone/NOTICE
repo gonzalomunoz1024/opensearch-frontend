@@ -11,7 +11,13 @@ keeps working, and parts of it are derived from it under the Apache License, Ver
     order in which the colours of the palette are given out,
   - the reading of a Vega spec (web/vis/vega): its settings, the requests it makes to OpenSearch,
     its warnings and its error texts,
-  - the palette of chart colours, which is that of the OpenSearch UI framework.
+  - the palette of chart colours, which is that of the OpenSearch UI framework,
+  - the sample data sets (server/sample_data/data_sets): their documents (the *.json.gz files,
+    copied as they are from src/plugins/home/server/services/sample_data/data_sets of
+    OpenSearch Dashboards 3.9.0), the field mappings of their indices, and their saved objects
+    in the form OpenSearch Dashboards 3.9.0 writes them when it installs a set; and their
+    preview pictures (web/static/plugins/home/assets/sample_data_resources, copied as they are
+    from src/plugins/home/public/assets/sample_data_resources).
 
 OpenSearch Dashboards
 Copyright OpenSearch Contributors

@@ -31,6 +31,7 @@ import { fieldsForWildcard } from './index_pattern_fields';
 import type { Logger } from './logger';
 import { OpenSearchClient, OpenSearchError, OpenSearchUnavailableError } from './opensearch';
 import { SavedObjectsRepository, type FindOptions } from './saved_objects';
+import { registerSampleData } from './sample_data/routes';
 import { registerShortUrls } from './short_urls';
 import { registerSqlConsole } from './sql_console';
 import { contentSecurityPolicy, readBuild, renderPage, serveStatic } from './static';
@@ -398,6 +399,10 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
   // --- Short URLs ------------------------------------------------------------------------------
 
   registerShortUrls(router, repository, { basePath: config.server.basePath, logger });
+
+  // --- Sample data -----------------------------------------------------------------------------
+
+  registerSampleData(router, client, repository, { logger });
 
   // --- The pipeline every request goes through -------------------------------------------------
 

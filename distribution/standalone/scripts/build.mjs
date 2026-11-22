@@ -46,7 +46,8 @@ function write(path, content) {
   writeFileSync(path, content);
 }
 
-// Every TypeScript file of a source directory, as a CommonJS file at the same place under dist/
+// Every TypeScript file of a source directory, as a CommonJS file at the same place under dist/,
+// with the data files beside them (JSON, and the gzipped documents of the sample data sets)
 function transpileTree(name) {
   let count = 0;
   for (const file of walk(join(root, name))) {
@@ -56,7 +57,7 @@ function transpileTree(name) {
     if (extension === '.ts' || extension === '.tsx') {
       write(target.slice(0, -extension.length) + '.js', transpile(readFileSync(file, 'utf8'), file));
       count += 1;
-    } else if (extension === '.json') {
+    } else if (extension === '.json' || file.endsWith('.json.gz')) {
       write(target, readFileSync(file));
     }
   }
