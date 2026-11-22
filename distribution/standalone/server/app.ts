@@ -32,6 +32,7 @@ import { OpenSearchClient, OpenSearchError, OpenSearchUnavailableError } from '.
 import { SavedObjectsRepository, type FindOptions } from './saved_objects';
 import { registerSqlConsole } from './sql_console';
 import { CONTENT_SECURITY_POLICY, readBuild, renderPage, serveStatic } from './static';
+import { registerTimeline } from './timeline';
 import { UiSettings } from './ui_settings';
 
 export const PRODUCT_NAME = 'InfraDashboard';
@@ -383,6 +384,7 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
   // --- Index Management ------------------------------------------------------------------------
 
   registerIndexManagement(router, client);
+  registerTimeline(router, { client, repository, uiSettings, config, logger });
 
   // --- The pipeline every request goes through -------------------------------------------------
 
