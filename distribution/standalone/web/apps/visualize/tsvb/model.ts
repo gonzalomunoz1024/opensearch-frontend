@@ -215,6 +215,144 @@ export function reIdSeries(source: Series): Series {
   return series;
 }
 
+// --- Aggregations ---------------------------------------------------------------------------------
+
+/** What each aggregation is called in labels */
+export const AGG_NAMES: Record<string, string> = {
+  count: 'Count',
+  calculation: 'Calculation',
+  std_deviation: 'Std. Deviation',
+  variance: 'Variance',
+  sum_of_squares: 'Sum of Sq.',
+  avg: 'Average',
+  max: 'Max',
+  min: 'Min',
+  sum: 'Sum',
+  percentile: 'Percentile',
+  percentile_rank: 'Percentile Rank',
+  cardinality: 'Cardinality',
+  value_count: 'Value Count',
+  derivative: 'Derivative',
+  cumulative_sum: 'Cumulative Sum',
+  moving_average: 'Moving Average',
+  avg_bucket: 'Overall Average',
+  min_bucket: 'Overall Min',
+  max_bucket: 'Overall Max',
+  sum_bucket: 'Overall Sum',
+  variance_bucket: 'Overall Variance',
+  sum_of_squares_bucket: 'Overall Sum of Sq.',
+  std_deviation_bucket: 'Overall Std. Deviation',
+  series_agg: 'Series Agg',
+  math: 'Math',
+  serial_diff: 'Serial Difference',
+  filter_ratio: 'Filter Ratio',
+  positive_only: 'Positive Only',
+  static: 'Static Value',
+  top_hit: 'Top Hit',
+  positive_rate: 'Positive Rate',
+};
+
+/** The aggregations computed from another of the series */
+export const PIPELINE_AGGS = [
+  'calculation',
+  'derivative',
+  'cumulative_sum',
+  'moving_average',
+  'avg_bucket',
+  'min_bucket',
+  'max_bucket',
+  'sum_bucket',
+  'variance_bucket',
+  'sum_of_squares_bucket',
+  'std_deviation_bucket',
+  'series_agg',
+  'math',
+  'serial_diff',
+  'positive_only',
+];
+
+/** An aggregation of the documents themselves, which a series can start with */
+export const isBasicAgg = (metric: { type?: unknown }): boolean =>
+  typeof metric.type === 'string' && metric.type in AGG_NAMES && !PIPELINE_AGGS.includes(metric.type);
+
+/** The aggregations "Order by" of a split by terms can sort by */
+export const BASIC_AGGS = ['count', 'avg', 'max', 'min', 'sum', 'std_deviation', 'variance', 'sum_of_squares', 'value_count', 'cardinality'];
+
+// Those that name the metric they are computed from
+const OF_METRIC = [
+  'cumulative_sum',
+  'derivative',
+  'moving_average',
+  'avg_bucket',
+  'sum_bucket',
+  'min_bucket',
+  'max_bucket',
+  'std_deviation_bucket',
+  'variance_bucket',
+  'sum_of_squares_bucket',
+  'serial_diff',
+  'positive_only',
+];
+
+/** "Average of bytes", "Derivative of Max of bytes": what a metric is called when it has no alias */
+export function calculateLabel(metric: Metric | undefined, metrics: Metric[]): string {
+  if (!metric) return 'Unknown';
+  if (metric.alias) return String(metric.alias);
+  if (metric.type === 'count') return 'Count';
+  if (metric.type === 'calculation') return 'Bucket Script';
+  if (metric.type === 'math') return 'Math';
+  if (metric.type === 'series_agg') return `Series Agg (${String(metric.function)})`;
+  if (metric.type === 'filter_ratio') return 'Filter Ratio';
+  if (metric.type === 'positive_rate') return `Positive Rate of ${String(metric.field)}`;
+  if (metric.type === 'static') return `Static Value of ${String(metric.value)}`;
+  if (OF_METRIC.includes(metric.type)) {
+    const field = metric.field ?? '';
+    const target = metrics.find((item) => field.startsWith(item.id));
+    const targetLabel = calculateLabel(target, metrics);
+    // A percentile is named with the one picked of it: "…[95.0]"
+    if (target && target.type === 'percentile') {
+      const matches = /\[([0-9.]+)\]$/.exec(field);
+      if (matches) return `${AGG_NAMES[metric.type]} of ${targetLabel} (${matches[1]})`;
+    }
+    return `${AGG_NAMES[metric.type]} of ${targetLabel}`;
+  }
+  return `${AGG_NAMES[metric.type]} of ${String(metric.field)}`;
+}
+
+/** The metrics another can be computed from: all but itself and those computed from it */
+export function calculateSiblings(siblings: Metric[], model: Doc): Metric[] {
+  const ancestors: string[] = typeof model.id === 'string' && model.id ? [model.id] : [];
+  for (const sibling of siblings) {
+    if (sibling.field !== undefined && ancestors.includes(sibling.field)) ancestors.push(sibling.id);
+  }
+  return siblings.filter((row) => !ancestors.includes(row.id));
+}
+
+// The kinds of field the product knows, in the order it declares them
+const FIELD_KINDS = ['_source', 'attachment', 'boolean', 'date', 'geo_point', 'geo_shape', 'ip', 'murmur3', 'number', 'string', 'unknown', 'conflict', 'object', 'nested', 'histogram'];
+
+/** The kinds of field an aggregation can be asked of */
+export function supportedFieldKinds(type: string): string[] {
+  switch (type) {
+    case 'cardinality':
+      return FIELD_KINDS.filter((kind) => kind !== 'histogram');
+    case 'value_count':
+      return FIELD_KINDS;
+    case 'avg':
+    case 'sum':
+      return ['number', 'histogram'];
+    default:
+      return ['number'];
+  }
+}
+
+/** A percentile as the product writes it in a metric's name: always with a decimal */
+export const toPercentileNumber = (value: unknown): string => (/\d+\.\d+/.test(`${String(value)}`) ? String(value) : `${String(value)}.0`);
+
+export const newPercentile = (extra: Doc = {}): Doc & { id: string } => ({ id: uuid(), mode: 'line', shade: 0.2, ...extra });
+
+export const newVariable = (extra: Doc = {}): Doc & { id: string } => ({ id: uuid(), name: '', field: '', ...extra });
+
 // --- Collections ----------------------------------------------------------------------------------
 
 /** A list of the params kept by id, as TSVB's editors change them: add at the end, change or delete by id */

@@ -2,20 +2,27 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { aggOptions, metricOptions } from '../../web/apps/visualize/tsvb/agg_lists';
 import {
+  calculateLabel,
+  calculateSiblings,
   drawnInterval,
   extractIndexPatterns,
   formatInterval,
+  isBasicAgg,
   isDuration,
   isModelInvalid,
   newSeries,
   panelAdditions,
   reIdSeries,
   stableKey,
+  supportedFieldKinds,
+  toPercentileNumber,
   tsvbDefaults,
   uuid,
   validateInterval,
   withTsvbDefaults,
+  type Metric,
   type Series,
 } from '../../web/apps/visualize/tsvb/model';
 import { colorOutput, cssColor, parseColor, toHex } from '../../web/components/color_picker';
@@ -162,5 +169,88 @@ describe('the colours a TSVB colour picker reads', () => {
     assert.equal(toHex([0, 0, 0, 0.5]), '#00000080');
     assert.equal(cssColor('104,188,0,0.5'), 'rgba(104,188,0,0.5)');
     assert.equal(cssColor(null), 'transparent');
+  });
+});
+
+describe('the metrics of a TSVB series', () => {
+  const metric = (id: string, type: string, extra: Record<string, unknown> = {}): Metric => ({ id, type, ...extra });
+
+  it('names a metric as the product does when it has no alias', () => {
+    assert.equal(calculateLabel(undefined, []), 'Unknown');
+    assert.equal(calculateLabel(metric('1', 'avg', { field: 'memory', alias: 'Example' }), []), 'Example');
+    assert.equal(calculateLabel(metric('1', 'count'), []), 'Count');
+    assert.equal(calculateLabel(metric('1', 'calculation'), []), 'Bucket Script');
+    assert.equal(calculateLabel(metric('1', 'series_agg', { function: 'max' }), []), 'Series Agg (max)');
+    assert.equal(calculateLabel(metric('1', 'avg', { field: 'memory' }), []), 'Average of memory');
+    assert.equal(calculateLabel(metric('1', 'static', { value: 10 }), []), 'Static Value of 10');
+    const max = metric('1', 'max', { field: 'network.out.bytes' });
+    const moving = metric('2', 'moving_average', { field: '1' });
+    const derivative = metric('3', 'derivative', { field: '2' });
+    assert.equal(calculateLabel(derivative, [max, moving, derivative]), 'Derivative of Moving Average of Max of network.out.bytes');
+    const percentile = metric('1', 'percentile', { field: 'network.out.bytes' });
+    const ofPercentile = metric('2', 'derivative', { field: '1[50.0]' });
+    assert.equal(calculateLabel(ofPercentile, [percentile, ofPercentile]), 'Derivative of Percentile of network.out.bytes (50.0)');
+    assert.equal(calculateLabel(metric('2', 'derivative', { field: '1' }), [{ ...max, alias: 'Outbound Traffic' }]), 'Derivative of Outbound Traffic');
+  });
+
+  it('tells the aggregations of documents from those computed from another metric', () => {
+    assert.equal(isBasicAgg({ type: 'avg' }), true);
+    assert.equal(isBasicAgg({ type: 'filter_ratio' }), true);
+    assert.equal(isBasicAgg({ type: 'derivative' }), false);
+    assert.equal(isBasicAgg({ type: 'math' }), false);
+    assert.equal(isBasicAgg({ type: null }), false);
+  });
+
+  it('offers the pipelines only once a series has a metric of documents and another', () => {
+    const groups = (options: ReturnType<typeof aggOptions>) => [...new Set(options.map((option) => option.group))];
+    const one = aggOptions('timeseries', [metric('1', 'count')]);
+    assert.deepEqual(groups(one), ['Metric Aggregations', 'Parent Pipeline Aggregations', 'Sibling Pipeline Aggregations', 'Special Aggregations']);
+    assert.equal(one.find((option) => option.value === 'derivative')?.disabled, true);
+    assert.equal(one.find((option) => option.value === 'avg')?.disabled, undefined);
+    const two = aggOptions('timeseries', [metric('1', 'count'), metric('2', 'derivative', { field: '1' })]);
+    assert.equal(two.find((option) => option.value === 'math')?.disabled, false);
+    const onlyPipelines = aggOptions('timeseries', [metric('1', 'derivative'), metric('2', 'derivative')]);
+    assert.equal(onlyPipelines.find((option) => option.value === 'derivative')?.disabled, true);
+    assert.deepEqual(
+      aggOptions('histogram', []).map((option) => option.value),
+      ['avg', 'count', 'sum', 'value_count']
+    );
+    assert.equal(aggOptions('filter_ratio', []).length, 8);
+    assert.equal(aggOptions('metrics', []).length, 16);
+  });
+
+  it('lists the metrics another can be computed from, without itself or what is computed from it', () => {
+    const avg = metric('a', 'avg', { field: 'bytes' });
+    const percentile = metric('p', 'percentile', { field: 'bytes', percentiles: [{ id: 'x', value: 95 }, { id: 'y', value: '' }] });
+    const derivative = metric('d', 'derivative', { field: 'a' });
+    const ofDerivative = metric('m', 'moving_average', { field: 'd' });
+    const overall = metric('o', 'sum_bucket', { field: 'a' });
+    const metrics = [avg, percentile, derivative, ofDerivative, overall];
+    assert.deepEqual(
+      calculateSiblings(metrics, derivative).map((row) => row.id),
+      ['a', 'p', 'o']
+    );
+    assert.deepEqual(metricOptions({ metrics, metric: derivative }), [
+      { value: 'a', label: 'Average of bytes' },
+      { value: 'p[95.0]', label: 'Percentile of bytes (95.0)' },
+    ]);
+    assert.deepEqual(
+      metricOptions({ metrics, metric: derivative, includeSiblings: true }).map((option) => option.value),
+      ['a', 'o', 'p[95.0]']
+    );
+    assert.deepEqual(
+      metricOptions({ metrics, restrict: 'basic', additionalOptions: [{ value: '_count', label: 'Doc Count (default)' }] }).map((option) => option.value),
+      ['a', '_count']
+    );
+    assert.equal(toPercentileNumber(50), '50.0');
+    assert.equal(toPercentileNumber('99.9'), '99.9');
+  });
+
+  it('lists the fields of the kinds an aggregation can be asked of', () => {
+    assert.deepEqual(supportedFieldKinds('avg'), ['number', 'histogram']);
+    assert.deepEqual(supportedFieldKinds('max'), ['number']);
+    assert.equal(supportedFieldKinds('cardinality').includes('histogram'), false);
+    assert.equal(supportedFieldKinds('cardinality').includes('string'), true);
+    assert.equal(supportedFieldKinds('value_count').includes('histogram'), true);
   });
 });

@@ -7,7 +7,19 @@
  * original's does, key by key, so that what is saved has the shape OpenSearch Dashboards saves.
  */
 
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FocusEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from 'react';
 import { IconButton, cx } from '../../../components/basic';
 import { ColorPicker } from '../../../components/color_picker';
 import { ComboBox, type ComboOption } from '../../../components/combo_box';
@@ -191,6 +203,7 @@ export function Combo({
   disabled,
   invalid,
   testId,
+  fullWidth = true,
 }: {
   options: Choice[];
   value: unknown;
@@ -200,9 +213,11 @@ export function Combo({
   disabled?: boolean;
   invalid?: boolean;
   testId?: string;
+  /** False for a list in an item that takes only the room it needs */
+  fullWidth?: boolean;
 }) {
   const selected = options.some((option) => option.value === value) ? [String(value)] : [];
-  return (
+  const combo = (
     <ComboBox
       options={options as ComboOption[]}
       selected={selected}
@@ -213,8 +228,11 @@ export function Combo({
       disabled={disabled}
       invalid={invalid}
       testId={testId}
+      fullWidth={fullWidth}
     />
   );
+  // A list that takes only the room it needs is as wide as what it shows
+  return fullWidth ? combo : <div className="tvbCombo--fit">{combo}</div>;
 }
 
 /** Yes and No as radios, saved as 1 and 0 */
@@ -335,6 +353,254 @@ export function AddDeleteButtons({
       {!disableDelete && (
         <IconButton size="s" className="tvbIconButton tvbIconButton--danger" icon="trash" label={deleteTooltip} onClick={onDelete} testId={`${testSubj}DeleteBtn`} />
       )}
+    </div>
+  );
+}
+
+// --- Sorting by dragging ------------------------------------------------------------------------------
+
+/** What the handle of a row that can be dragged takes */
+export interface HandleProps {
+  ref: (element: HTMLElement | null) => void;
+  onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
+  onKeyDown: (event: ReactKeyboardEvent<HTMLElement>) => void;
+  onBlur: (event: FocusEvent<HTMLElement>) => void;
+  lifted: boolean;
+}
+
+export interface Sortable {
+  /** The element of a row, measured when a drag starts */
+  row: (id: string) => (element: HTMLElement | null) => void;
+  /** How a row is moved while one is dragged over it */
+  style: (id: string) => CSSProperties | undefined;
+  dragging: (id: string) => boolean;
+  handle: (id: string) => HandleProps;
+}
+
+interface DragState {
+  id: string;
+  from: number;
+  /** Where the row would be dropped, or null while it is outside its list */
+  target: number | null;
+  startX: number;
+  startY: number;
+  startScroll: number;
+  dx: number;
+  dy: number;
+  /** The middles of the rows when the drag started, the box of the dragged one and of the list */
+  middles: number[];
+  box: { top: number; left: number; width: number; height: number };
+  list: { top: number; bottom: number; left: number; right: number };
+  slot: number;
+}
+
+// The page scrolls by itself while a row is dragged near its top or bottom edge, as the product's
+// drag and drop does: from a quarter of the window away, faster nearer the edge, at most 28 pixels
+// a frame, and gently in the first second of a drag
+const SCROLL_FROM = 0.25;
+const SCROLL_MAX = 28;
+const SCROLL_DAMPEN_MS = 1200;
+
+function scrollStep(clientY: number, elapsed: number) {
+  const height = window.innerHeight;
+  const zone = height * SCROLL_FROM;
+  const toBottom = height - clientY;
+  const distance = Math.min(clientY, toBottom);
+  if (distance >= zone) return 0;
+  const strength = ((zone - Math.max(distance, 0)) / zone) ** 2;
+  const dampen = Math.min(1, elapsed / SCROLL_DAMPEN_MS);
+  const step = Math.max(1, Math.round(SCROLL_MAX * strength * dampen));
+  return clientY < toBottom ? -step : step;
+}
+
+/** Where a row dragged by (dx, dy) would be dropped: null while its middle is outside its list */
+function dropTarget(state: DragState, dx: number, dy: number): number | null {
+  const { from, middles, box, list } = state;
+  const centerX = box.left + box.width / 2 + dx;
+  const centerY = box.top + box.height / 2 + dy;
+  if (centerX < list.left || centerX > list.right || centerY < list.top || centerY > list.bottom) return null;
+  const top = box.top + dy;
+  const bottom = top + box.height;
+  // A row below makes way once the dragged row's bottom edge passes its middle, a row above once
+  // the dragged row's top edge does
+  let target = from;
+  middles.forEach((middle, index) => {
+    if (index > from && bottom > middle) target = Math.max(target, index);
+  });
+  if (target === from) {
+    middles.forEach((middle, index) => {
+      if (index < from && top < middle) target = Math.min(target, index);
+    });
+  }
+  return target;
+}
+
+/**
+ * Rows sorted by dragging their handle, as the product's lists are: the dragged row follows the
+ * pointer, the others make room for it, and it is dropped where it is let go. From the keyboard,
+ * Space lifts the row of the focused handle, the arrows move it and Space or Escape drops it.
+ */
+export function useSortable(ids: string[], onMove: (from: number, to: number) => void): Sortable {
+  const rows = useRef(new Map<string, HTMLElement>());
+  const handles = useRef(new Map<string, HTMLElement>());
+  const [drag, setDrag] = useState<DragState | null>(null);
+  const [lifted, setLifted] = useState<string | null>(null);
+  const latest = useRef({ ids, onMove, drag });
+  latest.current = { ids, onMove, drag };
+  const refocus = useRef<string | null>(null);
+
+  // A row moved from the keyboard keeps the focus on its handle
+  useLayoutEffect(() => {
+    if (!refocus.current) return;
+    handles.current.get(refocus.current)?.focus();
+    refocus.current = null;
+  });
+
+  const dragId = drag?.id;
+  useEffect(() => {
+    if (!dragId) return undefined;
+    const began = performance.now();
+    let pointer: { x: number; y: number } | null = null;
+    let frame = 0;
+    const update = () =>
+      setDrag((current) => {
+        if (!current || !pointer) return current;
+        const dx = pointer.x - current.startX;
+        const dy = pointer.y - current.startY + (window.scrollY - current.startScroll);
+        return { ...current, dx, dy, target: dropTarget(current, dx, dy) };
+      });
+    const tick = () => {
+      if (pointer) {
+        const step = scrollStep(pointer.y, performance.now() - began);
+        if (step) {
+          const before = window.scrollY;
+          window.scrollBy(0, step);
+          if (window.scrollY !== before) update();
+        }
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    const move = (event: PointerEvent) => {
+      pointer = { x: event.clientX, y: event.clientY };
+      update();
+    };
+    const up = () => {
+      const current = latest.current.drag;
+      setDrag(null);
+      if (current && current.target !== null && current.target !== current.from) latest.current.onMove(current.from, current.target);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+    };
+  }, [dragId]);
+
+  const begin = (id: string, event: ReactPointerEvent<HTMLElement>) => {
+    if (event.button !== 0) return;
+    const order = latest.current.ids;
+    const boxes = order.map((rowId) => rows.current.get(rowId)?.getBoundingClientRect());
+    const from = order.indexOf(id);
+    const box = boxes[from];
+    const holder = rows.current.get(id)?.parentElement?.getBoundingClientRect();
+    if (!box || !holder || boxes.some((item) => !item)) return;
+    event.preventDefault();
+    const measured = boxes as DOMRect[];
+    const next = measured[from + 1];
+    const previous = measured[from - 1];
+    const gap = next ? next.top - box.bottom : previous ? box.top - previous.bottom : 0;
+    setDrag({
+      id,
+      from,
+      target: from,
+      startX: event.clientX,
+      startY: event.clientY,
+      startScroll: window.scrollY,
+      dx: 0,
+      dy: 0,
+      middles: measured.map((item) => item.top + item.height / 2),
+      box: { top: box.top, left: box.left, width: box.width, height: box.height },
+      list: { top: holder.top, bottom: holder.bottom, left: holder.left, right: holder.right },
+      slot: box.height + gap,
+    });
+  };
+
+  const key = (id: string, event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.key === ' ' || event.key === 'Enter') {
+      event.preventDefault();
+      setLifted((current) => (current === id ? null : id));
+      return;
+    }
+    if (event.key === 'Escape') {
+      setLifted(null);
+      return;
+    }
+    if (lifted !== id || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return;
+    event.preventDefault();
+    const order = latest.current.ids;
+    const from = order.indexOf(id);
+    const to = from + (event.key === 'ArrowUp' ? -1 : 1);
+    if (from < 0 || to < 0 || to >= order.length) return;
+    refocus.current = id;
+    latest.current.onMove(from, to);
+  };
+
+  return {
+    row: (id) => (element) => {
+      if (element) rows.current.set(id, element);
+      else rows.current.delete(id);
+    },
+    style: (id) => {
+      if (!drag) return undefined;
+      const index = ids.indexOf(id);
+      if (id === drag.id) return { transform: `translate(${drag.dx}px, ${drag.dy}px)`, position: 'relative', zIndex: 2 };
+      const { from, target, slot } = drag;
+      let shift = 0;
+      if (target !== null && from < target && index > from && index <= target) shift = -slot;
+      if (target !== null && target < from && index >= target && index < from) shift = slot;
+      return { transform: shift ? `translateY(${shift}px)` : undefined, transition: 'transform 0.2s ease' };
+    },
+    dragging: (id) => drag?.id === id || lifted === id,
+    handle: (id) => ({
+      ref: (element) => {
+        if (element) handles.current.set(id, element);
+        else handles.current.delete(id);
+      },
+      onPointerDown: (event) => begin(id, event),
+      onKeyDown: (event) => key(id, event),
+      // Moving a row takes the focus away for a moment; only a move elsewhere drops it
+      onBlur: (event) => {
+        if (event.relatedTarget) setLifted((current) => (current === id ? null : current));
+      },
+      lifted: lifted === id,
+    }),
+  };
+}
+
+/** The grip a row is dragged by; the place stays, empty, while the row cannot be sorted */
+export function DragHandle({ handle, hidden }: { handle?: HandleProps; hidden: boolean }) {
+  if (hidden || !handle) return <div className="tvbDragHandle" />;
+  const { lifted, ...props } = handle;
+  return (
+    <div className="tvbDragHandle">
+      <div
+        {...props}
+        role="button"
+        tabIndex={0}
+        className={cx('tvbDragHandle__grip', lifted && 'tvbDragHandle__grip--lifted')}
+        aria-label="Drag to sort"
+        aria-pressed={lifted}
+        title="Drag to sort"
+      >
+        <svg className="atlIcon" viewBox="0 0 16 16" aria-hidden="true">
+          <path d="M3 6.500h10M3 9.500h10" />
+        </svg>
+      </div>
     </div>
   );
 }

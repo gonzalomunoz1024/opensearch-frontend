@@ -301,6 +301,13 @@
   cursor: not-allowed;
 }
 
+/* A list as wide as the option it shows */
+.tvbCombo--fit .atlCombo > input {
+  flex: 0 1 auto;
+  min-width: 24px;
+  field-sizing: content;
+}
+
 .tvbQueryBar {
   display: flex;
 }
@@ -359,6 +366,146 @@
 
 .tvbIconButton--danger.atlButton {
   color: var(--color-critical);
+}
+
+/* --- Series and their metrics -------------------------------------------------------------------- */
+
+.tvbSeriesList {
+  padding: var(--space-2);
+}
+
+.tvbSeriesList__item {
+  padding: var(--space-1);
+}
+
+.tvbSeriesEditor {
+  margin-bottom: var(--space-4);
+  padding: var(--space-2);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.tvbSeries__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.tvbSeries__label {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.tvbSeries__toggle.atlButton {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: var(--color-text-primary);
+}
+
+.tvbSeries__body {
+  margin: var(--space-2) 0 0 var(--space-8);
+}
+
+.tvbAggList {
+  padding: 2px;
+}
+
+.tvbAggList__item {
+  padding: 2px;
+}
+
+.tvbAggRow {
+  margin-bottom: var(--space-2);
+  padding: var(--space-2);
+  background: var(--color-surface-secondary);
+}
+
+/* The split of a series lines up with the fields of its metrics, past their eye */
+.tvbAggRow--split {
+  padding-left: var(--space-8);
+}
+
+.tvbAggRow__group {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.tvbAggRow__visibility {
+  display: flex;
+  flex: 0 0 auto;
+}
+
+.tvbAggRow__visibilityIcon {
+  margin-top: var(--space-1);
+  color: var(--color-text-primary);
+}
+
+.tvbAggRow__visibilityIcon--subdued {
+  color: var(--color-text-tertiary);
+}
+
+.tvbAggRow__children {
+  flex: 1 1 0;
+  min-width: 0;
+  padding-top: 6px;
+}
+
+.tvbColumn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.tvbVars .tvbRow + .tvbRow,
+.tvbPercentiles .tvbRow + .tvbRow {
+  margin-top: var(--space-2);
+}
+
+.tvbAggRow textarea.atlField {
+  min-height: 80px;
+}
+
+.tvbLinkIcon {
+  width: 12px;
+  height: 12px;
+  margin-left: 2px;
+  vertical-align: -1px;
+}
+
+/* A row that wraps when its items do not fit */
+.tvbRow--wrap {
+  flex-wrap: wrap;
+}
+
+/* The grip a row is dragged by, and the row while it is */
+.tvbDragHandle {
+  display: flex;
+  flex: 0 0 auto;
+}
+
+.tvbDragHandle__grip {
+  display: flex;
+  border-radius: var(--radius-xs);
+  color: var(--color-text-primary);
+  cursor: grab;
+}
+
+.tvbDragHandle__grip:focus-visible,
+.tvbDragHandle__grip--lifted {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.tvbDragging {
+  cursor: grabbing;
+}
+
+.tvbDragging > .tvbSeriesEditor,
+.tvbDragging > .tvbAggRow {
+  box-shadow: var(--shadow-card);
 }
 
 @media (max-width: 767px) {

@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { choice } from './agg_lists';
 import {
   ColorRules,
   Combo,
@@ -25,10 +26,9 @@ import {
   TvbColorPicker,
   TvbTabs,
   YesNo,
-  type Choice,
   type TabSpec,
 } from './controls';
-import { panelAdditions, str, type Fields, type OnChange, type Panel } from './model';
+import { SERIES_LIMIT, panelAdditions, str, type Fields, type OnChange, type Panel } from './model';
 import { SeriesEditor, type PanelData } from './series';
 
 export interface PanelProps {
@@ -39,14 +39,13 @@ export interface PanelProps {
   visData?: PanelData;
 }
 
-const choice = (value: string, label: string): Choice => ({ value, label });
 
-const POSITIONS = [choice('right', 'Right'), choice('left', 'Left')];
-const SCALES = [choice('normal', 'Normal'), choice('log', 'Log')];
-const LEGEND_POSITIONS = [choice('right', 'Right'), choice('left', 'Left'), choice('bottom', 'Bottom')];
-const TOOLTIP_MODES = [choice('show_all', 'Show all values'), choice('show_focused', 'Show focused values')];
-const GAUGE_STYLES = [choice('circle', 'Circle'), choice('half', 'Half Circle')];
-const ALIGNMENTS = [choice('top', 'Top'), choice('middle', 'Middle'), choice('bottom', 'Bottom')];
+const POSITIONS = [choice('Right', 'right'), choice('Left', 'left')];
+const SCALES = [choice('Normal', 'normal'), choice('Log', 'log')];
+const LEGEND_POSITIONS = [choice('Right', 'right'), choice('Left', 'left'), choice('Bottom', 'bottom')];
+const TOOLTIP_MODES = [choice('Show all values', 'show_all'), choice('Show focused values', 'show_focused')];
+const GAUGE_STYLES = [choice('Circle', 'circle'), choice('Half Circle', 'half')];
+const ALIGNMENTS = [choice('Top', 'top'), choice('Middle', 'middle'), choice('Bottom', 'bottom')];
 
 /** The data options every kind of panel starts its options with */
 function DataOptions({ model, fields, onChange, before }: PanelProps & { before?: ReactNode }) {
@@ -174,7 +173,7 @@ function MetricPanel(props: PanelProps) {
   const [tab, setTab] = useState('data');
   const view =
     tab === 'data' ? (
-      <SeriesEditor {...props} colorPicker={false} />
+      <SeriesEditor {...props} colorPicker={false} limit={SERIES_LIMIT.metric} />
     ) : (
       <div className="tvbPanelConfig__container">
         <DataOptions {...props} />
@@ -246,7 +245,7 @@ function GaugePanel(props: PanelProps) {
   const model: Panel = { gauge_max: '', gauge_style: 'circle', gauge_inner_width: '', gauge_width: '', ...props.model };
   const view =
     tab === 'data' ? (
-      <SeriesEditor {...props} />
+      <SeriesEditor {...props} limit={SERIES_LIMIT.gauge} />
     ) : (
       <div className="tvbPanelConfig__container">
         <DataOptions {...props} />
