@@ -8,6 +8,7 @@
  */
 
 import { Icon } from '../../components/icon';
+import { HttpFetchError } from '../../services/http';
 
 /** A failure as the product hands it to its panel: OpenSearch's error, or a message */
 export interface TsvbPanelError {
@@ -23,6 +24,29 @@ export interface TsvbPanelError {
       caused_by?: { reason?: string };
     };
   };
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/** The error a panel shows for what made its request fail */
+export function panelError(failure: unknown): TsvbPanelError {
+  // A query in DQL that could not be read gives the reason alone, without the query and the mark
+  // under it
+  if (isRecord(failure) && failure.name === 'DQLSyntaxError') {
+    return { message: typeof failure.shortMessage === 'string' ? failure.shortMessage : String(failure.message) };
+  }
+  if (failure instanceof HttpFetchError) {
+    let body = failure.body;
+    if (typeof body === 'string') {
+      try {
+        body = JSON.parse(body);
+      } catch {
+        // Not JSON: the message stands
+      }
+    }
+    if (isRecord(body) && isRecord(body.error)) return body as TsvbPanelError;
+  }
+  return { message: failure instanceof Error ? failure.message : String(failure) };
 }
 
 // The ids OpenSearch writes in square brackets in some of its reasons

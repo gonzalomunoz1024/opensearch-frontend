@@ -779,7 +779,9 @@ export async function fetchTsvb(params: TsvbParams, input: VisInput, signal?: Ab
 
 /** The data of the Table panel: a row for each value of the field it groups by, a column per series */
 export async function fetchTsvbTable(params: TsvbParams, input: VisInput, signal?: AbortSignal): Promise<TsvbTableData> {
-  if (!params.pivot_id) throw new Error('Choose a field to group the rows by');
+  // A table that groups by no field has no rows, and says it has no data, as the product's does
+  // while its group-by field is still to be chosen
+  if (!params.pivot_id) return { rows: [], requests: [] };
   const requests: RequestRecord[] = [];
   const pivot = { field: params.pivot_id, size: toNumber(params.pivot_rows, 10) };
   const shown = (params.series ?? []).filter((series) => !series.hidden);

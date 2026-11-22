@@ -11,7 +11,6 @@ import { Markdown } from '../../lib/markdown';
 import { renderTemplate, TemplateError } from '../../lib/template';
 import type { Vis } from '../../lib/vis';
 import { services } from '../../services';
-import { errorMessage } from '../../services/http';
 import type { RequestRecord } from '../../services/search';
 import type { VisInput } from '../request';
 import {
@@ -23,7 +22,7 @@ import {
   type TsvbParams,
   type TsvbTableData,
 } from './data';
-import { TsvbError, type TsvbPanelError } from './error';
+import { panelError, TsvbError, type TsvbPanelError } from './error';
 import { annotationIcon } from './icons';
 import { convertSeriesToVars } from './markdown_vars';
 
@@ -381,7 +380,7 @@ export function TsvbVis({
   const params = vis.params as TsvbParams;
   const kind = params.type ?? 'timeseries';
   const [data, setData] = useState<{ kind: string; series?: TsvbData; table?: TsvbTableData }>();
-  const [error, setError] = useState<string>();
+  const [error, setError] = useState<TsvbPanelError>();
   const [loading, setLoading] = useState(true);
   const report = useRef(onData);
   report.current = onData;
@@ -408,7 +407,9 @@ export function TsvbVis({
       })
       .catch((failure) => {
         if ((failure as Error).name === 'AbortError') return;
-        setError(errorMessage(failure));
+        // A request that could not be made (a query in DQL that cannot be read) or that OpenSearch
+        // refused is shown in the panel, as the product shows it, and nowhere else
+        setError(panelError(failure));
         setLoading(false);
       });
     return () => controller.abort();
@@ -419,9 +420,8 @@ export function TsvbVis({
   if (params.isModelInvalid) body = <NoData />;
   else if (error) {
     body = (
-      <div className="visError" role="alert" data-test-subj="visError">
-        <strong>This visualization could not be drawn</strong>
-        <span>{error}</span>
+      <div className="visTsvbFrame">
+        <TsvbError error={error} />
       </div>
     );
   } else if (data && data.kind === kind) {

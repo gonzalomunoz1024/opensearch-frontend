@@ -28,6 +28,8 @@ import {
 import { colorOutput, cssColor, parseColor, toHex } from '../../web/components/color_picker';
 import { compileLess } from '../../web/apps/visualize/tsvb/less';
 import { renderTemplate, TemplateError } from '../../web/lib/template';
+import { HttpFetchError } from '../../web/services/http';
+import { errorDetails, panelError } from '../../web/vis/tsvb/error';
 import { convertSeriesToVars, getLastValue, snakeCase } from '../../web/vis/tsvb/markdown_vars';
 
 const UUID_V1 = /^[0-9a-f]{8}-[0-9a-f]{4}-1[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -359,5 +361,59 @@ describe('the variables of a TSVB markdown panel', () => {
       () => renderTemplate('{{#each count}}x', scope, { strict: true }),
       (error: unknown) => error instanceof TemplateError && error.kind === 'parse'
     );
+  });
+});
+
+describe('the error a TSVB panel shows', () => {
+  it('reads a DQL error, an OpenSearch error and any other failure as the product does', () => {
+    const dql = Object.assign(new Error('Expected "(" but end of input found.\nfoo:(\n-----^'), {
+      name: 'DQLSyntaxError',
+      shortMessage: 'Expected "(" but end of input found.',
+    });
+    assert.deepEqual(panelError(dql), { message: 'Expected "(" but end of input found.' });
+    const body = {
+      error: { type: 'search_phase_execution_exception', reason: 'all shards failed', caused_by: { type: 'query_shard_exception', reason: 'Failed to parse query [foo:(]' } },
+      status: 400,
+    };
+    assert.deepEqual(panelError(new HttpFetchError(400, 'all shards failed', body)), body);
+    assert.deepEqual(panelError(new HttpFetchError(400, 'all shards failed', JSON.stringify(body))), body);
+    assert.deepEqual(panelError(new HttpFetchError(502, 'Bad gateway', 'Bad gateway')), { message: 'Bad gateway' });
+    assert.deepEqual(panelError(new Error('boom')), { message: 'boom' });
+  });
+
+  it('takes the title, the reason and the script stack from it', () => {
+    assert.deepEqual(errorDetails({ message: 'Expected x' }), { title: undefined, reason: 'Expected x' });
+    assert.deepEqual(
+      errorDetails({ error: { type: 'search_phase_execution_exception', caused_by: { type: 'query_shard_exception', reason: 'Failed to parse query [foo:(]' } } }),
+      { title: undefined, reason: 'Failed to parse query [foo:(]' }
+    );
+    // An illegal argument shows the reason of the error itself, without the ids in it
+    assert.deepEqual(
+      errorDetails({
+        error: {
+          type: 'search_phase_execution_exception',
+          reason: 'all shards failed [0c3ab1d0-2f7e-11ee-be56-0242ac120002]',
+          caused_by: { type: 'illegal_argument_exception', reason: 'Fielddata is disabled' },
+        },
+      }),
+      { title: undefined, reason: 'all shards failed ' }
+    );
+    assert.deepEqual(
+      errorDetails({
+        error: {
+          caused_by: {
+            type: 'script_exception',
+            reason: 'compile error',
+            script_stack: ['params.a +', '          ^---- HERE'],
+            caused_by: { reason: 'unexpected end of script.' },
+          },
+        },
+      }),
+      { title: undefined, reason: 'unexpected end of script.', stack: 'params.a +\n          ^---- HERE' }
+    );
+    assert.deepEqual(errorDetails({ error: { caused_by: { title: 'Error processing your markdown', reason: '{{foo}} is an unknown variable' } } }), {
+      title: 'Error processing your markdown',
+      reason: '{{foo}} is an unknown variable',
+    });
   });
 });
