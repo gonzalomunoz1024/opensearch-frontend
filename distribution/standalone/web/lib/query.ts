@@ -251,6 +251,15 @@ export function describeFilter(
     }
     case 'exists':
       return { key, value: 'exists' };
+    case 'geo_bounding_box':
+    case 'geo_polygon': {
+      // mapGeoBoundingBox and mapGeoPolygon, with the text a geo_point field shows an object as
+      const clause = (filter[meta.type] ?? {}) as Record<string, unknown>;
+      const params = (meta.params ?? clause[key]) as { top_left?: unknown; bottom_right?: unknown; points?: unknown[] } | undefined;
+      const pretty = (point: unknown) => JSON.stringify(point, null, 1).replace(/\n\s*/g, ' ');
+      if (meta.type === 'geo_polygon') return { key, value: (params?.points ?? []).map(pretty).join(', ') };
+      return { key, value: `${pretty(params?.top_left)} to ${pretty(params?.bottom_right)}` };
+    }
     case 'missing':
       return { key, value: 'missing' };
     default: {

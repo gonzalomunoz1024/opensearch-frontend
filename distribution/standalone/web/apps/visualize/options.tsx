@@ -13,6 +13,8 @@ import { FormRow, NumberField, RangeField, Select, Switch, TextArea, TextField, 
 import { aggLabel, type AggConfig, type AggContext } from '../../lib/aggs';
 import { ControlsOptions, ControlsTab } from './controls_editor';
 import { axisName, nextAxisId, oppositeSide } from './defaults';
+import { RegionMapOptions } from './region_map/region_map_options';
+import { TileMapOptions } from './maps/tile_map_options';
 import { VegaSpecEditor } from './vega_editor';
 
 export interface OptionsProps {
@@ -731,6 +733,7 @@ const TABS: Record<string, OptionTab[]> = {
   heatmap: [{ id: 'options', label: 'Options', render: (props) => <HeatmapOptions {...props} /> }],
   tagcloud: [{ id: 'options', label: 'Options', render: (props) => <TagCloudOptions {...props} /> }],
   table: [{ id: 'options', label: 'Options', render: (props) => <TableOptions {...props} /> }],
+  tile_map: [{ id: 'options', label: 'Options', render: (props) => <TileMapOptions {...props} /> }],
   markdown: [
     { id: 'advanced', label: 'Data', render: (props) => <MarkdownData {...props} /> },
     { id: 'options', label: 'Options', render: (props) => <MarkdownOptions {...props} /> },
@@ -740,6 +743,7 @@ const TABS: Record<string, OptionTab[]> = {
     { id: 'options', label: 'Options', render: (props) => <ControlsOptions {...props} /> },
   ],
   vega: [{ id: 'options', label: 'Options', render: (props) => <VegaSpecEditor {...props} /> }],
+  region_map: [{ id: 'options', label: 'Layer Options', render: (props) => <RegionMapOptions {...props} /> }],
 };
 
 /** The tabs of a kind's settings, after "Data" when it is drawn from aggregations */

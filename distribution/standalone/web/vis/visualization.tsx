@@ -20,9 +20,11 @@ import { HeatmapVis } from './heatmap_vis';
 import { MarkdownVis } from './markdown_vis';
 import { MetricVis } from './metric_vis';
 import { PieVis } from './pie_vis';
+import { RegionMapVis } from './region_map/region_map_vis';
 import { fetchVisData, type VisData, type VisInput } from './request';
 import { TableVis } from './table_vis';
 import { TagCloudVis } from './tag_cloud_vis';
+import { TileMapVis } from './tile_map/tile_map_vis';
 import { splitTables, type VisRenderProps } from './types';
 import { TsvbVis } from './tsvb/vis';
 import type { VegaDebugValues } from './vega/debug_view';
@@ -66,8 +68,10 @@ const DRAWN: Record<string, (props: VisRenderProps) => ReactNode> = {
   gauge: (props) => <GaugeVis {...props} />,
   goal: (props) => <GaugeVis {...props} />,
   heatmap: (props) => <HeatmapVis {...props} />,
+  region_map: (props) => <RegionMapVis {...props} />,
   tagcloud: (props) => <TagCloudVis {...props} />,
   table: (props) => <TableVis {...props} />,
+  tile_map: (props) => <TileMapVis {...props} />,
 };
 
 // The kinds whose legend can be opened and closed from the corner of the chart
@@ -80,7 +84,17 @@ export const canDraw = (type: string) =>
 /** Whether a kind of visualization takes colours from the page's memory, and so a turn */
 export const takesTurn = (type: string) => type in DRAWN;
 
-function AggVisualization({ vis, input, tick, uiState, onUiState, onFilter, onTimeChange, onData, turn }: VisualizationProps) {
+function AggVisualization({ vis: saved, input, tick, uiState, onUiState, onFilter, onTimeChange, onData, turn }: VisualizationProps) {
+  // Params a drawing sets on an aggregation (a map's bounds and precision), until the aggregations change
+  const [aggPatch, setAggPatch] = useState<{ aggs: string; params: Record<string, Record<string, unknown>> }>();
+  const savedAggs = JSON.stringify(saved.aggs);
+  const patch = aggPatch?.aggs === savedAggs ? aggPatch.params : undefined;
+  const vis = patch ? { ...saved, aggs: saved.aggs.map((agg) => (patch[agg.id] ? { ...agg, params: { ...agg.params, ...patch[agg.id] } } : agg)) } : saved;
+  const onAggParams = (aggId: string, params: Record<string, unknown>) =>
+    setAggPatch((current) => {
+      const base = current?.aggs === savedAggs ? current.params : {};
+      return { aggs: savedAggs, params: { ...base, [aggId]: { ...base[aggId], ...params } } };
+    });
   const [data, setData] = useState<VisData>();
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(true);
@@ -125,7 +139,7 @@ function AggVisualization({ vis, input, tick, uiState, onUiState, onFilter, onTi
     const parts = vis.type === 'table' || vis.type in DRAWN ? splitTables(data.table) : [{ table: data.table }];
     const split = vis.aggs.find((agg) => agg.schema === 'split' && agg.enabled !== false);
     const asRows = split?.params?.row !== false;
-    const props = { vis, uiState: uiState ?? vis.uiState, onUiState, onFilter, onTimeChange };
+    const props = { vis, uiState: uiState ?? vis.uiState, onUiState, onFilter, onTimeChange, onAggParams };
     body =
       parts.length === 1 && parts[0].label === undefined ? (
         draw({ ...props, data })

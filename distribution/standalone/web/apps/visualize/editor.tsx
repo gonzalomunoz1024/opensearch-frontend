@@ -33,6 +33,7 @@ import { Visualization, canDraw, type VisInspectData } from '../../vis/visualiza
 import { DataTab } from './data_tab';
 import { defaultParams, newVis, syncParams, visProblems } from './defaults';
 import { optionTabs } from './options';
+import { setupRegionMap } from '../../vis/region_map/region_map_type';
 
 export const VISUALIZE = '/app/visualize';
 
@@ -75,6 +76,8 @@ async function load(savedId: string | undefined, create: { type?: string; indexP
     if (!create.type || !visType(create.type)) throw new Error('The address names no kind of visualization to create');
     vis = newVis(create.type, { indexPatternId: create.indexPattern, savedSearchId: create.savedSearchId });
   }
+  // The setup of a region map: the vector map, join field and base map it has not chosen yet
+  if (vis.type === 'region_map') vis = { ...vis, params: (await setupRegionMap(vis.params)).params };
   let searchTitle: string | undefined;
   const searchId = vis.savedSearchId;
   if (searchId) {

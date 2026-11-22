@@ -26,6 +26,7 @@ import {
 } from './http';
 import { exportObjects, fileFromMultipart, importObjects } from './import_export';
 import { registerIndexManagement } from './index_management';
+import { registerGeospatial } from './geospatial';
 import { fieldsForWildcard } from './index_pattern_fields';
 import type { Logger } from './logger';
 import { OpenSearchClient, OpenSearchError, OpenSearchUnavailableError } from './opensearch';
@@ -379,6 +380,10 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
   // --- Query Workbench -------------------------------------------------------------------------
 
   registerSqlConsole(router, client);
+
+  // --- Region maps: the custom vector maps of indices named "*-map" -------------------------------
+
+  registerGeospatial(router, client);
 
   // --- Index Management ------------------------------------------------------------------------
 
