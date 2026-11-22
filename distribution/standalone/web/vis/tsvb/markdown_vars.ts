@@ -7,7 +7,7 @@
  */
 
 import { formatDate } from '../../lib/dates';
-import type { TsvbParams, TsvbSeriesData } from './data';
+import { getLastValue, type TsvbParams, type TsvbSeriesData } from './data';
 
 // Lodash's snake case, which names the variables. Letters with accents first lose them, as lodash's
 // deburr writes them, and apostrophes go. A text of plain words is then split at what is not a
@@ -65,11 +65,7 @@ export function snakeCase(value: unknown): string {
   return (words ?? []).map((word) => word.toLowerCase()).join('_');
 }
 
-/** The value of the last bucket, or 0 when it has none: a 0 counts as none, as in the product */
-export function getLastValue(data: Array<[number, number | null]>): number {
-  const last = data[data.length - 1];
-  return (last && last[1]) || 0;
-}
+export { getLastValue };
 
 type Tree = Record<string, unknown>;
 

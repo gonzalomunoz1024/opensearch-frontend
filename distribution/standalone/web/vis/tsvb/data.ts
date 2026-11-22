@@ -40,6 +40,9 @@ export interface TsvbMetric {
   order_by?: string;
   order?: string;
   agg_with?: string;
+  // A standard deviation's: how many of them, and which of its values is drawn
+  sigma?: number | string;
+  mode?: string;
 }
 
 export interface TsvbSeries {
@@ -79,6 +82,8 @@ export interface TsvbSeries {
   series_interval?: string;
   /** The time range mode of a series that overrides the index pattern */
   time_range_mode?: 'entire_time_range' | 'last_value';
+  /** Whether a series that overrides the index pattern drops its last bucket, when the panel does not say */
+  override_drop_last_bucket?: number;
   color_rules?: ColorRule[];
 }
 
@@ -162,7 +167,7 @@ export interface TsvbSeriesData {
   color: string;
   /** [time in milliseconds, value] */
   data: Array<[number, number | null]>;
-  /** The value the panels that show one number show */
+  /** The value the panels that show one number show: the last bucket's, or 0 when it has none */
   last: number | null;
   series: TsvbSeries;
   format: (value: number | null) => string;
@@ -323,6 +328,35 @@ export function metricLabel(series: TsvbSeries, metric: TsvbMetric | undefined =
   return `${name} of ${target ? metricLabel(series, target) : (metric.field ?? '')}`;
 }
 
+/**
+ * The parts a metric or a gauge whose series is split shows, one for each, as the product's do:
+ * each with the series of that part under the series' own name, the part's name to write under its
+ * value, and the series that is not split beside them.
+ */
+export function splitParts(params: TsvbParams, data: TsvbData): Array<{ key: string; label: string; data: TsvbData }> | undefined {
+  if (data.series.every((item) => item.id.split(':').length === 1)) return undefined;
+  const models = params.series ?? [];
+  // An object, as the product keeps them in: parts named by numbers come first, in their order
+  const parts: Record<string, { label: string; series: TsvbSeriesData[] }> = {};
+  for (const item of data.series) {
+    const [seriesId, splitId] = item.id.split(':');
+    const model = models.find((series) => series.id === seriesId);
+    if (!model || !splitId) continue;
+    parts[splitId] ??= { label: item.label, series: [] };
+    parts[splitId].series.push({ ...item, id: seriesId, color: item.color || model.color || '', label: model.label || metricLabel(model) });
+  }
+  const whole = data.series.find((item) => {
+    const model = models.find((series) => series.id === item.id);
+    return model?.split_mode === 'everything' || model?.split_mode === 'filter';
+  });
+  const wholeAt = whole ? models.findIndex((series) => series.id === whole.id) : -1;
+  return Object.keys(parts).map((key) => {
+    const { label, series } = parts[key];
+    const all = !whole ? series : wholeAt > 0 ? [...series, whole] : [whole, ...series];
+    return { key, label, data: { ...data, series: all } };
+  });
+}
+
 /** The colour a value gets from a panel's rules: the last rule that holds */
 export function ruleFor(rules: ColorRule[] | undefined, value: number | null): ColorRule | undefined {
   if (value === null || !rules) return undefined;
@@ -352,12 +386,36 @@ async function patternFor(title: string): Promise<IndexPattern | undefined> {
 const BASIC: Record<string, string> = { avg: 'avg', sum: 'sum', min: 'min', max: 'max', cardinality: 'cardinality', value_count: 'value_count' };
 const EXTENDED: Record<string, string> = { std_deviation: 'std_deviation', variance: 'variance', sum_of_squares: 'sum_of_squares' };
 
+/** The statistics of a standard deviation, a variance or a sum of squares, with the sigma it names */
+function extendedStats(metric: TsvbMetric): Dsl {
+  const stats: Dsl = { field: metric.field };
+  const sigma = parseInt(String(metric.sigma ?? ''), 10);
+  if (metric.sigma && !Number.isNaN(sigma)) stats.sigma = sigma;
+  return { extended_stats: stats };
+}
+
+/** Which value of its statistics a standard deviation draws: one of its bounds, or itself */
+const boundOf = (metric: TsvbMetric): string | undefined =>
+  metric.type === 'std_deviation' && (metric.mode === 'upper' || metric.mode === 'lower') ? `std_${metric.mode}` : undefined;
+
+/**
+ * What orders buckets by a measure, as the product asks for it: the measure worked out again in
+ * each bucket under `<id>-SORT`, and the path to its value. Count, and the measures worked out
+ * from others, order nothing this way.
+ */
+function sortBy(metric: TsvbMetric): { key: string; path: string; agg: Dsl } | undefined {
+  const key = `${metric.id}-SORT`;
+  if (BASIC[metric.type]) return { key, path: key, agg: { [BASIC[metric.type]]: { field: metric.field } } };
+  if (EXTENDED[metric.type]) return { key, path: `${key}[${boundOf(metric) ?? metric.type}]`, agg: extendedStats(metric) };
+  return undefined;
+}
+
 function metricAggs(metrics: TsvbMetric[], indexPattern: IndexPattern | undefined): Dsl {
   const aggs: Dsl = {};
   const config = services.queryConfig();
   for (const metric of metrics) {
     if (BASIC[metric.type] && metric.field) aggs[metric.id] = { [BASIC[metric.type]]: { field: metric.field } };
-    else if (EXTENDED[metric.type] && metric.field) aggs[metric.id] = { extended_stats: { field: metric.field } };
+    else if (EXTENDED[metric.type] && metric.field) aggs[metric.id] = extendedStats(metric);
     else if (metric.type === 'percentile' && metric.field) {
       const percents = (metric.percentiles ?? []).map((item) => toNumber(item.value, NaN)).filter((value) => !Number.isNaN(value));
       aggs[metric.id] = { percentiles: { field: metric.field, percents: percents.length ? percents : [50] } };
@@ -417,8 +475,14 @@ function metricValues(
       return buckets.map((bucket) => numeric((bucket[metric.id] as { value?: number } | undefined)?.value));
     case 'std_deviation':
     case 'variance':
-    case 'sum_of_squares':
-      return buckets.map((bucket) => numeric((bucket[metric.id] as Record<string, number> | undefined)?.[metric.type]));
+    case 'sum_of_squares': {
+      // A standard deviation set to its upper or lower bound draws that bound
+      const bound = boundOf(metric)?.slice(4);
+      return buckets.map((bucket) => {
+        const stats = bucket[metric.id] as (Record<string, unknown> & { std_deviation_bounds?: Record<string, unknown> }) | undefined;
+        return numeric(bound ? stats?.std_deviation_bounds?.[bound] : stats?.[metric.type]);
+      });
+    }
     case 'percentile':
     case 'percentile_rank':
       return buckets.map((bucket) => {
@@ -636,8 +700,9 @@ async function planFor(params: TsvbParams, series: TsvbSeries | undefined, input
     intervalMs,
     intervalExpression: expression,
     entireRange,
-    // The last bucket is still filling, so a line would dip at its end
-    dropLast: !entireRange && (params.drop_last_bucket ?? 1) === 1,
+    // The last bucket is still filling, so a line would dip at its end; the panel's choice holds,
+    // or else the series' own
+    dropLast: !entireRange && Boolean(params.drop_last_bucket ?? series?.override_drop_last_bucket ?? 1),
   };
 }
 
@@ -647,11 +712,10 @@ function finish(points: Array<[number, number | null]>, plan: Plan, shift: numbe
   return data;
 }
 
-function lastOf(data: Array<[number, number | null]>): number | null {
-  for (let index = data.length - 1; index >= 0; index -= 1) {
-    if (data[index][1] !== null) return data[index][1];
-  }
-  return null;
+/** The value of the last bucket, or 0 when it has none: a 0 counts as none, as in the product */
+export function getLastValue(data: Array<[number, number | null]>): number {
+  const last = data[data.length - 1];
+  return (last && last[1]) || 0;
 }
 
 const offsetOf = (series: TsvbSeries): number => {
@@ -675,15 +739,19 @@ async function fetchSeries(
   const mode = series.split_mode ?? 'everything';
   let split: Dsl;
   if (mode === 'terms' && series.terms_field) {
-    const orderBy = series.terms_order_by && series.terms_order_by !== '_count' && series.terms_order_by !== '_key' ? '_count' : (series.terms_order_by ?? '_count');
+    const direction = series.terms_direction ?? 'desc';
+    // The terms are ordered by a measure worked out again in each, as the product asks, or by
+    // their value or their count
+    const by = metrics.find((metric) => metric.id === series.terms_order_by);
+    const sort = by ? sortBy(by) : undefined;
     const terms: Dsl = {
       field: series.terms_field,
       size: toNumber(series.terms_size, 10),
-      order: { [orderBy]: series.terms_direction ?? 'desc' },
+      order: sort ? { [sort.path]: direction } : { [series.terms_order_by === '_key' ? '_key' : '_count']: direction },
     };
     if (series.terms_include) terms.include = series.terms_include;
     if (series.terms_exclude) terms.exclude = series.terms_exclude;
-    split = { terms, aggs: { timeseries } };
+    split = { terms, aggs: { ...(sort ? { [sort.key]: sort.agg } : {}), timeseries } };
   } else if (mode === 'filters' && series.split_filters?.length) {
     const filters: Record<string, BoolQuery> = {};
     for (const item of series.split_filters) {
@@ -712,7 +780,7 @@ async function fetchSeries(
     if (!found) return [];
     const make = (id: string, label: string, color: string, node: { timeseries?: { buckets: TimeBucket[] } }): TsvbSeriesData => {
       const data = finish(seriesValues(series, node.timeseries?.buckets ?? [], plan.intervalMs), plan, shift);
-      return { id, seriesId: series.id, label, color, data, last: lastOf(data), series, format };
+      return { id, seriesId: series.id, label, color, data, last: getLastValue(data), series, format };
     };
     if (mode === 'terms' && Array.isArray(found.buckets)) {
       const list = found.buckets as Array<{ key: string | number; key_as_string?: string; timeseries?: { buckets: TimeBucket[] } }>;
@@ -813,19 +881,6 @@ interface TablePivot {
   sortAggs?: Dsl;
 }
 
-// The aggregations a table can be sorted by, worked out over each row as the product does
-const SORT_AGGS: Record<string, { agg: string; value?: string }> = {
-  avg: { agg: 'avg' },
-  max: { agg: 'max' },
-  min: { agg: 'min' },
-  sum: { agg: 'sum' },
-  value_count: { agg: 'value_count' },
-  cardinality: { agg: 'cardinality' },
-  std_deviation: { agg: 'extended_stats', value: 'std_deviation' },
-  variance: { agg: 'extended_stats', value: 'variance' },
-  sum_of_squares: { agg: 'extended_stats', value: 'sum_of_squares' },
-};
-
 /**
  * The order the product asks OpenSearch for the rows of a table in: by count or by the metric of
  * the series sorted by, or by the value of the field the rows are grouped by. Without a sort in
@@ -837,14 +892,8 @@ export function tableSort(params: TsvbParams, sort: TsvbTableSort | undefined): 
   const series = (params.series ?? []).find((item) => item.id === sort.column);
   const metric = series?.metrics?.[series.metrics.length - 1];
   if (metric?.type === 'count') return { order: { _count: order } };
-  const sortable = metric ? SORT_AGGS[metric.type] : undefined;
-  if (metric && sortable) {
-    const key = `${metric.id}-SORT`;
-    return {
-      order: { [sortable.value ? `${key}[${sortable.value}]` : key]: order },
-      sortAggs: { [key]: { [sortable.agg]: { field: metric.field } } },
-    };
-  }
+  const by = metric ? sortBy(metric) : undefined;
+  if (by) return { order: { [by.path]: order }, sortAggs: { [by.key]: by.agg } };
   return { order: { _key: order } };
 }
 

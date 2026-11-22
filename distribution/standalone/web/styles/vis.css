@@ -732,6 +732,16 @@
   font-size: var(--font-size-s);
 }
 
+/* The name of the part of a split metric, under its values */
+.visTsvbMetric__additional {
+  max-width: 100%;
+  font-size: var(--font-size-xs);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .visTsvbTopN {
   flex: 1 1 auto;
   min-height: 0;
@@ -788,11 +798,36 @@
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * A metric or a gauge split by terms or filters: one for each part, as the product lays them out,
+ * at least a quarter of the width and 192 by 154 pixels each, spread over as many rows as they need
+ */
+.visTsvbSplit {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: stretch;
+  justify-content: space-around;
+  min-height: 0;
+  margin: var(--space-2);
+  overflow: auto;
+}
+
+.visTsvbSplit__part {
+  display: flex;
+  flex: 1 0 25%;
+  flex-direction: column;
+  min-width: 192px;
+  min-height: 154px;
+  border: var(--space-2) solid transparent;
+}
+
 .visTsvbTable__trend {
-  display: inline-block;
-  width: 1.4em;
   color: var(--color-text-secondary);
-  text-align: right;
+}
+
+.visTsvbTable__trend .atlIcon {
+  vertical-align: middle;
 }
 
 /* The arrow of the column a TSVB table is sorted by */

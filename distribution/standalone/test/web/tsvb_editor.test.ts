@@ -29,7 +29,7 @@ import { colorOutput, cssColor, parseColor, toHex } from '../../web/components/c
 import { compileLess } from '../../web/apps/visualize/tsvb/less';
 import { renderTemplate, TemplateError } from '../../web/lib/template';
 import { HttpFetchError } from '../../web/services/http';
-import { tableSort, type TsvbParams } from '../../web/vis/tsvb/data';
+import { splitParts, tableSort, type TsvbData, type TsvbParams, type TsvbSeriesData } from '../../web/vis/tsvb/data';
 import { errorDetails, panelError } from '../../web/vis/tsvb/error';
 import { convertSeriesToVars, getLastValue, snakeCase } from '../../web/vis/tsvb/markdown_vars';
 
@@ -448,5 +448,62 @@ describe('the order of the rows of a TSVB table', () => {
     // A series whose last metric is not one OpenSearch can order by, and the field's own column
     assert.deepEqual(tableSort(params, { column: 'd', order: 'desc' }), { order: { _key: 'desc' } });
     assert.deepEqual(tableSort(params, { column: '_default_', order: 'desc' }), { order: { _key: 'desc' } });
+    // A standard deviation drawn as its upper bound is ordered by that bound, with its sigma
+    const bound: TsvbParams = { series: [{ id: 'e', metrics: [{ id: 'e1', type: 'std_deviation', field: 'bytes', mode: 'upper', sigma: '3' }] }] };
+    assert.deepEqual(tableSort(bound, { column: 'e', order: 'asc' }), {
+      order: { 'e1-SORT[std_upper]': 'asc' },
+      sortAggs: { 'e1-SORT': { extended_stats: { field: 'bytes', sigma: 3 } } },
+    });
+  });
+});
+
+describe('the parts of a split TSVB metric or gauge', () => {
+  const row = (id: string, label: string): TsvbSeriesData => ({
+    id,
+    seriesId: id.split(':')[0],
+    label,
+    color: '#111',
+    data: [[0, 1]],
+    last: 1,
+    series: { id: id.split(':')[0] },
+    format: String,
+  });
+  const data = (series: TsvbSeriesData[]): TsvbData => ({
+    series,
+    interval: { ms: 1, expression: '1ms' },
+    range: { from: new Date(0), to: new Date(1) },
+    annotations: [],
+    requests: [],
+  });
+
+  it('draws one of an unsplit series', () => {
+    assert.equal(splitParts({ series: [{ id: 'a', split_mode: 'everything' }] }, data([row('a', 'Count')])), undefined);
+  });
+
+  it('makes a part of each term, named by it, with the series named by its metric and the unsplit series beside it', () => {
+    const params: TsvbParams = {
+      series: [
+        { id: 'a', split_mode: 'terms', metrics: [{ id: 'm', type: 'avg', field: 'bytes' }] },
+        { id: 'b', split_mode: 'everything', label: 'All' },
+      ],
+    };
+    const parts = splitParts(params, data([row('a:zip', 'zip'), row('a:404', '404'), row('a:gz', 'gz'), row('b', 'All')]));
+    // Parts named by numbers come first, as the product's object keeps them; the unsplit series
+    // comes after the split one, as it does in the panel's list
+    assert.deepEqual(
+      parts?.map((part) => [part.key, part.label, part.data.series.map((item) => `${item.id}=${item.label}`)]),
+      [
+        ['404', '404', ['a=Average of bytes', 'b=All']],
+        ['zip', 'zip', ['a=Average of bytes', 'b=All']],
+        ['gz', 'gz', ['a=Average of bytes', 'b=All']],
+      ]
+    );
+  });
+});
+
+describe('the last value of a TSVB series', () => {
+  it('is that of its last bucket, or 0 when the bucket has none, as the product reads it', () => {
+    assert.equal(getLastValue([[0, 5], [1, null]]), 0);
+    assert.equal(getLastValue([[0, 5], [1, 7]]), 7);
   });
 });

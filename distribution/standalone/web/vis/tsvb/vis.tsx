@@ -19,9 +19,11 @@ import {
   metricLabel,
   ruleFor,
   seriesFormatter,
+  splitParts,
   type TsvbData,
   type TsvbParams,
   type TsvbSeries,
+  type TsvbSeriesData,
   type TsvbTableData,
   type TsvbTableSort,
 } from './data';
@@ -51,11 +53,20 @@ function perInterval(ms: number): string {
   return `per ${ms} milliseconds`;
 }
 
-/** The latest value of a series as its legend shows it: its share of the stack when the stack is of shares */
-function lastText(item: TsvbData['series'][number], all: TsvbData['series']): string {
-  if (item.series.stacked !== 'percent') return item.format(item.last);
-  const total = all.filter((other) => other.series.stacked === 'percent').reduce((sum, other) => sum + Math.abs(other.last ?? 0), 0);
-  return seriesFormatter('percent', item.series.value_template)(total === 0 ? 0 : (item.last ?? 0) / total);
+/** The value of the last bucket of a series, none when it has none */
+const lastBucket = (item: TsvbSeriesData): number | null => item.data[item.data.length - 1]?.[1] ?? null;
+
+/**
+ * The latest value of a series as its legend shows it: that of its last bucket, nothing when the
+ * bucket has none (as the product's charts show it), and its share of the stack when the stack is
+ * of shares
+ */
+function lastText(item: TsvbSeriesData, all: TsvbSeriesData[]): string {
+  const value = lastBucket(item);
+  if (value === null) return '';
+  if (item.series.stacked !== 'percent') return item.format(value);
+  const total = all.filter((other) => other.series.stacked === 'percent').reduce((sum, other) => sum + Math.abs(lastBucket(other) ?? 0), 0);
+  return seriesFormatter('percent', item.series.value_template)(total === 0 ? 0 : value / total);
 }
 
 /** Whether the values of a series rise or fall over its time: the slope of the line that fits them best */
@@ -70,7 +81,9 @@ function slopeOf(data: Array<[number, number | null]>): number {
     above += (x - meanX) * (y - meanY);
     below += (x - meanX) ** 2;
   }
-  return below === 0 ? 0 : above / below;
+  // Rounded to two decimals, as the product's regression gives it: over time in milliseconds,
+  // nearly every slope rounds to 0, which the product draws as falling
+  return below === 0 ? 0 : Math.round((above / below) * 100) / 100;
 }
 
 function TimeSeries({ params, data, onTimeChange }: { params: TsvbParams; data: TsvbData; onTimeChange?: (range: TimeRange) => void }) {
@@ -160,7 +173,7 @@ function TimeSeries({ params, data, onTimeChange }: { params: TsvbParams; data: 
   );
 }
 
-function Metric({ params, data }: { params: TsvbParams; data: TsvbData }) {
+function Metric({ params, data, extra }: { params: TsvbParams; data: TsvbData; extra?: string }) {
   const [primary, secondary] = data.series;
   if (!primary) return <ChartMessage>No results found</ChartMessage>;
   const rule = ruleFor(params.background_color_rules, primary.last);
@@ -177,6 +190,41 @@ function Metric({ params, data }: { params: TsvbParams; data: TsvbData }) {
           <span>{secondary.label}</span> <strong>{secondary.format(secondary.last)}</strong>
         </div>
       )}
+      {extra && <div className="visTsvbMetric__additional">{extra}</div>}
+    </div>
+  );
+}
+
+/** A metric or a gauge, or one of either for each part of its split, each in the frame of a panel */
+function Splits({
+  params,
+  data,
+  framed,
+  draw,
+}: {
+  params: TsvbParams;
+  data: TsvbData;
+  framed: boolean;
+  draw: (data: TsvbData, extra?: string) => ReactNode;
+}) {
+  const parts = splitParts(params, data);
+  const background = params.background_color || undefined;
+  if (!parts) {
+    return framed ? (
+      <div className="visTsvbFrame" style={{ background }}>
+        {draw(data)}
+      </div>
+    ) : (
+      <>{draw(data)}</>
+    );
+  }
+  return (
+    <div className="visTsvbSplit" data-test-subj="tsvbSplitVis">
+      {parts.map((part) => (
+        <div key={part.key} className="visTsvbSplit__part" style={framed ? { background } : undefined}>
+          {draw(part.data, part.label)}
+        </div>
+      ))}
     </div>
   );
 }
@@ -211,20 +259,48 @@ function TopN({ params, data }: { params: TsvbParams; data: TsvbData }) {
   );
 }
 
-function Gauge({ params, data }: { params: TsvbParams; data: TsvbData }) {
+// The lines the product writes over a gauge: their height, the middle of their text from their
+// top, and the size of their text, in the box it lays over the arc
+const GAUGE_LINES = { label: [11, 3.5, 7], value: [12.6, 6.3, 12.6], extra: [10.72, 5.36, 5.6] } as const;
+type GaugeLine = keyof typeof GAUGE_LINES;
+
+/**
+ * Where the product writes the lines of a gauge, in the square of 120 its arc is drawn in: in a
+ * box of 100 by 70 laid over the arc, stacked at its foot, for a half gauge, or in the middle of
+ * one of 100 by 100 for a circle, the value first; the box is scaled to the panel apart from the
+ * arc, to 82/70 (124/100 for a circle) of its scale.
+ */
+function gaugeLines(half: boolean, extra: boolean): Record<GaugeLine, { y: number; size: number }> {
+  const scale = half ? 82 / 70 : 124 / 100;
+  const order: GaugeLine[] = half ? ['label', 'value'] : ['value', 'label'];
+  if (extra) order.push('extra');
+  const total = order.reduce((sum, line) => sum + GAUGE_LINES[line][0], 0);
+  let top = half ? 62 - total : 50 - total / 2;
+  const at = { label: { y: 0, size: 0 }, value: { y: 0, size: 0 }, extra: { y: 0, size: 0 } };
+  for (const line of order) {
+    const [height, middle, size] = GAUGE_LINES[line];
+    at[line] = { y: (top + middle) * scale, size: size * scale };
+    top += height;
+  }
+  return at;
+}
+
+function Gauge({ params, data, extra }: { params: TsvbParams; data: TsvbData; extra?: string }) {
   const [ref, size] = useSize<HTMLDivElement>();
   const series = data.series[0];
   if (!series) return <ChartMessage>No results found</ChartMessage>;
   const half = params.gauge_style !== 'circle';
   const rule = ruleFor(params.gauge_color_rules, series.last);
-  const color = rule?.gauge ?? series.color;
+  const color = rule?.gauge ?? (series.color || '#8ac336');
   const value = series.last ?? 0;
-  const max = number(params.gauge_max, 0) || Math.max(1, value);
+  // Without a maximum of its own, a gauge goes up to the largest value of its series
+  const largest = Math.max(...series.data.map(([, y]) => y ?? Number.NEGATIVE_INFINITY));
+  const max = number(params.gauge_max, 0) || (Number.isFinite(largest) && largest !== 0 ? largest : 1);
   const share = Math.max(0, Math.min(1, value / max));
   // Drawn in a square of 120 with the ring's middle 50 from the centre, as TSVB draws it, so
   // that the widths a panel was saved with mean what they meant
-  const stroke = number(params.gauge_width, 10);
-  const track = number(params.gauge_inner_width, 10);
+  const stroke = number(params.gauge_width, 0) || 10;
+  const track = number(params.gauge_inner_width, 0) || 2;
   const radius = 50;
   const edge = Math.max(stroke, track) / 2;
   const sweep = half ? 0.6 : 1;
@@ -237,18 +313,43 @@ function Gauge({ params, data }: { params: TsvbParams; data: TsvbData }) {
   const height = half ? 60 + radius * Math.cos(Math.PI * (1 - sweep)) + edge + 2 : 120;
   const scale = Math.max(0.1, Math.min(size.width / 120, size.height / height));
   const text = series.format(series.last);
+  const lines = gaugeLines(half, Boolean(extra));
+  // On a background of the panel's own, the text takes the colour that reads on it
+  const background = params.background_color || undefined;
+  const ink = background ? readableOn(background) : undefined;
   return (
     <div ref={ref} className="visTsvbGauge" data-test-subj="tsvbGauge">
       {size.width > 0 && (
         <svg width={120 * scale} height={height * scale} viewBox={`0 0 120 ${height}`} role="img" aria-label={`${series.label}: ${text}`}>
           <path d={arc(1)} fill="none" stroke={params.gauge_inner_color || 'var(--chart-band)'} strokeWidth={track} />
           {share > 0 && <path d={arc(share)} fill="none" stroke={color} strokeWidth={stroke} />}
-          <text x={60} y={half ? 62 : 52} textAnchor="middle" fontSize={8} fill="var(--color-text-secondary)">
-            {fitText(series.label, (radius - edge) * 1.7, 8)}
+          <text
+            x={60}
+            y={lines.label.y}
+            dominantBaseline="central"
+            textAnchor="middle"
+            fontSize={lines.label.size}
+            fill={ink ?? 'var(--color-text-secondary)'}
+            fillOpacity={ink ? 0.6 : undefined}
+          >
+            {fitText(series.label, (half ? 60 : 68) * (lines.label.size / 7), lines.label.size)}
           </text>
-          <text x={60} y={half ? 79 : 70} textAnchor="middle" fontSize={14} fill={rule?.text ?? 'var(--color-text-primary)'} data-test-subj="tsvbGaugeValue">
+          <text
+            x={60}
+            y={lines.value.y}
+            dominantBaseline="central"
+            textAnchor="middle"
+            fontSize={lines.value.size}
+            fill={rule?.text ?? ink ?? 'var(--color-text-primary)'}
+            data-test-subj="tsvbGaugeValue"
+          >
             {text}
           </text>
+          {extra && (
+            <text x={60} y={lines.extra.y} dominantBaseline="central" textAnchor="middle" fontSize={lines.extra.size} fill={ink ?? 'var(--color-text-primary)'}>
+              {fitText(extra, (half ? 68 : 76) * (lines.extra.size / 5.6), lines.extra.size)}
+            </text>
+          )}
         </svg>
       )}
     </div>
@@ -355,8 +456,10 @@ function PivotTable({ params, data, sort = { column: '_default_', order: 'asc' }
                     <td key={series.id} className="atlTable__numeric" style={{ color }}>
                       {found ? found.format(found.last) : '-'}
                       {found && Number(series.trend_arrows) === 1 && (
-                        <span className="visTsvbTable__trend" aria-label={slopeOf(found.data) > 0 ? 'Rising' : 'Falling'}>
-                          {slopeOf(found.data) > 0 ? '↑' : '↓'}
+                        // The product's arrow: its sort icons, after a space
+                        <span className="visTsvbTable__trend">
+                          {'  '}
+                          <Icon name={slopeOf(found.data) > 0 ? 'sortUp' : 'sortDown'} title={slopeOf(found.data) > 0 ? 'Rising' : 'Falling'} />
                         </span>
                       )}
                     </td>
@@ -382,9 +485,9 @@ function NoData() {
 
 const PANELS: Record<string, (props: { params: TsvbParams; data: TsvbData; onTimeChange?: (range: TimeRange) => void }) => ReactNode> = {
   timeseries: (props) => <TimeSeries {...props} />,
-  metric: (props) => <Metric {...props} />,
+  metric: ({ params, data }) => <Splits params={params} data={data} framed={false} draw={(part, extra) => <Metric params={params} data={part} extra={extra} />} />,
   top_n: (props) => <TopN {...props} />,
-  gauge: (props) => <Gauge {...props} />,
+  gauge: ({ params, data }) => <Splits params={params} data={data} framed draw={(part, extra) => <Gauge params={params} data={part} extra={extra} />} />,
   markdown: (props) => <MarkdownPanel {...props} />,
 };
 

@@ -75,13 +75,17 @@
   padding: var(--space-2);
 }
 
+/* The switch is as tall as the product's, 16 pixels, so that the row is as tall as its message */
 .tvbEditorVisualization__auto {
+  display: flex;
   flex: 1 1 auto;
+  align-items: center;
 }
 
 .tvbEditorVisualization__auto .atlSwitch {
   gap: var(--space-2);
   font-size: var(--font-size-s);
+  line-height: 16px;
 }
 
 .tvbEditorVisualization__auto .atlSwitch__track {
