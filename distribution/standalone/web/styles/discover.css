@@ -11,11 +11,12 @@
   padding: var(--space-2);
 }
 
+/* A fifth of the page, and no less than 260px, as the original first draws its sidebar */
 .dscSidebar {
   display: flex;
-  flex: none;
+  flex: 0 0 20%;
   flex-direction: column;
-  width: 284px;
+  min-width: 260px;
   min-height: 0;
 }
 
@@ -132,88 +133,497 @@
   background: var(--color-accent);
 }
 
-.dscMain {
-  display: flex;
-  flex: 1 1 0;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-}
-
-.dscMain .shlSearchBar {
-  padding: 0 0 var(--space-2);
-}
-
+/*
+ * The documents' side, as the original's canvas: a panel that scrolls, with the query bar at its
+ * top and, under it, the histogram, the bar of the results and the table, set in 12px
+ */
 .dscCanvas {
   position: relative;
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
   min-height: 0;
-  overflow: auto;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+  overflow: hidden auto;
 }
 
-.dscChartHeader {
+.dscCanvas > .shlSearchBar {
+  padding: 0;
+}
+
+.dscCanvas > .dscNoResults {
+  min-height: calc(100% - 72px);
+}
+
+.dscCanvas__results {
+  margin-left: var(--space-3);
+  border-top: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+/* --- The histogram and its header ------------------------------------------------------------- */
+
+.dscChart {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dscChart__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 36px;
+  padding-top: var(--space-1);
+}
+
+.dscChart__range {
+  padding-left: var(--space-1);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+/* As wide as its longest choice, as the original's: 8px before the text, 32px for the arrow */
+.dscChart select.dscChart__select {
+  width: auto;
+  padding: 0 31px 0 7px;
+}
+
+.dscChart__interval {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.dscChart__scaled {
+  display: inline-flex;
+  color: var(--color-warning-text);
+}
+
+.dscTimechart {
+  flex: none;
+  height: 200px;
+}
+
+.dscHistogram {
+  height: 100%;
+  padding: var(--space-2);
+}
+
+.dscHistogram__chart {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.dscHistogram__svg {
+  display: block;
+  font-family: var(--font-family);
+  user-select: none;
+}
+
+.dscHistogram__labels {
+  fill: var(--color-text-tertiary);
+  font-size: var(--font-size-chart);
+}
+
+.dscHistogram__title {
+  fill: var(--color-text-primary);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+}
+
+.dscHistogram__grid,
+.dscHistogram__axis {
+  stroke: var(--chart-line);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.dscHistogram__grid--dashed {
+  stroke-dasharray: 4 4;
+}
+
+.dscHistogram__band {
+  fill: var(--chart-band);
+}
+
+/* "Now", in the colour of danger, and the time outside the range asked for, shaded */
+.dscHistogram__now {
+  stroke: var(--color-critical);
+  stroke-width: 2;
+  opacity: 0.7;
+}
+
+.dscHistogram__shade {
+  fill: var(--color-text-secondary);
+  opacity: 0.2;
+}
+
+:root.themeDark .dscHistogram__shade {
+  fill: var(--color-border);
+  opacity: 0.6;
+}
+
+.dscHistogram__highlight {
+  fill: rgb(255 255 255 / 20%);
+  pointer-events: none;
+}
+
+/* The stretch being dragged across, in the chart library's own colours */
+.dscHistogram__brush {
+  fill: #0b64dd;
+  fill-opacity: 0.1;
+  stroke: #0b64dd;
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+  pointer-events: none;
+}
+
+:root.themeDark .dscHistogram__brush {
+  fill: #61a2ff;
+  fill-opacity: 0.2;
+  stroke: #61a2ff;
+}
+
+.dscHistogram__brush rect {
+  stroke: none;
+}
+
+.dscHistogram__pointer {
+  fill: transparent;
+}
+
+/* The count of the bucket under the pointer */
+.dscHistogram__tooltip {
+  position: fixed;
+  z-index: 9000;
+  min-width: 100px;
+  max-width: 256px;
+  border: 1px solid var(--color-surface);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.dscHistogram__tooltipHeader {
+  padding: var(--space-1) var(--space-2);
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.dscHistogram__tooltipDivider {
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* The series' colour in a strip, then its name and the count, sharing what the header leaves */
+.dscHistogram__tooltipTable {
+  display: grid;
+  grid-template-columns: 11px auto auto;
+  align-items: stretch;
+}
+
+.dscHistogram__tooltipColor {
+  width: 5px;
+}
+
+.dscHistogram__tooltipLabel {
+  padding: 2px var(--space-1);
+  overflow-wrap: anywhere;
+}
+
+.dscHistogram__tooltipValue {
+  padding: 2px var(--space-1);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* --- The bar of the results: how many, start the saved search again, download them ------------ */
+
+.dscResultsBar {
+  padding: var(--space-1) 0;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.dscResultsBar__actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-4) 0;
-  font-size: var(--font-size-m);
+  min-height: 40px;
 }
 
-.dscChart {
-  flex: none;
-  height: 200px;
-  padding: var(--space-2) var(--space-3) var(--space-2);
-  border-bottom: 1px solid var(--color-border-light);
-}
-
-.dscResultsHeader {
+.dscResultsBar__count {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-2) var(--space-4);
-  border-bottom: 1px solid var(--color-border-light);
+  padding: var(--space-1);
 }
 
-.dscTableWrap {
+.dscResultsBar__count strong {
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-semibold);
+  line-height: 21px;
+}
+
+.dscResults__button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 32px;
   padding: 0 var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-accent);
+  font-family: inherit;
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 21px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out-quint);
+}
+
+.dscResults__button:hover {
+  background: var(--color-accent-tint);
+}
+
+.dscResults__button:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+}
+
+/* --- The document table, as OpenSearch Dashboards' legacy table draws it ---------------------- */
+
+/*
+ * The table's lines are the colour the original's table style sheet writes (its own, not the
+ * Atlas theme's), as are its 12 pixel code face and its 18 pixel lines.
+ */
+:root {
+  --dsc-table-line: #d3dae6;
+}
+
+:root.themeDark {
+  --dsc-table-line: #343741;
 }
 
 .dscTable {
-  width: 100%;
-  border-collapse: collapse;
-  font-family: var(--font-family-code);
-  font-size: var(--font-size-xs);
-  line-height: 24px;
+  overflow-x: auto;
 }
 
-.dscTable th {
-  padding: var(--space-1) var(--space-2);
-  border-bottom: 1px solid var(--color-border-light);
-  font-weight: var(--font-weight-semibold);
+.dscTable__table {
+  width: 100%;
+  margin: 0 0 20px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: var(--font-family-code);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}
+
+/* On a dashboard the pager follows the table at once */
+.dscPager ~ .dscTable__table {
+  margin-bottom: 0;
+}
+
+.dscTable__table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-surface);
+}
+
+.dscTable__table th {
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--dsc-table-line);
+  font-weight: bold;
+  line-height: 1.42857143;
   text-align: left;
+  vertical-align: bottom;
   white-space: nowrap;
 }
 
-.dscTable td {
+.dscTable__table td {
   padding: var(--space-2);
-  border-bottom: 1px solid var(--color-border-light);
+  border-top: 1px solid var(--dsc-table-line);
   vertical-align: top;
 }
 
+.dscTable__table tbody > tr:first-child > td,
+.dscTable__table td.dscTable__details {
+  border-top: none;
+}
+
+/* The buttons of a column's header: hidden until the header is pointed at */
+.dscTable__headerButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 10px;
+  height: 10px;
+  margin-left: var(--space-1);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent);
+  vertical-align: middle;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity var(--duration-fast);
+}
+
+.dscTable__headerButton .atlIcon {
+  width: 12px;
+  height: 12px;
+}
+
+.dscTable__headerField:hover .dscTable__headerButton,
+.dscTable__headerField:focus-within .dscTable__headerButton {
+  opacity: 1;
+}
+
 .dscTable__toggle {
-  width: 28px;
-  padding-right: 0 !important;
+  padding: 4px 0 0 4px !important;
 }
 
-.dscTable__row--open > td {
-  border-bottom-color: transparent;
+.dscTable__toggleButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24.2px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--color-text-primary);
+  vertical-align: middle;
+  cursor: pointer;
 }
 
-.dscTable__details > td {
-  padding: 0 var(--space-2) var(--space-4) !important;
+.dscTable__toggleButton:hover {
+  background: var(--color-hover);
+}
+
+.dscTable__cell {
+  position: relative;
+  overflow-wrap: break-word;
+  word-break: break-all;
+}
+
+/* The time never wraps and takes no more room than it needs */
+.dscTable__cell--time {
+  width: 1%;
+  white-space: nowrap;
+  word-break: normal;
+}
+
+.dscTable__truncate {
+  display: inline-block;
+  overflow: hidden;
+}
+
+.dscTable__value {
+  white-space: pre-wrap;
+}
+
+.dscTable__cell--time .dscTable__value {
+  white-space: nowrap;
+}
+
+/* A cell's filter buttons, over the end of its first line behind a fade */
+.dscTable__filter {
+  position: absolute;
+  top: calc(1em + 6px);
+  right: 0;
+  display: flex;
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  opacity: 0;
+  transform: translateY(-50%);
+  transition: opacity var(--duration-fast);
+}
+
+.dscTable__filter::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  background-image: linear-gradient(to right, transparent 0, var(--color-surface) 16px);
+}
+
+.dscTable__filter > * {
+  z-index: 2;
+}
+
+.dscTable__cell:hover .dscTable__filter,
+.dscTable__cell:focus-within .dscTable__filter {
+  opacity: 1;
+}
+
+.dscTable__filterButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--color-accent);
+  cursor: pointer;
+}
+
+.dscTable__filterButton:hover {
+  background: var(--color-accent-tint);
+}
+
+/* On a narrow screen nothing waits to be pointed at */
+@media (max-width: 991px) {
+  .dscTable__headerButton,
+  .dscTable__filter {
+    opacity: 1;
+  }
+}
+
+.dscTable__cell--source .dscTable__truncate {
+  margin-top: -1.5px;
+  margin-bottom: -3.5px;
+}
+
+.dscSource {
+  margin: 0;
+  line-height: 2em;
+  word-break: break-word;
+}
+
+.dscSource dt,
+.dscSource dd {
+  display: inline;
+  margin: 0;
+}
+
+.dscSource dt {
+  margin-right: var(--space-1);
+  padding: 2px var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-tint);
+  word-break: normal;
+}
+
+.dscTable__details {
+  padding-bottom: var(--space-4) !important;
 }
 
 .dscDetails {
@@ -234,92 +644,134 @@
   font-size: var(--font-size-xs);
 }
 
-.dscTable__time {
-  width: 1%;
-  white-space: nowrap;
+/* The bar that shows more rows are on their way, and the note under the last of them */
+.dscTable__progress {
+  position: relative;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-surface-secondary);
 }
 
-.dscHeader {
+.dscTable__progress::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: var(--color-accent);
+  animation: atlProgress 1.2s var(--ease-out-quint) infinite;
+}
+
+.dscTable__footer {
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-accent-tint);
+  font-size: var(--font-size-s);
+  line-height: 1.5;
+}
+
+.dscTable__backToTop {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-}
-
-.dscHeader__button {
-  display: inline-flex;
-  padding: 2px;
+  gap: var(--space-2);
+  height: 32px;
+  padding: 0 9px;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: none;
-  color: var(--color-text-secondary);
-  opacity: 0;
+  color: var(--color-accent);
+  font-family: inherit;
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.5;
+  vertical-align: middle;
+  white-space: nowrap;
   cursor: pointer;
 }
 
-th:hover .dscHeader__button,
-.dscHeader__button:focus-visible {
-  opacity: 1;
+.dscTable__backToTop:hover {
+  text-decoration: underline;
 }
 
-.dscHeader__button:hover {
-  background: var(--color-hover);
+/* --- The pager of a saved search on a dashboard ------------------------------------------------ */
+
+.dscPager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-6);
+  /* the original's row is as wide as the table but drawn 12 pixels to the left by its gutter */
+  padding-right: var(--space-6);
+  font-size: var(--font-size-s);
+  line-height: 1;
+}
+
+.dscPager__limit {
+  color: var(--color-text-secondary);
+}
+
+.dscPager__nav {
+  display: flex;
+  align-items: center;
+}
+
+.dscPager__list {
+  display: flex;
+  align-items: baseline;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dscPager__arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.dscPager__arrow:disabled {
+  cursor: not-allowed;
+}
+
+.dscPager__page {
+  height: 32px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.dscPager__page:hover {
   color: var(--color-text-primary);
 }
 
-.dscCell {
-  position: relative;
-  display: block;
+.dscPager__page[aria-current="true"] {
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  cursor: default;
 }
 
-.dscCell__value {
-  overflow-wrap: anywhere;
-}
-
-.dscCell__actions {
-  position: absolute;
-  top: -2px;
-  right: 0;
-  display: none;
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-sm);
-}
-
-td:hover > .dscCell > .dscCell__actions {
-  display: inline-flex;
-}
-
-.dscSource {
-  display: -webkit-box;
-  margin: 0;
-  max-height: 96px;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
-  overflow-wrap: anywhere;
-}
-
-.dscSource__pair {
-  margin-right: var(--space-2);
-}
-
-.dscSource dt,
-.dscSource dd {
-  display: inline;
-  margin: 0;
-}
-
-.dscSource dt {
-  margin-right: 6px;
-  padding: 2px 5px;
-  border-radius: var(--radius-xs);
-  background: var(--color-accent-tint);
-}
-
-.dscFooter {
-  padding: var(--space-4);
-  color: var(--color-text-secondary);
-  text-align: center;
+/* The ellipsis sits 2px under the top of the pages, where the original's falls */
+.dscPager__gap {
+  align-self: flex-start;
+  height: 24px;
+  margin-top: 2px;
+  padding: 6px var(--space-2) 0;
+  color: var(--color-text-tertiary);
 }
 
 .dscDocFields td {
@@ -361,8 +813,14 @@ td:hover > .dscCell > .dscCell__actions {
   }
 
   .dscSidebar {
+    flex: none;
     width: 100%;
     max-height: 320px;
+  }
+
+  .dscCanvas {
+    flex: none;
+    overflow: visible;
   }
 }
 

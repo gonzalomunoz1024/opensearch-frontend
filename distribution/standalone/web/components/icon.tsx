@@ -21,6 +21,7 @@ const PATHS = {
   arrowDown: 'M8 3v10M4 9l4 4 4-4',
   sortUp: 'M8 12V4M5 7l3-3 3 3',
   sortDown: 'M8 4v8M5 9l3 3 3-3',
+  sortable: 'M5 12V4M2.5 6.5L5 4l2.5 2.5M11 4v8M8.5 9.5L11 12l2.5-2.5',
   refresh: 'M13 3v3.5H9.5M12.6 6.5A5 5 0 1 0 13 9.5',
   calendar: 'M2.5 4.5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1zM2.5 7h11M5.5 2v3M10.5 2v3',
   clock: 'M8 14A6 6 0 1 0 8 2a6 6 0 0 0 0 12zM8 4.5V8l2.5 1.5',

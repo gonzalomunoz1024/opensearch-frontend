@@ -154,6 +154,11 @@ body.dshDragging {
   padding: var(--space-2);
 }
 
+/* A saved search's table spans the panel from side to side, as the original's */
+.dshPanel__body--flush {
+  padding: 0;
+}
+
 .dshPanel__resize {
   position: absolute;
   right: 0;

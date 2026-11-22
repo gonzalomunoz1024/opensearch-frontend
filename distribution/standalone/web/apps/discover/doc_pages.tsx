@@ -152,7 +152,6 @@ export function ContextPage({ indexPatternId, id, basePath }: { indexPatternId: 
             indexPattern={pattern}
             columns={['_source']}
             sort={[]}
-            pageSize={1000}
             details={(hit) => <DocDetails hit={hit} indexPattern={pattern} basePath={basePath} />}
           />
         </Panel>

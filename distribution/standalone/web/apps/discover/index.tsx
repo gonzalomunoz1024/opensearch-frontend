@@ -2,13 +2,13 @@
 
 /* Discover: search an index pattern's documents, see when they happened, look into each one. */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, EmptyPrompt, Loading, Panel, Tabs } from '../../components/basic';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Button, EmptyPrompt, Loading, Tabs } from '../../components/basic';
 import { Select } from '../../components/form';
-import { CopyableCode, downloadFile } from '../../components/overlay';
-import { XYChart } from '../../charts/xy';
+import { Icon } from '../../components/icon';
+import { CopyableCode, downloadFile, Tooltip } from '../../components/overlay';
 import { dateInterval, tabify } from '../../lib/aggs';
-import { formatDate, resolveTimeRange } from '../../lib/dates';
+import { formatDate, parseInterval, resolveTimeRange, timeZoneOffset } from '../../lib/dates';
 import { flattenHit, toCsv, type RawHit } from '../../lib/docs';
 import { existsFilter, mergeFilters, phraseFilter } from '../../lib/query';
 import { parseSearchSource, serializeSearchSource } from '../../lib/search_source';
@@ -32,6 +32,8 @@ import { addRecentlyAccessed, currentGlobalParam, useAutoRefresh, useBreadcrumbs
 import { DocDetails } from './doc_viewer';
 import { DocTable, type SortPair } from './doc_table';
 import { DocPage, ContextPage } from './doc_pages';
+import { Histogram } from './histogram';
+import { bucketSpan, parseBucketInterval, shortestBucket } from './histogram_scale';
 import { aggContext, buildDiscoverRequest, histogramAgg } from './search';
 import { Sidebar } from './sidebar';
 import { normalizeSort } from './sort';
@@ -70,11 +72,11 @@ const INTERVALS = [
   { value: 'ms', label: 'Millisecond' },
   { value: 's', label: 'Second' },
   { value: 'm', label: 'Minute' },
-  { value: 'h', label: 'Hourly' },
-  { value: 'd', label: 'Daily' },
-  { value: 'w', label: 'Weekly' },
-  { value: 'M', label: 'Monthly' },
-  { value: 'y', label: 'Yearly' },
+  { value: 'h', label: 'Hour' },
+  { value: 'd', label: 'Day' },
+  { value: 'w', label: 'Week' },
+  { value: 'M', label: 'Month' },
+  { value: 'y', label: 'Year' },
 ];
 
 interface Result {
@@ -180,7 +182,8 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
     () => normalizeSort(urlApp.discover?.sort ?? urlApp.sort ?? saved?.attributes.sort),
     [urlApp, saved]
   );
-  const interval = urlApp.discover?.interval ?? urlApp.interval ?? 'auto';
+  // None until one is picked: the histogram is then "auto", and its header still says "per"
+  const interval = urlApp.discover?.interval ?? urlApp.interval;
   const indexPatternId = urlApp.metadata?.indexPattern ?? urlApp.index ?? savedSource?.indexId ?? defaultId;
   const query: Query = useMemo(
     () => urlQuery.query ?? urlApp.query ?? savedSource?.query ?? { query: '', language: defaultQueryLanguage() },
@@ -424,6 +427,8 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
     [indexPattern, basePath, columns, toggleColumn, addFilter, addExists]
   );
 
+  // The zone the chart is drawn in: the setting dateFormat:tz, or the browser's own
+  const offsetAt = useCallback((time: number) => timeZoneOffset(time, services.timeZone()), []);
   const histogram = useMemo(() => {
     if (!result || !indexPattern?.timeFieldName || !result.range) return undefined;
     const agg = histogramAgg(indexPattern, interval);
@@ -432,12 +437,30 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
     const table = tabify([agg, { id: '1', type: 'count', schema: 'metric' }], result.response, aggContextValue);
     const [bucketColumn, countColumn] = table.columns;
     if (!bucketColumn || !countColumn) return undefined;
+    const bucketInterval = dateInterval(agg, aggContextValue);
+    const points = table.rows.map((row) => ({ x: row[bucketColumn.id] as number, y: row[countColumn.id] as number }));
+    const unit = parseBucketInterval(bucketInterval.expression);
+    const minInterval = shortestBucket(
+      points.map((point) => point.x),
+      (time) => (unit ? bucketSpan(time, unit, offsetAt, services.weekStart()) : bucketInterval.ms)
+    );
+    // An interval asked for that would give too many bars is widened, and the header says so
+    const asked = interval && interval !== 'auto' ? parseInterval(INTERVALS.some((item) => item.value === interval) ? `1${interval}` : interval) : undefined;
     return {
-      interval: dateInterval(agg, aggContextValue),
+      interval: bucketInterval,
+      scale: asked ? asked.ms / bucketInterval.ms : 1,
       column: bucketColumn,
-      points: table.rows.map((row) => ({ x: row[bucketColumn.id] as number, y: row[countColumn.id] as number })),
+      points,
+      minInterval,
     };
-  }, [result, indexPattern, interval]);
+  }, [result, indexPattern, interval, offsetAt]);
+  const formatBucket = useCallback((value: number) => (histogram ? histogram.column.format(value) : String(value)), [histogram]);
+  const narrowTime = useCallback(
+    (from: number, to: number) => setGlobal({ time: { from: new Date(from).toISOString(), to: new Date(to).toISOString() } }),
+    [setGlobal]
+  );
+  // The pane that scrolls: the table's "Back to top." goes back to its start
+  const canvasRef = useRef<HTMLDivElement>(null);
 
   const downloadCsv = () => {
     if (!result || !indexPattern) return;
@@ -550,7 +573,7 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
           setResult(undefined);
           setHashParams({
             _a: encodeState({
-              discover: { columns: ['_source'], interval: 'auto', isDirty: false, savedQuery: savedQueryId, sort: [] },
+              discover: { columns: ['_source'], interval, isDirty: false, savedQuery: savedQueryId, sort: [] },
               metadata: { indexPattern: id, view: 'discover' },
             }),
             _q: encodeState({ filters: [], query }),
@@ -575,7 +598,8 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
         onFilter={addFilter}
         onVisualize={visualize}
       />
-      <div className="dscMain">
+      <div ref={canvasRef} className="dscCanvas" data-test-subj="dscCanvas">
+        {loading && <div className="atlProgress" />}
         <SearchBar
           indexPatterns={[indexPattern]}
           query={query}
@@ -592,102 +616,120 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
           savedQueryId={savedQueryId}
           onSavedQueryChange={onSavedQueryChange}
         />
-        <Panel flush className="dscCanvas">
-          {loading && <div className="atlProgress" />}
-          {failed || (result && total === 0) ? (
-            <NoResults query={query} />
-          ) : !result ? (
-            <Loading>Searching</Loading>
-          ) : (
-            <>
-              {histogram && result.range && (
-                <>
-                  <div className="dscChartHeader" data-test-subj="discoverIntervalDateRange">
-                    <span>
-                      {formatDate(result.range.from, dateFormat, services.timeZone())} -{' '}
-                      {formatDate(result.range.to, dateFormat, services.timeZone())} per
-                    </span>
+        {failed || (result && total === 0) ? (
+          <NoResults query={query} />
+        ) : !result ? (
+          <Loading>Searching</Loading>
+        ) : (
+          <div className="dscCanvas__results" data-test-subj="dscCanvasResults">
+            {histogram && result.range && (
+              <div className="dscChart" data-test-subj="dscChartWrapper">
+                <div className="dscChart__header" data-test-subj="dscChartTimechartHeader">
+                  <Tooltip content="To change the time, use the global time filter above">
+                    <div className="dscChart__range" data-test-subj="discoverIntervalDateRange">
+                      {`${formatDate(result.range.from, dateFormat, services.timeZone())} - ${formatDate(
+                        result.range.to,
+                        dateFormat,
+                        services.timeZone()
+                      )} ${interval !== 'auto' ? 'per' : ''}`}
+                    </div>
+                  </Tooltip>
+                  <div className="dscChart__interval">
                     <Select
-                      compact
-                      style={{ width: 132 }}
-                      value={INTERVALS.some((item) => item.value === interval) ? interval : 'auto'}
+                      className="dscChart__select"
+                      value={interval && INTERVALS.some((item) => item.value === interval) ? interval : 'auto'}
                       onChange={(next) => writeApp({ interval: next })}
                       options={INTERVALS}
-                      aria-label="Interval"
+                      aria-label="Time interval"
                       testId="discoverIntervalSelect"
                     />
                     {histogram.interval.scaled && (
-                      <span className="atlSubdued atlSmall">
-                        This interval makes too many bars for the time range, so it was scaled to {histogram.interval.description}.
-                      </span>
+                      <Tooltip
+                        content={`This interval creates ${
+                          histogram.scale > 1 ? 'buckets that are too large' : 'too many buckets'
+                        } to show in the selected time range, so it has been scaled to ${histogram.interval.description}.`}
+                        testId="discoverIntervalIconTip"
+                      >
+                        <span className="dscChart__scaled" tabIndex={0}>
+                          <Icon name="warning" />
+                        </span>
+                      </Tooltip>
                     )}
                   </div>
-                  <div className="dscChart" data-test-subj="discoverChart">
-                    <XYChart
-                      series={[
-                        {
-                          id: 'count',
-                          label: 'Count',
-                          color: '#6092C0',
-                          type: 'histogram',
-                          mode: 'stacked',
-                          axisId: 'count',
-                          points: histogram.points,
-                        },
-                      ]}
-                      axes={[{ id: 'count', position: 'left', title: 'Count', format: (value) => value.toLocaleString() }]}
-                      x={{
-                        type: 'time',
-                        values: histogram.points.map((point) => point.x),
-                        interval: histogram.interval.ms,
-                        domain: [result.range.from.getTime(), result.range.to.getTime()],
-                        format: (value) => histogram.column.format(value),
-                        title: `${indexPattern.timeFieldName} per ${histogram.interval.description}`,
-                      }}
-                      legend={false}
-                      nowMarker
-                      onBrush={(from, to) =>
-                        setGlobal({ time: { from: new Date(from).toISOString(), to: new Date(to).toISOString() } })
-                      }
-                      onPointClick={(_series, point) =>
-                        setGlobal({
-                          time: {
-                            from: new Date(point.x as number).toISOString(),
-                            to: new Date((point.x as number) + histogram.interval.ms).toISOString(),
-                          },
-                        })
-                      }
+                </div>
+                <section className="dscTimechart" data-test-subj="dscTimechart">
+                  <div className="dscHistogram" data-test-subj="discoverChart">
+                    <Histogram
+                      points={histogram.points}
+                      from={result.range.from.getTime()}
+                      to={result.range.to.getTime()}
+                      intervalMs={histogram.interval.ms}
+                      minInterval={histogram.minInterval}
+                      offsetAt={offsetAt}
+                      formatX={formatBucket}
+                      xTitle={`${indexPattern.timeFieldName} per ${histogram.interval.description}`}
+                      yTitle="Count"
+                      onTimeChange={narrowTime}
                     />
                   </div>
-                </>
-              )}
-              <div className="dscResultsHeader">
-                <span className="atlTitleXxs" data-test-subj="discoverQueryHits">
-                  Results ({rows.length.toLocaleString()}/{total.toLocaleString()})
-                </span>
-                <Button variant="empty" size="s" icon="download" onClick={downloadCsv} testId="dscDownloadCsvButton">
-                  Download as CSV
-                </Button>
+                </section>
               </div>
-              <DocTable
-                rows={rows}
-                indexPattern={indexPattern}
-                columns={columns}
-                sort={sort}
-                onSort={(next) => writeApp({ sort: next })}
-                onRemoveColumn={toggleColumn}
-                onMoveColumn={moveColumn}
-                onFilter={addFilter}
-                details={details}
-              />
-              {rows.length < total && (
-                <div className="dscFooter">
-                  These are the first {rows.length.toLocaleString()} documents matching your search. Refine your search to see others.
+            )}
+            <div className="dscResultsBar" data-test-subj="dscResultsActionBar">
+              <div className="dscResultsBar__actions">
+                <div className="dscResultsBar__count" data-test-subj="dscResultCount">
+                  <strong>
+                    {rows.length === 1 ? 'Result' : 'Results'} (
+                    <span data-test-subj="discoverQueryRowsCount" aria-label={`${rows.length} ${rows.length === 1 ? 'row' : 'rows'} shown`}>
+                      {rows.length.toLocaleString()}
+                    </span>
+                    {total ? (
+                      <>
+                        /
+                        <span data-test-subj="discoverQueryHits" aria-label={`${total} ${total === 1 ? 'hit' : 'hits'}`}>
+                          {total.toLocaleString()}
+                        </span>
+                      </>
+                    ) : null}
+                    )
+                  </strong>
+                  {saved && (
+                    <button
+                      type="button"
+                      className="dscResults__button"
+                      aria-label="Reset search"
+                      data-test-subj="resetSavedSearch"
+                      onClick={() => navigate(appUrl(basePath, `/view/${encodeURIComponent(saved.id)}`, { _g: currentGlobalParam() }))}
+                    >
+                      <Icon name="refresh" />
+                      Reset search
+                    </button>
+                  )}
                 </div>
-              )}
-            </>
-          )}
-        </Panel>
+                {rows.length > 0 && (
+                  <button type="button" className="dscResults__button" data-test-subj="dscDownloadCsvButton" onClick={downloadCsv}>
+                    <Icon name="download" />
+                    Download as CSV
+                  </button>
+                )}
+              </div>
+            </div>
+            <DocTable
+              rows={rows}
+              indexPattern={indexPattern}
+              columns={columns}
+              sort={sort}
+              onSort={(next) => writeApp({ sort: next })}
+              onRemoveColumn={toggleColumn}
+              onMoveColumn={moveColumn}
+              onFilter={addFilter}
+              details={details}
+              onBackToTop={() => {
+                if (canvasRef.current) canvasRef.current.scrollTop = 0;
+              }}
+            />
+          </div>
+        )}
       </div>
       {dialog === 'save' && (
         <SaveModal
