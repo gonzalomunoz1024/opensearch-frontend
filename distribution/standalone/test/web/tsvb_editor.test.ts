@@ -29,6 +29,7 @@ import { colorOutput, cssColor, parseColor, toHex } from '../../web/components/c
 import { compileLess } from '../../web/apps/visualize/tsvb/less';
 import { renderTemplate, TemplateError } from '../../web/lib/template';
 import { HttpFetchError } from '../../web/services/http';
+import { tableSort, type TsvbParams } from '../../web/vis/tsvb/data';
 import { errorDetails, panelError } from '../../web/vis/tsvb/error';
 import { convertSeriesToVars, getLastValue, snakeCase } from '../../web/vis/tsvb/markdown_vars';
 
@@ -415,5 +416,37 @@ describe('the error a TSVB panel shows', () => {
       title: 'Error processing your markdown',
       reason: '{{foo}} is an unknown variable',
     });
+  });
+});
+
+describe('the order of the rows of a TSVB table', () => {
+  const params: TsvbParams = {
+    type: 'table',
+    pivot_id: 'request.keyword',
+    series: [
+      { id: 'a', metrics: [{ id: 'a1', type: 'count' }] },
+      { id: 'b', metrics: [{ id: 'b1', type: 'avg', field: 'bytes' }] },
+      { id: 'c', metrics: [{ id: 'c1', type: 'std_deviation', field: 'bytes' }] },
+      { id: 'd', metrics: [{ id: 'd1', type: 'avg', field: 'bytes' }, { id: 'd2', type: 'derivative', field: 'd1' }] },
+    ],
+  };
+
+  it('asks for no order until the table is sorted', () => {
+    assert.deepEqual(tableSort(params, undefined), {});
+  });
+
+  it('orders by count, by a metric worked out in each row, or by the value of the field', () => {
+    assert.deepEqual(tableSort(params, { column: 'a', order: 'desc' }), { order: { _count: 'desc' } });
+    assert.deepEqual(tableSort(params, { column: 'b', order: 'asc' }), {
+      order: { 'b1-SORT': 'asc' },
+      sortAggs: { 'b1-SORT': { avg: { field: 'bytes' } } },
+    });
+    assert.deepEqual(tableSort(params, { column: 'c', order: 'desc' }), {
+      order: { 'c1-SORT[std_deviation]': 'desc' },
+      sortAggs: { 'c1-SORT': { extended_stats: { field: 'bytes' } } },
+    });
+    // A series whose last metric is not one OpenSearch can order by, and the field's own column
+    assert.deepEqual(tableSort(params, { column: 'd', order: 'desc' }), { order: { _key: 'desc' } });
+    assert.deepEqual(tableSort(params, { column: '_default_', order: 'desc' }), { order: { _key: 'desc' } });
   });
 });

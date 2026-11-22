@@ -545,3 +545,8 @@
   color: var(--color-text-secondary);
   text-align: right;
 }
+
+/* The arrow of the column a TSVB table is sorted by */
+.visTsvbTable__sort {
+  vertical-align: middle;
+}

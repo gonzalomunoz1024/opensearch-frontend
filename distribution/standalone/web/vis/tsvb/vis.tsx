@@ -16,11 +16,14 @@ import type { VisInput } from '../request';
 import {
   fetchTsvb,
   fetchTsvbTable,
+  metricLabel,
   ruleFor,
   seriesFormatter,
   type TsvbData,
   type TsvbParams,
+  type TsvbSeries,
   type TsvbTableData,
+  type TsvbTableSort,
 } from './data';
 import { panelError, TsvbError, type TsvbPanelError } from './error';
 import { annotationIcon } from './icons';
@@ -303,19 +306,40 @@ function MarkdownPanel({ params, data }: { params: TsvbParams; data: TsvbData })
   );
 }
 
-function PivotTable({ params, data }: { params: TsvbParams; data: TsvbTableData }) {
+/** The sort of a table its UI state keeps, if it keeps one */
+function tableSortOf(uiState: Vis['uiState'] | undefined): TsvbTableSort | undefined {
+  const table = uiState?.table;
+  const sort = table && typeof table === 'object' ? (table as { sort?: unknown }).sort : undefined;
+  return sort && typeof sort === 'object' ? (sort as TsvbTableSort) : undefined;
+}
+
+/** A column's title, as the product writes it: the series' label or its metric's, with the percentile it shows */
+function columnLabel(series: TsvbSeries): string {
+  const metric = series.metrics?.[series.metrics.length - 1];
+  const label = series.label || metricLabel(series);
+  if (metric?.type === 'percentile') return `${label} (${metric.percentiles?.[metric.percentiles.length - 1]?.value || 0})`;
+  if (metric?.type === 'percentile_rank') return `${label} (${metric.values?.[metric.values.length - 1] || 0})`;
+  return label;
+}
+
+function PivotTable({ params, data, sort = { column: '_default_', order: 'asc' } }: { params: TsvbParams; data: TsvbTableData; sort?: TsvbTableSort }) {
   if (data.rows.length === 0) return <ChartMessage>No results found</ChartMessage>;
   const columns = (params.series ?? []).filter((series) => !series.hidden);
+  // The column the rows are sorted by shows an arrow; the rows' own column does when nothing else is sorted
+  const arrow = (column: string) =>
+    sort.column === column ? <Icon name={sort.order === 'desc' ? 'sortDown' : 'sortUp'} className="visTsvbTable__sort" /> : null;
   return (
     <div className="visTable" data-test-subj="tsvbTable">
       <div className="visTable__scroll">
         <table className="atlTable atlTable--compact">
           <thead>
             <tr>
-              <th>{params.pivot_label || params.pivot_id}</th>
+              <th>
+                {params.pivot_label || params.pivot_id} {arrow('_default_')}
+              </th>
               {columns.map((series) => (
                 <th key={series.id} className="atlTable__numeric">
-                  {series.label || 'Value'}
+                  {columnLabel(series)} {arrow(series.id)}
                 </th>
               ))}
             </tr>
@@ -396,7 +420,7 @@ export function TsvbVis({
     setLoading(true);
     const work =
       kind === 'table'
-        ? fetchTsvbTable(params, input, controller.signal).then((table) => ({ kind, table, requests: table.requests }))
+        ? fetchTsvbTable(params, input, controller.signal, tableSortOf(vis.uiState)).then((table) => ({ kind, table, requests: table.requests }))
         : fetchTsvb(params, input, controller.signal).then((series) => ({ kind, series, requests: series.requests }));
     work
       .then((answer) => {
@@ -427,7 +451,7 @@ export function TsvbVis({
   } else if (data && data.kind === kind) {
     // A panel none of whose series drew anything says so, whatever its kind
     if (kind === 'table' ? !data.table?.rows.length : !data.series?.series.length) body = <NoData />;
-    else if (kind === 'table' && data.table) body = <PivotTable params={params} data={data.table} />;
+    else if (kind === 'table' && data.table) body = <PivotTable params={params} data={data.table} sort={tableSortOf(vis.uiState)} />;
     else if (data.series && PANELS[kind]) body = PANELS[kind]({ params, data: data.series, onTimeChange });
     else body = <ChartMessage>This kind of TSVB panel is not drawn by this build.</ChartMessage>;
   }
