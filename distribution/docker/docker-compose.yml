@@ -1,19 +1,32 @@
-# InfraDashboard and an OpenSearch 3.9.0 to try it against, with the security plugin on, so
-# sign-in, roles and tenants behave as in a real deployment.
+# InfraDashboard and an OpenSearch 3.9.0 to try it against. Neither has the security plugin: there
+# is no sign-in, and the two talk plain HTTP, as the product ships.
+#
+# The OpenSearch here stands in for the lite backend (gonzalomunoz1024/opensearch-backend) until
+# that has an image in a registry: the official image, started with every plugin taken out of the
+# container but the ones the lite backend has, so a page that needs another plugin fails here as
+# it would there.
 #
 #   distribution/scripts/build.sh all        # or download the tarball a CI run built into target/
-#   export OPENSEARCH_INITIAL_ADMIN_PASSWORD='<a strong password>'
 #   docker compose -f distribution/docker/docker-compose.yml up --build
 #
-# Then open http://localhost:5601 and sign in as admin with that password.
+# Then open http://localhost:5601.
 name: infradashboard
 
 services:
   opensearch:
     image: opensearchproject/opensearch:3.9.0
+    working_dir: /usr/share/opensearch
+    # every directory under plugins/ but the three named goes, inside the container only
+    entrypoint:
+      - bash
+      - -O
+      - extglob
+      - -c
+      - >-
+        rm -rf plugins/!(opensearch-job-scheduler|opensearch-index-management|opensearch-sql) &&
+        exec ./opensearch-docker-entrypoint.sh opensearch
     environment:
       discovery.type: single-node
-      OPENSEARCH_INITIAL_ADMIN_PASSWORD: ${OPENSEARCH_INITIAL_ADMIN_PASSWORD:?Set OPENSEARCH_INITIAL_ADMIN_PASSWORD to a strong password}
       OPENSEARCH_JAVA_OPTS: -Xms1g -Xmx1g
     ulimits:
       nofile: { soft: 65536, hard: 65536 }
@@ -22,7 +35,7 @@ services:
     volumes:
       - opensearch-data:/usr/share/opensearch/data
     healthcheck:
-      test: ['CMD-SHELL', 'curl -fsk -u "admin:$$OPENSEARCH_INITIAL_ADMIN_PASSWORD" https://localhost:9200/_cluster/health || exit 1']
+      test: ['CMD-SHELL', 'curl -fs http://localhost:9200/_cluster/health || exit 1']
       interval: 10s
       timeout: 5s
       retries: 30
@@ -40,19 +53,19 @@ services:
         condition: service_healthy
     environment:
       # the same variables the OpenSearch Dashboards image reads
-      OPENSEARCH_HOSTS: '["https://opensearch:9200"]'
+      OPENSEARCH_HOSTS: '["http://opensearch:9200"]'
     ports:
       - '5601:5601'
     healthcheck:
-      # With the security plugin on, the status endpoint answers 401 to a caller that has not
-      # signed in. Either answer means the server is up. The image has no curl, so Node.js asks.
+      # The status endpoint answers 200 once the server is up and has reached OpenSearch. The
+      # image has no curl, so Node.js asks.
       test:
         - CMD
         - /usr/share/opensearch-dashboards/node/bin/node
         - -e
         - >-
           require('http').get('http://localhost:5601/api/status',
-          (r) => process.exit(r.statusCode === 200 || r.statusCode === 401 ? 0 : 1))
+          (r) => process.exit(r.statusCode === 200 ? 0 : 1))
           .on('error', () => process.exit(1))
       interval: 10s
       timeout: 5s

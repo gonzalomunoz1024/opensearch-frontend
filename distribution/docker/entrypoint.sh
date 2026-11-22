@@ -5,8 +5,9 @@
 
 # The entrypoint of the OpenSearch Dashboards 3.x image, from opensearch-project/opensearch-build
 # (docker/release/config/opensearch-dashboards/opensearch-dashboards-docker-entrypoint-3.x.sh),
-# unchanged below this note, so the environment variables and paths a deployment of that image
-# uses keep working with this one.
+# so the environment variables and paths a deployment of that image uses keep working with this
+# one. One step is gone: that entrypoint removed the security plugin when
+# DISABLE_SECURITY_DASHBOARDS_PLUGIN was set, and this image has no security plugin to remove.
 
 #
 # Run OpenSearch-Dashboards, using environment variables to
@@ -186,23 +187,6 @@ opensearch_dashboards_vars=(
     investigation.agenticFeaturesEnabled
 )
 
-function setupSecurityDashboardsPlugin {
-    SECURITY_DASHBOARDS_PLUGIN="securityDashboards"
-
-    if [ -d "$OPENSEARCH_DASHBOARDS_HOME/plugins/$SECURITY_DASHBOARDS_PLUGIN" ]; then
-        if [ "$DISABLE_SECURITY_DASHBOARDS_PLUGIN" = "true" ]; then
-            echo "Disabling OpenSearch Security Dashboards Plugin"
-            ./bin/opensearch-dashboards-plugin remove securityDashboards
-
-            # Remove all security related parameters as well as changing HTTPS to HTTP
-            # Temporary fix before security-dashboards plugin implement a parameter to disable the plugin entirely
-            # https://github.com/opensearch-project/security-dashboards-plugin/issues/896
-            UPDATED_CONFIG=`cat $OPENSEARCH_DASHBOARDS_HOME/config/opensearch_dashboards.yml | sed "/^opensearch_security/d" | sed -E "/^[[:space:]]*opensearch\.hosts:/ s|https://|http://|g"`
-            echo "$UPDATED_CONFIG" > $OPENSEARCH_DASHBOARDS_HOME/config/opensearch_dashboards.yml
-        fi
-    fi
-}
-
 function runOpensearchDashboards {
     longopts=()
     for opensearch_dashboards_var in ${opensearch_dashboards_vars[*]}; do
@@ -220,9 +204,6 @@ function runOpensearchDashboards {
 
     # Files created at run-time should be group-writable, for Openshift's sake.
     umask 0002
-
-    ##Security Dashboards Plugin
-    setupSecurityDashboardsPlugin
 
     # TO DO:
     # Confirm with Mihir if this is necessary

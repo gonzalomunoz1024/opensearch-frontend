@@ -1,7 +1,8 @@
 # Builds InfraDashboard the way it ships: the Dashboards platform from this repository, each
-# plugin of distribution/plugins.json at its pinned commit, the two put together, the container
-# image, and a sign-in against a secured OpenSearch. Every step is distribution/scripts/build.sh,
-# so the same build runs on a laptop.
+# plugin that distribution/plugins.json ships at its pinned commit, the two put together, the
+# container image, and a check of the running image against an OpenSearch with the backend plugins
+# of the lite backend and no security. Every step is distribution/scripts/build.sh, so the same
+# build runs on a laptop.
 
 name: Distribution
 
@@ -109,7 +110,7 @@ jobs:
           if-no-files-found: error
 
   assemble:
-    name: Assemble, build the image and sign in
+    name: Assemble, build the image and check it
     needs: [manifest, platform, plugin]
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -138,13 +139,10 @@ jobs:
           retention-days: 14
           if-no-files-found: error
       - name: Start OpenSearch and the image
-        env:
-          OPENSEARCH_INITIAL_ADMIN_PASSWORD: Smoke-${{ github.run_id }}-${{ github.sha }}
         run: |
           sudo sysctl -w vm.max_map_count=262144
-          echo "OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_INITIAL_ADMIN_PASSWORD}" >> "$GITHUB_ENV"
           docker compose -f distribution/docker/docker-compose.yml up --build --detach --wait --wait-timeout 600
-      - name: Sign in
+      - name: Check the running image
         run: node distribution/scripts/smoke_test.js
       - name: Container logs
         if: failure()

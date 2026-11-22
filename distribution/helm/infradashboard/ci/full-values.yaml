@@ -3,16 +3,17 @@ image:
   registry: registry.example.com/platform
 imagePullSecrets: [registry-credentials]
 opensearch:
+  # a proxy in front of OpenSearch that speaks https and asks for a user
   hosts: [https://opensearch-a:9200, https://opensearch-b:9200]
   credentialsSecret: { name: dashboards-server-user, usernameKey: username, passwordKey: password }
   caSecret: { name: opensearch-ca, key: ca.crt }
 config:
   server.basePath: /dashboards
   server.rewriteBasePath: true
-  opensearch_security.cookie.password: ${COOKIE_PASSWORD}
+  opensearch.ssl.keystore.password: ${KEYSTORE_PASSWORD}
 secrets:
   env:
-    - { name: COOKIE_PASSWORD, secretName: infradashboard, key: cookie-password }
+    - { name: KEYSTORE_PASSWORD, secretName: infradashboard, key: keystore-password }
   envFrom: [infradashboard-extra]
 env:
   - { name: TZ, value: UTC }

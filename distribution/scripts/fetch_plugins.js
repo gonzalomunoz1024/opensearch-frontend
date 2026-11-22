@@ -5,13 +5,14 @@
  */
 
 /*
- * Fetches the plugins named in distribution/plugins.json into plugins/<name>, each at the commit
- * it is pinned to. A tag that no longer points at the pinned commit fails the fetch rather than
- * building something else.
+ * Fetches the plugins that ship (`plugins` in distribution/plugins.json) into plugins/<name>, each
+ * at the commit it is pinned to. A tag that no longer points at the pinned commit fails the fetch
+ * rather than building something else. A plugin the manifest leaves out is not fetched: move its
+ * entry from `leftOut` to `plugins` first.
  *
- *   node distribution/scripts/fetch_plugins.js                    # all of them
- *   node distribution/scripts/fetch_plugins.js securityDashboards # some of them
- *   node distribution/scripts/fetch_plugins.js --list             # print the names
+ *   node distribution/scripts/fetch_plugins.js                           # all of them
+ *   node distribution/scripts/fetch_plugins.js indexManagementDashboards # some of them
+ *   node distribution/scripts/fetch_plugins.js --list                    # print the names
  */
 
 const { execFileSync } = require('child_process');
@@ -73,6 +74,21 @@ const main = () => {
   }
 
   const unknown = args.filter((name) => !MANIFEST.plugins.some((p) => p.name === name));
+  const leftOut = unknown
+    .map((name) => MANIFEST.leftOut.find((p) => p.name === name))
+    .filter(Boolean);
+  if (leftOut.length) {
+    throw new Error(
+      leftOut
+        .map(
+          (p) =>
+            `${p.name} is left out of the distribution: its pages need ${p.backend} on the ` +
+            'backend. To ship it, move its entry from `leftOut` to `plugins` in ' +
+            'distribution/plugins.json.'
+        )
+        .join('\n')
+    );
+  }
   if (unknown.length) {
     throw new Error(`Not in distribution/plugins.json: ${unknown.join(', ')}`);
   }

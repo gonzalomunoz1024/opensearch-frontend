@@ -35,31 +35,43 @@ replicas: 2
 
 # ------------------------------------------------------------------ the OpenSearch it talks to
 
+# InfraDashboard has no sign-in and no permissions of its own, and expects an OpenSearch without
+# the security plugin. Whoever reaches the Service can read and change everything that OpenSearch
+# holds: decide who reaches it with the Ingress, a NetworkPolicy or a proxy in front.
 opensearch:
+  # the Service of the lite backend's chart (gonzalomunoz1024/opensearch-backend), in the same
+  # namespace
   hosts:
-    - https://opensearch-cluster-master:9200
-  # An existing Secret with the user the Dashboards server itself connects as (kibanaserver in a
-  # default security setup). People still sign in with their own accounts, as they do today.
+    - http://opensearch-lite:9200
+  # Only where something in front of OpenSearch asks for them: an existing Secret with a user the
+  # Dashboards server connects as. Every person then acts as that one user.
   credentialsSecret:
     name: ""
     usernameKey: username
     passwordKey: password
-  # An existing Secret with the CA certificate that signed the cluster's HTTP certificates.
+  # Only for https hosts: an existing Secret with the CA certificate that signed their
+  # certificates.
   caSecret:
     name: ""
     key: ca.crt
-  # full, certificate or none. Keep full outside a sandbox.
+  # full, certificate or none; it applies to https hosts. Keep full outside a sandbox.
   sslVerificationMode: full
 
 # ------------------------------------------------------------------ settings
 
 # opensearch_dashboards.yml settings, merged over what the chart sets (the server's host and port,
-# the OpenSearch connection above, the security plugin's defaults of the OpenSearch Dashboards
-# image). Never put a secret here: write ${NAME} and give NAME a value from a Secret in secrets.env,
-# like
+# the OpenSearch connection above, the one header bar). Never put a secret here: write ${NAME} and
+# give NAME a value from a Secret in secrets.env, like
 #   config:
-#     opensearch_security.cookie.password: ${COOKIE_PASSWORD}
+#     opensearch.ssl.keystore.password: ${KEYSTORE_PASSWORD}
 #   secrets:
+#     env:
+#       - { name: KEYSTORE_PASSWORD, secretName: infradashboard, key: keystore-password }
+# A setting of the security plugin (opensearch_security.*) fails the render: the image has no
+# security plugin, and its server stops at start on a setting it does not know.
+config: {}
+
+secrets:
 #     env:
 #       - { name: COOKIE_PASSWORD, secretName: infradashboard, key: cookie-password }
 # With more than one replica set that cookie password, so a session one pod started is read by
