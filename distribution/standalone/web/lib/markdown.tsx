@@ -163,9 +163,12 @@ function renderBlocks(lines: string[], options: MarkdownOptions, keyPrefix: stri
           items.push([next[3]]);
           index += 1;
         } else if (lines[index].trim() === '') {
-          // A blank line stays in the list only when what follows still belongs to it
+          // A blank line stays in the list only when what follows still belongs to it: an item of
+          // the other kind (a numbered one after bullets) starts a list of its own
           const after = lines[index + 1];
-          if (after === undefined || (!/^\s{2,}\S/.test(after) && !(ITEM.exec(after) && (ITEM.exec(after) as RegExpExecArray)[1].length <= indent + 1))) break;
+          const following = after === undefined ? null : ITEM.exec(after);
+          const sameList = following !== null && following[1].length <= indent + 1 && /\d/.test(following[2]) === ordered;
+          if (after === undefined || (!/^\s{2,}\S/.test(after) && !sameList)) break;
           loose = true;
           items[items.length - 1].push('');
           index += 1;

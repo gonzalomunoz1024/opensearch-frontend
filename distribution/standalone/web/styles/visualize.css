@@ -390,10 +390,41 @@
   cursor: pointer;
 }
 
-.vzeMarkdown {
+/* The Markdown of a Markdown visualization: its title and help, 16px over the text that fills the rest */
+.vzeMarkdownPanel {
+  gap: var(--space-4);
+}
+
+.vzeMarkdownPanel__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.vzeMarkdownPanel__help {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-accent);
+  font-size: var(--font-size-xs);
+}
+
+.vzeMarkdownPanel__help:hover {
+  text-decoration: underline;
+}
+
+.vzeMarkdownPanel__external.atlIcon {
+  width: 12px;
+  height: 12px;
+  margin-left: var(--space-1);
+}
+
+/* The original draws the field's line inside its 8px: the text starts 8px from the edge */
+textarea.vzeMarkdown {
   flex: 1 1 auto;
-  min-height: 200px;
-  resize: vertical;
+  min-height: 0;
+  padding: calc(var(--space-2) - 1px);
+  line-height: 21px;
+  resize: none;
 }
 
 /* --- An aggregation ------------------------------------------------------------------------- */
