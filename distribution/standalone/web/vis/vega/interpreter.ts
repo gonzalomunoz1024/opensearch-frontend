@@ -4,8 +4,8 @@
  * Vega expressions evaluated by walking their syntax tree, as OpenSearch Dashboards has them
  * evaluated: Vega would otherwise turn each one into a function from its text, which the page's
  * content security policy forbids. The rules are those of vega-interpreter 1.2.1 (BSD-3-Clause,
- * Copyright Interactive Data Lab and contributors): the same functions, constants and
- * operators, and the same refusals of members that could run code.
+ * Copyright (c) 2015-2023, University of Washington Interactive Data Lab): the same functions,
+ * constants and operators, and the same refusals of members that could run code.
  */
 
 export interface ExpressionNode {

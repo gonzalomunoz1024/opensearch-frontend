@@ -117,9 +117,9 @@ for (const file of walk(join(root, 'web', 'static'))) {
   copyFileSync(file, target);
 }
 
-// The licences of what is bundled into the browser scripts travel with the build: React's, and
-// those of Vega, Vega-Lite and the packages their builds hold (not the ones of their command line
-// tools, which no browser build holds)
+// The licences of what is bundled into the browser scripts travel with the build: React's,
+// Leaflet's, and those of Vega, Vega-Lite and the packages their builds hold (not the ones of
+// their command line tools, which no browser build holds)
 const COMMAND_LINE_ONLY = new Set([
   'ansi-regex',
   'ansi-styles',
@@ -157,13 +157,17 @@ const follow = (name) => {
   bundled.add(name);
   Object.keys(found.entry.dependencies ?? {}).forEach(follow);
 };
-['vega', 'vega-lite'].forEach(follow);
+['vega', 'vega-lite', 'leaflet'].forEach(follow);
 for (const name of [...bundled].sort()) {
   const directory = join(root, installed.get(name)?.path ?? join('node_modules', name));
   const licence = ['LICENSE', 'LICENSE.md', 'LICENSE.txt', 'license']
     .map((file) => join(directory, file))
     .find((file) => existsSync(file));
   if (licence) write(join(dist, 'licenses', `${name}.txt`), readFileSync(licence));
+}
+// and so do those of the packages whose code parts of the browser side are written after (NOTICE)
+for (const file of walk(join(root, 'licenses'))) {
+  write(join(dist, 'licenses', 'followed', relative(join(root, 'licenses'), file)), readFileSync(file));
 }
 for (const name of ['NOTICE', 'LICENSE']) {
   if (existsSync(join(root, name))) write(join(dist, name), readFileSync(join(root, name)));
