@@ -1,0 +1,305 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/* Vega and Vega-Lite visualizations: the view, the controls of bound signals, messages, tooltips. */
+
+.vgaVis {
+  position: relative;
+  display: flex;
+  flex: 1 1 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.vgaVis__view {
+  z-index: 0;
+  display: block;
+  flex: 1 1 100%;
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  max-height: 100%;
+}
+
+/* Vega draws the controls in the view as well: they are shown once, below it */
+.vgaVis__view .vega-bindings {
+  display: none !important;
+}
+
+.vgaVis__controls {
+  display: flex;
+  font-size: var(--font-size-s);
+}
+
+.vgaVis__controls:not(:empty) {
+  padding: var(--space-2) 0;
+}
+
+.vgaVis__controls--column {
+  flex-direction: column;
+}
+
+.vgaVis__controls--row {
+  flex-direction: row;
+}
+
+.vgaVis__controls--row > .vega-bind {
+  flex-grow: 1;
+}
+
+.vgaVis__controls > .vega-bind .vega-bind-name {
+  display: inline-block;
+  width: 104px;
+}
+
+.vgaVis__controls > .vega-bind input[type="range"] {
+  display: inline-block;
+  width: 120px;
+  vertical-align: middle;
+}
+
+.vgaVis__controls > .vega-bind label {
+  margin: 0 0 0 var(--space-2);
+}
+
+.vgaVis__controls > .vega-bind select {
+  max-width: 160px;
+}
+
+.vgaVis__controls > .vega-bind .vega-bind-radio label {
+  margin: 0 var(--space-2) 0 var(--space-1);
+}
+
+/* Warnings and errors of the spec, over the chart */
+.vgaVis__messages {
+  position: absolute;
+  top: 0;
+  z-index: 1;
+  width: 100%;
+  margin: auto;
+  padding: 0;
+  list-style: none;
+  opacity: 0.8;
+}
+
+.vgaVis__message {
+  margin: var(--space-2);
+}
+
+.vgaVis__messageCode {
+  margin: 0;
+  padding: var(--space-2);
+  font-family: var(--font-family-code);
+  font-size: var(--font-size-xs);
+  white-space: pre-wrap;
+}
+
+.vgaVis__message--warn .vgaVis__messageCode {
+  background-color: color-mix(in srgb, var(--color-warning) 10%, #ffffff);
+  color: var(--color-warning-text);
+}
+
+.vgaVis__message--err .vgaVis__messageCode {
+  background-color: color-mix(in srgb, var(--color-critical) 10%, #ffffff);
+  color: var(--color-critical-text);
+}
+
+.themeDark .vgaVis__message--warn .vgaVis__messageCode {
+  background-color: color-mix(in srgb, var(--color-warning) 30%, #000000);
+}
+
+.themeDark .vgaVis__message--err .vgaVis__messageCode {
+  background-color: color-mix(in srgb, var(--color-critical) 30%, #000000);
+}
+
+/* The tooltip of marks: one element on the page, placed beside the mark or the pointer */
+.vgaVis__tooltip {
+  position: fixed;
+  z-index: 6000;
+  max-width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-text-primary);
+  box-shadow: var(--shadow-md);
+  color: var(--color-surface);
+  font-size: var(--font-size-xs);
+  pointer-events: none;
+}
+
+.vgaVis__tooltip h2 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-s);
+}
+
+.vgaVis__tooltip table {
+  border-collapse: collapse;
+}
+
+.vgaVis__tooltip td {
+  max-width: 100%;
+  overflow: hidden;
+  padding-top: var(--space-1);
+  padding-bottom: var(--space-1);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+.vgaVis__tooltip td.key {
+  max-width: 160px;
+  padding-right: var(--space-1);
+  color: var(--color-text-tertiary);
+  text-align: right;
+}
+
+.vgaVis__tooltip td.value {
+  max-width: 240px;
+  text-align: left;
+}
+
+@media only screen and (max-width: 1199px) {
+  .vgaVis__tooltip td.key {
+    max-width: 96px;
+  }
+
+  .vgaVis__tooltip td.value {
+    max-width: 160px;
+  }
+}
+
+/* --- The spec editor in the Visualize sidebar ------------------------------------------------ */
+
+/* Colours of the original's HJSON editor (its Ace theme as the Atlas theme sets it) */
+.vgaEditor {
+  --vga-gutter-border: #e9e9eb;
+  --vga-guide: #86868b;
+  --vga-key: #037098;
+  --vga-constant: #990000;
+  --vga-number: #037098;
+  --vga-escape: #5256e1;
+  --vga-string: #087824;
+  --vga-comment: #41705a;
+  --vga-invalid: #ff0000;
+  --vga-invalid-background: rgba(255, 0, 0, 0.1);
+}
+
+.themeDark .vgaEditor {
+  --vga-gutter-border: #2c2c2e;
+  --vga-guide: #636366;
+  --vga-key: #6fb6dd;
+  --vga-constant: #ff8b8b;
+  --vga-number: #6fb6dd;
+  --vga-escape: #a3a6ff;
+  --vga-string: #7ccd8f;
+  --vga-comment: #8db8a2;
+  --vga-invalid: #ff6961;
+  --vga-invalid-background: rgba(255, 0, 0, 0.1);
+}
+
+/* The help and format menus sit at the top of the sidebar, beside the button that folds it */
+.vgaEditor__aceEditorActions {
+  position: absolute;
+  top: var(--space-2);
+  right: 40px;
+  z-index: 1;
+  display: flex;
+  line-height: 1;
+}
+
+/* The editor takes the whole width and grows with the spec: the sidebar scrolls */
+.vzeSide__body.vzeSide__body--flush {
+  padding: 0;
+}
+
+.vgaEditor__code.atlCodeEditor {
+  --code-gutter: 53px;
+  border: 0;
+  border-radius: 0;
+  background: linear-gradient(
+    to right,
+    var(--vga-gutter-border) 0,
+    var(--vga-gutter-border) 1px,
+    var(--color-surface) 1px,
+    var(--color-surface) 49px,
+    var(--color-surface-secondary) 49px
+  );
+  line-height: 15px;
+  overflow: visible;
+}
+
+.vgaEditor__code.atlCodeEditor:focus-within {
+  border: 0;
+  box-shadow: none;
+}
+
+.vgaEditor__code .atlCodeEditor__paint {
+  padding: 0;
+}
+
+.vgaEditor__code .atlCodeEditor__line {
+  padding: 0 4px 0 var(--code-gutter);
+  background: transparent;
+}
+
+.vgaEditor__code .atlCodeEditor__line::before {
+  width: 36px;
+  margin: 0 17px 0 calc(-1 * var(--code-gutter));
+  color: var(--color-text-secondary);
+}
+
+.vgaEditor__code .atlCodeEditor__input {
+  padding: 0 4px 0 var(--code-gutter);
+}
+
+.tokHjKey {
+  color: var(--vga-key);
+}
+
+.tokHjConstant {
+  color: var(--vga-constant);
+}
+
+.tokHjNumber {
+  color: var(--vga-number);
+}
+
+.tokHjEscape {
+  color: var(--vga-escape);
+}
+
+.tokHjString {
+  color: var(--vga-string);
+}
+
+.tokHjComment {
+  color: var(--vga-comment);
+}
+
+.tokHjInvalid {
+  background-color: var(--vga-invalid-background);
+  color: var(--vga-invalid);
+}
+
+/* An indent guide: a line at the right of each two spaces of an indent, the whole height of the line */
+.tokHjGuide {
+  display: inline-block;
+  height: 1lh;
+  vertical-align: top;
+  background: linear-gradient(to left, var(--vga-guide) 0, var(--vga-guide) 1px, transparent 1px, transparent 100%);
+}
+
+/* The placeholder at the top of the sidebar, where the original names an index pattern */
+.vzeSide__title.vzeSide__title--placeholder {
+  min-height: 40px;
+  padding: 0;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+/* Auto apply: a button of its own after Discard and Update, or alone while it is on */
+.vzeSide__buttons.vzeSide__buttons--auto {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.vzeSide__buttons--auto > .atlButton:not(.vzeSide__autoApply) {
+  flex: 1 1 0;
+}

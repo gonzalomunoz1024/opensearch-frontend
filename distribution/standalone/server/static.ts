@@ -23,7 +23,8 @@ const TYPES: Record<string, string> = {
 export interface Build {
   version: string;
   builtAt: string;
-  assets: { script: string; styles: string };
+  /** The app's script and style sheet, and the browser builds of Vega and Vega-Lite */
+  assets: { script: string; styles: string; vega?: string; vegaLite?: string };
 }
 
 export function readBuild(distDirectory: string): Build {

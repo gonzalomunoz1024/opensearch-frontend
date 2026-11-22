@@ -652,6 +652,7 @@ function DashboardPage({ savedId }: { savedId?: string }) {
           title={inspectedTitle}
           requests={panelData.current[inspected.panelIndex]?.requests ?? []}
           table={panelData.current[inspected.panelIndex]?.table}
+          vega={panelData.current[inspected.panelIndex]?.vega}
           onClose={() => setDialog(undefined)}
         />
       )}

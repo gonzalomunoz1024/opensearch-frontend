@@ -29,6 +29,7 @@ function readBootData(): BootData {
     settingsDefaults: {},
     settingsOverrides: {},
     map: DEFAULT_MAP_CONFIG,
+    libraries: { vega: '', vegaLite: '' },
   };
   if (!element?.textContent) return fallback;
   try {

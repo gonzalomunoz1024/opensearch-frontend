@@ -246,6 +246,7 @@ export interface TabItem {
   id: string;
   label: ReactNode;
   to?: string;
+  testId?: string;
 }
 
 export function Tabs({
@@ -267,6 +268,7 @@ export function Tabs({
             className="atlTab"
             aria-selected={tab.id === selected}
             href={toHref(tab.to)}
+            data-test-subj={tab.testId}
           >
             {tab.label}
           </a>
@@ -278,6 +280,7 @@ export function Tabs({
             className="atlTab"
             aria-selected={tab.id === selected}
             onClick={() => onSelect?.(tab.id)}
+            data-test-subj={tab.testId}
           >
             {tab.label}
           </button>
