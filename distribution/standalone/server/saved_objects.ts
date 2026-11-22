@@ -294,8 +294,13 @@ export class SavedObjectsRepository {
       document.found && document._source
         ? this.toSavedObject(document)
         : {
-            ...objects[at],
-            error: { statusCode: 404, error: 'Not Found', message: 'Not found' },
+            id: objects[at].id,
+            type: objects[at].type,
+            error: {
+              statusCode: 404,
+              error: 'Not Found',
+              message: `Saved object [${objects[at].type}/${objects[at].id}] not found`,
+            },
           }
     );
   }
