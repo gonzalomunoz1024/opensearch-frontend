@@ -13,6 +13,15 @@ import {
   ordinalColors,
   setColorMapping,
 } from '../../web/charts/core';
+import {
+  keptLabels,
+  labelBand,
+  placeLabel,
+  sizeAlong,
+  truncateLabel,
+  valueAxisLabels,
+  type FontMetrics,
+} from '../../web/charts/axis_labels';
 
 describe('the value axis of a classic chart', () => {
   it('has as many ticks as its length allows', () => {
@@ -107,5 +116,103 @@ describe('the colours of series', () => {
     assert.equal(colors.get('word 10'), SERIES_COLORS[0]);
     assert.equal(ordinalColors(['word 5']).get('word 5'), SERIES_COLORS[0]);
     assert.equal(ordinalColors(['word 5'], { 'word 5': '#123456' }).get('word 5'), '#123456');
+  });
+});
+
+describe('the labels of an axis of a classic chart', () => {
+  // 8pt in the face of the original, whose lines reach 0.9375em above the baseline and 0.28em below
+  const font: FontMetrics = { size: 32 / 3, ascent: 10, descent: (32 / 3) * 0.28 };
+  const near = (actual: number, expected: number) =>
+    assert.ok(Math.abs(actual - expected) < 0.05, `${actual} is not ${expected}`);
+
+  it('are cut to a number of characters, or kept whole', () => {
+    assert.equal(truncateLabel('Kibana Airlines', 6), 'Kibana…');
+    assert.equal(truncateLabel('Kibana Airlines', 0), 'Kibana Airlines');
+    assert.equal(truncateLabel('Kibana', 6), 'Kibana');
+    assert.equal(truncateLabel('Kibana', 100), 'Kibana');
+  });
+
+  it('turn about their end under the axis, as deep as the original draws them', () => {
+    // "300" under a horizontal bar chart: the original measures its tick at -11.75 0 17.81 29.95
+    // and gives the axis 35 pixels
+    const label = placeLabel('bottom', 75, 20.03, font);
+    assert.equal(label.anchor, 'end');
+    assert.equal(label.angle, -75);
+    assert.deepEqual([label.x, label.y, label.cx, label.cy], [0, 9, 0, 9]);
+    near(label.dy, 3.2);
+    near(label.box.left, -11.75);
+    near(label.box.bottom, 29.95);
+    assert.equal(label.box.top, 0);
+    assert.equal(labelBand('bottom', [label.box]), 35);
+  });
+
+  it('turn the other way over the axis, and up the side of an upright chart', () => {
+    const over = placeLabel('top', 75, 20.03, font);
+    assert.equal(over.angle, 75);
+    assert.equal(over.y, -9);
+    assert.equal(over.box.bottom, 0);
+    near(over.box.top, -30.11);
+    assert.equal(labelBand('top', [over.box]), 36);
+
+    const beside = placeLabel('left', 75, 26.5, font);
+    assert.equal(beside.anchor, 'end');
+    assert.equal(beside.dy, 0);
+    assert.deepEqual([beside.cx, beside.cy], [-9, 0]);
+    assert.equal(beside.box.right, 0);
+    assert.equal(labelBand('left', [beside.box]), 31);
+
+    // Upright beside the axis, a label turns about its middle
+    const upright = placeLabel('left', 90, 26.5, font);
+    assert.equal(upright.anchor, 'middle');
+    near(upright.cx, -9);
+    near(upright.cy, (font.descent - font.ascent) / 2);
+  });
+
+  it('lie flat as d3 places them when they are not turned', () => {
+    const under = placeLabel('bottom', 0, 20, font);
+    assert.equal(under.anchor, 'middle');
+    assert.equal(under.angle, 0);
+    assert.equal(sizeAlong('bottom', under.box), 20);
+    const beside = placeLabel('left', 0, 20, font);
+    assert.equal(beside.anchor, 'end');
+    assert.deepEqual([beside.box.left, beside.box.right], [-29, 0]);
+    near(sizeAlong('left', beside.box), font.ascent + font.descent);
+  });
+
+  it('are left out past either end of the axis and where they run into the last one kept', () => {
+    // The value axis of the horizontal bar chart: 0 to 350, of which 0 and 350 go
+    const ticks = [0, 50, 100, 150, 200, 250, 300, 350];
+    const length = 760;
+    const kept = keptLabels(
+      ticks.map((tick) => ({
+        center: (tick / 350) * length,
+        size: sizeAlong('bottom', placeLabel('bottom', 75, String(tick).length * 6.2, font).box),
+      })),
+      length
+    );
+    assert.deepEqual(
+      ticks.filter((_, index) => kept[index]),
+      [50, 100, 150, 200, 250, 300]
+    );
+    // Labels closer than their size: every other one is kept, counted from the last one kept
+    assert.deepEqual(
+      keptLabels([0, 10, 20, 30, 40].map((center) => ({ center, size: 15 })), 100),
+      [false, true, false, true, false]
+    );
+  });
+
+  it('take the defaults of the original for what a visualization does not say', () => {
+    // The horizontal bar chart's own: turned, filtered and cut at 100 characters
+    assert.deepEqual(valueAxisLabels({ show: true, rotate: 75, filter: true, truncate: 100 }, true, false), {
+      rotate: 75,
+      filter: true,
+      truncate: 100,
+    });
+    // Along a horizontal axis: filtered, whole; up a vertical one: not filtered, cut at 100
+    assert.deepEqual(valueAxisLabels({}, true, false), { rotate: 0, filter: true, truncate: 0 });
+    assert.deepEqual(valueAxisLabels(undefined, false, false), { rotate: 0, filter: false, truncate: 100 });
+    assert.equal(valueAxisLabels({ filter: false }, true, false).filter, false);
+    // A logarithmic scale is always filtered
+    assert.equal(valueAxisLabels({ filter: false }, false, true).filter, true);
   });
 });

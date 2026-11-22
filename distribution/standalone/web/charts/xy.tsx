@@ -13,6 +13,7 @@ import {
   ChartTooltip,
   Legend,
   fitText,
+  fontMetrics,
   classicDomain,
   classicTickCount,
   classicTimeTicks,
@@ -27,6 +28,15 @@ import {
   type LegendPosition,
   type ScaleKind,
 } from './core';
+import {
+  keptLabels,
+  labelBand,
+  placeLabel,
+  sizeAlong,
+  truncateLabel,
+  type AxisSide,
+  type LabelPlacement,
+} from './axis_labels';
 import '../styles/charts.css';
 
 export interface XYPoint {
@@ -70,6 +80,12 @@ export interface XYAxis {
   tickCount?: number;
   /** End the axis at the data instead of at a round number */
   exact?: boolean;
+  /** Turn the labels by this many degrees about their end nearest the axis, as the classic charts do */
+  rotate?: number;
+  /** Leave out the labels that would run past the ends of the axis or into the label before */
+  filter?: boolean;
+  /** The most characters of a label to show; 0 or none shows them whole */
+  truncate?: number;
   format: (value: number) => string;
 }
 
@@ -297,6 +313,37 @@ export function XYChart({
     return niceTicks(domain[0], domain[1], Math.max(2, Math.floor(horizontal ? length / 64 : length / 28)));
   };
 
+  /**
+   * The labels of a value axis on a side of a plot this long: their text, where each goes, and
+   * those kept when the axis filters them; turned labels take the room the deepest of them needs
+   */
+  const valueLabels = (axis: XYAxis, side: AxisSide, length: number) => {
+    const along = side === 'top' || side === 'bottom';
+    const domain = model.domains.get(axis.id) ?? [0, 1];
+    const scale = valueScale(axis.scale ?? 'linear', domain, along ? [0, length] : [length, 0]);
+    const format = axis.mode === 'percentage' ? (value: number) => `${Math.round(value * 100)}%` : axis.format;
+    const turned = (axis.rotate ?? 0) !== 0;
+    const font = fontMetrics(FONT);
+    const labels = valueTicks(axis, length)
+      .filter((tick) => tick >= Math.min(domain[0], domain[1]) && tick <= Math.max(domain[0], domain[1]))
+      .map((tick) => {
+        const whole = truncateLabel(format(tick), axis.truncate ?? 0);
+        // Flat labels beside an upright chart keep to the room the chart gives them
+        const text = along || turned ? whole : fitText(whole, 96, FONT);
+        const placement: LabelPlacement = placeLabel(side, axis.rotate ?? 0, textWidth(text, FONT), font);
+        return { tick, at: scale(tick), text, placement };
+      });
+    // Along a vertical axis the classic charts measure from its foot, where the values start
+    const kept = axis.filter
+      ? keptLabels(
+          labels.map(({ at, placement }) => ({ center: along ? at : length - at, size: sizeAlong(side, placement.box) })),
+          length
+        )
+      : labels.map(() => true);
+    const shown = labels.filter((_, index) => kept[index]);
+    return { labels: shown, turned, band: labelBand(side, shown.map(({ placement }) => placement.box)) };
+  };
+
   const { width, height } = size;
   const layout = useMemo(() => {
     if (width < 40 || height < 40) return undefined;
@@ -308,7 +355,14 @@ export function XYChart({
       if (axis.showLabels === false) return 0;
       const ticks = valueTicks(axis, Math.max(60, height - 60));
       const format = axis.mode === 'percentage' ? (value: number) => `${Math.round(value * 100)}%` : axis.format;
-      return Math.min(96, Math.max(0, ...ticks.map((tick) => textWidth(format(tick), FONT))));
+      return Math.min(96, Math.max(0, ...ticks.map((tick) => textWidth(truncateLabel(format(tick), axis.truncate ?? 0), FONT))));
+    };
+    // The room the labels of a value axis take beside it: flat, a line under a horizontal axis or
+    // the widest beside a vertical one; turned, as deep as the deepest of those kept
+    const labelRoom = (axis: XYAxis, side: AxisSide, length: number) => {
+      if (axis.showLabels !== false && (axis.rotate ?? 0) !== 0) return valueLabels(axis, side, length).band;
+      if (side === 'top' || side === 'bottom') return axis.showLabels === false ? 0 : 18;
+      return labelWidth(axis) + 8;
     };
     const titleSpace = (title?: string) => (title ? 18 : 0);
     const categoryShown = x.show !== false;
@@ -327,12 +381,14 @@ export function XYChart({
     let bottom = 6;
     if (horizontal) {
       left += categoryLabelWidth + (categoryLabels ? 8 : 0) + titleSpace(categoryShown ? x.title : undefined);
-      for (const axis of before) bottom += (axis.showLabels === false ? 0 : 18) + titleSpace(axis.title);
-      for (const axis of after) top += (axis.showLabels === false ? 0 : 18) + titleSpace(axis.title);
+      const length = Math.max(10, width - left - right);
+      for (const axis of before) bottom += labelRoom(axis, 'bottom', length) + titleSpace(axis.title);
+      for (const axis of after) top += labelRoom(axis, 'top', length) + titleSpace(axis.title);
     } else {
       bottom += (categoryLabels ? (turned ? turnedHeight : 18) : 0) + titleSpace(categoryShown ? x.title : undefined);
-      for (const axis of before) left += labelWidth(axis) + 8 + titleSpace(axis.title);
-      for (const axis of after) right += labelWidth(axis) + 8 + titleSpace(axis.title);
+      const length = Math.max(10, height - top - bottom);
+      for (const axis of before) left += labelRoom(axis, 'left', length) + titleSpace(axis.title);
+      for (const axis of after) right += labelRoom(axis, 'right', length) + titleSpace(axis.title);
     }
     const plot = {
       left,
@@ -340,7 +396,7 @@ export function XYChart({
       width: Math.max(10, width - left - right),
       height: Math.max(10, height - top - bottom),
     };
-    return { plot, before, after, labelWidth, categoryLabels, categoryShown, turned, turnedHeight, categoryLabelWidth };
+    return { plot, before, after, labelRoom, categoryLabels, categoryShown, turned, turnedHeight, categoryLabelWidth };
   }, [width, height, axes, horizontal, model.domains, x, Boolean(classic)]);
 
   const geometry = useMemo(() => {
@@ -575,17 +631,16 @@ export function XYChart({
     const axisParts: React.ReactNode[] = [];
     const gridParts: React.ReactNode[] = [];
     const drawValueAxis = (axis: XYAxis, side: 'before' | 'after', offset: number) => {
+      const edge: AxisSide = horizontal ? (side === 'before' ? 'bottom' : 'top') : side === 'before' ? 'left' : 'right';
+      const length = horizontal ? plot.width : plot.height;
       const axisDomain = model.domains.get(axis.id) ?? [0, 1];
-      const scale = scales.get(axis.id)!;
-      const ticks = valueTicks(axis, horizontal ? plot.width : plot.height).filter(
+      const scale = scales.get(axis.id);
+      const ticks = valueTicks(axis, length).filter(
         (tick) => tick >= Math.min(axisDomain[0], axisDomain[1]) && tick <= Math.max(axisDomain[0], axisDomain[1])
       );
-      const labels = axis.showLabels !== false;
-      const format = axis.mode === 'percentage' ? (value: number) => `${Math.round(value * 100)}%` : axis.format;
-      const widthOfLabels = layout.labelWidth(axis);
-      ticks.forEach((tick) => {
-        const at = scale(tick);
-        if (grid.value && axis.id === axes[0].id) {
+      if (scale && grid.value && axis.id === axes[0].id) {
+        for (const tick of ticks) {
+          const at = scale(tick);
           gridParts.push(
             horizontal ? (
               <line key={`g-${axis.id}-${tick}`} className="chtGrid" x1={at} x2={at} y1={0} y2={plot.height} />
@@ -594,30 +649,58 @@ export function XYChart({
             )
           );
         }
-        if (!labels) return;
-        axisParts.push(
-          horizontal ? (
-            <text
-              key={`t-${axis.id}-${tick}`}
-              x={at}
-              y={side === 'before' ? plot.height + offset + 13 : -offset - 5}
-              textAnchor="middle"
-            >
-              {format(tick)}
-            </text>
-          ) : (
-            <text
-              key={`t-${axis.id}-${tick}`}
-              x={side === 'before' ? -offset - 8 : plot.width + offset + 8}
-              y={at + 4}
-              textAnchor={side === 'before' ? 'end' : 'start'}
-            >
-              {fitText(format(tick), 96, FONT)}
-            </text>
-          )
-        );
-      });
-      const used = horizontal ? (labels ? 18 : 0) : widthOfLabels + 8;
+      }
+      const { labels, turned } = valueLabels(axis, edge, length);
+      if (axis.showLabels !== false) {
+        for (const { tick, at, text, placement } of labels) {
+          if (turned) {
+            // Turned about the point beside the tick, as the classic charts turn theirs
+            const [tickX, tickY] =
+              edge === 'bottom'
+                ? [at, plot.height + offset]
+                : edge === 'top'
+                  ? [at, -offset]
+                  : edge === 'left'
+                    ? [-offset, at]
+                    : [plot.width + offset, at];
+            axisParts.push(
+              <text
+                key={`t-${axis.id}-${tick}`}
+                x={tickX + placement.x}
+                y={tickY + placement.y}
+                dy={placement.dy}
+                textAnchor={placement.anchor}
+                transform={`rotate(${placement.angle}, ${tickX + placement.cx}, ${tickY + placement.cy})`}
+              >
+                {text}
+              </text>
+            );
+          } else {
+            axisParts.push(
+              horizontal ? (
+                <text
+                  key={`t-${axis.id}-${tick}`}
+                  x={at}
+                  y={side === 'before' ? plot.height + offset + 13 : -offset - 5}
+                  textAnchor="middle"
+                >
+                  {text}
+                </text>
+              ) : (
+                <text
+                  key={`t-${axis.id}-${tick}`}
+                  x={side === 'before' ? -offset - 8 : plot.width + offset + 8}
+                  y={at + 4}
+                  textAnchor={side === 'before' ? 'end' : 'start'}
+                >
+                  {text}
+                </text>
+              )
+            );
+          }
+        }
+      }
+      const used = layout.labelRoom(axis, edge, length);
       if (axis.title) {
         const text = fitText(axis.title, (horizontal ? plot.width : plot.height) - 8, FONT);
         axisParts.push(
@@ -676,18 +759,13 @@ export function XYChart({
         for (const tick of ticks) categoryTicks.push({ at: (tick - domain[0]) * factor, label: x.format(tick) });
         if (classicTime && x.filter !== false && !horizontal) {
           // The classic charts drop a label that runs past the axis or into the label before it
-          let lastStart = Number.POSITIVE_INFINITY;
-          let lastEnd = Number.NEGATIVE_INFINITY;
-          for (const tick of categoryTicks) {
-            const half = (textWidth(tick.label, FONT) * 1.1) / 2;
-            const start = tick.at - half;
-            const end = tick.at + half;
-            if (end > geometry.length || start < 0 || (end >= lastStart && start <= lastEnd)) hiddenLabels.add(tick.at);
-            else {
-              lastStart = start;
-              lastEnd = end;
-            }
-          }
+          const kept = keptLabels(
+            categoryTicks.map((tick) => ({ center: tick.at, size: textWidth(tick.label, FONT) })),
+            geometry.length
+          );
+          categoryTicks.forEach((tick, index) => {
+            if (!kept[index]) hiddenLabels.add(tick.at);
+          });
         }
       }
     }

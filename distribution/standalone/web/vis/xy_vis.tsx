@@ -3,6 +3,7 @@
 /* Area, line, vertical bar and horizontal bar: a table of buckets and measures as series on axes. */
 
 import { useMemo } from 'react';
+import { valueAxisLabels } from '../charts/axis_labels';
 import { ChartMessage, assignColors, type LegendPosition, type ScaleKind } from '../charts/core';
 import { XYChart, type XYAxis, type XYCategoryAxis, type XYPoint, type XYSeries } from '../charts/xy';
 import { bucketFilter, type TableColumn } from '../lib/aggs';
@@ -121,30 +122,32 @@ export function XYVis({ vis, data, uiState, onFilter, onTimeChange }: VisRenderP
     const series = [...made.values()];
     const colors = assignColors(series.map((item) => item.label), overrides);
     for (const item of series) item.color = colors.get(item.label) ?? item.color;
+    const category = params.categoryAxes?.[0] ?? {};
+    const horizontal = category.position === 'left' || category.position === 'right';
     const axes: XYAxis[] = (params.valueAxes?.length ? params.valueAxes : [{ id: 'ValueAxis-1', position: 'left' }]).map((axis) => {
       const id = axis.id ?? 'ValueAxis-1';
       const first = series.find((item) => item.axisId === id);
       const metric = metrics.find((column) => first?.id.endsWith(`|${column.id}`)) ?? metrics[0];
       const position = axis.position;
+      const scale = (axis.scale?.type === 'log' || axis.scale?.type === 'square root' ? axis.scale.type : 'linear') as ScaleKind;
       return {
         id,
         position: position === 'right' || position === 'top' || position === 'bottom' ? position : 'left',
         title: axis.title?.text || metric?.name,
         show: axis.show !== false,
         showLabels: axis.labels?.show !== false,
-        scale: (axis.scale?.type === 'log' || axis.scale?.type === 'square root' ? axis.scale.type : 'linear') as ScaleKind,
+        scale,
         mode: (axis.scale?.mode as XYAxis['mode']) ?? 'normal',
         min: axis.scale?.setYExtents ? axis.scale.min : undefined,
         max: axis.scale?.setYExtents ? axis.scale.max : undefined,
         fitToData: Boolean(axis.scale?.defaultYExtents),
+        ...valueAxisLabels(axis.labels, horizontal, scale === 'log'),
         format: (value: number) => (metric ? metric.format(value) : String(value)),
       };
     });
 
-    const category = params.categoryAxes?.[0] ?? {};
     const timeRange = context.timeRange;
     const isTimeField = Boolean(xColumn?.isDate && xColumn.fieldName === context.indexPattern?.timeFieldName);
-    const horizontal = category.position === 'left' || category.position === 'right';
     // Only time runs along a scale; the bars of anything else, a number histogram too, stand side
     // by side with a label each, turned on its side under an upright chart unless the
     // visualization says otherwise
