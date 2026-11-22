@@ -30,11 +30,11 @@
   user-select: none;
 }
 
+/* Proportional figures: labels are measured, and placed, as the classic charts measure theirs */
 .chtAxis text,
 .chtText {
   fill: var(--color-text-secondary);
   font-size: var(--font-size-chart);
-  font-variant-numeric: tabular-nums;
 }
 
 .chtAxisTitle {
@@ -74,6 +74,12 @@
   pointer-events: none;
 }
 
+.chtEndZone {
+  fill: var(--color-text-primary);
+  fill-opacity: 0.08;
+  pointer-events: none;
+}
+
 .chtNowLine {
   stroke: var(--color-critical);
   stroke-width: 1.5;
@@ -108,6 +114,13 @@
   width: 25%;
   min-width: 96px;
   max-width: 220px;
+}
+
+.chtLegend--right.chtLegend--classic,
+.chtLegend--left.chtLegend--classic {
+  width: 150px;
+  min-width: 150px;
+  max-width: 150px;
 }
 
 .chtLegend--top,
@@ -224,4 +237,28 @@
 .chtLegend--top .chtLegend__value,
 .chtLegend--bottom .chtLegend__value {
   margin-left: 0;
+}
+
+/* The button that opens and closes the legend of a classic chart, in its bottom left corner */
+.chtLegendToggle {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  display: inline-flex;
+  padding: 3px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.chtLegendToggle:hover {
+  color: var(--color-text-primary);
+}
+
+.chtLegendToggle--open {
+  background: var(--color-surface-tertiary);
+  color: var(--color-text-primary);
 }

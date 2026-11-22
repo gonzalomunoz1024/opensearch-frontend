@@ -173,3 +173,15 @@ body.dshDragging {
     transition: none;
   }
 }
+
+/* On a dashboard the button that opens a chart's legend shows when the panel is pointed at */
+.dshPanel .chtLegendToggle {
+  opacity: 0;
+  transition: opacity var(--duration-fast);
+}
+
+.dshPanel:hover .chtLegendToggle,
+.dshPanel .chtLegendToggle:focus-visible,
+.dshPanel .chtLegendToggle--open {
+  opacity: 1;
+}

@@ -15,6 +15,7 @@ import {
   fitText,
   classicDomain,
   classicTickCount,
+  classicTimeTicks,
   classicTicks,
   niceDomain,
   niceTicks,
@@ -407,7 +408,8 @@ export function XYChart({
     hidden: hidden.includes(item.id),
     value: legendValues?.[item.id],
   }));
-  const showLegend = legend !== false && (series.length > 1 || legendValues !== undefined);
+  // The classic charts name a single series too
+  const showLegend = legend !== false && (series.length > 1 || legendValues !== undefined || classic !== undefined);
 
   let content = null;
   if (layout && geometry) {
@@ -652,6 +654,7 @@ export function XYChart({
 
     // The category axis
     const categoryTicks: Array<{ at: number; label: string }> = [];
+    const hiddenLabels = new Set<number>();
     if (layout.categoryLabels) {
       if (x.type === 'category') {
         // Turned labels take the height of a line each; flat ones their own width
@@ -663,15 +666,36 @@ export function XYChart({
       } else if (domain) {
         const sample = textWidth(x.format(domain[0]), FONT) + 24;
         const wanted = Math.max(2, Math.floor(geometry.length / (horizontal ? 28 : sample)));
-        const ticks = x.type === 'time' ? timeTicks(domain[0], domain[1], wanted) : niceTicks(domain[0], domain[1], wanted);
+        const classicTime = classic !== undefined && x.type === 'time';
+        const ticks = classicTime
+          ? classicTimeTicks(domain[0], domain[1], classicTickCount(geometry.length))
+          : x.type === 'time'
+            ? timeTicks(domain[0], domain[1], wanted)
+            : niceTicks(domain[0], domain[1], wanted);
         const factor = geometry.length / (domain[1] - domain[0] || 1);
         for (const tick of ticks) categoryTicks.push({ at: (tick - domain[0]) * factor, label: x.format(tick) });
+        if (classicTime && x.filter !== false && !horizontal) {
+          // The classic charts drop a label that runs past the axis or into the label before it
+          let lastStart = Number.POSITIVE_INFINITY;
+          let lastEnd = Number.NEGATIVE_INFINITY;
+          for (const tick of categoryTicks) {
+            const half = (textWidth(tick.label, FONT) * 1.1) / 2;
+            const start = tick.at - half;
+            const end = tick.at + half;
+            if (end > geometry.length || start < 0 || (end >= lastStart && start <= lastEnd)) hiddenLabels.add(tick.at);
+            else {
+              lastStart = start;
+              lastEnd = end;
+            }
+          }
+        }
       }
     }
     for (const tick of categoryTicks) {
       // A label that would run past the edge of the chart is left out; its line stays
       const half = !horizontal && !layout.turned && x.type !== 'category' ? textWidth(tick.label, FONT) / 2 : 0;
-      const outside = half > 0 && (tick.at + half > width - plot.left - 1 || tick.at - half < -plot.left + 1);
+      const outside =
+        hiddenLabels.has(tick.at) || (half > 0 && (tick.at + half > width - plot.left - 1 || tick.at - half < -plot.left + 1));
       if (grid.category) {
         gridParts.push(
           horizontal ? (
@@ -823,11 +847,34 @@ export function XYChart({
       }
     };
 
+    // The classic charts shade what lies outside the time range: the part of the first bucket
+    // before it, and the last bucket, which is still filling
+    const endZones: Array<{ from: number; to: number }> = [];
+    if (classic && domain && x.type === 'time' && x.domain) {
+      const along = (value: number) => ((value - domain[0]) / (domain[1] - domain[0] || 1)) * geometry.length;
+      const numbers = x.values.filter((value): value is number => typeof value === 'number');
+      const startsAt = Math.min(Math.max(along(x.domain[0]), 0), geometry.length);
+      if (startsAt > 0) endZones.push({ from: 0, to: startsAt });
+      const lastValue = numbers.length ? Math.min(x.domain[1], numbers[numbers.length - 1]) : x.domain[1];
+      const endsAt = Math.min(Math.max(along(lastValue + 1), 0), geometry.length);
+      if (endsAt < geometry.length) endZones.push({ from: endsAt, to: geometry.length });
+    }
+
     const now = Date.now();
     const thresholdAt = threshold ? scales.get(axes[0].id)!(threshold.value) : undefined;
     content = (
       <svg width={width} height={height} role="img" aria-label="Chart" data-test-subj={testId}>
         <g transform={`translate(${plot.left},${plot.top})`}>
+          {endZones.map((zone, index) => (
+            <rect
+              key={`zone-${index}`}
+              className="chtEndZone"
+              x={horizontal ? 0 : zone.from}
+              y={horizontal ? zone.from : 0}
+              width={horizontal ? plot.width : zone.to - zone.from}
+              height={horizontal ? zone.to - zone.from : plot.height}
+            />
+          ))}
           <g>{gridParts}</g>
           {hover !== undefined && !brush && (
             <rect
@@ -931,6 +978,7 @@ export function XYChart({
           <Legend
             items={legendItems}
             position={legend || 'right'}
+            classic={classic !== undefined}
             onHover={setEmphasized}
             onToggle={(id) =>
               setHidden((current) =>

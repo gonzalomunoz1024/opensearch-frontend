@@ -124,7 +124,7 @@ export function HeatmapVis({ vis, data, uiState, onFilter }: VisRenderProps) {
       position={legendPosition}
       legend={
         showLegend ? (
-          <Legend items={steps.map((_, index) => ({ id: String(index), label: stepLabel(index), color: stepColor(index) }))} position={legendPosition} />
+          <Legend items={steps.map((_, index) => ({ id: String(index), label: stepLabel(index), color: stepColor(index) }))} position={legendPosition} classic />
         ) : undefined
       }
     >

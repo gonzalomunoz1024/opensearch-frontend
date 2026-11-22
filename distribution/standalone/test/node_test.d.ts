@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
 // The browser side's tests run in Node, whose types the browser side is otherwise checked without.
+declare const process: { env: Record<string, string | undefined> };
 declare module 'node:test' {
   export function describe(name: string, body: () => void): void;
   export function it(name: string, body: () => void | Promise<void>): void;

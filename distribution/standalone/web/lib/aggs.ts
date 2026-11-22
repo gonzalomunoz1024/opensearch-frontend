@@ -530,6 +530,22 @@ function bucketClause(agg: AggConfig, context: AggContext): Dsl {
 
 export const MISSING_KEY = '__missing__';
 
+/** A clause with what someone wrote under "JSON input" merged into it */
+function withJson(agg: AggConfig, clause: Dsl): Dsl {
+  const json = agg.params?.json;
+  if (typeof json !== 'string' || json.trim() === '') return clause;
+  let extra: unknown;
+  try {
+    extra = JSON.parse(json);
+  } catch {
+    return clause;
+  }
+  if (extra === null || typeof extra !== 'object' || Array.isArray(extra)) return clause;
+  const [type] = Object.keys(clause);
+  if (!type || clause[type] === null || typeof clause[type] !== 'object') return clause;
+  return { ...clause, [type]: { ...(clause[type] as Dsl), ...(extra as Dsl) } };
+}
+
 function numberOf(value: unknown): number | undefined {
   if (value === undefined || value === null || value === '') return undefined;
   const parsed = Number(value);
@@ -561,7 +577,9 @@ export function buildAggsDsl(aggs: AggConfig[], context: AggContext, options: Bu
     for (const metric of metrics) {
       // A derivative has nothing to derive from outside a histogram
       if (PARENT_PIPELINES.has(metric.type) && !insideHistogram) continue;
-      Object.assign(out, metricDsl(metric, context, metrics));
+      const own = metricDsl(metric, context, metrics);
+      if (own[metric.id]) own[metric.id] = withJson(metric, own[metric.id] as Dsl);
+      Object.assign(out, own);
     }
     return out;
   };
@@ -573,7 +591,7 @@ export function buildAggsDsl(aggs: AggConfig[], context: AggContext, options: Bu
     const deeper = nest(level + 1, isHistogram);
     const own: Dsl = { ...deeper };
     if (options.metricsAtAllLevels && level < buckets.length - 1) Object.assign(own, metricsDsl(isHistogram));
-    const clause = bucketClause(agg, context);
+    const clause = withJson(agg, bucketClause(agg, context));
 
     if (agg.type === 'terms') {
       const terms = clause.terms as Dsl;
@@ -925,7 +943,13 @@ export function tabify(
   const rows: TableRow[] = [];
   const walk = (container: Bucket, level: number, partial: TableRow) => {
     const agg = buckets[level];
-    const list = bucketsOf(agg, container[agg.id]);
+    let list = bucketsOf(agg, container[agg.id]);
+    // Buckets that reach outside the time range hold part of what they stand for
+    const range = context.timeRange;
+    if (agg.type === 'date_histogram' && agg.params?.drop_partials && range && list.length > 1 && fieldNameOf(agg) === context.indexPattern?.timeFieldName) {
+      const interval = (list[1].key as number) - (list[0].key as number);
+      list = list.filter(({ key }) => typeof key === 'number' && key >= range.from.getTime() && key + interval <= range.to.getTime());
+    }
     if (list.length === 0 && options.partialRows && level > 0) rows.push(partial);
     for (const { key, bucket } of list) {
       const row: TableRow = { ...partial, [bucketColumns[level].id]: key };
@@ -998,4 +1022,80 @@ export function bucketFilter(column: TableColumn, key: unknown, context: AggCont
     default:
       return undefined;
   }
+}
+
+// --- The bucket of everything else ----------------------------------------------------------------
+
+const OTHER_AGG = 'other-filter';
+
+/**
+ * What a terms aggregation with "Group other values in separate bucket" still has to ask once
+ * its answer is in: per list of terms, the documents that are in none of them, with the same
+ * aggregations under them. `apply` puts the answer in the first answer as one more bucket.
+ */
+export function planOtherBucket(
+  aggs: AggConfig[],
+  dsl: Dsl,
+  response: { aggregations?: Record<string, unknown> },
+  context: AggContext
+): { aggs: Dsl; apply: (answer: Record<string, unknown> | undefined) => void } | undefined {
+  const buckets = enabled(aggs).filter(isBucketAgg);
+  const level = buckets.findIndex((agg) => agg.type === 'terms' && Boolean(agg.params?.otherBucket));
+  if (level === -1) return undefined;
+  const other = buckets[level];
+  const field = fieldOf(other, context);
+  const fieldName = fieldNameOf(other);
+  if (!fieldName || field?.scripted) return undefined;
+
+  // What is asked under each term is asked under the rest too
+  let node: Dsl | undefined = dsl;
+  for (let at = 0; at <= level && node; at += 1) node = (node[buckets[at].id] as Dsl | undefined)?.aggs as Dsl | undefined;
+
+  const columns = buckets.map((agg, at) => bucketColumn(agg, context, `other-${at}`));
+  const indexId = context.indexPattern?.id;
+  const filters: Record<string, Dsl> = {};
+  const targets: Record<string, { buckets?: unknown }> = {};
+  let empty = false;
+  const visit = (container: Bucket, at: number, above: Filter[], name: string) => {
+    const agg = buckets[at];
+    const list = bucketsOf(agg, container[agg.id]);
+    if (list.length === 0) {
+      empty = true;
+      return;
+    }
+    if (at < level) {
+      for (const { key, bucket } of list) {
+        const filter = bucketFilter(columns[at], key, context);
+        const part = key !== null && typeof key === 'object' ? String((key as { label?: string }).label ?? '') : String(key);
+        visit(bucket, at + 1, filter ? [...above, filter] : above, `${name}-${part}`);
+      }
+      return;
+    }
+    const all = [...above];
+    // Documents without the field are the "missing" bucket's, when it is shown, and not the rest's
+    if (!other.params?.missingBucket || list.some(({ key }) => key === MISSING_KEY)) all.push(existsFilter({ name: fieldName }, indexId));
+    for (const { key } of list) {
+      if (key === MISSING_KEY) continue;
+      const shown = phraseFilter({ name: fieldName }, key, indexId);
+      shown.meta.negate = true;
+      all.push(shown);
+    }
+    filters[name] = buildQuery(context.indexPattern, [], all) as unknown as Dsl;
+    targets[name] = container[agg.id] as { buckets?: unknown };
+  };
+  visit((response.aggregations ?? {}) as Bucket, 0, [], '');
+  // As in OpenSearch Dashboards, one list without terms and nothing is asked
+  if (empty || Object.keys(filters).length === 0) return undefined;
+
+  return {
+    aggs: { [OTHER_AGG]: { filters: { filters }, ...(node && Object.keys(node).length ? { aggs: node } : {}) } },
+    apply: (answer) => {
+      const found = (answer?.[OTHER_AGG] as { buckets?: Record<string, Bucket> } | undefined)?.buckets ?? {};
+      for (const [name, bucket] of Object.entries(found)) {
+        const target = targets[name];
+        if (!target || !Array.isArray(target.buckets) || !bucket.doc_count) continue;
+        target.buckets.push({ ...bucket, key: OTHER_KEY });
+      }
+    },
+  };
 }

@@ -172,7 +172,7 @@ export function SavedObjectFinder({
         services.savedObjects
           .find<{ title: string }>({
             type: typeKey.split(','),
-            search: search.trim() || undefined,
+            search: search.trim() ? `${search.trim().replace(/\*+$/, '')}*` : undefined,
             searchFields: ['title'],
             fields: ['title', 'visState', 'description'],
             page: page + 1,

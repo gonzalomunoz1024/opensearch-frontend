@@ -89,7 +89,7 @@ The last two lines only give back what this server does not need: it holds about
 | Dashboards: list, view, edit (move, resize, add, replace, rename), save, clone, share, full screen | done |
 | Visualizations drawn: area, line, bar, horizontal bar, pie, metric, gauge, goal, heat map, tag cloud, data table, markdown, controls, TSVB | done |
 | Inspect (requests, responses, the table behind a chart) | done |
-| Visualize: the list and the editor of a visualization | not yet |
+| Visualize: the list, the kinds to choose from, and the editor (metrics and buckets, the options of each kind, save, share, inspect) | done for the kinds above; TSVB is edited as JSON; clicking the "Other" slice adds no filter; "Show values on chart" and "Order buckets by sum" are not offered |
 | Management: index patterns (create, fields, formats, scripted fields, source filters), saved objects (export, import, relationships, inspect), advanced settings | done |
 | Dev Tools console, Query Workbench, Index Management | not yet |
 | Vega, Timeline, coordinate and region maps, VisBuilder objects | not drawn yet; the panel says so |
@@ -107,7 +107,7 @@ web/       the browser side
   shell/       the page frame, search bar, filter bar, time picker   (shl)
   charts/      SVG charts: axes, scales, legends, tooltips           (cht)
   vis/         one file per kind of visualization, and TSVB          (vis)
-  apps/        home, discover (dsc), dashboard (dsh)
+  apps/        home, discover (dsc), dashboard (dsh), visualize (vze), management (mgt)
   lib/         DQL, rison, date math, number and date formats, aggregations, markdown
 scripts/   build.mjs (TypeScript compiler and a small bundler), the two registry checks
 registry/  the packages the target registry could not serve, as it reported them

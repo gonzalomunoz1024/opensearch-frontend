@@ -5,7 +5,7 @@
  * time range, the visualization's own, and its aggregations, answered as a table.
  */
 
-import { buildAggsDsl, fieldNameOf, needsFieldBounds, tabify, type AggContext, type Table } from '../lib/aggs';
+import { buildAggsDsl, fieldNameOf, needsFieldBounds, planOtherBucket, tabify, type AggContext, type Table } from '../lib/aggs';
 import { resolveTimeRange, type TimeRange } from '../lib/dates';
 import { buildQuery, timeRangeFilter } from '../lib/query';
 import type { Filter, IndexPattern, Query } from '../lib/types';
@@ -100,9 +100,20 @@ export async function fetchVisData(vis: Vis, input: VisInput, signal?: AbortSign
   }
 
   const options = { metricsAtAllLevels: metricsAtAllLevels(resolved), partialRows: Boolean(resolved.params.showPartialRows) };
-  const body = { size: 0, track_total_hits: true, query, aggs: buildAggsDsl(resolved.aggs, context, options) };
+  const aggs = buildAggsDsl(resolved.aggs, context, options);
+  const body = { size: 0, track_total_hits: true, query, aggs };
   const record: RequestRecord = { name: 'Data', index: indexPattern.title, body, startedAt: Date.now() };
   requests.push(record);
   const response = await services.search.search(indexPattern.title, body, { signal, record });
+
+  // A terms aggregation that groups the rest asks for the rest once it knows its terms
+  const rest = planOtherBucket(resolved.aggs, aggs, response, context);
+  if (rest) {
+    const otherBody = { size: 0, query, aggs: rest.aggs };
+    const otherRecord: RequestRecord = { name: 'Other bucket', index: indexPattern.title, body: otherBody, startedAt: Date.now() };
+    requests.push(otherRecord);
+    const answer = await services.search.search(indexPattern.title, otherBody, { signal, record: otherRecord });
+    rest.apply(answer.aggregations as Record<string, unknown> | undefined);
+  }
   return { indexPattern, context, table: tabify(resolved.aggs, response, context, options), requests };
 }

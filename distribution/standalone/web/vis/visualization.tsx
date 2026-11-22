@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ChartMessage } from '../charts/core';
+import { ChartMessage, LegendToggle } from '../charts/core';
 import { ErrorBoundary } from '../components/basic';
 import type { Table } from '../lib/aggs';
 import type { TimeRange } from '../lib/dates';
@@ -60,6 +60,9 @@ const DRAWN: Record<string, (props: VisRenderProps) => ReactNode> = {
   tagcloud: (props) => <TagCloudVis {...props} />,
   table: (props) => <TableVis {...props} />,
 };
+
+// The kinds whose legend can be opened and closed from the corner of the chart
+const LEGEND_KINDS = new Set(['area', 'line', 'histogram', 'horizontal_bar', 'pie', 'heatmap']);
 
 /** Whether this product draws a kind of visualization */
 export const canDraw = (type: string) => type in DRAWN || type === 'markdown' || type === 'input_control_vis' || type === 'metrics';
@@ -129,10 +132,15 @@ function AggVisualization({ vis, input, tick, uiState, onUiState, onFilter, onTi
         </div>
       );
   }
+  const state = uiState ?? vis.uiState;
+  const legendOpen = state.vis?.legendOpen !== false;
   return (
     <>
       {loading && <div className="atlProgress visRoot__progress" />}
       {body}
+      {data && !error && onUiState && LEGEND_KINDS.has(vis.type) && vis.params.addLegend !== false && (
+        <LegendToggle open={legendOpen} onToggle={() => onUiState({ ...state, vis: { ...state.vis, legendOpen: !legendOpen } })} />
+      )}
     </>
   );
 }

@@ -208,7 +208,7 @@ export function PieVis({ vis, data, uiState, onFilter }: VisRenderProps) {
   return (
     <ChartFrame
       position={legendPosition}
-      legend={showLegend ? <Legend items={legendItems} position={legendPosition} onHover={setActive} /> : undefined}
+      legend={showLegend ? <Legend items={legendItems} position={legendPosition} onHover={setActive} classic /> : undefined}
     >
       <div ref={ref} className="chtPlot" data-test-subj="visChart">
         {size.width > 0 && size.height > 0 && (

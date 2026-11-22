@@ -16,6 +16,7 @@ import {
   type RefObject,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { Icon } from '../components/icon';
 
 /*
  * The series colours of OpenSearch Dashboards (its component library's palette), so that a
@@ -281,6 +282,111 @@ export function timeTicks(min: number, max: number, count: number): number[] {
   return ticks;
 }
 
+// The steps the classic charts choose their time ticks from, and what each counts in
+const CLASSIC_TIME_STEPS = [1e3, 5e3, 15e3, 3e4, 6e4, 3e5, 9e5, 18e5, 36e5, 108e5, 216e5, 432e5, 864e5, 1728e5, 6048e5, 2592e6, 7776e6, 31536e6];
+const CLASSIC_TIME_UNITS: Array<['s' | 'm' | 'h' | 'd' | 'w' | 'M' | 'y', number]> = [
+  ['s', 1], ['s', 5], ['s', 15], ['s', 30], ['m', 1], ['m', 5], ['m', 15], ['m', 30], ['h', 1], ['h', 3], ['h', 6], ['h', 12],
+  ['d', 1], ['d', 2], ['w', 1], ['M', 1], ['M', 3], ['y', 1],
+];
+
+/**
+ * The ticks of a time axis as the classic charts of OpenSearch Dashboards place them: the step
+ * nearest to the range divided by the wanted count, counted from round moments (every third
+ * hour of the day, every second day of the month) where the reader is.
+ */
+export function classicTimeTicks(min: number, max: number, count: number): number[] {
+  const span = max - min;
+  if (!(span > 0) || count < 1) return [min];
+  const target = span / count;
+  let index = 0;
+  while (index < CLASSIC_TIME_STEPS.length && CLASSIC_TIME_STEPS[index] <= target) index += 1;
+  // The moments are counted on a clock shifted to the reader's zone, and shifted back
+  const offsetAt = (time: number) => -new Date(time).getTimezoneOffset() * 60000;
+  const startOffset = offsetAt(min);
+  const from = min + startOffset;
+  const to = max + startOffset;
+  let shifted: number[] = [];
+  if (index === 0) {
+    const step = classicStep(span, count);
+    for (let value = Math.ceil(from / step) * step; value <= to; value += step) shifted.push(value);
+  } else if (index === CLASSIC_TIME_STEPS.length) {
+    const first = new Date(from).getUTCFullYear();
+    const last = new Date(to).getUTCFullYear();
+    const step = Math.max(1, classicStep(span / 31536e6, count));
+    for (let year = Math.ceil(first / step) * step; year <= last + 1; year += step) {
+      const value = Date.UTC(year, 0, 1);
+      if (value >= from && value <= to) shifted.push(value);
+    }
+  } else {
+    const chosen = target / CLASSIC_TIME_STEPS[index - 1] < CLASSIC_TIME_STEPS[index] / target ? index - 1 : index;
+    const [unit, every] = CLASSIC_TIME_UNITS[chosen];
+    const floor = (time: number): number => {
+      const date = new Date(time);
+      switch (unit) {
+        case 's':
+          return Math.floor(time / 1000) * 1000;
+        case 'm':
+          return Math.floor(time / 60000) * 60000;
+        case 'h':
+          return Math.floor(time / 3600000) * 3600000;
+        case 'd':
+          return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+        case 'w':
+          return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() - date.getUTCDay());
+        case 'M':
+          return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1);
+        default:
+          return Date.UTC(date.getUTCFullYear(), 0, 1);
+      }
+    };
+    const next = (time: number): number => {
+      const date = new Date(time);
+      switch (unit) {
+        case 's':
+          return time + 1000;
+        case 'm':
+          return time + 60000;
+        case 'h':
+          return time + 3600000;
+        case 'd':
+          return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1);
+        case 'w':
+          return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 7);
+        case 'M':
+          return Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1);
+        default:
+          return Date.UTC(date.getUTCFullYear() + 1, 0, 1);
+      }
+    };
+    const numberOf = (time: number): number => {
+      const date = new Date(time);
+      switch (unit) {
+        case 's':
+          return date.getUTCSeconds();
+        case 'm':
+          return date.getUTCMinutes();
+        case 'h':
+          return date.getUTCHours();
+        case 'd':
+          return date.getUTCDate() - 1;
+        case 'M':
+          return date.getUTCMonth();
+        default:
+          return 0;
+      }
+    };
+    let time = floor(from);
+    if (time < from) time = next(time);
+    for (let guard = 0; time <= to && guard < 5000; guard += 1) {
+      if (every === 1 || numberOf(time) % every === 0) shifted.push(time);
+      time = next(time);
+    }
+  }
+  // Several ticks a day keep the offset the range starts with; whole days take their own
+  const hourTicks = shifted.length > 0 && span / shifted.length < 12 * 3600000;
+  return shifted.map((value) => value - (hourTicks ? startOffset : offsetAt(value - startOffset)));
+}
+
 export function linearScale(domain: [number, number], range: [number, number]) {
   const [d0, d1] = domain;
   const [r0, r1] = range;
@@ -443,14 +549,17 @@ export function Legend({
   position,
   onToggle,
   onHover,
+  classic,
 }: {
   items: LegendItem[];
   position: LegendPosition;
   onToggle?: (id: string) => void;
   onHover?: (id: string | undefined) => void;
+  /** As wide as the legend of a classic chart of OpenSearch Dashboards, whatever the chart's width */
+  classic?: boolean;
 }) {
   return (
-    <ul className={`chtLegend chtLegend--${position}`} data-test-subj="legendContainer">
+    <ul className={`chtLegend chtLegend--${position}${classic ? ' chtLegend--classic' : ''}`} data-test-subj="legendContainer">
       {items.map((item) => (
         <li key={item.id}>
           <button
@@ -470,6 +579,23 @@ export function Legend({
         </li>
       ))}
     </ul>
+  );
+}
+
+/** Opens and closes the legend of a chart, from the chart's corner */
+export function LegendToggle({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      className={`chtLegendToggle${open ? ' chtLegendToggle--open' : ''}`}
+      aria-label="Toggle legend"
+      aria-expanded={open}
+      title="Toggle legend"
+      onClick={onToggle}
+      data-test-subj="vislibToggleLegend"
+    >
+      <Icon name="list" />
+    </button>
   );
 }
 

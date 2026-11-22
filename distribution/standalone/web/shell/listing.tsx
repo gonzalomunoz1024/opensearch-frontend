@@ -68,7 +68,7 @@ export function Listing({
         services.savedObjects
           .find<ListedAttributes>({
             type: typeKey.split(','),
-            search: search.trim() || undefined,
+            search: search.trim() ? `${search.trim().replace(/\*+$/, '')}*` : undefined,
             searchFields: ['title^3', 'description'],
             fields: fieldKey.split(','),
             perPage: limit,
