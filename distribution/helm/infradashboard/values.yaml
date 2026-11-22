@@ -17,12 +17,17 @@ serviceAccount:
   name: ""
   annotations: {}
 
-# the image runs as uid and gid 1000, like the OpenSearch Dashboards image
+# No user or group is named here, so the default install is admitted under OpenShift's restricted
+# policy (restricted-v2), which gives each pod a uid from the namespace's own range and refuses a
+# pod that asks for another. The server runs as whichever non-root user it is given: every file of
+# the image can be read by any user, and it writes only to the two emptyDir volumes the chart
+# mounts (data and /tmp). Without a uid from the cluster it runs as the image's own user, uid and
+# gid 1000, like the OpenSearch Dashboards image. Where a cluster's policy wants them named, add
+#   runAsUser: 1000
+#   runAsGroup: 1000
+#   fsGroup: 1000
 podSecurityContext:
   runAsNonRoot: true
-  runAsUser: 1000
-  runAsGroup: 1000
-  fsGroup: 1000
   seccompProfile:
     type: RuntimeDefault
 containerSecurityContext:
@@ -69,13 +74,6 @@ opensearch:
 #       - { name: KEYSTORE_PASSWORD, secretName: infradashboard, key: keystore-password }
 # A setting of the security plugin (opensearch_security.*) fails the render: the image has no
 # security plugin, and its server stops at start on a setting it does not know.
-config: {}
-
-secrets:
-#     env:
-#       - { name: COOKIE_PASSWORD, secretName: infradashboard, key: cookie-password }
-# With more than one replica set that cookie password, so a session one pod started is read by
-# the others.
 config: {}
 
 secrets:

@@ -2,7 +2,7 @@ apiVersion: v2
 name: infradashboard
 description: InfraDashboard on Kubernetes - the web app and its server, in front of an OpenSearch cluster that runs elsewhere.
 type: application
-version: 0.2.0
+version: 0.2.1
 appVersion: "3.9.0"
 keywords:
   - opensearch

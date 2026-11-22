@@ -198,6 +198,14 @@ The chart follows the conventions of the Atlas platform chart: secrets are only 
 name, the pod runs as non-root with a read-only root filesystem, and `values.yaml` documents each
 setting. A setting that looks like a secret in `config` fails the render.
 
+The default install asks for nothing a namespace's own rights do not give, so it is admitted under
+OpenShift's restricted policy (`restricted-v2`) without help from a cluster administrator: no
+user, group or `fsGroup` is named, no capability is kept, and nothing on a node is touched.
+OpenShift then runs the pod as a uid from the namespace's range in group 0, and the server is
+fine with that: every file of the image can be read by any user, and it writes only to the two
+`emptyDir` volumes the chart mounts. On a cluster whose policy wants the user named, set
+`podSecurityContext.runAsUser`, `runAsGroup` and `fsGroup` to 1000.
+
 ## Checking a running instance
 
 ```bash
