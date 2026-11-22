@@ -1,0 +1,126 @@
+{{- $os := .Values.opensearch -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "infradashboard.fullname" . }}
+  labels:
+    {{- include "infradashboard.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      {{- include "infradashboard.selector" . | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  template:
+    metadata:
+      labels:
+        {{- include "infradashboard.labels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include "infradashboard.config" . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "infradashboard.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- range . }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: dashboards
+          image: {{ include "infradashboard.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - { name: http, containerPort: 5601, protocol: TCP }
+          env:
+            - name: NODE_OPTIONS
+              value: {{ .Values.nodeOptions | quote }}
+            {{- if $os.credentialsSecret.name }}
+            - name: OPENSEARCH_USERNAME
+              valueFrom:
+                secretKeyRef: { name: {{ $os.credentialsSecret.name | quote }}, key: {{ $os.credentialsSecret.usernameKey | quote }} }
+            - name: OPENSEARCH_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: {{ $os.credentialsSecret.name | quote }}, key: {{ $os.credentialsSecret.passwordKey | quote }} }
+            {{- end }}
+            {{- range .Values.secrets.env }}
+            - name: {{ .name }}
+              valueFrom:
+                secretKeyRef: { name: {{ .secretName | quote }}, key: {{ .key | quote }} }
+            {{- end }}
+            {{- with .Values.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.secrets.envFrom }}
+          envFrom:
+            {{- range . }}
+            - secretRef: { name: {{ . | quote }} }
+            {{- end }}
+          {{- end }}
+          # The status API answers only a signed-in user once the security plugin is on, so the
+          # probes check that the server listens.
+          startupProbe:
+            tcpSocket: { port: http }
+            periodSeconds: 5
+            failureThreshold: 60
+          livenessProbe:
+            tcpSocket: { port: http }
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket: { port: http }
+            periodSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /usr/share/opensearch-dashboards/config/opensearch_dashboards.yml
+              subPath: opensearch_dashboards.yml
+              readOnly: true
+            - { name: data, mountPath: /usr/share/opensearch-dashboards/data }
+            - { name: tmp, mountPath: /tmp }
+            {{- if $os.caSecret.name }}
+            - { name: opensearch-ca, mountPath: /etc/infradashboard/opensearch-ca, readOnly: true }
+            {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "infradashboard.fullname" . }}
+        - name: data
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        {{- if $os.caSecret.name }}
+        - name: opensearch-ca
+          secret:
+            secretName: {{ $os.caSecret.name | quote }}
+            items:
+              - { key: {{ $os.caSecret.key | quote }}, path: ca.crt }
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -6,6 +6,31 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 OpenSearch Dashboards is a browser-based data visualization and exploration tool for OpenSearch. It is a large-scale Node.js + React monorepo with a plugin-based architecture. The project was forked from Kibana and adapted for the OpenSearch ecosystem.
 
+## This Repository Is a Fork
+
+This is **InfraDashboard**, a fork of OpenSearch Dashboards 3.9.0 (`main` started at the upstream tag `3.9.0`) that gives the product the Atlas design while keeping its behaviour, its server and its saved objects. Everything below about OpenSearch Dashboards still applies. On top of it:
+
+- **Keep the fork thin.** New files of ours go under `distribution/` (build, image, Helm chart, name and logo). A change to an upstream file must be as small as possible and listed in `distribution/UPSTREAM.md`; prefer an extension point (a setting, a registry, a theme, a plugin) over an edit.
+- **Behaviour must not change.** The goal is the same functionality with a different look. Existing dashboards, sign-in and APIs keep working as in OpenSearch Dashboards 3.9.0.
+- **Name, colours and logos** come from `distribution/branding/brand.json`. Regenerate assets with `node distribution/branding/render_assets.js --png`; never hand-edit the files under `src/core/server/core_app/assets`.
+- **Plugins** are pinned in `distribution/plugins.json` and fetched into the git-ignored `plugins/` at build time. Do not leave a fetched plugin there while `yarn start` runs.
+- **Design language**: the Atlas kit lives in `gonzalomunoz1024/infrastructure-automation` (`packages/ui`, `docs/design-language.md`). Use its tokens; do not invent colours, radii or type sizes.
+- Files under `distribution/` start with `/* SPDX-License-Identifier: Apache-2.0 */` (ESLint enforces it); upstream files keep their headers.
+
+```bash
+# OpenSearch 3.9.0 for development (no security plugin), then the source against it
+docker compose -f distribution/docker/dev/docker-compose.yml up -d
+yarn start --config distribution/config/dev.yml
+
+# Build what ships: platform, the 16 pinned plugins, the assembled tarball
+distribution/scripts/build.sh all
+
+# Check a running instance (add --no-security --core-only for `yarn start`)
+node distribution/scripts/smoke_test.js
+```
+
+CI: `.github/workflows/distribution.yml` builds and smoke-tests the distribution; upstream's `build_and_test_workflow.yml` and `cypress_workflow.yml` run on every pull request, with their tests unchanged.
+
 ## Common Commands
 
 ```bash

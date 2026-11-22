@@ -1,0 +1,62 @@
+# InfraDashboard and an OpenSearch 3.9.0 to try it against, with the security plugin on, so
+# sign-in, roles and tenants behave as in a real deployment.
+#
+#   distribution/scripts/build.sh all        # or download the tarball a CI run built into target/
+#   export OPENSEARCH_INITIAL_ADMIN_PASSWORD='<a strong password>'
+#   docker compose -f distribution/docker/docker-compose.yml up --build
+#
+# Then open http://localhost:5601 and sign in as admin with that password.
+name: infradashboard
+
+services:
+  opensearch:
+    image: opensearchproject/opensearch:3.9.0
+    environment:
+      discovery.type: single-node
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: ${OPENSEARCH_INITIAL_ADMIN_PASSWORD:?Set OPENSEARCH_INITIAL_ADMIN_PASSWORD to a strong password}
+      OPENSEARCH_JAVA_OPTS: -Xms1g -Xmx1g
+    ulimits:
+      nofile: { soft: 65536, hard: 65536 }
+    ports:
+      - '9200:9200'
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsk -u "admin:$$OPENSEARCH_INITIAL_ADMIN_PASSWORD" https://localhost:9200/_cluster/health || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  dashboards:
+    image: infradashboard:${VERSION:-3.9.0}
+    build:
+      context: .
+      additional_contexts:
+        dist: ../../target
+      args:
+        VERSION: ${VERSION:-3.9.0}
+    depends_on:
+      opensearch:
+        condition: service_healthy
+    environment:
+      # the same variables the OpenSearch Dashboards image reads
+      OPENSEARCH_HOSTS: '["https://opensearch:9200"]'
+    ports:
+      - '5601:5601'
+    healthcheck:
+      # With the security plugin on, the status endpoint answers 401 to a caller that has not
+      # signed in. Either answer means the server is up. The image has no curl, so Node.js asks.
+      test:
+        - CMD
+        - /usr/share/opensearch-dashboards/node/bin/node
+        - -e
+        - >-
+          require('http').get('http://localhost:5601/api/status',
+          (r) => process.exit(r.statusCode === 200 || r.statusCode === 401 ? 0 : 1))
+          .on('error', () => process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  opensearch-data:

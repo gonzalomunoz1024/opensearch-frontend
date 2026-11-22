@@ -22,6 +22,12 @@ const OSD_NEW_HEADER = `
  */
 `;
 
+// The distribution's own files (distribution/) are not contributions to OpenSearch Dashboards,
+// so they carry the licence line without the upstream copyright notice.
+const DISTRIBUTION_HEADER = `
+/* SPDX-License-Identifier: Apache-2.0 */
+`;
+
 const OSD_HEADER = `
 /*
  * SPDX-License-Identifier: Apache-2.0
@@ -178,6 +184,18 @@ module.exports = defineConfig([
             SAFER_LODASH_SET_LODASH_HEADER,
             SAFER_LODASH_SET_DEFINITELYTYPED_HEADER,
           ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['distribution/**/*.{js,mjs,ts,tsx}'],
+
+    rules: {
+      '@osd/eslint/require-license-header': [
+        'error',
+        {
+          licenses: [DISTRIBUTION_HEADER],
         },
       ],
     },

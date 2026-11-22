@@ -1,0 +1,112 @@
+# InfraDashboard on Kubernetes: the web app and the server behind it. OpenSearch runs elsewhere;
+# point at it below. Secrets are only referenced (names of existing Secrets): the chart never holds
+# a value.
+
+image:
+  # prefix for a repository given as a bare name, like registry.example.com/platform
+  registry: ""
+  repository: infradashboard
+  tag: ""                        # the chart's appVersion when empty
+  pullPolicy: IfNotPresent
+
+# names of existing docker-registry Secrets
+imagePullSecrets: []
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# the image runs as uid and gid 1000, like the OpenSearch Dashboards image
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+replicas: 2
+
+# ------------------------------------------------------------------ the OpenSearch it talks to
+
+opensearch:
+  hosts:
+    - https://opensearch-cluster-master:9200
+  # An existing Secret with the user the Dashboards server itself connects as (kibanaserver in a
+  # default security setup). People still sign in with their own accounts, as they do today.
+  credentialsSecret:
+    name: ""
+    usernameKey: username
+    passwordKey: password
+  # An existing Secret with the CA certificate that signed the cluster's HTTP certificates.
+  caSecret:
+    name: ""
+    key: ca.crt
+  # full, certificate or none. Keep full outside a sandbox.
+  sslVerificationMode: full
+
+# ------------------------------------------------------------------ settings
+
+# opensearch_dashboards.yml settings, merged over what the chart sets (the server's host and port,
+# the OpenSearch connection above, the security plugin's defaults of the OpenSearch Dashboards
+# image). Never put a secret here: write ${NAME} and give NAME a value from a Secret in secrets.env,
+# like
+#   config:
+#     opensearch_security.cookie.password: ${COOKIE_PASSWORD}
+#   secrets:
+#     env:
+#       - { name: COOKIE_PASSWORD, secretName: infradashboard, key: cookie-password }
+# With more than one replica set that cookie password, so a session one pod started is read by
+# the others.
+config: {}
+
+secrets:
+  # environment variables from keys of existing Secrets: { name, secretName, key }
+  env: []
+  # names of existing Secrets whose every key becomes an environment variable
+  envFrom: []
+
+# plain environment variables. The image maps the same variables as the OpenSearch Dashboards
+# image (OPENSEARCH_HOSTS, SERVER_BASEPATH and so on) to settings.
+env: []
+
+# --max-old-space-size and other Node.js options
+nodeOptions: "--max-old-space-size=1024"
+
+# ------------------------------------------------------------------ the workload
+
+resources:
+  requests: { cpu: 250m, memory: 1Gi }
+  limits: { memory: 2Gi }
+
+pdb:
+  minAvailable: 1
+
+service:
+  type: ClusterIP
+  port: 5601
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: dashboards.example.com
+      paths:
+        - { path: /, pathType: Prefix }
+  # - { secretName: dashboards-tls, hosts: [dashboards.example.com] }
+  tls: []
+
+podAnnotations: {}
+terminationGracePeriodSeconds: 30
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
