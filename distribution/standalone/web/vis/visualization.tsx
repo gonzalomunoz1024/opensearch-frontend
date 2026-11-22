@@ -24,6 +24,7 @@ import { fetchVisData, type VisData, type VisInput } from './request';
 import { TableVis } from './table_vis';
 import { TagCloudVis } from './tag_cloud_vis';
 import { splitTables, type VisRenderProps } from './types';
+import type { TsvbData, TsvbTableData } from './tsvb/data';
 import { TsvbVis } from './tsvb/vis';
 import { XYVis } from './xy_vis';
 import { waitTurn, type Turn } from './turns';
@@ -41,8 +42,8 @@ export interface VisualizationProps {
   /** Controls replace their own among the page's filters */
   onFiltersChange?: (filters: Filter[]) => void;
   onTimeChange?: (range: TimeRange) => void;
-  /** What Inspect shows: the requests made and the table drawn */
-  onData?: (data: { requests: RequestRecord[]; table?: Table }) => void;
+  /** What Inspect shows: the requests made and the table drawn; for TSVB, the data it drew */
+  onData?: (data: { requests: RequestRecord[]; table?: Table; tsvb?: TsvbData | TsvbTableData }) => void;
   /** This chart's place among the charts of the page, when the page keeps one */
   turn?: Turn;
 }

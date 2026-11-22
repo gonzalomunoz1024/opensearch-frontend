@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChartMessage, fitText, readableOn, useSize, type LegendPosition } from '../../charts/core';
 import { XYChart, type XYAxis, type XYSeries } from '../../charts/xy';
+import { Icon } from '../../components/icon';
 import { formatDate, scaledDateFormat, type TimeRange } from '../../lib/dates';
 import { Markdown } from '../../lib/markdown';
 import { renderTemplate } from '../../lib/template';
@@ -318,6 +319,15 @@ function PivotTable({ params, data }: { params: TsvbParams; data: TsvbTableData 
   );
 }
 
+function NoData() {
+  return (
+    <div className="visError visTsvbNoData" data-test-subj="noTSVBDataMessage">
+      <Icon name="visualize" />
+      <p>No data to display for the selected metrics</p>
+    </div>
+  );
+}
+
 const PANELS: Record<string, (props: { params: TsvbParams; data: TsvbData; onTimeChange?: (range: TimeRange) => void }) => ReactNode> = {
   timeseries: (props) => <TimeSeries {...props} />,
   metric: (props) => <Metric {...props} />,
@@ -337,7 +347,7 @@ export function TsvbVis({
   input: VisInput;
   tick?: number;
   onTimeChange?: (range: TimeRange) => void;
-  onData?: (data: { requests: RequestRecord[] }) => void;
+  onData?: (data: { requests: RequestRecord[]; tsvb?: TsvbData | TsvbTableData }) => void;
 }) {
   const params = vis.params as TsvbParams;
   const kind = params.type ?? 'timeseries';
@@ -349,6 +359,11 @@ export function TsvbVis({
 
   const key = JSON.stringify([params, input]);
   useEffect(() => {
+    // While its editor holds an interval OpenSearch would refuse, the panel is not asked for
+    if (params.isModelInvalid) {
+      setLoading(false);
+      return undefined;
+    }
     const controller = new AbortController();
     setLoading(true);
     const work =
@@ -360,7 +375,7 @@ export function TsvbVis({
         setData(answer);
         setError(undefined);
         setLoading(false);
-        report.current?.({ requests: answer.requests });
+        report.current?.({ requests: answer.requests, tsvb: 'series' in answer ? answer.series : answer.table });
       })
       .catch((failure) => {
         if ((failure as Error).name === 'AbortError') return;
@@ -372,7 +387,8 @@ export function TsvbVis({
   }, [key, tick]);
 
   let body: ReactNode = null;
-  if (error) {
+  if (params.isModelInvalid) body = <NoData />;
+  else if (error) {
     body = (
       <div className="visError" role="alert" data-test-subj="visError">
         <strong>This visualization could not be drawn</strong>
@@ -380,7 +396,9 @@ export function TsvbVis({
       </div>
     );
   } else if (data && data.kind === kind) {
-    if (kind === 'table' && data.table) body = <PivotTable params={params} data={data.table} />;
+    // A panel none of whose series drew anything says so, whatever its kind
+    if (kind === 'table' ? !data.table?.rows.length : !data.series?.series.length) body = <NoData />;
+    else if (kind === 'table' && data.table) body = <PivotTable params={params} data={data.table} />;
     else if (data.series && PANELS[kind]) body = PANELS[kind]({ params, data: data.series, onTimeChange });
     else body = <ChartMessage>This kind of TSVB panel is not drawn by this build.</ChartMessage>;
   }

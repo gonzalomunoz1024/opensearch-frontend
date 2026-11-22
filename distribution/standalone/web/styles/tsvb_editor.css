@@ -1,0 +1,377 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/* The editor of a TSVB visualization: the kinds of panel, the chart, the bar that applies the
+   changes and the panel's settings under it, laid out as the product lays them out. Class
+   prefix: tvb. */
+
+.vzePage.vzePage--tsvb {
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  gap: 0;
+}
+
+.vzePage--tsvb .shlSearchBar {
+  padding: var(--space-2);
+}
+
+.tvbEditor {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* --- Tabs ------------------------------------------------------------------------------------ */
+
+.tvbTabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--space-1);
+  overflow-x: auto;
+}
+
+.tvbTab {
+  padding: var(--space-1) 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 21px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tvbTab:hover {
+  color: var(--color-text-primary);
+}
+
+.tvbTab[aria-selected="true"] {
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+}
+
+/* --- The chart and the bar under it ---------------------------------------------------------- */
+
+.tvbEditorVisualization {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 300px;
+  background: var(--color-surface);
+}
+
+.tvbEditorVisualization > .visRoot {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.tvbEditorVisualization__apply {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  min-height: 34px;
+  padding: var(--space-2);
+}
+
+.tvbEditorVisualization__auto {
+  flex: 1 1 auto;
+}
+
+.tvbEditorVisualization__auto .atlSwitch {
+  gap: var(--space-2);
+  font-size: var(--font-size-s);
+}
+
+.tvbEditorVisualization__auto .atlSwitch__track {
+  width: 28px;
+  height: 16px;
+  border-radius: 8px;
+}
+
+.tvbEditorVisualization__auto .atlSwitch__track::after {
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+}
+
+.tvbEditorVisualization__auto .atlSwitch__track[aria-checked="true"] {
+  background: var(--color-accent);
+}
+
+.tvbEditorVisualization__auto .atlSwitch__track[aria-checked="true"]::after {
+  transform: translateX(12px);
+}
+
+.tvbEditorVisualization__draghandle {
+  display: block;
+  width: 100%;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  background: var(--color-surface);
+  cursor: row-resize;
+}
+
+.tvbEditorVisualization__draghandle:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+/* --- Text ------------------------------------------------------------------------------------ */
+
+.tvbText {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  line-height: 1.5;
+}
+
+.tvbText--xs {
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.index-pattern .tvbText--xs {
+  white-space: normal;
+}
+
+.tvbText--subdued {
+  color: var(--color-text-secondary);
+}
+
+.tvbCode {
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--color-surface-secondary);
+  font-family: var(--font-family-code);
+  font-size: 11px;
+}
+
+/* --- The panel's settings ----------------------------------------------------------------------- */
+
+.tvbPanelConfig__container {
+  padding: var(--space-4);
+}
+
+.tvbOptions {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.tvbOptions__title {
+  margin: 0;
+  font-size: var(--font-size-l);
+  font-weight: var(--font-weight-semibold);
+  line-height: 22px;
+}
+
+.tvbTitle--xxs {
+  margin: 0;
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+.tvbRule {
+  height: 1px;
+  margin: var(--space-6) 0;
+  border: 0;
+  background: var(--color-border-light);
+}
+
+.tvbRule--s {
+  margin: var(--space-2) 0;
+}
+
+.tvbSpacer--xs {
+  height: var(--space-1);
+}
+
+.tvbSpacer--s {
+  height: var(--space-2);
+}
+
+.tvbSpacer--m {
+  height: var(--space-4);
+}
+
+.tvbSpacer--l {
+  height: var(--space-6);
+}
+
+/* Rows of fields: items share the room, or take only what they need */
+.tvbRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-6);
+}
+
+.tvbRow + .tvbRow {
+  margin-top: var(--space-3);
+}
+
+.tvbRow--m {
+  gap: var(--space-4);
+}
+
+.tvbRow--s {
+  gap: var(--space-2);
+}
+
+.tvbRow--center {
+  align-items: center;
+}
+
+.tvbItem {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.tvbItem--fixed {
+  flex: 0 0 auto;
+}
+
+.tvbField {
+  display: flex;
+  flex-direction: column;
+  max-width: 400px;
+}
+
+.tvbField--full {
+  max-width: none;
+}
+
+.tvbLabel {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 18px;
+}
+
+.tvbField > .tvbLabel {
+  margin-bottom: var(--space-1);
+}
+
+.tvbLabel--invalid {
+  color: var(--color-critical-text);
+}
+
+.tvbField__help,
+.tvbField__error {
+  padding-top: var(--space-1);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+.tvbField__error {
+  color: var(--color-critical-text);
+}
+
+.tvbInput.atlField {
+  padding: 0 var(--space-2);
+}
+
+.tvbInput:disabled,
+.tvbField .atlCombo--disabled {
+  opacity: 0.6;
+}
+
+.tvbYesNo {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 1em;
+  white-space: nowrap;
+}
+
+.tvbYesNo .atlRadio {
+  min-height: 24px;
+}
+
+.tvbYesNo--disabled {
+  color: var(--color-text-tertiary);
+  cursor: not-allowed;
+}
+
+.tvbQueryBar {
+  display: flex;
+}
+
+.tvbQueryBar .shlQuery {
+  flex: 1 1 auto;
+}
+
+/* --- Colours ----------------------------------------------------------------------------------------- */
+
+/* As tall as the product's swatch with its anchor, so that a row of colours keeps its height */
+.tvbColorPicker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 25px;
+}
+
+.tvbColorPicker__clear {
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: none;
+  color: var(--color-critical);
+  cursor: pointer;
+}
+
+.tvbColorPicker__clear .atlIcon {
+  width: 12px;
+  height: 12px;
+}
+
+/* A rule is a group of small gutters with room of its own around it: the gutter and the padding
+   make 12px, and the rules stand 4px apart */
+.tvbColorRules__rule {
+  margin: calc(var(--space-1) * -1) calc(var(--space-1) * -1) var(--space-2);
+  padding: var(--space-3);
+  background: var(--color-surface-secondary);
+}
+
+/* --- Buttons of a row ------------------------------------------------------------------------------ */
+
+.tvbAddDelete {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.tvbIconButton.atlButton {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: var(--color-accent);
+}
+
+.tvbIconButton--danger.atlButton {
+  color: var(--color-critical);
+}
+
+@media (max-width: 767px) {
+  .tvbRow {
+    flex-wrap: wrap;
+  }
+
+  .tvbRow > .tvbItem {
+    flex-basis: 100%;
+  }
+
+  .tvbRow--center > .tvbItem,
+  .tvbRow--s > .tvbItem {
+    flex-basis: auto;
+  }
+}

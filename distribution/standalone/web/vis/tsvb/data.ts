@@ -144,6 +144,8 @@ export interface TsvbParams {
   pivot_type?: string;
   drilldown_url?: string;
   annotations?: TsvbAnnotation[];
+  /** Set by the editor while one of its intervals is not valid */
+  isModelInvalid?: boolean;
 }
 
 export interface TsvbSeriesData {

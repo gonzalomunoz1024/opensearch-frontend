@@ -40,6 +40,15 @@
   overflow-wrap: anywhere;
 }
 
+.visTsvbNoData {
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+}
+
+.visTsvbNoData p {
+  margin: 0;
+}
+
 /* A chart split into several */
 
 .visSplit {
