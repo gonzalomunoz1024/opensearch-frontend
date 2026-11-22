@@ -31,7 +31,7 @@ import type { Logger } from './logger';
 import { OpenSearchClient, OpenSearchError, OpenSearchUnavailableError } from './opensearch';
 import { SavedObjectsRepository, type FindOptions } from './saved_objects';
 import { registerSqlConsole } from './sql_console';
-import { CONTENT_SECURITY_POLICY, readBuild, renderPage, serveStatic } from './static';
+import { contentSecurityPolicy, readBuild, renderPage, serveStatic } from './static';
 import { UiSettings } from './ui_settings';
 
 export const PRODUCT_NAME = 'InfraDashboard';
@@ -397,7 +397,7 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
     return {
       headers: {
         'content-type': 'text/html; charset=utf-8',
-        'content-security-policy': CONTENT_SECURITY_POLICY,
+        'content-security-policy': contentSecurityPolicy(config.map),
         'cache-control': 'no-store',
       },
       body: renderPage({
