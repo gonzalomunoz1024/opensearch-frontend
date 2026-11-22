@@ -119,6 +119,7 @@ export function createServices(boot: BootData): Services {
       queryStringOptions: uiSettings.get<Record<string, unknown>>('query:queryString:options', {}),
       dateFormatTZ: timeZone(),
       ignoreFilterIfFieldNotInIndex: uiSettings.get('courier:ignoreFilterIfFieldNotInIndex', false),
+      allowLeadingWildcards: uiSettings.get('query:allowLeadingWildcards', true),
     }),
     timeZone,
     weekStart: () => Math.max(0, DAYS.indexOf(uiSettings.get('dateFormat:dow', 'Sunday'))),

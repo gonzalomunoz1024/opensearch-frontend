@@ -13,6 +13,26 @@ export class HttpFetchError extends Error {
   }
 }
 
+const BIG = '\u0000bigint:';
+
+/**
+ * JSON with whole numbers too long for JavaScript (BigInt, as DQL reads them) written out in full,
+ * as OpenSearch Dashboards sends them with data:withLongNumerals
+ */
+export function stringifyJson(value: unknown, space?: number): string {
+  let big = false;
+  const text = JSON.stringify(
+    value,
+    (_key, item: unknown) => {
+      if (typeof item !== 'bigint') return item;
+      big = true;
+      return `${BIG}${item.toString()}\u0000`;
+    },
+    space
+  );
+  return big ? text.replace(/"\\u0000bigint:(-?\d+)\\u0000"/g, '$1') : text;
+}
+
 export interface FetchOptions {
   method?: string;
   query?: Record<string, string | number | boolean | string[] | undefined>;
@@ -45,7 +65,7 @@ export class Http {
       body = options.body;
       if (typeof options.body === 'string') headers['content-type'] ??= 'application/json';
     } else if (options.body !== undefined) {
-      body = JSON.stringify(options.body);
+      body = stringifyJson(options.body);
       headers['content-type'] ??= 'application/json';
     }
 

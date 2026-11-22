@@ -10,6 +10,7 @@ import { DataTable } from '../components/table';
 import type { Table } from '../lib/aggs';
 import { toCsv } from '../lib/docs';
 import { services } from '../services';
+import { stringifyJson } from '../services/http';
 import { totalOf, type RequestRecord, type SearchResponse } from '../services/search';
 import { VegaDebugView, type VegaDebugValues } from '../vis/vega/debug_view';
 
@@ -82,7 +83,7 @@ function RequestsView({ requests }: { requests: RequestRecord[] }) {
   const [tab, setTab] = useState('statistics');
   const request = requests[Math.min(selected, requests.length - 1)];
   const response = request?.response as SearchResponse | undefined;
-  const body = useMemo(() => JSON.stringify(request?.body ?? {}, null, 2), [request]);
+  const body = useMemo(() => stringifyJson(request?.body ?? {}, 2), [request]);
   const answer = useMemo(() => JSON.stringify(request?.response ?? {}, null, 2), [request]);
   if (!request) return <EmptyPrompt title="No requests logged">The element has not logged any requests yet.</EmptyPrompt>;
   const text = tab === 'request' ? body : answer;

@@ -18,6 +18,8 @@ export interface QueryConfig {
   dateFormatTZ?: string;
   /** The setting courier:ignoreFilterIfFieldNotInIndex */
   ignoreFilterIfFieldNotInIndex?: boolean;
+  /** The setting query:allowLeadingWildcards: true unless it says otherwise */
+  allowLeadingWildcards?: boolean;
 }
 
 export interface BoolQuery {
@@ -93,21 +95,20 @@ export function buildQuery(
       if (query.query && Object.keys(query.query).length) bool.must.push(query.query);
       continue;
     }
-    const text = query.query.trim();
+    const text = query.query;
     if (query.language === 'lucene') {
-      bool.must.push(
-        text === ''
-          ? { match_all: {} }
-          : {
-              query_string: {
-                query: text,
-                ...(config.queryStringOptions ?? { analyze_wildcard: true }),
-                ...(config.dateFormatTZ ? { time_zone: config.dateFormatTZ } : {}),
-              },
-            }
-      );
-    } else if (text !== '') {
-      bool.filter.push(kueryToDsl(parseKuery(text), indexPattern, { dateFormatTZ: config.dateFormatTZ }));
+      if (text.trim() === '') {
+        bool.must.push({ match_all: {} });
+      } else {
+        // the options of query:queryString:options, and the time zone unless they name one
+        const queryString: Dsl = { query: text, ...(config.queryStringOptions ?? { analyze_wildcard: true }) };
+        if (config.dateFormatTZ && queryString.time_zone === undefined) queryString.time_zone = config.dateFormatTZ;
+        bool.must.push({ query_string: queryString });
+      }
+    } else if (query.language === 'kuery') {
+      // DQL as typed, an empty query too: it asks for everything, as in OpenSearch Dashboards
+      const node = parseKuery(text, { allowLeadingWildcards: config.allowLeadingWildcards ?? true });
+      bool.filter.push(kueryToDsl(node, indexPattern, { dateFormatTZ: config.dateFormatTZ }));
     }
   }
 
