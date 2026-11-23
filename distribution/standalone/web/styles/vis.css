@@ -86,15 +86,15 @@
 }
 
 /*
- * The frame the product draws a TSVB markdown panel and a failed panel in: the visualization's
- * padding, then a transparent border that leaves the panel's background colour inside it
+ * The frame the product draws a TSVB panel in: a transparent border that leaves the panel's
+ * background colour inside it. The visualization's padding of 8 px around it is its container's,
+ * as a dashboard panel's body keeps it; the TSVB editor, whose chart has none, gives it a margin.
  */
 .visTsvbFrame {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
-  margin: var(--space-2);
   border: var(--space-2) solid transparent;
 }
 
@@ -602,7 +602,6 @@
   align-items: stretch;
   justify-content: space-around;
   min-height: 0;
-  margin: var(--space-2);
   overflow: auto;
 }
 
@@ -629,13 +628,17 @@
   --vis-tsvb-table-line: #343741;
 }
 
-/* What scrolls it in a panel: the visualization, with its 8 px of padding inside what scrolls */
+/*
+ * What scrolls it in a panel: the visualization, with its 8 px of padding inside what scrolls. The
+ * panel's body keeps that padding around it, so the scroller spans it and takes it inside.
+ */
 .visTsvbTable {
   display: flex;
   flex: 1 1 100%;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  margin: calc(-1 * var(--space-2));
   padding: var(--space-2);
   overflow: auto;
 }

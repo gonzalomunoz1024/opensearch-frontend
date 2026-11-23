@@ -67,10 +67,16 @@
   min-height: 0;
 }
 
-/* In the editor a table scrolls inside the visualization's padding, not with it, as the product's
-   chart container does outside a dashboard */
-.tvbEditorVisualization .visTsvbTable {
+/* The chart keeps no padding of its own here, so a panel takes the visualization's 8 px as a
+   margin; a table scrolls inside them, not with them, as the product's chart container does
+   outside a dashboard */
+.tvbEditorVisualization > .visRoot > .visTsvbFrame,
+.tvbEditorVisualization > .visRoot > .visTsvbSplit,
+.tvbEditorVisualization > .visRoot > .visTsvbTable {
   margin: var(--space-2);
+}
+
+.tvbEditorVisualization > .visRoot > .visTsvbTable {
   padding: 0;
 }
 
