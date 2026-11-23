@@ -15,6 +15,7 @@ import { href, navigate, useUrlState } from '../../router';
 import { services } from '../../services';
 import { useBreadcrumbs } from '../../shell/state';
 import { FieldEditor } from './field_editor';
+import { MANAGEMENT_CRUMB, sectionCrumb } from './frame';
 import {
   fieldPath,
   filterOptions,
@@ -38,8 +39,8 @@ import { CreateIndexPatternWizard } from './index_pattern_wizard';
 import '../../styles/index_patterns.css';
 
 export const ROOT = '/app/management/opensearch-dashboards/indexPatterns';
-export const MANAGEMENT_CRUMB = { text: 'Dashboards Management', to: '/app/management' };
-export const LIST_CRUMB = { text: 'Index patterns', to: ROOT };
+export { MANAGEMENT_CRUMB };
+export const LIST_CRUMB = sectionCrumb('indexPatterns');
 
 const MAPPING_API = 'https://opensearch.org/docs/latest/opensearch/index-templates';
 const PAINLESS_DOCS = 'https://opensearch.org/docs/latest';
@@ -269,7 +270,7 @@ export function SelectBox({
 // --- The list ---------------------------------------------------------------------------------------
 
 function PatternList() {
-  useBreadcrumbs([MANAGEMENT_CRUMB, { text: 'Index patterns' }]);
+  useBreadcrumbs([MANAGEMENT_CRUMB, LIST_CRUMB]);
   const [items, setItems] = useState<PatternListItem[]>();
   const [search, setSearch] = useState('');
 
@@ -458,7 +459,11 @@ export function IndexHeader({
 
 function PatternPage({ id }: { id: string }) {
   const [pattern, changed] = usePattern(id);
-  useBreadcrumbs(pattern ? [MANAGEMENT_CRUMB, LIST_CRUMB, { text: patternName(pattern) }] : [MANAGEMENT_CRUMB, LIST_CRUMB]);
+  useBreadcrumbs(
+    pattern
+      ? [MANAGEMENT_CRUMB, LIST_CRUMB, { text: patternName(pattern), to: patternPath(pattern.id) }]
+      : [MANAGEMENT_CRUMB, LIST_CRUMB]
+  );
   if (!pattern) return null;
   return <PatternDetails pattern={pattern} changed={changed} />;
 }

@@ -4,8 +4,9 @@
  * The frame of Dashboards Management, as the original's management plugin draws it in the Atlas
  * theme (`management_app`, `management_sidebar_nav`, `landing`): its own side navigation, the
  * section "Dashboards Management" with its tip and a link for each of its applications, beside the
- * page; and the landing page. On the short addresses the original mounts a page alone, outside the
- * frame. Nothing here loads a style sheet, so that tests can draw it.
+ * page; the landing page; and the trail of the section's pages. On its short address,
+ * `/app/settings`, the original mounts advanced settings alone, outside the frame. Nothing here
+ * loads a style sheet, so that tests can draw it.
  */
 
 import { useId, useState } from 'react';
@@ -13,20 +14,25 @@ import { cx } from '../../components/basic';
 import { Icon } from '../../components/icon';
 import { Tooltip } from '../../components/overlay';
 import { href } from '../../router';
-import { useBreadcrumbs } from '../../shell/state';
+import { useBreadcrumbs, type Breadcrumb } from '../../shell/state';
 
 export const MANAGEMENT_ROOT = '/app/management';
 export const SECTION_ROOT = `${MANAGEMENT_ROOT}/opensearch-dashboards`;
 
 /**
- * The section's applications in the original's order, each with its short address. The original's
- * "Data sources", second, is left out: the product has no data sources.
+ * The section's applications in the original's order, advanced settings with its short address.
+ * The original's "Data sources", second, is left out: the product has no data sources. Its
+ * `/app/indexPatterns` and `/app/objects` exist only with the new navigation, which 3.9.0 has off.
  */
-export const SECTIONS = [
-  { id: 'indexPatterns', label: 'Index patterns', short: '/app/indexPatterns' },
-  { id: 'objects', label: 'Saved objects', short: '/app/objects' },
+export const SECTIONS: ReadonlyArray<{
+  readonly id: 'indexPatterns' | 'objects' | 'settings';
+  readonly label: string;
+  readonly short?: string;
+}> = [
+  { id: 'indexPatterns', label: 'Index patterns' },
+  { id: 'objects', label: 'Saved objects' },
   { id: 'settings', label: 'Advanced settings', short: '/app/settings' },
-] as const;
+];
 
 export type SectionId = (typeof SECTIONS)[number]['id'];
 
@@ -51,7 +57,9 @@ export function readManagementPath(pathname: string): ManagementPath {
     }
   };
   for (const section of SECTIONS) {
-    for (const root of [`${SECTION_ROOT}/${section.id}`, section.short]) {
+    const roots = [`${SECTION_ROOT}/${section.id}`];
+    if (section.short) roots.push(section.short);
+    for (const root of roots) {
       if (pathname === root || pathname.startsWith(`${root}/`)) {
         return {
           section: section.id,
@@ -69,6 +77,26 @@ const NAV_HEADING_ID = 'stack-management-nav-header';
 
 const SECTION_TITLE = 'Dashboards Management';
 const SECTION_TIP = 'Customize OpenSearch Dashboards and manage saved objects';
+
+/** The section's crumb, which the original links to the section's root with its last slash */
+export const MANAGEMENT_CRUMB: Breadcrumb = { text: SECTION_TITLE, to: `${MANAGEMENT_ROOT}/` };
+
+/**
+ * The crumb of an application of the section: the original links it to the application's root
+ * with its last slash (`…/indexPatterns/`), on the application's first page too
+ */
+export function sectionCrumb(section: SectionId): Breadcrumb {
+  const label = SECTIONS.find((item) => item.id === section)?.label ?? section;
+  return { text: label, to: `${sectionPath(section)}/` };
+}
+
+/**
+ * The trail of a page of the section, as the original's management app sets it: the section's
+ * crumb before the page's own, except on a short address, where the page stands alone
+ */
+export function managementTrail(pathname: string, crumbs: Breadcrumb[]): Breadcrumb[] {
+  return readManagementPath(pathname).alone ? crumbs : [MANAGEMENT_CRUMB, ...crumbs];
+}
 
 /**
  * The original's EuiSideNav: the section's heading, not a link, its name and the mark of its tip
@@ -141,7 +169,7 @@ export function ManagementNav({ selected }: { selected?: SectionId }) {
 /** The original's landing page: a panel in the middle, as wide as its text */
 export function ManagementLanding() {
   // The original's crumb leads to the section's root, the page itself
-  useBreadcrumbs([{ text: SECTION_TITLE, to: `${MANAGEMENT_ROOT}/` }]);
+  useBreadcrumbs([MANAGEMENT_CRUMB]);
   return (
     <div className="mgtLanding">
       <div className="mgtLanding__panel" data-test-subj="managementHome">

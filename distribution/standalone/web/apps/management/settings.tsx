@@ -13,9 +13,11 @@ import { Button, CallOut } from '../../components/basic';
 import { Icon } from '../../components/icon';
 import { Tooltip } from '../../components/overlay';
 import { executeQuery, parseQuery, QuerySyntaxError, type QueryClause } from '../../lib/search_query';
+import { useLocation } from '../../router';
 import { services } from '../../services';
 import { errorMessage } from '../../services/http';
 import { useBreadcrumbs } from '../../shell/state';
+import { managementTrail } from './frame';
 import { Field } from './settings_field';
 import {
   ariaName,
@@ -151,7 +153,7 @@ function BottomBar({
 }
 
 export function AdvancedSettings({ query = '' }: { query?: string }) {
-  useBreadcrumbs([{ text: 'Dashboards Management', to: '/app/management' }, { text: 'Advanced settings' }]);
+  useBreadcrumbs(managementTrail(useLocation().pathname, [{ text: 'Advanced settings' }]));
   const client = services.uiSettings;
   const version = useSyncExternalStore(client.subscribe, client.getVersion);
   const [status, setStatus] = useState<'loading' | 'ready' | 'failed'>('loading');
@@ -243,15 +245,23 @@ export function AdvancedSettings({ query = '' }: { query?: string }) {
       changes[name] = valueToSave(setting, change.value);
     }
     const saved = Object.keys(changes);
-    let failed: string[] = [];
     try {
-      try {
-        await client.setMany(changes);
-      } catch (failure) {
-        // Nothing is stored when the server refuses: every setting of the request stays unsaved
-        failed = saved;
-        services.toasts.danger('Unable to update UI setting', errorMessage(failure));
-      }
+      // As the original's page saves: each setting on its own, in the scope it is kept in. Its
+      // client sends the first alone and the others together once that one is answered, so the
+      // server refuses only the request that has a value it does not take. Each setting refused
+      // has a toast of its own, and only those stay unsaved.
+      const results = await Promise.all(
+        saved.map((key) =>
+          client.save(key, changes[key]).then(
+            () => true,
+            (failure: unknown) => {
+              services.toasts.danger('Unable to update UI setting', errorMessage(failure));
+              return false;
+            }
+          )
+        )
+      );
+      const failed = saved.filter((_key, index) => !results[index]);
       const failedSet = new Set(failed);
       setUnsaved((current) => {
         const remaining: Record<string, FieldState> = {};

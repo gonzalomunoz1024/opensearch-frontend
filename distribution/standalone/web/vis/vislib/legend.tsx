@@ -25,6 +25,23 @@ export const LEGEND_COLORS = [
 
 export type LegendPosition = 'top' | 'bottom' | 'left' | 'right';
 
+/** The series pointed at in a chart or its legend, by its name */
+export interface Hover {
+  label?: string;
+  /** Once a series has been pointed at, the marks keep the opacity it left them */
+  touched: boolean;
+}
+
+/**
+ * The series pointed at after the pointer goes to a series' name, or away (undefined). A series
+ * without a name, an empty term, lights nothing up, as vislib's highlight returns at an empty
+ * data-label; going away gives every mark its opacity all the same, as its unHighlight does
+ */
+export function hoverAfter(current: Hover, label: string | undefined): Hover {
+  if (label === '') return current;
+  return label === undefined ? { touched: true } : { label, touched: true };
+}
+
 /** The side the popover of a name opens to, from the side the legend is on: below it when the chart says none */
 const anchorOf = (position: LegendPosition | undefined) =>
   position === 'bottom' ? 'upCenter' : position === 'left' ? 'rightUp' : position === 'right' ? 'leftUp' : 'downCenter';
@@ -141,6 +158,11 @@ export function VisLegend({
   const anchors = useRef(new Map<string, HTMLDivElement>());
   const side = anchorOf(position);
   const select = (label: string | undefined) => setSelected((current) => (current === label ? undefined : label));
+  // A filter or a colour chosen closes the popover, as the original's legend is drawn anew after either
+  const chosen = (choose: () => void) => {
+    setSelected(undefined);
+    choose();
+  };
   // Escape on a name closes its popover
   const onNameKey = (event: KeyboardEvent) => {
     if (event.key === 'Escape') {
@@ -215,7 +237,7 @@ export function VisLegend({
                               aria-label={`Filter for value ${label}`}
                               title={`Filter for value ${label}`}
                               data-test-subj={`legend-${label}-filterIn`}
-                              onClick={() => onFilter?.(label, false)}
+                              onClick={() => chosen(() => onFilter?.(label, false))}
                             >
                               <Icon name="plusCircle" />
                             </button>
@@ -225,7 +247,7 @@ export function VisLegend({
                               aria-label={`Filter out value ${label}`}
                               title={`Filter out value ${label}`}
                               data-test-subj={`legend-${label}-filterOut`}
-                              onClick={() => onFilter?.(label, true)}
+                              onClick={() => chosen(() => onFilter?.(label, true))}
                             >
                               <Icon name="minusCircle" />
                             </button>
@@ -239,7 +261,7 @@ export function VisLegend({
                         </span>
                         {LEGEND_COLORS.map((choice) => {
                           const isSelected = choice === color;
-                          const pick = () => onColor?.(label, choice);
+                          const pick = () => chosen(() => onColor?.(label, choice));
                           return (
                             <LegendDot
                               key={choice}

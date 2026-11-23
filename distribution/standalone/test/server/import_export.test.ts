@@ -40,6 +40,43 @@ describe('export files', () => {
       sortObjects([dashboard, visualization, pattern]).map((entry) => entry.id),
       ['p', 'v', 'd']
     );
+    // By the references alone, not by a usual order of the types: here a visualization refers to
+    // a dashboard, and an index pattern to a search
+    const dash = object('dashboard', 'd2');
+    const vis = object('visualization', 'v2', [{ type: 'dashboard', id: 'd2' }]);
+    const search = object('search', 's2');
+    const odd = object('index-pattern', 'p2', [{ type: 'search', id: 's2' }]);
+    assert.deepEqual(
+      sortObjects([vis, odd, dash, search]).map((entry) => entry.id),
+      ['d2', 'v2', 's2', 'p2']
+    );
+    // Among objects of one type, and through several steps
+    const a = object('visualization', 'a', [{ type: 'visualization', id: 'b' }]);
+    const b = object('visualization', 'b', [{ type: 'visualization', id: 'c' }]);
+    const c = object('visualization', 'c');
+    assert.deepEqual(
+      sortObjects([a, c, b]).map((entry) => entry.id),
+      ['c', 'b', 'a']
+    );
+  });
+
+  it('keeps the order of the file where nothing refers to anything, and passes over what is not in it', () => {
+    const first = object('visualization', 'z', [{ type: 'index-pattern', id: 'not in the file' }]);
+    const second = object('index-pattern', 'a');
+    const third = object('dashboard', 'm', [{ type: 'visualization', id: 'z' }]);
+    assert.deepEqual(
+      sortObjects([first, second, third]).map((entry) => entry.id),
+      ['z', 'a', 'm']
+    );
+    // An object referred to twice is written once
+    const both = object('dashboard', 'n', [
+      { type: 'visualization', id: 'z' },
+      { type: 'visualization', id: 'z' },
+    ]);
+    assert.deepEqual(
+      sortObjects([both, third, first]).map((entry) => entry.id),
+      ['z', 'n', 'm']
+    );
   });
 
   it('refuses objects that refer to each other in a circle', () => {

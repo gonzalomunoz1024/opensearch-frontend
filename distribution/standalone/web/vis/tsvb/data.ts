@@ -364,6 +364,9 @@ const METRIC_NAMES: Record<string, string> = {
   sum_of_squares_bucket: 'Overall Sum of Sq.',
 };
 
+// The metrics named after the metric they are worked out from, as the product's calculateLabel names them
+const OF_METRIC = ['cumulative_sum', 'derivative', 'moving_average', 'avg_bucket', 'sum_bucket', 'min_bucket', 'max_bucket', 'std_deviation_bucket', 'variance_bucket', 'sum_of_squares_bucket', 'serial_diff', 'positive_only'];
+
 /** The name a series goes by when it was given none: its last metric, as TSVB words it */
 export function metricLabel(series: TsvbSeries, metric: TsvbMetric | undefined = series.metrics?.[series.metrics.length - 1]): string {
   if (!metric) return 'Unknown';
@@ -372,10 +375,15 @@ export function metricLabel(series: TsvbSeries, metric: TsvbMetric | undefined =
   if (metric.type === 'math') return 'Math';
   if (metric.type === 'series_agg') return `Series Agg (${String((metric as { function?: string }).function ?? 'sum')})`;
   if (metric.type === 'filter_ratio') return 'Filter Ratio';
+  if (metric.type === 'positive_rate') return `Positive Rate of ${metric.field ?? ''}`;
   if (metric.type === 'static') return `Static Value of ${String((metric as { value?: unknown }).value ?? '')}`;
   const name = METRIC_NAMES[metric.type ?? ''] ?? metric.type ?? 'Unknown';
-  const target = (series.metrics ?? []).find((other) => other.id === metric.field);
-  return `${name} of ${target ? metricLabel(series, target) : (metric.field ?? '')}`;
+  if (!OF_METRIC.includes(metric.type)) return `${name} of ${metric.field ?? ''}`;
+  // The metric it is worked out from, which a percentile's "<id>[50.0]" names by its id first
+  const field = metric.field ?? '';
+  const target = (series.metrics ?? []).find((other) => field.startsWith(other.id));
+  const percentile = target?.type === 'percentile' ? /\[([0-9.]+)\]$/.exec(field) : null;
+  return `${name} of ${target ? metricLabel(series, target) : 'Unknown'}${percentile ? ` (${percentile[1]})` : ''}`;
 }
 
 /**
@@ -604,7 +612,7 @@ function metricValues(
   buckets: TimeBucket[],
   computed: Map<string, Array<number | null>>,
   intervalMs: number,
-  all: Record<string, MathValue>
+  table: boolean
 ): Array<number | null> {
   const from = (id: string | undefined) => namedValues(id, buckets, computed);
   const numeric = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null);
@@ -661,7 +669,8 @@ function metricValues(
     case 'derivative':
     case 'positive_rate': {
       const source = metric.type === 'positive_rate' ? buckets.map((bucket) => numeric((bucket[`${metric.id}-max`] as { value?: number } | undefined)?.value)) : from(metric.field);
-      const unit = metric.unit ? parseInterval(metric.unit)?.ms : metric.type === 'positive_rate' ? UNIT_MS.s : undefined;
+      // Without a unit of its own, a rate is the change over a bucket, as the product asks for it
+      const unit = metric.unit ? parseInterval(metric.unit)?.ms : undefined;
       return source.map((value, index) => {
         const before = index > 0 ? source[index - 1] : null;
         if (value === null || before === null) return null;
@@ -723,15 +732,24 @@ function metricValues(
       const variables = metric.variables ?? [];
       // A script of the Bucket Script aggregation is arithmetic over params.*, which is what is worked out here
       const script = (metric.script ?? '').replace(/;\s*$/, '');
+      // Math as the product works it out: nothing without variables, `params._all` holding the
+      // values of each variable under its name, no value where a variable has none, and a script
+      // that cannot be worked out failing the panel (a table, whose Math the product never works
+      // out, has no value instead)
+      const math = metric.type === 'math';
+      if (math && variables.length === 0) return buckets.map(() => null);
+      const named = variables.flatMap((variable) => (variable.name ? [[variable.name, from(variable.field)] as const] : []));
+      const timestamps = buckets.map((bucket) => bucket.key);
+      const all: Record<string, MathValue> = Object.fromEntries(named.map(([name, values]) => [name, { values: values.map((value) => value ?? NaN), timestamps }]));
       return buckets.map((bucket, index) => {
+        if (math && named.some(([, values]) => values[index] === null || values[index] === undefined)) return null;
         const params: Record<string, MathValue> = { _index: index, _timestamp: bucket.key, _interval: intervalMs, _all: all };
-        for (const variable of variables) {
-          if (variable.name) params[variable.name] = from(variable.field)[index];
-        }
+        for (const [name, values] of named) params[name] = values[index];
         try {
           const value = evaluateMath(script, { params });
           return Number.isFinite(value) ? value : null;
-        } catch {
+        } catch (failure) {
+          if (math && !table) throw new MathScriptError(failure);
           return null;
         }
       });
@@ -761,12 +779,7 @@ export interface SeriesLine {
 export function seriesLines(series: TsvbSeries, buckets: TimeBucket[], intervalMs: number, table = false): SeriesLine[] {
   const metrics = series.metrics ?? [];
   const computed = new Map<string, Array<number | null>>();
-  const all: Record<string, MathValue> = {};
-  for (const metric of metrics) {
-    const values = metricValues(metric, buckets, computed, intervalMs, all);
-    computed.set(metric.id, values);
-    all[metric.id] = { values: values.map((value) => value ?? NaN), timestamps: buckets.map((bucket) => bucket.key) };
-  }
+  for (const metric of metrics) computed.set(metric.id, metricValues(metric, buckets, computed, intervalMs, table));
   const last = metrics[metrics.length - 1];
   const at = (key: string): TsvbPoint[] => buckets.map((bucket) => [bucket.key, last ? percentileAt(bucket, last.id, key) : null]);
   if (last?.type === 'percentile') {
@@ -822,6 +835,8 @@ interface Plan {
   range: AbsoluteRange;
   intervalMs: number;
   intervalExpression: string;
+  /** Whether the buckets follow the calendar, as the product asks for one unit of its own interval */
+  calendar: boolean;
   entireRange: boolean;
   dropLast: boolean;
 }
@@ -858,7 +873,7 @@ function histogram(plan: Plan, shift: number, inner: Dsl): Dsl {
   return {
     date_histogram: {
       field: plan.timeField,
-      fixed_interval: `${Math.max(1, Math.round(plan.intervalMs))}ms`,
+      ...(plan.calendar ? { calendar_interval: plan.intervalExpression } : { fixed_interval: `${Math.max(1, Math.round(plan.intervalMs))}ms` }),
       min_doc_count: 0,
       time_zone: services.timeZone() ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
       extended_bounds: { min: from, max: to },
@@ -878,6 +893,17 @@ export class TooMuchDataError extends Error {
   constructor() {
     super(TOO_MUCH_DATA);
     this.name = 'TooMuchDataError';
+  }
+}
+
+/**
+ * A Math aggregation whose script cannot be worked out: as in the product, which works Math out
+ * after its request, the failure of the panel's request, not of a search
+ */
+export class MathScriptError extends Error {
+  constructor(failure: unknown) {
+    super(failure instanceof Error ? failure.message : String(failure));
+    this.name = 'MathScriptError';
   }
 }
 
@@ -922,9 +948,14 @@ async function planFor(params: TsvbParams, series: TsvbSeries | undefined, input
   let intervalMs = auto.ms;
   let expression = auto.expression;
   const fixed = parseInterval(atLeast ? atLeast[1] : requested);
-  if (fixed && (!atLeast || fixed.ms > auto.ms)) {
+  // The panel's own interval holds when it is at least the automatic one; one minute, hour, day,
+  // week, month or year of it is a calendar interval (dateHistogramInterval), the automatic one
+  // never is
+  let calendar = false;
+  if (fixed && (!atLeast || fixed.ms >= auto.ms)) {
     intervalMs = fixed.ms;
     expression = fixed.expression;
+    calendar = !entireRange && /^1[mhdwMy]$/.test(expression);
   }
   if (entireRange) {
     intervalMs = Math.max(1, duration);
@@ -937,6 +968,7 @@ async function planFor(params: TsvbParams, series: TsvbSeries | undefined, input
     range,
     intervalMs,
     intervalExpression: expression,
+    calendar,
     entireRange,
     // The last bucket is still filling, so a line would dip at its end; the panel's choice holds,
     // or else the series' own
@@ -946,7 +978,8 @@ async function planFor(params: TsvbParams, series: TsvbSeries | undefined, input
 
 function finish(points: TsvbPoint[], plan: Plan, shift: number): TsvbPoint[] {
   let data = points.map(([time, ...values]): TsvbPoint => [time + shift, ...values]);
-  if (plan.dropLast && data.length > 1) data = data.slice(0, -1);
+  // Even an only bucket, as the product drops it
+  if (plan.dropLast) data = data.slice(0, -1);
   return data;
 }
 

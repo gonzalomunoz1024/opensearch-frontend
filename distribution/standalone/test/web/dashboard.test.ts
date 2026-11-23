@@ -1,23 +1,43 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
-import { cloneBase, cloneTitle, fullAppState, ownTime, sameQuery } from '../../web/apps/dashboard/app_state';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import {
+  cloneBase,
+  cloneTitle,
+  fullAppState,
+  marksDiffer,
+  openingMarks,
+  ownTime,
+  sameQuery,
+  viewedFromAddress,
+  type ChangeMarks,
+  type UrlAppState,
+} from '../../web/apps/dashboard/app_state';
 import {
   MIN_PANEL,
   cellUnder,
   compact,
+  createNewState,
+  dashboardBars,
   dashboardFromSavedObject,
   dashboardToSavedObject,
   editorStateFor,
   emptyDashboard,
   existingFilter,
   findPlace,
+  finderName,
   handedPanel,
   moveItem,
   newPanelIndex,
   offersInspector,
+  openedEmbedded,
   orderAsOriginal,
+  panelTitle,
+  panelTitleHidden,
   panelsDiffer,
   panelsFromUrl,
   panelsToUrl,
@@ -33,12 +53,17 @@ import {
   timeAsSaved,
   withHandedPanel,
   type Dashboard,
+  type DashboardBars,
   type GridItem,
   type PanelState,
 } from '../../web/apps/dashboard/model';
+import { DashboardGrid, NARROW_WINDOW, placeOf, WhenSeen } from '../../web/apps/dashboard/grid';
+import { PanelMenu } from '../../web/apps/dashboard/panel_menu';
+import { PanelTitle } from '../../web/apps/dashboard/panel_title';
 import { existsFilter, phraseFilter, uniqueFilters } from '../../web/lib/query';
-import type { Filter } from '../../web/lib/types';
+import type { Filter, Query } from '../../web/lib/types';
 import { decodeState, encodeState } from '../../web/lib/url';
+import { editorStateFor as newVisEditorState } from '../../web/apps/visualize/state_transfer';
 import { makeTurns, waitTurn } from '../../web/vis/turns';
 
 const at = (items: GridItem[], id: string) => {
@@ -214,6 +239,111 @@ describe('the grid of a dashboard', () => {
     const first = newPanelIndex();
     assert.match(first, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     assert.notEqual(newPanelIndex(), first);
+  });
+});
+
+// As the original's grid lays a dashboard out in a narrow window (_dashboard_grid.scss), measured
+// on its page at 560, 700, 740, 760 and 800 pixels
+describe('a dashboard in a narrow window', () => {
+  const layout: GridItem[] = [
+    { x: 24, y: 0, w: 24, h: 12, i: 'b' },
+    { x: 0, y: 0, w: 24, h: 12, i: 'a' },
+    { x: 0, y: 12, w: 48, h: 5, i: 'c' },
+  ];
+  // The grid drawn in a window that is narrow or not
+  const grid = (editing: boolean, narrowWindow: boolean) => {
+    const holder = globalThis as { window?: unknown };
+    holder.window = { matchMedia: (query: string) => ({ matches: narrowWindow && query === NARROW_WINDOW }) };
+    try {
+      return renderToStaticMarkup(
+        createElement(DashboardGrid, {
+          layout,
+          useMargins: true,
+          editing,
+          dashboardState: '',
+          onLayoutChange: () => undefined,
+          renderPanel: (item: GridItem) => createElement('i', null, item.i),
+        })
+      );
+    } finally {
+      delete holder.window;
+    }
+  };
+
+  it('stacks the panels below 768 pixels while it is looked at, in reading order, in the wrappers scripts find', () => {
+    assert.equal(NARROW_WINDOW, '(max-width: 767px)');
+    const stacked = grid(false, true);
+    assert.match(stacked, /dshGrid--stacked/);
+    assert.deepEqual(
+      [...stacked.matchAll(/data-test-subj="dashboardPanel"><i>(\w)<\/i>/g)].map((found) => found[1]),
+      ['a', 'b', 'c']
+    );
+  });
+
+  it('keeps the grid while it is edited, and in a wider window', () => {
+    assert.ok(!grid(true, true).includes('dshGrid--stacked'));
+    assert.ok(!grid(false, false).includes('dshGrid--stacked'));
+  });
+});
+
+// As the original's grid draws a panel (embeddable_child_panel.tsx): once it comes near the window,
+// its loading chart until then, measured on the demo dashboard of the logs, 7 of its 53 drawn
+describe('a panel far from the window', () => {
+  const drawn = (observing: boolean) => {
+    const holder = globalThis as { IntersectionObserver?: unknown };
+    if (observing) holder.IntersectionObserver = class {};
+    try {
+      return renderToStaticMarkup(createElement(WhenSeen, { id: 'a', children: createElement('i', null, 'the panel') }));
+    } finally {
+      delete holder.IntersectionObserver;
+    }
+  };
+
+  it('shows the loading chart in its place until it is seen', () => {
+    assert.equal(
+      drawn(true),
+      '<div class="dshWaiting"><span class="dshWaiting__chart">' +
+        '<span class="dshWaiting__bar"></span><span class="dshWaiting__bar"></span><span class="dshWaiting__bar"></span><span class="dshWaiting__bar"></span>' +
+        '</span></div>'
+    );
+  });
+
+  it('is drawn at once where nothing can tell where the window is', () => {
+    assert.equal(drawn(false), '<i>the panel</i>');
+  });
+});
+
+// As the original's grid (react-grid-layout without CSS transforms) writes its panels' places, read
+// on its page in a window 1400 pixels wide, where the browser puts its first panel at 7.984375 until
+// the grid is drawn again (a query submitted, Edit), and at 8 from then on
+describe("a panel's place on the grid", () => {
+  it('is first in hundredths of the grid across, to the last digit, and in pixels down, the margin around all', () => {
+    assert.deepEqual(placeOf({ x: 0, y: 0, w: 24, h: 12, i: 'a' }, 1400, 8, true), {
+      left: '0.5714285714285714%',
+      top: '8px',
+      width: '49.142857142857146%',
+      height: '328px',
+    });
+    assert.deepEqual(placeOf({ x: 24, y: 12, w: 24, h: 15, i: 'b' }, 1400, 8, true), {
+      left: '50.28571428571429%',
+      top: '344px',
+      width: '49.142857142857146%',
+      height: '412px',
+    });
+  });
+
+  it('is in pixels once the grid is drawn again', () => {
+    assert.deepEqual(placeOf({ x: 24, y: 0, w: 24, h: 12, i: 'b' }, 1400, 8, false), { left: '704px', top: '8px', width: '688px', height: '328px' });
+  });
+
+  it('spans the page without margins', () => {
+    assert.deepEqual(placeOf({ x: 24, y: 0, w: 24, h: 12, i: 'b' }, 1400, 0, true), { left: '50%', top: '0px', width: '50%', height: '240px' });
+  });
+
+  it('is where the panel in hand is, while one is moved or sized', () => {
+    const item = { x: 0, y: 0, w: 24, h: 12, i: 'a' };
+    assert.deepEqual(placeOf(item, 1400, 8, false, { left: 50.4, top: 20.6 }), { left: '50px', top: '21px', width: '688px', height: '328px' });
+    assert.deepEqual(placeOf(item, 1400, 8, false, { left: 8, top: 8, width: 700.2, height: 400.7 }).height, '401px');
   });
 });
 
@@ -437,6 +567,23 @@ describe('a dashboard saved in an older form', () => {
     // From 6.4 on they are among the settings already; what is beside them is not read
     assert.deepEqual(panels[3].embeddableConfig, {});
   });
+
+  it('reads a query kept from before queries had a language as Lucene, and saves it so', () => {
+    const open = (source: string) =>
+      dashboardFromSavedObject({ id: 'old', attributes: { title: 'Old', kibanaSavedObjectMeta: { searchSourceJSON: source } } });
+    const dsl = open('{"query":{"query_string":{"query":"customer_gender:MALE","analyze_wildcard":true}},"filter":[]}');
+    assert.deepEqual(dsl.query, { query: { query_string: { query: 'customer_gender:MALE', analyze_wildcard: true } }, language: 'lucene' });
+    // As the fork's build saves it again: the text, then the language
+    assert.equal(
+      dashboardToSavedObject(dsl).attributes.kibanaSavedObjectMeta?.searchSourceJSON,
+      '{"query":{"query":{"query_string":{"query":"customer_gender:MALE","analyze_wildcard":true}},"language":"lucene"},"filter":[]}'
+    );
+    assert.deepEqual(open('{"query":"customer_gender:MALE","filter":[]}').query, { query: 'customer_gender:MALE', language: 'lucene' });
+    // A query in a language the panels do not share gives way to an empty DQL query
+    assert.deepEqual(open('{"query":{"query":"source = logs","language":"PPL"},"filter":[]}').query, { query: '', language: 'kuery' });
+    assert.deepEqual(open('{"query":{"query":"a","language":"kuery"},"filter":[]}').query, { query: 'a', language: 'kuery' });
+    assert.equal(open('{"filter":[]}').query, undefined);
+  });
 });
 
 describe('a dashboard in the address', () => {
@@ -487,9 +634,40 @@ describe('a dashboard in the address', () => {
     assert.equal(fullAppState(emptyDashboard(), {}, [], query).viewMode, 'edit');
   });
 
+  it('shows the panels it carries while looked at, then leaves them out of it', () => {
+    const saved: Dashboard = { ...emptyDashboard(), id: 'mine', title: 'Mine', panels: [panel('a', 0, 0)] };
+    const query = { query: '', language: 'kuery' };
+    const given = [panel('b', 24, 0, { title: 'From the address' }), panel('a', 0, 0)];
+    const viewed: UrlAppState = { viewMode: 'view', panels: panelsToUrl(given) };
+    assert.deepEqual(viewedFromAddress(saved, viewed), given);
+    assert.deepEqual(viewedFromAddress(saved, { panels: panelsToUrl(given) }), given);
+    assert.equal(fullAppState(saved, viewed, given, query).panels, undefined);
+    // While it is edited they stay in the address, which is where the page reads them from
+    assert.equal(viewedFromAddress(saved, { ...viewed, viewMode: 'edit' }), undefined);
+    assert.equal(viewedFromAddress({ id: undefined }, { panels: panelsToUrl(given) }), undefined);
+    assert.equal(viewedFromAddress(saved, { viewMode: 'view' }), undefined);
+  });
+
   it('compares queries by their text and language', () => {
     assert.equal(sameQuery({ query: 'a', language: 'kuery' }, { language: 'kuery', query: 'a' }), true);
     assert.equal(sameQuery({ query: 'a', language: 'kuery' }, { query: 'a', language: 'lucene' }), false);
+    // A query of OpenSearch's DSL read back from the address, its keys sorted, is the one saved
+    const saved = { query: { query_string: { query: 'a', analyze_wildcard: true } }, language: 'lucene' };
+    assert.equal(sameQuery(decodeState<{ query: Query }>(encodeState({ query: saved })).query, saved), true);
+    assert.equal(sameQuery({ ...saved, query: { query_string: { query: 'b', analyze_wildcard: true } } }, saved), false);
+  });
+
+  it('takes a query from the address as the original does, one with no language as Lucene', () => {
+    const saved: Dashboard = { ...emptyDashboard(), id: 'mine', title: 'Mine' };
+    const query = { query: '', language: 'kuery' };
+    // As an address written before queries had a language carries it
+    const old = decodeState<UrlAppState>('(query:(query_string:(query:a)))');
+    assert.deepEqual(fullAppState(saved, old, [], query).query, {
+      query: { query_string: { query: 'a' } },
+      language: 'lucene',
+    });
+    assert.deepEqual(fullAppState(saved, { query: { query: 'x', language: 'SQL' } }, [], query).query, { query: '', language: 'kuery' });
+    assert.deepEqual(fullAppState(saved, { query: { query: 'x', language: 'lucene' } }, [], query).query, { query: 'x', language: 'lucene' });
   });
 });
 
@@ -513,6 +691,48 @@ describe("a dashboard's own time", () => {
     assert.deepEqual(ownTime(kept, {}).time, { from: 'now-7d', to: 'now' });
     assert.deepEqual(ownTime(kept, { time: { from: 'now-1h', to: 'now' } }), { refreshInterval: { pause: false, value: 900000 } });
     assert.deepEqual(ownTime(kept, { refreshInterval: { pause: false, value: 5000 } }), { time: { from: 'now-7d', to: 'now' } });
+  });
+});
+
+// As the original counts a change of a dashboard (its isDirty), which says "(unsaved)" and asks
+// before changes are discarded, measured on its page
+describe('what changes a dashboard', () => {
+  const panel = (i: string, x: number): PanelState => ({
+    panelIndex: i,
+    gridData: { x, y: 0, w: 24, h: 15, i },
+    type: 'visualization',
+    id: `v${i}`,
+    embeddableConfig: {},
+  });
+  const opened: ChangeMarks = { panels: [panel('1', 0)], query: { query: '', language: 'kuery' }, filters: [] };
+  const lastWeek = { from: 'now-7d', to: 'now' };
+  const paused = { pause: true, value: 0 };
+
+  it('is a change of its panels, its query or its filters, not of the order of their keys', () => {
+    assert.equal(marksDiffer(opened, { ...opened, query: { language: 'kuery', query: '' } }), false);
+    assert.equal(marksDiffer(opened, { ...opened, query: { query: 'customer_gender:MALE', language: 'kuery' } }), true);
+    assert.equal(marksDiffer(opened, { ...opened, panels: [panel('1', 24)] }), true);
+    // A panel an editor hands back as a new one, after the page opened
+    assert.equal(marksDiffer(opened, { ...opened, panels: [panel('1', 0), panel('2', 24)] }), true);
+    assert.equal(marksDiffer(opened, { ...opened, filters: [existsFilter({ name: 'customer_first_name' }, 'ecommerce')] }), true);
+  });
+
+  it('is a change of its time and refresh interval while it keeps its own', () => {
+    const own = { ...opened, time: lastWeek, refreshInterval: paused };
+    assert.equal(marksDiffer(own, { ...own, time: { from: 'now-1d', to: 'now' } }), true);
+    assert.equal(marksDiffer(own, { ...own, refreshInterval: { pause: false, value: 5000 } }), true);
+    assert.equal(marksDiffer(own, { ...own, refreshInterval: { value: 0, pause: true } }), false);
+  });
+
+  it('opens with the time it keeps, as the page puts it in place: its coming is no change', () => {
+    const dashboard = { timeRestore: true, timeFrom: 'now-15d', timeTo: 'now', refreshInterval: { pause: false, value: 900000 } };
+    const loading = { ...opened, time: { from: 'now-15m', to: 'now' }, refreshInterval: paused };
+    const start = openingMarks(loading, dashboard);
+    assert.equal(marksDiffer(start, { ...opened, time: { from: 'now-15d', to: 'now' }, refreshInterval: { pause: false, value: 900000 } }), false);
+    // A time the address named is the one it opens with
+    assert.deepEqual(openingMarks(loading, dashboard, { time: { from: 'now-15m', to: 'now' } }).time, { from: 'now-15m', to: 'now' });
+    // Without a time of its own, it opens with what the page shows
+    assert.equal(openingMarks(opened, { ...dashboard, timeRestore: false }), opened);
   });
 });
 
@@ -614,6 +834,174 @@ describe('what a panel offers', () => {
     for (const type of ['input_control_vis', 'markdown', 'metrics', 'timelion']) assert.equal(offersInspector(type), false, type);
     for (const type of ['area', 'pie', 'table', 'vega', 'region_map', 'tile_map']) assert.equal(offersInspector(type), true, type);
   });
+
+  it('names what Add panels found as the original does in its tooltip and in the toast', () => {
+    // As the dashboard's flyouts name the types they add
+    const types = [
+      { type: 'visualization', name: 'Visualization' },
+      { type: 'visualization-visbuilder', name: 'VisBuilder' },
+      { type: 'search', name: 'Saved search' },
+    ];
+    const found = (type: string, attributes: { title?: string; visState?: string }) => ({ id: 'x', type, attributes, references: [] });
+    assert.equal(finderName(found('visualization', { title: 'Sales by Gender', visState: '{"type":"pie"}' }), types), 'Sales by Gender (Pie)');
+    assert.equal(finderName(found('visualization', { title: 'Notes', visState: '{"type":"markdown"}' }), types), 'Notes (Markdown)');
+    assert.equal(finderName(found('search', { title: '[eCommerce] Orders' }), types), '[eCommerce] Orders (Saved search)');
+    assert.equal(finderName(found('visualization-visbuilder', { title: 'Built' }), types), 'Built (VisBuilder)');
+  });
+});
+
+describe("a panel's title", () => {
+  const grid = { x: 0, y: 0, w: 24, h: 15, i: '1' };
+  const stored = (embeddableConfig: Record<string, unknown>, title?: string) => ({
+    version: '7.10.2',
+    gridData: grid,
+    panelIndex: '1',
+    embeddableConfig,
+    ...(title !== undefined ? { title } : {}),
+    panelRefName: 'panel_0',
+  });
+  const read = (panel: unknown) =>
+    dashboardFromSavedObject({
+      id: 'titles',
+      attributes: { title: 'Titles', panelsJSON: JSON.stringify([panel]) },
+      references: [{ name: 'panel_0', type: 'visualization', id: 'vis-1' }],
+    }).panels[0];
+
+  it('takes a title kept among the settings over the one beside them, as the original reads a panel', () => {
+    const custom = read(stored({ title: 'Custom A', vis: { legendOpen: false } }));
+    assert.equal(custom.title, 'Custom A');
+    assert.deepEqual(custom.embeddableConfig, { vis: { legendOpen: false } });
+    assert.equal(read(stored({ title: 'Config B' }, 'Top B')).title, 'Config B');
+    assert.equal(read(stored({ title: '' }, 'Top C')).title, '');
+    assert.equal(read(stored({}, 'Top D')).title, 'Top D');
+    // ...and writes it beside them when it saves the panel again
+    const { attributes } = dashboardToSavedObject({ ...emptyDashboard(), title: 'Titles', panels: [custom] });
+    assert.equal(
+      attributes.panelsJSON,
+      JSON.stringify([
+        { version: '3.9.0', gridData: grid, panelIndex: '1', embeddableConfig: { vis: { legendOpen: false } }, title: 'Custom A', panelRefName: 'panel_0' },
+      ])
+    );
+  });
+
+  it('takes it so from the address too', () => {
+    const [panel] =
+      panelsFromUrl([
+        { embeddableConfig: { title: 'Custom A', hidePanelTitles: false }, gridData: grid, id: 'vis-1', panelIndex: '1', title: 'Top', type: 'visualization', version: '3.9.0' },
+      ]) ?? [];
+    assert.equal(panel.title, 'Custom A');
+    assert.deepEqual(panel.embeddableConfig, { hidePanelTitles: false });
+  });
+
+  it("shows its own title, else its object's, and none when titles are hidden, as the original", () => {
+    const titled = (embeddableConfig: Record<string, unknown>, title?: string) => ({ embeddableConfig, ...(title !== undefined ? { title } : {}) });
+    assert.equal(panelTitle(titled({}), 'Object', false), 'Object');
+    assert.equal(panelTitle(titled({}, 'Own'), 'Object', false), 'Own');
+    assert.equal(panelTitle(titled({ title: 'Among the settings' }, 'Own'), 'Object', false), 'Among the settings');
+    assert.equal(panelTitle(titled({}, ''), 'Object', false), '');
+    // The text goes with the panel's own setting, or else the dashboard's...
+    assert.equal(panelTitle(titled({}, 'Own'), 'Object', true), '');
+    assert.equal(panelTitle(titled({ hidePanelTitles: true }), 'Object', false), '');
+    // ...and the title is hidden when either the dashboard or the panel hides it
+    assert.equal(panelTitleHidden(titled({ hidePanelTitles: false }), true), true);
+    assert.equal(panelTitleHidden(titled({ hidePanelTitles: true }), false), true);
+    assert.equal(panelTitleHidden(titled({}), false), false);
+  });
+});
+
+// As the original's panel header marks it up (panel_header.tsx), compared with its page
+describe("a panel's heading", () => {
+  const heading = (props: Partial<Parameters<typeof PanelTitle>[0]> = {}) =>
+    renderToStaticMarkup(
+      createElement(PanelTitle, { labelId: 'l', title: 'Sales', showTitle: true, showBar: true, description: '', ...props })
+    );
+  // The declarations of a rule of the dashboard's stylesheet
+  const ruleOf = (selector: string): string => {
+    const sheet = readFileSync('web/styles/dashboard.css', 'utf8');
+    const start = sheet.indexOf(`\n${selector} {`);
+    assert.ok(start >= 0, `${selector} has a rule`);
+    return sheet.slice(start, sheet.indexOf('}', start));
+  };
+
+  it('holds the title in a span of its own, with a description or without', () => {
+    // What a script reads as the title is the title, after the words of a screen reader
+    assert.equal(
+      heading(),
+      '<h2 class="dshPanel__title atlTruncate" title="Sales" data-test-subj="dashboardPanelTitle">' +
+        '<span id="l" class="atlScreenReaderOnly">Dashboard panel: Sales</span>' +
+        '<span class="dshPanel__titleInner"><span class="dshPanel__titleText">Sales</span></span></h2>'
+    );
+    assert.match(
+      heading({ description: 'About sales' }),
+      /<span class="dshPanel__titleInner"><span class="dshPanel__titleText">Sales<\/span> <svg[^>]*class="atlIcon[^"]*dshPanel__info"/
+    );
+  });
+
+  it('puts "[No Title]" in place of the title while the dashboard is edited', () => {
+    assert.match(heading({ title: '' }), /<span class="dshPanel__titleInner"><span class="dshPanel__noTitle">\[No Title\]<\/span><\/span><\/h2>$/);
+    const described = heading({ title: '', description: 'About sales' });
+    assert.match(described, /<span class="dshPanel__titleInner"><span class="dshPanel__noTitle">\[No Title\]<\/span> <svg/);
+    assert.ok(!described.includes('dshPanel__titleText'));
+  });
+
+  it('is no heading on a panel without a bar, only what a screen reader calls it', () => {
+    assert.equal(heading({ title: '', showTitle: false, showBar: false }), '<span id="l" class="atlScreenReaderOnly">Dashboard panel</span>');
+  });
+
+  it('leaves the options button and the description in the panel beside a long title', () => {
+    // The button's anchor keeps its size, and the title's anchor no wider than the heading: what
+    // does not fit of a long title is cut short before them, as in the original
+    assert.match(renderToStaticMarkup(createElement(PanelMenu, { editing: false, items: [] })), /^<span class="dshPanel__menuAnchor"[ >]/);
+    assert.match(ruleOf('.dshPanel__menuAnchor'), /flex: none;/);
+    assert.match(ruleOf('.dshPanel__title > .atlTooltipAnchor'), /max-width: 100%;/);
+  });
+});
+
+// As OpenSearch Dashboards 3.9.0 shows them, measured on a page opened afresh with each address
+describe('the bar over a dashboard', () => {
+  const page = { headerShown: true, fullScreen: false, hasFilters: false };
+  const embedded = { ...page, headerShown: false };
+  const shown = (bars: DashboardBars) =>
+    Object.entries(bars)
+      .filter(([part, visible]) => visible && part !== 'inlineMenu')
+      .map(([part]) => part);
+  const all = ['topMenu', 'queryInput', 'datePicker', 'filterBar'];
+
+  it('shows every part under the header, whatever the address asks for', () => {
+    assert.deepEqual(shown(dashboardBars({}, page)), all);
+    assert.deepEqual(shown(dashboardBars({ 'show-top-menu': 'false', 'hide-filter-bar': 'true' }, page)), all);
+  });
+
+  it('shows only the filters in a page embedded in another, unless its address asks for more', () => {
+    assert.deepEqual(shown(dashboardBars({ embed: 'true' }, embedded)), ['filterBar']);
+    assert.deepEqual(shown(dashboardBars({ embed: 'true', 'show-top-menu': 'true' }, embedded)), ['topMenu', 'filterBar']);
+    assert.deepEqual(shown(dashboardBars({ embed: 'true', 'show-query-input': 'true' }, embedded)), ['queryInput', 'filterBar']);
+    assert.deepEqual(shown(dashboardBars({ embed: 'true', 'show-time-filter': 'true' }, embedded)), ['datePicker', 'filterBar']);
+    assert.deepEqual(shown(dashboardBars({ embed: 'true', 'hide-filter-bar': 'true' }, embedded)), []);
+    // Any value asks, "false" too; none does not
+    assert.deepEqual(shown(dashboardBars({ embed: 'false', 'show-query-input': 'true' }, embedded)), ['queryInput', 'filterBar']);
+    assert.deepEqual(shown(dashboardBars({ embed: '', 'show-top-menu': 'true' }, embedded)), ['filterBar']);
+  });
+
+  it('keeps only the filters in full screen, and only when the dashboard has some of its own', () => {
+    assert.deepEqual(shown(dashboardBars({}, { ...page, fullScreen: true })), []);
+    assert.deepEqual(shown(dashboardBars({}, { ...page, fullScreen: true, hasFilters: true })), ['filterBar']);
+    assert.deepEqual(shown(dashboardBars({ embed: 'true', 'show-top-menu': 'true', 'show-time-filter': 'true' }, { ...embedded, fullScreen: true })), []);
+  });
+
+  it('draws the menu in the page while the address has embed with a value, even one put there after the page loaded', () => {
+    // Under the header then, as the original's top nav mounts its menu in the page (setMenuMountPoint)
+    assert.deepEqual(dashboardBars({ embed: 'true' }, page), { ...dashboardBars({}, page), inlineMenu: true });
+    assert.equal(dashboardBars({}, page).inlineMenu, false);
+    assert.equal(dashboardBars({ embed: 'true', 'show-top-menu': 'true' }, embedded).inlineMenu, true);
+    assert.equal(dashboardBars({ embed: '', 'show-top-menu': 'true' }, embedded).inlineMenu, false);
+  });
+
+  it('takes the page as embedded when it was opened with embed in its address, with a value or not', () => {
+    assert.equal(openedEmbedded('#/view/d1?embed=true&_g=()'), true);
+    assert.equal(openedEmbedded('#/view/d1?embed=&_g=()'), true);
+    assert.equal(openedEmbedded('#/view/d1?_g=()'), false);
+  });
 });
 
 describe('the round trip to an editor', () => {
@@ -624,6 +1012,12 @@ describe('the round trip to an editor', () => {
     assert.deepEqual(Object.keys(state), ['originatingApp', 'valueInput', 'embeddableId', 'containerInfo']);
     assert.deepEqual(state, { originatingApp: 'dashboards', valueInput: undefined, embeddableId: '7', containerInfo: container });
     assert.deepEqual(Object.keys(state.containerInfo ?? {}), ['containerName', 'containerId']);
+  });
+
+  it("tells the editor Create new opens where it came from, as the original's visualization factory does", () => {
+    const { originatingApp, containerInfo } = createNewState(container);
+    // What the New Visualization dialog then opens the editor with, which goes back to this dashboard
+    assert.deepEqual(newVisEditorState(originatingApp, containerInfo), { originatingApp: 'dashboards', containerInfo: container });
   });
 
   it('reads as a panel handed back only a type and an input that is an object', () => {
