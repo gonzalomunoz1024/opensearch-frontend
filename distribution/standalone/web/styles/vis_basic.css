@@ -275,46 +275,74 @@
   height: var(--space-2);
 }
 
-/* Metric */
+/* --- Metric -------------------------------------------------------------------------------- */
 
+/*
+ * The metrics, side by side in the middle and wrapping when they do not fit, in the original's
+ * box of a visualization: 8px in, and scrolled when they are more than it holds. What is around a
+ * visualization here keeps those 8px free already, so this box reaches over them to its edges.
+ */
 .visMetric {
   display: flex;
-  flex: 1 1 auto;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  align-items: center;
-  justify-content: space-around;
-  min-height: 0;
-  padding: var(--space-2);
-  overflow: auto;
-}
-
-.visMetric__item {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
+  flex: 1 1 100%;
+  flex-flow: row wrap;
   align-items: center;
   justify-content: center;
-  min-width: 0;
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
+  margin: calc(-1 * var(--space-2));
+  padding: var(--space-2);
+  overflow: auto;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  line-height: 1;
+}
+
+/* One metric: its value over its label, 16px of room around them */
+.visMetric__container {
+  max-width: 100%;
+  padding: var(--space-4);
+  line-height: normal;
   text-align: center;
+}
+
+/* On a dark colour of its range, the text takes the colour of the surface */
+.visMetric__container--light {
+  color: var(--color-surface);
+}
+
+/* One of a bucket filters for it: the pointer the component library gives what acts as a button */
+.visMetric__container[role="button"] {
+  cursor: pointer;
+}
+
+/*
+ * With the focus, by the keyboard or a click, it wears the ring the original's core styles give
+ * whatever takes the focus outside the component library: it closes in to 3px; the accent's
+ * outline of the keyboard's focus stands 2px off
+ */
+.visMetric__container:focus {
+  animation: visFocusRing var(--duration-slow) var(--ease-out-quint) forwards;
+}
+
+.visMetric__container:focus-visible {
+  outline-offset: 2px;
+}
+
+@keyframes visFocusRing {
+  from {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-accent) 0%, transparent);
+  }
+
+  to {
+    box-shadow: 0 0 0 3px var(--color-focus-ring);
+  }
 }
 
 .visMetric__value {
   max-width: 100%;
   font-weight: var(--font-weight-semibold);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
-  line-height: 1.15;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.visMetric__label {
-  font-size: var(--font-size-m);
-  line-height: 1.3;
 }
 
 /* Tag cloud */

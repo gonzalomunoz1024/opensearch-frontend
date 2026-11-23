@@ -17,6 +17,7 @@ import type { TableRow } from '../lib/aggs';
 import type { Filter } from '../lib/types';
 import type { UiState } from '../lib/vis';
 import { services } from '../services';
+import { FormattedValue } from './formatted_value';
 import { VisNoResults } from './no_results';
 import {
   HEADER_BUTTON_SPACE,
@@ -28,7 +29,6 @@ import {
   tableVisData,
   toCsv,
   truncatesHeader,
-  type CellContent,
   type FormattedColumn,
   type FormattedTable,
   type TableVisParams,
@@ -310,7 +310,7 @@ function DynamicTable({
                     <td key={column.id} style={{ width: widthStyle(columnIndex) }}>
                       <div className="visTable__cell">
                         <span className="visTable__cellValue" data-test-subj="tableVisCellDataField">
-                          <CellValue content={column.cell(row[column.id])} />
+                          <FormattedValue content={column.cell(row[column.id])} />
                         </span>
                         {filterBucket && column.filterable && (
                           <span className="visTable__cellFilter" data-test-subj="tableVisCellFilter">
@@ -364,36 +364,6 @@ function DynamicTable({
       </div>
     </div>
   );
-}
-
-/** A cell's value as the original's HTML formats write it: in a span, a bucket's label bare */
-function CellValue({ content }: { content: CellContent }) {
-  if (content.bare) return <>{content.text}</>;
-  if (content.image) {
-    const { src, width, height } = content.image;
-    return (
-      <span>
-        <img src={src} alt={content.text} style={{ width: 'auto', height: 'auto', maxWidth: width ? `${width}px` : 'none', maxHeight: height ? `${height}px` : 'none' }} />
-      </span>
-    );
-  }
-  if (content.href) {
-    return (
-      <span>
-        <a href={content.href} target={content.newTab ? '_blank' : undefined} rel="noopener noreferrer">
-          {content.text}
-        </a>
-      </span>
-    );
-  }
-  if (content.color || content.background) {
-    return (
-      <span>
-        <span style={{ color: content.color, backgroundColor: content.background }}>{content.text}</span>
-      </span>
-    );
-  }
-  return <span>{content.text}</span>;
 }
 
 // How near the edges of the window the component library lets a popover come, and how wide the

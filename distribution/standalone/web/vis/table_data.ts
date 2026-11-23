@@ -365,9 +365,12 @@ export function cellFilters(
   context: AggContext
 ): Filter[] {
   const column = columns[columnIndex];
-  const value = rows[rowIndex]?.[column?.id ?? ''];
+  const row = rows[rowIndex];
+  const value = row?.[column?.id ?? ''];
   if (!column || column.kind !== 'bucket' || value === null || value === undefined) return [];
-  const filter = bucketFilter(column, value, context);
+  // The table and the row go with the click, as the original's event carries them: the bucket of
+  // the rest is filtered on the terms of the rows beside it
+  const filter = bucketFilter(column, value, context, { table: { columns, rows }, row });
   if (!filter) return [];
   return [negate ? { ...filter, meta: { ...filter.meta, negate: !filter.meta.negate } } : filter];
 }

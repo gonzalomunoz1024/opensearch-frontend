@@ -11,7 +11,7 @@ process.env.TZ = 'UTC';
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { tabify, type AggConfig, type AggContext, type TableRow } from '../../web/lib/aggs';
+import { OTHER_KEY, tabify, type AggConfig, type AggContext, type TableRow } from '../../web/lib/aggs';
 import type { Field, IndexPattern } from '../../web/lib/types';
 import {
   COLUMN_BUFFER,
@@ -284,6 +284,35 @@ describe('the filters a cell adds', () => {
     assert.deepEqual(cellFilters(columns, rows, 1, 0, false, context), []);
     assert.deepEqual(cellFilters(columns, [{ [columns[0].id]: null }], 0, 0, false, context), []);
     assert.deepEqual(cellFilters(columns, rows, 0, 9, false, context), []);
+  });
+
+  it('filters the bucket of the other terms against the terms of the rows beside it', () => {
+    const rest: AggConfig = { ...dest, params: { ...dest.params, otherBucket: true, otherBucketLabel: 'Other' } };
+    const { columns, rows } = tabify(
+      [count, rest],
+      {
+        aggregations: {
+          '3': {
+            buckets: [
+              { key: 'CN', doc_count: 3 },
+              { key: 'IN', doc_count: 5 },
+              { key: OTHER_KEY, doc_count: 9 },
+            ],
+          },
+        },
+      },
+      context
+    );
+    const [filter] = cellFilters(columns, rows, 0, 2, false, context);
+    assert.equal(filter.meta.type, 'phrases');
+    assert.equal(filter.meta.negate, true);
+    assert.deepEqual(filter.meta.params, ['CN', 'IN']);
+    // "Filter out value" turns it round: the documents of those terms
+    const [against] = cellFilters(columns, rows, 0, 2, true, context);
+    assert.equal(against.meta.negate, false);
+    // Of the rows the table shows, in its order
+    const [sorted] = cellFilters(columns, [rows[2], rows[1], rows[0]], 0, 0, false, context);
+    assert.deepEqual(sorted.meta.params, ['IN', 'CN']);
   });
 });
 
