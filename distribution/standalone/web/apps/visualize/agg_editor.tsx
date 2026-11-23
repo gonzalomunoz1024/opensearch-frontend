@@ -13,7 +13,7 @@ import { CodeEditor } from '../../components/code_editor';
 import { ComboBox, type ComboOption } from '../../components/combo_box';
 import { Icon } from '../../components/icon';
 import { Tooltip } from '../../components/overlay';
-import { AGG_TITLES, aggLabel, dateInterval, fieldNameOf, type AggConfig, type AggContext } from '../../lib/aggs';
+import { AGG_TITLES, dateInterval, fieldNameOf, responseAggs, type AggConfig, type AggContext } from '../../lib/aggs';
 import { parseInterval } from '../../lib/dates';
 import { tokenizeJson } from '../../lib/json_text';
 import type { Field, IndexPattern, Query } from '../../lib/types';
@@ -27,6 +27,7 @@ import {
   allowsStrings,
   changeAggType,
   fallbackMetric,
+  firstOrderBy,
   nestedAggs,
   nestedCount,
   orderByParams,
@@ -817,16 +818,19 @@ function TopAggregateParam({ p }: { p: ParamEditorProps }) {
 
 function OrderByParam({ p }: { p: ParamEditorProps }) {
   const { agg, params, set, touch, invalid, metricAggs, context, aggs } = p;
+  // As the original, every value the metrics answer with: each percentile rank can order the terms
+  const values = metricAggs.flatMap((metric) => responseAggs(metric, { ...context, aggs }));
   const options = [
-    ...metricAggs.map((metric) => ({ value: metric.id, label: `Metric: ${aggLabel(metric, { ...context, aggs })}`, disabled: !orderableMetric(metric) })),
+    ...values.map((item) => ({ value: item.id, label: `Metric: ${item.label}`, disabled: !orderableMetric(item.agg) })),
     { value: 'custom', label: 'Custom metric' },
     { value: '_key', label: 'Alphabetical' },
   ];
   const value = String(params.orderBy ?? '');
-  // A metric that is no longer asked for, or that cannot order the terms, gives way to the alphabet
-  const metrics = metricAggs.map((metric) => `${metric.id}:${metric.type}`).join();
+  // A metric that is no longer asked for, or that cannot order the terms, gives way to the alphabet;
+  // an aggregation that says nothing is ordered by the first metric that can, as the editor opens
+  const metrics = values.map((item) => `${item.id}:${item.agg.type}`).join();
   useEffect(() => {
-    const fallback = fallbackMetric(value, metricAggs, orderableMetric, '_key');
+    const fallback = value ? fallbackMetric(value, values, (item) => orderableMetric(item.agg), '_key') : firstOrderBy(metricAggs, { ...context, aggs });
     if (fallback) set({ orderBy: fallback });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, metrics]);
@@ -847,19 +851,15 @@ function OrderByParam({ p }: { p: ParamEditorProps }) {
 
 function MetricAggParam({ p }: { p: ParamEditorProps }) {
   const { agg, params, set, touch, invalid, metricAggs, context, aggs } = p;
-  const options = [
-    ...metricAggs
-      .filter((metric) => metric.type !== agg.type)
-      .map((metric) => ({ value: metric.id, label: `Metric: ${aggLabel(metric, { ...context, aggs })}`, disabled: !parentPipelineMetric(metric) })),
-    { value: 'custom', label: 'Custom metric' },
-  ];
+  const values = metricAggs.filter((metric) => metric.type !== agg.type).flatMap((metric) => responseAggs(metric, { ...context, aggs }));
+  const options = [...values.map((item) => ({ value: item.id, label: `Metric: ${item.label}`, disabled: !parentPipelineMetric(item.agg) })), { value: 'custom', label: 'Custom metric' }];
   const value = String(params.metricAgg ?? '');
   const choose = (metricAgg: string) =>
     set({ metricAgg, customMetric: metricAgg === 'custom' ? (params.customMetric ?? nestedCount(`${agg.id}-metric`)) : undefined });
   // A metric that is no longer asked for, or that a pipeline cannot work on, gives way to a custom one
-  const metrics = metricAggs.map((metric) => `${metric.id}:${metric.type}`).join();
+  const metrics = values.map((item) => `${item.id}:${item.agg.type}`).join();
   useEffect(() => {
-    const fallback = fallbackMetric(value, metricAggs, parentPipelineMetric, 'custom');
+    const fallback = fallbackMetric(value, values, (item) => parentPipelineMetric(item.agg), 'custom');
     if (fallback) choose(fallback);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, metrics]);

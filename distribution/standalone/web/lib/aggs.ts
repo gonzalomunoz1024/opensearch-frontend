@@ -770,21 +770,59 @@ function withGeoCollar(agg: AggConfig, dsl: Dsl): Dsl {
 function orderTerms(agg: AggConfig, terms: Dsl, own: Dsl, context: AggContext, metrics: AggConfig[]): void {
   const direction = param<string>(agg, 'order', 'desc');
   const orderBy = param<string>(agg, 'orderBy', '_count');
-  if (orderBy === '_key' || orderBy === '_term') terms.order = { _key: direction };
-  else if (orderBy === 'custom') {
-    const orderAgg = agg.params?.orderAgg as AggConfig | undefined;
-    if (orderAgg && orderAgg.type !== 'count') {
-      const id = orderAgg.id ?? `${agg.id}-orderAgg`;
-      Object.assign(own, metricWithJson({ ...orderAgg, id }, context, metrics));
-      terms.order = { [orderPath(orderAgg, id)]: direction };
+  // As the original's `params.orderAgg || the metric named`: a custom metric the aggregation carries
+  // orders it whatever "Order by" says, under the id the original gives it
+  const orderAgg = agg.params?.orderAgg as AggConfig | null | undefined;
+  if (orderAgg && typeof orderAgg === 'object' && orderAgg.type) {
+    if (orderAgg.type === 'count') {
+      terms.order = { _count: direction };
+      return;
     }
-  } else {
+    const id = `${agg.id}-orderAgg`;
+    Object.assign(own, metricWithJson({ ...orderAgg, id }, context, metrics));
+    terms.order = { [orderPath(orderAgg, id)]: direction };
+    return;
+  }
+  if (orderBy === '_key' || orderBy === '_term') terms.order = { _key: direction };
+  else if (orderBy !== 'custom') {
     const metric = metrics.find((candidate) => candidate.id === orderBy);
     if (metric && metric.type !== 'count' && !SIBLING_PIPELINES.has(metric.type) && !PARENT_PIPELINES.has(metric.type)) {
       Object.assign(own, metricWithJson(metric, context, metrics));
       terms.order = { [orderPath(metric, metric.id)]: direction };
+      return;
+    }
+    // One value of a metric with several: a percentile rank, or the percentile a saved object names
+    for (const candidate of metrics) {
+      const key = valueKeysOf(candidate).find((value) => responseAggId(candidate.id, value) === orderBy);
+      if (key === undefined) continue;
+      Object.assign(own, metricWithJson(candidate, context, metrics));
+      // The original writes the id as it is; OpenSearch reads a value with a point in it between brackets only
+      terms.order = { [String(key).includes('.') ? `${candidate.id}[${key}]` : orderBy]: direction };
+      return;
     }
   }
+}
+
+/** The values a percentiles or percentile ranks aggregation answers with */
+const valueKeysOf = (agg: AggConfig): number[] =>
+  agg.type === 'percentiles' ? param<number[]>(agg, 'percents', [1, 5, 25, 50, 75, 95, 99]) : agg.type === 'percentile_ranks' ? param<number[]>(agg, 'values', [0]) : [];
+
+/** The id the original gives one value of a metric with several: `2.5000`, or `2['1.5']` when the value has a point */
+export function responseAggId(parentId: string, key: string | number): string {
+  const subId = String(key);
+  return subId.includes('.') ? `${parentId}['${subId.replace(/'/g, "\\'")}']` : `${parentId}.${subId}`;
+}
+
+/**
+ * The values a metric answers with, as the original's response aggregations: what "Order by" and
+ * a parent pipeline's "Metric" list, each with its id and its label
+ */
+export function responseAggs(agg: AggConfig, context: AggContext): Array<{ id: string; label: string; agg: AggConfig }> {
+  return metricColumns(agg, context, '').map((column) => ({
+    id: column.valueKey !== undefined && agg.type !== 'std_dev' ? responseAggId(agg.id, column.valueKey) : column.id,
+    label: column.name,
+    agg,
+  }));
 }
 
 function orderPath(metric: AggConfig, id: string): string {
