@@ -3,6 +3,7 @@
 /* The frame around every page: the header with its trail and actions, and the navigation. */
 
 import {
+  Fragment,
   createContext,
   useCallback,
   useContext,
@@ -123,26 +124,31 @@ export interface TopNavItem {
   disabled?: boolean;
   title?: string;
   testId?: string;
+  /** What the button is put in: a popover it opens under itself, as the original's Options */
+  wrap?: (button: ReactNode) => ReactNode;
 }
 
 /** A page's actions as the header's row of links */
 export function TopNav({ items }: { items: TopNavItem[] }) {
   return (
     <HeaderActions>
-      {items.map((item) => (
-        <Button
-          key={item.id}
-          variant={item.emphasize ? 'default' : 'empty'}
-          icon={item.icon}
-          onClick={item.onClick}
-          to={item.to}
-          disabled={item.disabled}
-          title={item.title}
-          testId={item.testId ?? `topNav-${item.id}`}
-        >
-          {item.label}
-        </Button>
-      ))}
+      {items.map((item) => {
+        const button = (
+          <Button
+            key={item.id}
+            variant={item.emphasize ? 'default' : 'empty'}
+            icon={item.icon}
+            onClick={item.onClick}
+            to={item.to}
+            disabled={item.disabled}
+            title={item.title}
+            testId={item.testId ?? `topNav-${item.id}`}
+          >
+            {item.label}
+          </Button>
+        );
+        return item.wrap ? <Fragment key={item.id}>{item.wrap(button)}</Fragment> : button;
+      })}
     </HeaderActions>
   );
 }

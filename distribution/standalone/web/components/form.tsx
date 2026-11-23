@@ -257,16 +257,19 @@ export function Switch({
   onChange,
   label,
   disabled,
+  compressed,
   testId,
 }: {
   checked: boolean;
   onChange: (checked: boolean) => void;
   label?: ReactNode;
   disabled?: boolean;
+  /** The original's compressed switch, 28 by 16 pixels, in forms and popovers */
+  compressed?: boolean;
   testId?: string;
 }) {
   return (
-    <span className="atlSwitch">
+    <span className={cx('atlSwitch', compressed && 'atlSwitch--compressed')}>
       <button
         type="button"
         role="switch"
