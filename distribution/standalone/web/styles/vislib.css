@@ -17,6 +17,12 @@
   overflow: auto;
 }
 
+/* A chart of a split fills its part, as a chart fills the room it is given */
+.visSplit__body > .visLib {
+  position: absolute;
+  inset: 0;
+}
+
 .visLib--legend-left {
   flex-direction: row-reverse;
 }
@@ -218,6 +224,47 @@
   min-width: 0;
   min-height: 0;
   overflow: visible;
+}
+
+/* A gauge's room (vislib's gauge layout): the titles of a split beside and under the chart, which
+   a gauge leaves empty, and the gauges on lines as high as the text, their name under them */
+
+.visAxis__splitTitles--y {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 12px;
+}
+
+.visAxis__splitTitles--x {
+  display: flex;
+  flex-direction: row;
+  min-width: 16px;
+  min-height: 1px;
+  max-height: 16px;
+}
+
+.visWrapper__alerts {
+  position: relative;
+}
+
+.visWrapper .chart:has(> .chart-title) {
+  line-height: 1;
+}
+
+.visWrapper .chart-title {
+  flex: 1 1 100%;
+  min-width: 14px;
+  min-height: 14px;
+}
+
+.visWrapper .chart-label {
+  fill: var(--color-text-secondary);
+  font-family: var(--font-family);
+}
+
+.visGauge__meter--outline {
+  stroke: var(--color-border-light);
 }
 
 .visWrapper .slice {

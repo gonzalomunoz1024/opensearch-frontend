@@ -8,6 +8,7 @@ import type { Filter, IndexPattern } from '../../web/lib/types';
 import { splitTables, splitTimeFilter } from '../../web/vis/types';
 import { axisConfig, keptTicks, placeTick, truncateLabel, type AxisScaleInfo } from '../../web/vis/vislib/axis';
 import { heatmapColor } from '../../web/vis/vislib/color_maps';
+import { drawMeter, gaugeBucket, gaugeColors, gaugeLabels, gaugeSize, meterConfig } from '../../web/vis/vislib/gauge';
 import { seriesColors, standardizeColor } from '../../web/vis/vislib/colors';
 import { colorBucket, heatmapColors, heatmapLabels } from '../../web/vis/vislib/heatmap';
 import { groupedCount, groupedNum, isColorDark } from '../../web/vis/vislib/point_series_chart';
@@ -685,5 +686,153 @@ describe('the filters of a click', () => {
     assert.deepEqual(splitTimeFilter([time], undefined), { rest: [time] });
     const out = range('timestamp', { gte: '2026-11-16T15:00:00.000Z', lt: '2026-11-16T18:00:00.000Z' }, true);
     assert.deepEqual(splitTimeFilter([out], 'timestamp'), { rest: [out] });
+  });
+});
+
+describe('a gauge', () => {
+  const ranges = [
+    { from: 0, to: 6000 },
+    { from: 6000, to: 6500 },
+    { from: 6500, to: 7000 },
+  ];
+  const config = meterConfig({
+    gaugeType: 'Arc',
+    colorSchema: 'Green to Red',
+    colorsRange: ranges,
+    extendRange: true,
+    percentageMode: false,
+    labels: { show: true },
+    scale: { show: true },
+    style: { bgWidth: 0.9, width: 0.9, subText: '' },
+  });
+  const colors = gaugeColors(config, false);
+  // The paths' numbers cut to two decimals, as the comparisons with the original read them
+  const cut = (path: string) => path.replace(/(\d+\.\d{2})\d+/g, '$1');
+
+  it("takes the meter's defaults for what its settings leave out", () => {
+    assert.equal(config.innerSpace, 5);
+    assert.deepEqual(config.scale, { show: true, width: 2, ticks: 10, tickLength: 8 });
+    const goal = meterConfig({ colorsRange: [{ from: 0, to: 10000 }], style: { subText: 'of the goal' } });
+    assert.deepEqual([goal.style.bgWidth, goal.style.width, goal.style.subText], [0.5, 0.9, 'of the goal']);
+    // The meter assumes the percentage mode, and extends its range only when told to
+    assert.equal(goal.percentageMode, true);
+    assert.equal(goal.extendRange, false);
+    assert.deepEqual(meterConfig(undefined).colorsRange, []);
+  });
+
+  it('names its ranges by their ends, as shares of the last in the percentage mode', () => {
+    assert.deepEqual(gaugeLabels(config), ['0 - 6000', '6000 - 6500', '6500 - 7000']);
+    const goal = { percentageMode: true, colorsRange: [{ from: 0, to: 1e10 }, { from: 1e10, to: 2e10 }] };
+    assert.deepEqual(gaugeLabels(goal), ['0 - 50', '50 - 100']);
+  });
+
+  it('colours its ranges along the schema, the other way round when inverted', () => {
+    assert.deepEqual(colors, { '0 - 6000': 'rgb(52,199,89)', '6000 - 6500': 'rgb(255,149,0)', '6500 - 7000': 'rgb(255,59,48)' });
+    assert.equal(gaugeColors({ ...config, invertColors: true }, false)['0 - 6000'], 'rgb(255,59,48)');
+    // One range takes the start of the schema
+    assert.deepEqual(gaugeColors({ ...config, colorsRange: [{ from: 0, to: 1 }] }, false), { '0 - 1': 'rgb(52,199,89)' });
+  });
+
+  it('puts a value in its range, one below them all in the first and one above in the last', () => {
+    assert.equal(gaugeBucket(ranges, 6000), 1);
+    assert.equal(gaugeBucket(ranges, -5), 0);
+    assert.equal(gaugeBucket(ranges, 7000), 2);
+  });
+
+  it('shares the room between its gauges, side by side or one under the other', () => {
+    assert.deepEqual(gaugeSize('automatic', 792, 715, 5), { width: 153, height: 690 });
+    assert.deepEqual(gaugeSize('vertical', 792, 715, 5), { width: 792, height: 133 });
+    assert.deepEqual(gaugeSize('horizontal', 300, 715, 2), { width: 137, height: 690 });
+    // Automatic: one under the other where the room is taller than wide
+    assert.deepEqual(gaugeSize(undefined, 300, 715, 2), { width: 300, height: 332 });
+  });
+
+  it('draws an arc as MeterGauge does', () => {
+    const drawing = drawMeter({
+      config,
+      y: 6040.25,
+      label: 'zip',
+      width: 153,
+      height: 690,
+      format: (value) => String(value),
+      colorOf: (label) => colors[label],
+      measure: () => 10,
+    });
+    // As the original draws the gauge of "zip" in the sample "Average bytes by extension"
+    assert.equal(drawing.transform, 'translate(76.5, 345)');
+    assert.equal(drawing.holderLabel, '6000 - 6500');
+    assert.equal(cut(drawing.background), 'M-68.54,22.27A72.06,72.06 0 1,1 68.54,22.27L58.17,18.90A61.16,61.16 0 1,0 -58.17,18.90Z');
+    assert.equal(cut(drawing.value), 'M-68.54,22.27A72.06,72.06 0 1,1 70.59,-14.51L59.91,-12.31A61.16,61.16 0 1,0 -58.17,18.90Z');
+    assert.equal(drawing.valueColor, 'rgb(255,149,0)');
+    assert.equal(drawing.scale?.arcs.length, 3);
+    assert.equal(cut(drawing.scale?.arcs[0].d ?? ''), 'M-59.50,19.33A62.56,62.56 0 1,1 60.99,-13.92L59.04,-13.47A60.56,60.56 0 1,0 -57.59,18.71Z');
+    assert.equal(drawing.scale?.ticks.length, 11);
+    const first = drawing.scale?.ticks[0];
+    assert.deepEqual(first && [first.x1, first.y1, first.x2, first.y2].map((value) => Math.round(value * 100) / 100), [-57.6, 18.71, -49.99, 16.24]);
+    assert.deepEqual(drawing.label, { text: 'zip', hidden: false });
+    assert.deepEqual(drawing.subText, { text: '', hidden: false });
+  });
+
+  it('leaves out a value wider than the middle, and the sub text with it', () => {
+    const draw = (width: number, show = true) =>
+      drawMeter({
+        config: { ...config, labels: { show } },
+        y: 6040.25,
+        label: 'zip',
+        width: 153,
+        height: 690,
+        format: (value) => String(value),
+        colorOf: (label) => colors[label],
+        measure: (_text, large) => (large ? width : 10),
+      });
+    // The middle: the inner diameter less the ticks, 121.125 - 16, less six pixels
+    assert.equal(draw(99.1).valueText.hidden, false);
+    assert.equal(draw(99.2).valueText.hidden, true);
+    assert.equal(draw(99.2).subText?.hidden, true);
+    assert.equal(draw(99.2).label?.hidden, false);
+    assert.equal(draw(10, false).label, undefined);
+  });
+
+  it('shows no names on a gauge less than 70 pixels high, and writes a share in the percentage mode', () => {
+    const shares: Array<number | null> = [];
+    const drawing = drawMeter({
+      config: { ...config, percentageMode: true },
+      y: 6500,
+      label: 'zip',
+      width: 60,
+      height: 60,
+      format: (value) => {
+        shares.push(value);
+        return `${value}`;
+      },
+      colorOf: (label) => colors[label],
+      measure: () => 1,
+    });
+    assert.deepEqual(shares, [6500 / 7000]);
+    assert.equal(drawing.label?.hidden, true);
+    assert.equal(drawing.subText?.hidden, true);
+    assert.equal(drawing.valueText.hidden, false);
+  });
+
+  it('runs a ring all round, and its value as far as it goes, past the end when the range extends', () => {
+    const ring = meterConfig({ ...config, gaugeType: 'Circle', colorsRange: [{ from: 0, to: 100 }], scale: { show: false } });
+    const draw = (y: number, extendRange: boolean) =>
+      drawMeter({
+        config: { ...ring, extendRange },
+        y,
+        label: 'spend',
+        width: 767,
+        height: 690,
+        format: String,
+        colorOf: () => 'red',
+        measure: () => 1,
+      });
+    assert.equal(cut(draw(50, true).background), 'M0,325.01A325.01,325.01 0 1,1 0,-325.01A325.01,325.01 0 1,1 0,325.01M0,275.85A275.85,275.85 0 1,0 0,-275.85A275.85,275.85 0 1,0 0,275.85Z');
+    // Half way: down to six o'clock
+    assert.match(draw(50, true).value, /A325\.01875,325\.01875 0 0,1 1\.99\d*e-14,325\.01875L/);
+    // Over the end: all round, unless the range extends to the value, which then ends it
+    assert.equal(draw(150, false).value.startsWith('M0,325.01875A'), true);
+    assert.equal(draw(150, true).value, draw(100, true).value);
+    assert.equal(draw(150, true).scale, undefined);
   });
 });

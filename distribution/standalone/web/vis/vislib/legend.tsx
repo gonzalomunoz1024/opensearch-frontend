@@ -25,14 +25,15 @@ export const LEGEND_COLORS = [
 
 export type LegendPosition = 'top' | 'bottom' | 'left' | 'right';
 
-/** The side the popover of a name opens to, from the side the legend is on */
-const anchorOf = (position: LegendPosition) =>
+/** The side the popover of a name opens to, from the side the legend is on: below it when the chart says none */
+const anchorOf = (position: LegendPosition | undefined) =>
   position === 'bottom' ? 'upCenter' : position === 'left' ? 'rightUp' : position === 'right' ? 'leftUp' : 'downCenter';
 
 export interface VisLegendProps {
   labels: string[];
   colorOf: (label: string) => string;
-  position: LegendPosition;
+  /** The side of the chart it is on, as the visualization says it; a gauge says none */
+  position?: LegendPosition;
   open: boolean;
   onToggle: () => void;
   /** How see-through a name is while a series is pointed at; undefined leaves it alone */
