@@ -116,6 +116,13 @@ function metricSpec(agg: AggConfig, context: AggContext, depth = 0): FieldFormat
   }
 }
 
+/**
+ * A value as the original's formats write it: by the column's format, but an empty text as
+ * nothing, as every one of them writes it (asPrettyString), where the product's shared formats
+ * take it for a missing value and write a dash
+ */
+export const formatValue = (column: TableColumn, value: unknown): string => (value === '' ? '' : column.format(value));
+
 /** The format of a column as the original's dimension carries it */
 export function columnFormatSpec(column: TableColumn, context: AggContext): FieldFormatSpec {
   const { agg } = column;
@@ -144,7 +151,7 @@ function cellFormatter(column: TableColumn, context: AggContext): (value: unknow
   const rich = spec && (spec.id === 'url' || spec.id === 'color') ? createFormatter(spec, settings) : undefined;
   const plainBucket = column.kind === 'bucket' && !['terms', 'significant_terms', 'histogram'].includes(column.agg.type);
   return (value) => {
-    const text = column.format(value);
+    const text = formatValue(column, value);
     // The labels of the buckets of the rest and of the missing are written as they are
     if (bucketLabel && (value === OTHER_KEY || value === MISSING_KEY)) return { text, bare: true };
     if (!rich || plainBucket || value === null || value === undefined) return { text };
@@ -175,7 +182,7 @@ function extreme(values: unknown[], larger: boolean): unknown {
 function textOf(column: TableColumn, spec: FieldFormatSpec): (value: unknown) => string {
   const id = spec.id === 'terms' ? spec.params?.id : spec.id;
   const empty = id === 'number' || id === 'bytes' || id === 'percent' ? '' : id === 'date' ? '-' : ' - ';
-  return (value) => (value === null || value === undefined ? empty : column.format(value));
+  return (value) => (value === null || value === undefined ? empty : formatValue(column, value));
 }
 
 const addUp = (sum: number, value: unknown): number => {
@@ -218,7 +225,7 @@ export function formatTable(
         result.sumTotal = sum;
         const values = () => rows.map((row) => row[column.id]);
         // The original writes nothing for a total that is not a number
-        const write = (total: unknown) => (total === undefined ? '' : column.format(total));
+        const write = (total: unknown) => (total === undefined ? '' : formatValue(column, total));
         switch (totalFunc) {
           case 'sum':
             if (!isDate) {
@@ -290,7 +297,7 @@ export function tableVisData(table: Table, params: TableVisParams, context: AggC
     const key = keyText(value);
     let group = groups.get(key);
     if (!group) {
-      group = { title: `${split.format(value)}: ${split.name}`, rows: [] };
+      group = { title: `${formatValue(split, value)}: ${split.name}`, rows: [] };
       groups.set(key, group);
     }
     group.rows.push(row);
@@ -365,9 +372,12 @@ export function cellFilters(
   context: AggContext
 ): Filter[] {
   const column = columns[columnIndex];
-  const value = rows[rowIndex]?.[column?.id ?? ''];
+  const row = rows[rowIndex];
+  const value = row?.[column?.id ?? ''];
   if (!column || column.kind !== 'bucket' || value === null || value === undefined) return [];
-  const filter = bucketFilter(column, value, context);
+  // The table and the row go with the click, as the original's event carries them: the bucket of
+  // the rest is filtered on the terms of the rows beside it
+  const filter = bucketFilter(column, value, context, { table: { columns, rows }, row });
   if (!filter) return [];
   return [negate ? { ...filter, meta: { ...filter.meta, negate: !filter.meta.negate } } : filter];
 }

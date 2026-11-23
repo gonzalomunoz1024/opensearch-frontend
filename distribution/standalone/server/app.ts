@@ -66,7 +66,7 @@ import { registerSampleData } from './sample_data/routes';
 import { registerSearch } from './search_routes';
 import { registerShortUrls } from './short_urls';
 import { registerSqlConsole } from './sql_console';
-import { contentSecurityPolicy, readBuild, renderPage, serveStatic } from './static';
+import { contentSecurityPolicy, cspNonce, readBuild, renderPage, serveStatic } from './static';
 import { registerTsvbFields } from './tsvb_fields';
 import { registerTimeline } from './timeline';
 import { UiSettings } from './ui_settings';
@@ -450,10 +450,11 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
       health.state === 'green'
         ? await uiSettings.peek<boolean>('theme:darkMode', false)
         : config.uiSettings.overrides['theme:darkMode'] ?? config.uiSettings.defaults['theme:darkMode'];
+    const nonce = cspNonce();
     return {
       headers: {
         'content-type': 'text/html; charset=utf-8',
-        'content-security-policy': contentSecurityPolicy(config.map, config.csp),
+        'content-security-policy': contentSecurityPolicy(config.map, config.csp, nonce),
         'cache-control': 'no-store',
       },
       body: renderPage({
@@ -461,6 +462,7 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
         build,
         title: PRODUCT_NAME,
         dark: dark === true,
+        nonce,
         bootData: {
           basePath: config.server.basePath,
           version: build.version,
