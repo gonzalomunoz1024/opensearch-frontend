@@ -714,6 +714,15 @@ export const editorStateFor = (panelIndex: string, container: ContainerInfo): Ed
   containerInfo: container,
 });
 
+/**
+ * What the original's "Create new" hands the New Visualization dialog, which passes it on to the
+ * editor (its visualization factory's `create`): the app to go back to and the dashboard there
+ */
+export const createNewState = (container: ContainerInfo): { originatingApp: string; containerInfo: ContainerInfo } => ({
+  originatingApp: DASHBOARDS_APP,
+  containerInfo: container,
+});
+
 /** What an editor hands back to the dashboard it came from (the original's EmbeddablePackageState) */
 export interface HandedPanel {
   type: string;

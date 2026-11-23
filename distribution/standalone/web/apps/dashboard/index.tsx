@@ -40,6 +40,7 @@ import {
 import { DashboardGrid } from './grid';
 import {
   DEFAULT_PANEL,
+  createNewState,
   dashboardFromSavedObject,
   dashboardQuery,
   dashboardToSavedObject,
@@ -801,7 +802,11 @@ function DashboardPage({ savedId }: { savedId?: string }) {
           onClose={() => setDialog(undefined)}
         />
       )}
-      {dialog?.kind === 'create' && <NewVisModal onClose={() => setDialog(undefined)} />}
+      {dialog?.kind === 'create' && (
+        // As the original's visualization factory opens it from a dashboard: the editor is told where
+        // it came from, to go back there with what it saves
+        <NewVisModal onClose={() => setDialog(undefined)} {...createNewState(container)} />
+      )}
       {dialog?.kind === 'discard' && (
         <ConfirmModal
           title="Discard changes to dashboard?"
