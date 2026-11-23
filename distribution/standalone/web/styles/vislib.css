@@ -66,7 +66,8 @@
 }
 
 .visWrapper .visAxis__svg,
-.visWrapper .chart {
+.visWrapper .chart,
+.visWrapper > .chart-title {
   position: absolute;
 }
 
@@ -188,15 +189,34 @@
   fill: #fff;
 }
 
-.visWrapper .visError {
-  flex: 1 1 0;
+/* What vislib's handler shows in place of the charts when they cannot be drawn: the message in the
+   middle of their room, in a box as wide as its longest word at least, in the page's text. The
+   charts stay out of sight in the same room, measuring it. */
+.visLib__chart--failed {
+  position: relative;
 }
 
-.visError__title {
-  margin: 0;
+.visLib__chart--failed > .visWrapper {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+}
+
+.visLib__chart > .visError {
+  flex: 1 1 0;
+  flex-direction: row;
+  gap: 0;
+  height: auto;
+  padding: 0;
+  overflow: visible;
   color: var(--color-text-primary);
-  font-size: var(--font-size-m);
-  font-weight: var(--font-weight-semibold);
+}
+
+.visLib__chart > .visError h4 {
+  margin: 0;
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-regular);
+  line-height: 1;
 }
 
 /* A pie's room (vislib's pie layout): the chart in a column, five pixels in from its edges */
@@ -259,17 +279,6 @@
   fill: var(--color-text-secondary);
   font-family: var(--font-family);
   font-size: var(--font-size-chart);
-}
-
-/* One chart of a split too small to draw: the message in place of them all, as vislib's handler
-   shows it */
-.visWrapper--failed > :not(.visError) {
-  visibility: hidden;
-}
-
-.visWrapper > .visError--split {
-  position: absolute;
-  inset: 0;
 }
 
 /* A gauge's room (vislib's gauge layout): the titles of a split beside and under the chart, which

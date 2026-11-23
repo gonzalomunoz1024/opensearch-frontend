@@ -6,6 +6,8 @@
  * keep a policy, how far a restore has come, and what the lists and the dialogs say.
  */
 
+import { tokenizeFieldJson, type JsonRun } from '../management/saved_objects_lib';
+
 // --- Words ------------------------------------------------------------------------------------------
 
 /** A text cut to a length, the three dots counted in it */
@@ -227,6 +229,34 @@ export function repositoryBody(
   if (kind === 'fs') return { type: 'fs', settings: { ...parsed, location } };
   const { type, settings } = parsed as { type?: unknown; settings?: unknown };
   return { type, settings };
+}
+
+// Where the indent of a line ends, as the original editor looks for it
+const INDENT_END = /\s\S| \t|\t |\s$/;
+/** The tab of the editor the plugin shows a repository's settings in: four spaces */
+const SETTINGS_TAB = 4;
+
+/**
+ * JSON as the plugin's editor colours it, line by line: the runs of the original editor's JSON
+ * mode, and a guide for each full tab of an indent before its last space. The runs come with
+ * guides every two spaces, the tab of the editor they were made for; here it is four.
+ */
+export function settingsTokens(text: string): JsonRun[][] {
+  return tokenizeFieldJson(text).map((runs) => {
+    const rest = [...runs];
+    let indent = '';
+    while (rest[0]?.kind === 'Guide') indent += rest.shift()?.text ?? '';
+    if (rest[0] && !rest[0].kind) indent += rest.shift()?.text ?? '';
+    if (indent === '') return runs;
+    let columns = indent.startsWith(' ') ? Math.max(indent.search(INDENT_END), 0) : 0;
+    columns -= columns % SETTINGS_TAB;
+    const guides: JsonRun[] = Array.from({ length: columns / SETTINGS_TAB }, () => ({
+      text: ' '.repeat(SETTINGS_TAB),
+      kind: 'Guide',
+    }));
+    const left = indent.slice(columns);
+    return [...guides, ...(left ? [{ text: left }] : []), ...rest];
+  });
 }
 
 /** What the dialog that deletes repositories adds to its question: how much would go with them */

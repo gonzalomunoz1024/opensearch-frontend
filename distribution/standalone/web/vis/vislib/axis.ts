@@ -322,8 +322,9 @@ export function drawAxis(config: AxisConfig, scale: AxisScaleInfo, format: (valu
     const kept = keptTicks(ticks, scale, horizontal, length);
     ticks = ticks.filter((_, index) => kept[index]);
   }
-  // The line along the axis turns out at its ends as deep as a tick: an axis is never less deep
-  const deepest = Math.max(TICK_SIZE, ...ticks.map((tick) => (horizontal ? tick.box.height : tick.box.width)));
+  // As deep as its deepest tick with its label, as vislib measures the ticks left (adjustSize); the
+  // line along the axis is not measured, so an axis with no tick left is only its padding
+  const deepest = ticks.length ? Math.max(TICK_SIZE, ...ticks.map((tick) => (horizontal ? tick.box.height : tick.box.width))) : 0;
   const rawSize = deepest + AXIS_PADDING;
   const [r0, r1] = scale.extent;
   const path = horizontal

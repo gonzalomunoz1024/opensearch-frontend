@@ -14,7 +14,6 @@ import { Flyout, Modal } from '../../components/overlay';
 import { searchItems } from '../../lib/search_syntax';
 import { useBreadcrumbs } from '../../shell/state';
 import {
-  ConfirmationModal,
   ExternalLink,
   LocalTable,
   SearchRow,
@@ -66,6 +65,7 @@ import {
 } from './snapshot_model';
 import {
   AdvancedSnapshotSettings,
+  DeleteDialog,
   Facts,
   Field,
   FilterGroup,
@@ -1208,17 +1208,11 @@ export function Snapshots() {
         />
       )}
       {dialog === 'delete' && (
-        <ConfirmationModal
-          title="Delete snapshot"
-          bodyMessage={
-            <>
-              Delete "<strong>{selected.map((row) => row.id).join(', ')}</strong>" permanently?
-            </>
-          }
-          actionMessage="Delete snapshot"
-          danger
-          onClose={() => setDialog(undefined)}
-          onAction={remove}
+        <DeleteDialog
+          type="snapshot"
+          ids={selected.map((row) => row.id).join(', ')}
+          onCancel={() => setDialog(undefined)}
+          onDelete={() => void remove()}
         />
       )}
       {failureShown && failure && (

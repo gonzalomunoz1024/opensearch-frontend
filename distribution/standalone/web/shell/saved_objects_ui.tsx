@@ -151,7 +151,9 @@ export function SaveModal({
               setTitle(value);
               setDuplicate(false);
             }}
-            invalid={title.trim() === '' || duplicate}
+            // As the original's: a title found on another is no longer invalid once the warning
+            // shows, as the next save confirms it (`isTitleDuplicateConfirmed`)
+            invalid={title.trim() === ''}
             testId="savedObjectTitle"
             autoFocus
           />

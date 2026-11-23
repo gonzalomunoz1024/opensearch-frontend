@@ -182,32 +182,40 @@ export interface ModelInput {
   addInterval?: (value: number, times: number) => number;
 }
 
-/** A point series chart of a table as vislib sets it up */
-export function buildPointSeriesModel({ params, table, percentFormat, bounds, addInterval }: ModelInput): PointSeriesModel {
-  const valueAxesParams: AxisParams[] = params.valueAxes?.length
+/** The value axes of a visualization's params, or the one its mode gives */
+function valueAxesParamsOf(params: PointSeriesParams): AxisParams[] {
+  return params.valueAxes?.length
     ? params.valueAxes
     : [{ id: 'ValueAxis-1', type: 'value', scale: { mode: ['stacked', 'overlap'].includes(params.mode ?? '') ? 'normal' : params.mode } }];
+}
+
+/** The measures, by aggregation id, that the visualization puts on an axis in the percentage mode */
+function percentAggsOf(params: PointSeriesParams, valueAxesParams: AxisParams[]): Set<string> {
   const percentAggs = new Set<string>();
   for (const seriesParam of params.seriesParams ?? []) {
     const axis = valueAxesParams.find((candidate) => candidate.id === seriesParam.valueAxis);
     if (axis?.scale?.mode === 'percentage' && seriesParam.data?.id) percentAggs.add(seriesParam.data.id);
   }
-  const data = buildPointSeries(table.columns, table.rows, { percentAggs, percentFormat, bounds, addInterval });
-  const series = data.series.map((item) => seriesConfigOf(params, item));
-  const xValues = orderXValues(data, Boolean(params.orderBucketsBySum));
-  const valuesOnChart = Boolean(params.labels?.show);
+  return percentAggs;
+}
 
-  const valueAxes: ValueAxisModel[] = valueAxesParams.map((args) => {
+/** The value axes as vislib sets them up, named and written by the data (of the first chart of a split) */
+function valueAxesOf(params: PointSeriesParams, valueAxesParams: AxisParams[], data: PointSeriesData): ValueAxisModel[] {
+  const valuesOnChart = Boolean(params.labels?.show);
+  return valueAxesParams.map((args) => {
     const config = axisConfig(args, 'value', { ordinal: false, title: data.yLabel, valuesOnChart });
     // The format of the first series the visualization puts on the axis, else that of the first measure
     const seriesParam = params.seriesParams?.find((candidate) => candidate.valueAxis === args.id);
     const first = seriesParam ? data.series.find((item) => seriesParamId(item.aggId) === seriesParam.data?.id) : undefined;
     return { config, format: first ? first.format : data.yFormat };
   });
+}
 
+/** The axes of categories as vislib sets them up, named and written by the data (of the first chart of a split) */
+function categoryAxesOf(params: PointSeriesParams, data: PointSeriesData): CategoryAxisModel[] {
   const ordinal = !data.ordered?.date;
   const categoryParams: AxisParams[] = params.categoryAxes?.length ? params.categoryAxes : [{ id: 'CategoryAxis-1', type: 'category' }];
-  const categoryAxes: CategoryAxisModel[] = categoryParams.map((args) => {
+  return categoryParams.map((args) => {
     // The first axis of categories is always named by the bucket along it, whatever it was given
     const title = args.id === 'CategoryAxis-1' ? { ...(args.title ?? {}), text: data.xLabel } : args.title;
     const config = axisConfig({ ...args, title }, 'category', { ordinal, title: data.xLabel });
@@ -216,8 +224,10 @@ export function buildPointSeriesModel({ params, table, percentFormat, bounds, ad
       format: (value) => (value === '_all' && !data.xColumn ? '_all' : data.xFormat(value)),
     };
   });
+}
 
-  // Stacks, each value axis in turn: the series stacked on it, or all of it in a mode that piles them up
+/** Stacks, each value axis in turn: the series stacked on it, or all of it in a mode that piles them up */
+function stackOnAxes(valueAxes: ValueAxisModel[], series: SeriesConfig[], xValues: Array<number | string>): void {
   const firstAxisId = valueAxes[0]?.config.id ?? 'ValueAxis-1';
   valueAxes.forEach(({ config }) => {
     const stacked = series.filter(
@@ -227,7 +237,22 @@ export function buildPointSeriesModel({ params, table, percentFormat, bounds, ad
     injectZeros(values, xValues);
     stackSeries(values, (['normal', 'grouped', 'percentage', 'wiggle', 'silhouette'].includes(config.scale.mode) ? config.scale.mode : 'normal') as StackMode);
   });
+}
 
+/** The names of the legend, once each, in the order of the series */
+const labelsOf = (series: VislibSeries[]): string[] => [...new Set(series.map((item) => item.label))];
+
+/** What the charts of a split share, and what a chart that is not split has of its own */
+interface SharedModel {
+  xValues: Array<number | string>;
+  valueAxes: ValueAxisModel[];
+  categoryAxes: CategoryAxisModel[];
+  ordered?: Ordered;
+  labels: string[];
+}
+
+/** A chart's model: its series and its dot sizes, over the axes and values it has or shares */
+function chartModel(params: PointSeriesParams, data: PointSeriesData, series: SeriesConfig[], shared: SharedModel): PointSeriesModel {
   let min = Infinity;
   let max = -Infinity;
   for (const item of data.series) {
@@ -251,12 +276,12 @@ export function buildPointSeriesModel({ params, table, percentFormat, bounds, ad
 
   return {
     data,
-    xValues,
+    xValues: shared.xValues,
     series,
-    valueAxes,
-    categoryAxes,
-    ordered: data.ordered,
-    labels: [...new Set(data.series.map((item) => item.label))],
+    valueAxes: shared.valueAxes,
+    categoryAxes: shared.categoryAxes,
+    ordered: shared.ordered,
+    labels: shared.labels,
     radii: { min, max },
     grid: { categoryLines: Boolean(params.grid?.categoryLines), valueAxis: params.grid?.valueAxis || undefined },
     threshold,
@@ -264,8 +289,84 @@ export function buildPointSeriesModel({ params, table, percentFormat, bounds, ad
     tooltip: params.addTooltip !== false,
     // On unless the visualization says otherwise
     hover: params.enableHover === undefined ? true : Boolean(params.enableHover),
-    valueLabels: valuesOnChart,
+    valueLabels: Boolean(params.labels?.show),
   };
+}
+
+/** A point series chart of a table as vislib sets it up */
+export function buildPointSeriesModel({ params, table, percentFormat, bounds, addInterval }: ModelInput): PointSeriesModel {
+  const valueAxesParams = valueAxesParamsOf(params);
+  const percentAggs = percentAggsOf(params, valueAxesParams);
+  const data = buildPointSeries(table.columns, table.rows, { percentAggs, percentFormat, bounds, addInterval });
+  const series = data.series.map((item) => seriesConfigOf(params, item));
+  const xValues = orderXValues(data, Boolean(params.orderBucketsBySum));
+  const valueAxes = valueAxesOf(params, valueAxesParams, data);
+  stackOnAxes(valueAxes, series, xValues);
+  return chartModel(params, data, series, {
+    xValues,
+    valueAxes,
+    categoryAxes: categoryAxesOf(params, data),
+    ordered: data.ordered,
+    labels: labelsOf(data.series),
+  });
+}
+
+export interface SplitModelInput extends Omit<ModelInput, 'table'> {
+  /** The tables of a split's charts, in their order, each without the split's column */
+  tables: Table[];
+  /** How many columns the whole table has, the split's too: the tooltip counts them */
+  columnCount: number;
+}
+
+export interface SplitPointSeriesModels {
+  /**
+   * What the charts share: the axes, the values along them and the legend's names; its series are
+   * those of every chart, which the value axes reach
+   */
+  frame: PointSeriesModel;
+  /** Each chart: its own series, stacked over the values the charts share */
+  charts: PointSeriesModel[];
+}
+
+/**
+ * The charts of a split as vislib sets them up (its Data over rows or columns of charts): the axes
+ * named and written by the first chart; along the axis of names, the values of every chart's
+ * series as they come, ordered when the axis is, and none put back between them, as the whole has
+ * no step of its own; the first chart's order of time, its ends those of all the values when the
+ * time range does not bound it; the value axes over every chart's values; the legend's names of
+ * every chart; and each chart's series stacked over the shared values, its dots sized by its own.
+ */
+export function buildSplitPointSeriesModels({
+  params,
+  tables,
+  columnCount,
+  percentFormat,
+  bounds,
+  addInterval,
+}: SplitModelInput): SplitPointSeriesModels {
+  const valueAxesParams = valueAxesParamsOf(params);
+  const percentAggs = percentAggsOf(params, valueAxesParams);
+  const keys = new Map<string, unknown>();
+  const parts: Table[] = tables.length ? tables : [{ columns: [], rows: [] }];
+  const datas = parts.map((table) => {
+    const data = buildPointSeries(table.columns, table.rows, { percentAggs, percentFormat, bounds, addInterval, keys });
+    data.columnCount = columnCount;
+    return data;
+  });
+  const seriesOf = datas.map((data) => data.series.map((item) => seriesConfigOf(params, item)));
+  const first = datas[0];
+  const allSeries = datas.flatMap((data) => data.series);
+  const xValues = orderXValues({ xValues: [], series: allSeries, ordered: first.ordered }, Boolean(params.orderBucketsBySum), false);
+  let ordered = first.ordered;
+  if (ordered?.date && !bounds) {
+    const numbers = xValues.filter((value): value is number => typeof value === 'number');
+    if (numbers.length) ordered = { ...ordered, min: Math.min(...numbers), max: Math.max(...numbers) };
+  }
+  const valueAxes = valueAxesOf(params, valueAxesParams, first);
+  for (const series of seriesOf) stackOnAxes(valueAxes, series, xValues);
+  const shared: SharedModel = { xValues, valueAxes, categoryAxes: categoryAxesOf(params, first), ordered, labels: labelsOf(allSeries) };
+  const charts = datas.map((data, index) => chartModel(params, data, seriesOf[index], shared));
+  return { frame: { ...charts[0], series: seriesOf.flat() }, charts: tables.length ? charts : [] };
 }
 
 // --- Scales ---------------------------------------------------------------------------------------
