@@ -358,9 +358,8 @@ export function ImportFlyout({ onClose, onDone }: { onClose: () => void; onDone:
         </>
       )}
       {body}
-      {conflictingRecord && (
-        <OverwriteModal conflict={conflictingRecord.conflict} onFinish={(overwrite, destinationId) => conflictingRecord.done([overwrite, destinationId])} />
-      )}
+      {conflictingRecord &&
+        conflictQuestion(conflictingRecord.conflict, (overwrite, destinationId) => conflictingRecord.done([overwrite, destinationId]))}
     </Flyout>
   );
 }
@@ -556,6 +555,15 @@ function fromNow(date: string): string {
                         ? 'a year'
                         : `${round(s / (365.25 * 86400))} years`;
   return past ? `${text} ago` : `in ${text}`;
+}
+
+/**
+ * The question about one conflict, in a dialog of its own: the original's flyout mounts a new one
+ * for each conflict, so the focus starts on Overwrite again and the choice is that conflict's.
+ * Without the key, React keeps the dialog of the conflict before.
+ */
+export function conflictQuestion(conflict: FailedConflict, onFinish: (overwrite: boolean, destinationId?: string) => void) {
+  return <OverwriteModal key={`${conflict.obj.type}:${conflict.obj.id}`} conflict={conflict} onFinish={onFinish} />;
 }
 
 function OverwriteModal({ conflict, onFinish }: { conflict: FailedConflict; onFinish: (overwrite: boolean, destinationId?: string) => void }) {

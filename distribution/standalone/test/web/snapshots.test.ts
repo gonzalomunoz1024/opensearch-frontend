@@ -9,15 +9,19 @@ import {
   activityInfoWord,
   buildCron,
   buildPolicy,
+  capitalize,
   changeCron,
   clockTime,
   countOf,
   dayTime,
   defaultPolicy,
   distinct,
+  emptySnapshot,
   failedStage,
   failureSentence,
   fieldValues,
+  getAt,
+  hasRestoreErrors,
   humanCron,
   indexCountText,
   isOn,
@@ -40,9 +44,13 @@ import {
   restoreErrors,
   restoreFailureText,
   restoreProgress,
+  restoreTime,
+  restoredIndices,
   retainedCount,
   setAt,
+  settingsTokens,
   snapshotCountsWarning,
+  snapshotRowId,
   snapshotStatusText,
   snapshotStatusTone,
   stageTone,
@@ -161,6 +169,48 @@ describe('repositories', () => {
     assert.equal(repositoryBody('fs', '/x', '3'), undefined);
   });
 
+  it('colours the settings as the editor does, with a guide for each four spaces of an indent', () => {
+    const lines = settingsTokens(
+      ['{', '    "type": "s3",', '    "settings": {', '        "readonly": false,', '        "x": null', '    }', '}'].join('\n')
+    );
+    assert.deepEqual(lines[0], [{ text: '{' }]);
+    // Four spaces are an indent of one tab: no guide before its last space
+    assert.deepEqual(lines[1], [
+      { text: '    ' },
+      { text: '"type"', kind: 'Key' },
+      { text: ': ' },
+      { text: '"s3"', kind: 'String' },
+      { text: ',' },
+    ]);
+    // Eight are two: one guide, then the four spaces that are left
+    assert.deepEqual(lines[3], [
+      { text: '    ', kind: 'Guide' },
+      { text: '    ' },
+      { text: '"readonly"', kind: 'Key' },
+      { text: ': ' },
+      { text: 'false', kind: 'Boolean' },
+      { text: ',' },
+    ]);
+    // null is not coloured, as in the original's JSON mode
+    assert.deepEqual(lines[4], [
+      { text: '    ', kind: 'Guide' },
+      { text: '    ' },
+      { text: '"x"', kind: 'Key' },
+      { text: ': null' },
+    ]);
+    assert.deepEqual(lines[5], [{ text: '    }' }]);
+    assert.deepEqual(lines[6], [{ text: '}' }]);
+  });
+
+  it('draws the guides of a deep or an odd indent by whole tabs only', () => {
+    assert.deepEqual(settingsTokens('             1'), [
+      [{ text: '    ', kind: 'Guide' }, { text: '    ', kind: 'Guide' }, { text: '    ', kind: 'Guide' }, { text: ' ' }, { text: '1', kind: 'Number' }],
+    ]);
+    assert.deepEqual(settingsTokens('  "a"'), [[{ text: '  ' }, { text: '"a"', kind: 'String' }]]);
+    assert.deepEqual(settingsTokens(''), [[{ text: '' }]]);
+    assert.deepEqual(settingsTokens('        '), [[{ text: '    ', kind: 'Guide' }, { text: '    ' }]]);
+  });
+
   it('warns of the snapshots that go with the repositories deleted', () => {
     const one = { id: 'a', type: 'fs', snapshotCount: 2 };
     const two = { id: 'b', type: 'fs', snapshotCount: 0 };
@@ -206,6 +256,27 @@ describe('snapshots', () => {
     });
     assert.equal(failureSentence(error), ' snapshot with the same name is already in-progress.');
     assert.equal(failureSentence('plain words'), 'plain words');
+  });
+
+  it('tells apart snapshots of the same name in two repositories', () => {
+    assert.equal(snapshotRowId(row('SUCCESS')), 'repo:snap');
+    assert.notEqual(snapshotRowId({ ...row('SUCCESS'), repository: 'other' }), 'repo:snap');
+  });
+
+  it('writes a word with only its first letter large', () => {
+    assert.equal(capitalize('PARTIAL'), 'Partial');
+    assert.equal(capitalize('weekly'), 'Weekly');
+    assert.equal(capitalize(''), '');
+  });
+
+  it('takes a snapshot of nothing chosen, with every option off', () => {
+    assert.deepEqual(emptySnapshot(), {
+      indices: '',
+      ignore_unavailable: false,
+      include_global_state: false,
+      partial: false,
+    });
+    assert.notEqual(emptySnapshot(), emptySnapshot());
   });
 });
 
@@ -273,6 +344,22 @@ describe('restoring a snapshot', () => {
       noIndicesSelected: true,
     });
     assert.equal(restoreErrors({ ...form, customIndexSettings: '{' }).badJSON, true);
+    assert.equal(hasRestoreErrors(restoreErrors(form)), false);
+    assert.equal(hasRestoreErrors(wrong), true);
+    assert.equal(hasRestoreErrors({ ...restoreErrors(form), noIndicesSelected: true }), true);
+  });
+
+  it('restores all the indices of the snapshot, or those chosen', () => {
+    assert.deepEqual(restoredIndices(form), ['a', 'b']);
+    assert.deepEqual(restoredIndices({ ...form, restoreSpecific: true, selected: ['b'] }), ['b']);
+    assert.deepEqual(restoredIndices({ ...form, selected: ['b'] }), ['a', 'b']);
+  });
+
+  it('writes a moment as the list of restores does, the comma after the date made spaces', () => {
+    const time = Date.UTC(2026, 10, 22, 17, 29, 1);
+    const written = new Date(time).toLocaleString();
+    assert.equal(restoreTime(time), written.replace(',', '  '));
+    if (written.split(',').length === 2) assert.equal(restoreTime(time).includes(','), false);
   });
 
   it('suggests another prefix when the index is there already', () => {
@@ -344,6 +431,10 @@ describe('snapshot policies', () => {
     assert.equal(isOn(after, 'notification.conditions.failure'), true);
     assert.equal(before.notification, undefined);
     assert.equal(isOn({ snapshot_config: { partial: 'true' } }, 'snapshot_config.partial'), true);
+    assert.equal(getAt(after, 'notification.conditions.failure'), true);
+    assert.equal(getAt(after, 'notification.channel.id'), undefined);
+    assert.equal(getAt(after, 'snapshot_config.repository.length'), undefined);
+    assert.equal(getAt(null, 'snapshot_config'), undefined);
     assert.equal(notifies(after), true);
     assert.equal(notifies(before), false);
   });

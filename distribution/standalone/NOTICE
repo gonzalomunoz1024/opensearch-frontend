@@ -12,9 +12,10 @@ with it keeps working, and parts of it are derived from it under the Apache Lice
   - the reading of a Vega spec (web/vis/vega): its settings, the requests it makes to OpenSearch,
     its warnings and its error texts,
   - the palette of chart colours, which is that of the OpenSearch UI framework,
-  - the icons (web/components/icon.tsx): the drawings of the OpenSearch UI framework (OUI)
-    1.24.2, the component library OpenSearch Dashboards 3.9.0 is built with, copied as data from
-    the icons it holds,
+  - the icons (web/components/icon.tsx, and the mark beside the help menu's link to GitHub in
+    web/shell/help_menu.tsx): the drawings of the OpenSearch UI framework (OUI) 1.24.2, the
+    component library OpenSearch Dashboards 3.9.0 is built with, copied as data from the icons
+    it holds,
   - the sample data sets (server/sample_data/data_sets): their documents (the *.json.gz files,
     copied as they are from src/plugins/home/server/services/sample_data/data_sets of
     OpenSearch Dashboards 3.9.0), the field mappings of their indices, and their saved objects
@@ -99,6 +100,17 @@ Dashboards draws it with, and is derived from its code and from that of mdast-ut
 10.2.0, which it uses (web/lib/markdown.tsx): the address a link leads to (react-markdown's
 uriTransformer), MIT License, Copyright (c) 2015 Espen Hovlandsdal, and the lines between blocks
 and in list items, MIT License, Copyright (c) 2016 Titus Wormer.
+
+Their licence texts are in licenses/, and in dist/licenses/followed of a build.
+
+The tag cloud is laid out and drawn after the code of the packages OpenSearch Dashboards draws it
+with, so that its words fall, and move, where they do there, and is derived from that code under
+its licence:
+
+  - the layout of the words (web/vis/cloud_layout.ts): d3-cloud 1.2.5, BSD 3-Clause License,
+    Copyright (c) 2013, Jason Davies
+  - the scales, colours and transitions of the words (web/vis/tag_cloud_d3.ts): d3 3.5.17,
+    BSD 3-Clause License, Copyright (c) 2010-2016, Michael Bostock
 
 Their licence texts are in licenses/, and in dist/licenses/followed of a build.
 
