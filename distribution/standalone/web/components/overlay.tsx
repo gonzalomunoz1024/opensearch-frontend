@@ -567,8 +567,11 @@ export function Tooltip({
   block?: boolean;
   /** A class for the box of the text */
   className?: string;
-  /** Above its anchor, or under it; on the other side when there is no room */
-  position?: 'top' | 'bottom';
+  /**
+   * Where it is drawn, as the original's `position`: above its anchor or under it, on the other
+   * side when there is no room, or on its right
+   */
+  position?: 'top' | 'bottom' | 'right';
   /** Shown after the original's delay; at once when left out */
   delay?: keyof typeof TOOLTIP_DELAYS;
 }) {
@@ -581,6 +584,10 @@ export function Tooltip({
     if (!shown || !anchor.current || !box.current) return;
     const target = anchor.current.getBoundingClientRect();
     const own = box.current.getBoundingClientRect();
+    if (position === 'right' && target.right + 16 + own.width <= window.innerWidth - 8) {
+      setPlace({ left: target.right + 16, top: Math.max(8, target.top + target.height / 2 - own.height / 2) });
+      return;
+    }
     const left = Math.max(8, Math.min(target.left + target.width / 2 - own.width / 2, window.innerWidth - own.width - 8));
     // 16 px from its anchor, as the original's, on the side asked unless there is no room
     const above = target.top - own.height - 16;

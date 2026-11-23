@@ -185,7 +185,7 @@ export const VIS_TYPES: VisType[] = [
     aggBased: true,
     schemas: [
       { name: 'metric', title: 'Value', group: 'metrics', min: 1, max: 1 },
-      { name: 'segment', title: 'Geo coordinates', group: 'buckets', max: 1 },
+      { name: 'segment', title: 'Geo coordinates', group: 'buckets', min: 1, max: 1 },
     ],
   },
   {
@@ -269,7 +269,7 @@ export const VIS_TYPES: VisType[] = [
     aggBased: true,
     schemas: [
       { name: 'metric', title: 'Value', group: 'metrics', min: 1, max: 1 },
-      { name: 'segment', title: 'Shape field', group: 'buckets', max: 1 },
+      { name: 'segment', title: 'Shape field', group: 'buckets', min: 1, max: 1 },
     ],
   },
   {
@@ -280,7 +280,7 @@ export const VIS_TYPES: VisType[] = [
     aggBased: true,
     schemas: [
       { name: 'metric', title: 'Tag size', group: 'metrics', min: 1, max: 1 },
-      { name: 'segment', title: 'Tags', group: 'buckets', max: 1 },
+      { name: 'segment', title: 'Tags', group: 'buckets', min: 1, max: 1 },
     ],
   },
   { name: 'timelion', title: 'Timeline', description: 'Build time-series using functional expressions', icon: 'timeline', aggBased: false },
