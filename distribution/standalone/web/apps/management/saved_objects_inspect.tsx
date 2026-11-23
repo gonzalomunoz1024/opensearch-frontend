@@ -14,8 +14,17 @@ import { navigate, useLocation } from '../../router';
 import { services } from '../../services';
 import type { SavedObject } from '../../services/saved_objects';
 import { useBreadcrumbs } from '../../shell/state';
-import { OBJECT_SERVICES, createFieldList, savedAttributes, tokenizeFieldJson, type ObjectField, type ObjectService } from './saved_objects_lib';
-import { Callout, MANAGEMENT_CRUMB, OBJECTS_ROOT, SmallSwitch, errorText } from './saved_objects_parts';
+import {
+  OBJECT_SERVICES,
+  createFieldList,
+  inspectDelete,
+  inspectedObject,
+  savedAttributes,
+  tokenizeFieldJson,
+  type ObjectField,
+  type ObjectService,
+} from './saved_objects_lib';
+import { Callout, MANAGEMENT_CRUMB, OBJECTS_ROOT, SmallSwitch, allowedObjectTypes, errorText, useObjectsDocTitle } from './saved_objects_parts';
 
 type StoredObject = SavedObject<Record<string, unknown>>;
 
@@ -37,21 +46,30 @@ const NOT_FOUND_MESSAGES: Record<string, string> = {
   'index-pattern-field': 'A field associated with this object no longer exists in the index pattern.',
 };
 
+// Where the page goes when it is done: the section's root as the original's history writes it
+const LISTING = `${OBJECTS_ROOT}/`;
+
+const deleteObject = (type: string, id: string) => {
+  const request = inspectDelete(type, id);
+  return services.http.delete(request.path, { query: request.query });
+};
+
 /** The augment-vis objects of a deleted visualization go with it, as the vis augmenter's action does */
 async function deleteAugmentVis(id: string) {
   if (!services.uiSettings.get<boolean>('visualization:enablePluginAugmentation', true)) return;
   try {
     const found = await services.http.get<{ saved_objects: Array<{ id: string }> }>('/api/saved_objects/_find', {
+      // In the order the original's client writes them into the address
       query: {
-        type: 'augment-vis',
-        per_page: 100,
-        page: 1,
-        search_fields: ['title^3', 'description'],
         default_search_operator: 'AND',
         has_reference: JSON.stringify({ type: 'visualization', id }),
+        page: 1,
+        per_page: 100,
+        search_fields: ['title^3', 'description'],
+        type: 'augment-vis',
       },
     });
-    await Promise.all(found.saved_objects.map((object) => services.savedObjects.delete('augment-vis', object.id)));
+    await Promise.all(found.saved_objects.map((object) => deleteObject('augment-vis', object.id)));
   } catch {
     // As the original's: a clean-up the person did not ask for fails silently
   }
@@ -66,12 +84,21 @@ export function InspectPage({ serviceName, id }: { serviceName: string; id: stri
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   useBreadcrumbs([MANAGEMENT_CRUMB, { text: 'Saved objects', to: OBJECTS_ROOT }, { text: `Edit ${type}` }]);
+  useObjectsDocTitle();
+
+  useEffect(() => {
+    // As the original's section does when it is opened on an object: the types are asked for too
+    void allowedObjectTypes().catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (!service) return undefined;
     let live = true;
-    services.savedObjects.get<Record<string, unknown>>(service.type, id).then(
-      (loaded) => live && setObject(loaded),
+    // As the original's client reads one object: a bulk get of it. One that is not there is
+    // answered without attributes and shown empty, with nothing said; only a request that fails
+    // is told (the original leaves the page as it is then)
+    services.savedObjects.bulkGet<Record<string, unknown>>([{ id, type: service.type }]).then(
+      ([found]) => live && setObject(inspectedObject(service.type, id, found)),
       (error) => live && services.toasts.danger('Unable to find saved object', errorText(error))
     );
     return () => {
@@ -84,15 +111,17 @@ export function InspectPage({ serviceName, id }: { serviceName: string; id: stri
 
   const remove = async () => {
     setConfirmDelete(false);
+    // The object's delete is asked for first, the clean-up of what augments it after, as the original's
+    const deleted = deleteObject(type, id);
     if (type === 'visualization') void deleteAugmentVis(id);
     try {
-      await services.savedObjects.delete(type, id);
+      await deleted;
     } catch (error) {
       services.toasts.danger('Unable to delete saved objects', errorText(error));
       return;
     }
     services.toasts.success(`Deleted ${title} ${type} object`);
-    navigate(OBJECTS_ROOT);
+    navigate(LISTING);
   };
 
   return (
@@ -146,7 +175,7 @@ export function InspectPage({ serviceName, id }: { serviceName: string; id: stri
                   references: references as StoredObject['references'],
                 });
                 services.toasts.success(`Updated ${title} ${type} object`);
-                navigate(OBJECTS_ROOT);
+                navigate(LISTING);
               }}
             />
           </>

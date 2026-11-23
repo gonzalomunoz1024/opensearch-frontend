@@ -4,8 +4,12 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   OBJECT_SERVICES,
+  askedOnce,
   createFieldList,
   importItems,
+  inspectDelete,
+  inspectedObject,
+  objectsDocTitle,
   processImportResponse,
   resolveImportErrors,
   savedAttributes,
@@ -408,5 +412,57 @@ describe('the colours of a JSON field', () => {
 
   it('keeps an empty line', () => {
     assert.deepEqual(kinds('{\n\n}'), [[['', '{']], [['', '']], [['', '}']]]);
+  });
+});
+
+describe('an object of the inspect page that is not there', () => {
+  it('is shown as the original shows it: the fields of its class, all empty, after its references', () => {
+    // The bulk get's answer for an id that is not there
+    const answered = { id: 'gone', type: 'visualization', error: { statusCode: 404, message: 'Saved object [visualization/gone] not found' } };
+    const object = inspectedObject('visualization', 'gone', answered);
+    assert.deepEqual(object.attributes, {});
+    assert.deepEqual(object.references, []);
+    assert.equal(object.id, 'gone');
+    // Measured in the original's page of `savedVisualizations/undefined`
+    assert.deepEqual(
+      createFieldList(object, OBJECT_SERVICES.savedVisualizations).map((field) => field.name),
+      ['references', 'title', 'visState', 'uiStateJSON', 'description', 'savedSearchId', 'version']
+    );
+    // An answer without the object at all is shown the same
+    assert.deepEqual(inspectedObject('visualization', 'gone', undefined), { id: 'gone', type: 'visualization', attributes: {}, references: [] });
+  });
+
+  it('leaves an object that is there as it was answered', () => {
+    const answered = { id: 'v', type: 'visualization', attributes: { title: 'T' }, references: [{ name: 'a', type: 'search', id: 's' }], version: 'WzEsMV0=' };
+    assert.deepEqual(inspectedObject('visualization', 'v', answered), answered);
+  });
+});
+
+describe("the inspect page's delete", () => {
+  it("says it is not forced, as the original's client does, and writes the id so that it stays one", () => {
+    assert.deepEqual(inspectDelete('visualization', 'a/b c'), { path: '/api/saved_objects/visualization/a%2Fb%20c', query: { force: false } });
+  });
+});
+
+describe('what the section keeps for as long as the page lives', () => {
+  it("names the tab as the original's section does, on the list and on an object", () => {
+    assert.equal(objectsDocTitle('InfraDashboard'), 'Saved Objects - InfraDashboard');
+  });
+
+  it('asks once, however often it is needed, and again only after an answer that failed', async () => {
+    let asked = 0;
+    let fail = true;
+    const types = askedOnce(async () => {
+      asked += 1;
+      if (fail) throw new Error('no answer');
+      return ['dashboard'];
+    });
+    let failed = 0;
+    await types().catch(() => (failed += 1));
+    assert.deepEqual([asked, failed], [1, 1]);
+    fail = false;
+    assert.deepEqual(await types(), ['dashboard']);
+    assert.deepEqual(await Promise.all([types(), types()]), [['dashboard'], ['dashboard']]);
+    assert.equal(asked, 2);
   });
 });

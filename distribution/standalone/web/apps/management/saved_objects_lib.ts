@@ -402,6 +402,42 @@ function createFields(key: string, value: unknown, parents: string[] = []): Obje
 }
 
 /**
+ * What is asked once and kept for as long as the page lives, as the original's section keeps the
+ * types it may show: an answer that failed is asked for again the next time.
+ */
+export function askedOnce<T>(ask: () => Promise<T>): () => Promise<T> {
+  let kept: Promise<T> | undefined;
+  return () => {
+    if (!kept) {
+      const asked = ask();
+      kept = asked;
+      asked.catch(() => {
+        if (kept === asked) kept = undefined;
+      });
+    }
+    return kept;
+  };
+}
+
+/** The tab's title on every page of the section, the list and an object alike, as the original's */
+export const objectsDocTitle = (productName: string) => `Saved Objects - ${productName}`;
+
+/**
+ * The object the inspect page shows, from the answer of the bulk get the original's client asks
+ * with. One that is not there comes back with an error instead of attributes, and is shown as the
+ * original shows it: an object with nothing in it, the fields of its class empty.
+ */
+export function inspectedObject<R, T extends { id?: string; attributes?: Record<string, unknown>; references?: R[] }>(type: string, id: string, found: T | undefined) {
+  return { ...found, id, type, attributes: found?.attributes ?? {}, references: found?.references ?? [] };
+}
+
+/** A delete as the original's client asks for it from the inspect page: not forced, and saying so */
+export const inspectDelete = (type: string, id: string) => ({
+  path: `/api/saved_objects/${encodeURIComponent(type)}/${encodeURIComponent(id)}`,
+  query: { force: false },
+});
+
+/**
  * The fields of an object as the original lists them: its attributes, nested ones by their path
  * and JSON text pretty printed, then its references, then the fields of its class it has not
  */
