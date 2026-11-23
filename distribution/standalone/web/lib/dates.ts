@@ -344,14 +344,57 @@ export function formatDate(date: Date, pattern: string, timeZone?: string): stri
 
 export const DEFAULT_DATE_FORMAT = 'MMM D, YYYY @ HH:mm:ss.SSS';
 
-/** The format of an axis tick, by the width of what a tick stands for (the setting dateFormat:scaled) */
-export function scaledDateFormat(intervalMs: number): string {
-  if (intervalMs >= UNIT_MS.y) return 'YYYY';
-  if (intervalMs >= UNIT_MS.d) return 'YYYY-MM-DD';
-  if (intervalMs >= UNIT_MS.h) return 'YYYY-MM-DD HH:mm';
-  if (intervalMs >= UNIT_MS.m) return 'HH:mm';
-  if (intervalMs >= UNIT_MS.s) return 'HH:mm:ss';
-  return 'HH:mm:ss.SSS';
+/** The setting dateFormat:scaled: an ISO 8601 duration and the format of an interval at least that long */
+export type ScaledDateRules = Array<[string, string]>;
+
+export const DEFAULT_SCALED_DATE_RULES: ScaledDateRules = [
+  ['', 'HH:mm:ss.SSS'],
+  ['PT1S', 'HH:mm:ss'],
+  ['PT1M', 'HH:mm'],
+  ['PT1H', 'YYYY-MM-DD HH:mm'],
+  ['P1DT', 'YYYY-MM-DD'],
+  ['P1YT', 'YYYY'],
+];
+
+const ISO_DURATION =
+  /^P(?:(\d*\.?\d*)Y)?(?:(\d*\.?\d*)M)?(?:(\d*\.?\d*)W)?(?:(\d*\.?\d*)D)?(?:T(?:(\d*\.?\d*)H)?(?:(\d*\.?\d*)M)?(?:(\d*\.?\d*)S)?)?$/;
+
+/**
+ * An ISO 8601 duration in milliseconds, as moment counts one: a month is 30 days and a year 365.
+ * What is not a duration is 0, as moment makes of it.
+ */
+export function isoDurationMs(text: string): number {
+  const match = ISO_DURATION.exec(text.trim().toUpperCase());
+  if (!match) return 0;
+  const units: TimeUnit[] = ['y', 'M', 'w', 'd', 'h', 'm', 's'];
+  return units.reduce((total, unit, index) => total + (Number.parseFloat(match[index + 1] ?? '') || 0) * UNIT_MS[unit], 0);
+}
+
+/** The rules of dateFormat:scaled as the setting holds them, or none when it holds something else */
+export function scaledDateRules(value: unknown): ScaledDateRules | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const rules = value.filter(
+    (rule): rule is [string, string] =>
+      Array.isArray(rule) && typeof rule[0] === 'string' && typeof rule[1] === 'string'
+  );
+  return rules.length === value.length ? rules : undefined;
+}
+
+/**
+ * The format of an axis tick or a bucket by the interval it stands for, as the original's time
+ * buckets choose it: the last rule whose duration the interval reaches, or whose duration is empty;
+ * the date format when none is.
+ */
+export function scaledDateFormat(
+  intervalMs: number,
+  rules: ScaledDateRules = DEFAULT_SCALED_DATE_RULES,
+  dateFormat = DEFAULT_DATE_FORMAT
+): string {
+  for (let at = rules.length - 1; at >= 0; at--) {
+    const [duration, format] = rules[at];
+    if (!duration || (intervalMs && intervalMs >= isoDurationMs(duration))) return format;
+  }
+  return dateFormat;
 }
 
 // --- Intervals -----------------------------------------------------------------------------------

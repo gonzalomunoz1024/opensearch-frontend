@@ -222,6 +222,62 @@
   min-width: 0;
 }
 
+/* The custom banner of the advanced settings, above the page as the original's banner list */
+.shlBanners {
+  flex: none;
+  padding: var(--space-4);
+}
+
+.shlBanner {
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-accent-tint);
+  color: var(--color-text-primary);
+}
+
+.shlBanner__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-top: 1px;
+  color: var(--color-accent);
+  font-size: var(--font-size-m);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+/* At the top of the title's line, as the theme's header puts its icon */
+.shlBanner__icon.atlIcon {
+  align-self: flex-start;
+  margin-top: 1px;
+  stroke-width: 1.2;
+}
+
+.shlBanner__text strong {
+  font-weight: var(--font-weight-semibold);
+}
+
+/* The text runs on to the button: its paragraphs are not blocks, as the original renders them */
+.shlBanner__text {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+.shlBanner__text p {
+  display: inline;
+}
+
+.shlBanner__text p + p::before {
+  content: " ";
+}
+
+/* Its label a little below the line of the text, where the original's button puts it */
+.shlBanner__close.atlButton {
+  min-width: calc(var(--space-4) * 7);
+  vertical-align: -1.5px;
+}
+
 /* A page of settings or lists: a column in the middle */
 .shlPage {
   width: 100%;
