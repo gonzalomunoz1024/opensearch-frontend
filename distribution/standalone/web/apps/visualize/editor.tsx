@@ -41,7 +41,7 @@ import { serializeAggs } from './agg_params';
 import { editorStateDefaults, initialAppState, paramsWithDefaults, unlinkSavedSearch, type AppVisState, type VisualizeAppState } from './app_state';
 import { DataTab } from './data_tab';
 import { newVis, syncParams, visProblems, withoutDisabledBuckets } from './defaults';
-import { canAutoApply, dragWidths, editorHeading, initialWidths, keyWidths, searchBarParts, type SplitWidths } from './editor_layout';
+import { canAutoApply, dragWidths, editorAggs, editorHeading, initialWidths, keyWidths, searchBarParts, type SplitWidths } from './editor_layout';
 import { LeaveConfirmModal } from './leave_confirm';
 import { INDEX_PATTERNS_LINK, found, loadFailure } from './load_failure';
 import { optionTabs } from './options';
@@ -257,13 +257,14 @@ export function VisEditor({ savedId }: { savedId?: string }) {
   const appliedKey = useMemo(() => {
     if (!saved) return undefined;
     const fromUrl = urlState.vis && (urlState.vis.type === undefined || urlState.vis.type === saved.type) ? urlState.vis : undefined;
+    const stateAggs = editorAggs(fromUrl?.aggs, saved.aggs, aggBased, { indexPattern, queryLanguage: defaultQueryLanguage() });
     // As the original, a bucket type the advanced settings disable is not known to the editor
-    const aggs = withoutDisabledBuckets(fromUrl?.aggs ?? saved.aggs, (services.uiSettings.get('visualize:disableBucketAgg', []) ?? []) as string[]);
+    const aggs = withoutDisabledBuckets(stateAggs, (services.uiSettings.get('visualize:disableBucketAgg', []) ?? []) as string[]);
     // The settings over the kind's defaults, as the original's `Vis` takes them
     let params = fromUrl?.params ? paramsWithDefaults(saved.type, fromUrl.params) : saved.params;
     if (fromUrl?.params && saved.type === 'metrics') params = withTsvbDefaults(params);
     return stable({ aggs, params: fromUrl ? syncParams({ type: saved.type, aggs, params }, {}) : params });
-  }, [saved, urlState.vis]);
+  }, [saved, urlState.vis, aggBased, indexPattern]);
   const applied = useMemo<Draft | undefined>(() => (appliedKey ? (JSON.parse(appliedKey) as Draft) : undefined), [appliedKey]);
   useEffect(() => {
     if (appliedKey) setDraft(JSON.parse(appliedKey) as Draft);

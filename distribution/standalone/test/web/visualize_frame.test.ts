@@ -17,7 +17,7 @@ import {
   type VisualizeAppState,
 } from '../../web/apps/visualize/app_state';
 import { newVis } from '../../web/apps/visualize/defaults';
-import { editorHeading } from '../../web/apps/visualize/editor_layout';
+import { editorAggs, editorHeading } from '../../web/apps/visualize/editor_layout';
 import { INDEX_PATTERNS_LINK, SavedObjectNotFound, found, loadFailure } from '../../web/apps/visualize/load_failure';
 import {
   editorStateFor,
@@ -27,6 +27,7 @@ import {
 } from '../../web/apps/visualize/state_transfer';
 import { LEAVE_TEXT, LEAVE_TITLE, confirmsLeave, returnSwitch, visualizeTopNav } from '../../web/apps/visualize/top_nav';
 import { withBaseMap } from '../../web/apps/visualize/type_setup';
+import type { AggConfig } from '../../web/lib/aggs';
 import type { Filter } from '../../web/lib/types';
 import { encodeState } from '../../web/lib/url';
 import { visFromSavedObject } from '../../web/lib/vis';
@@ -158,6 +159,42 @@ describe('the state the editor writes to the address once a visualization has lo
     const unlinked = unlinkSavedSearch({ query: KUERY, filters: [own] }, { query: { query: 'response:200', language: 'kuery' }, filters: [parentFilter] });
     assert.deepEqual(unlinked, { query: { query: 'response:200', language: 'kuery' }, filters: [own, parentFilter], linked: false });
     assert.deepEqual(unlinkSavedSearch({ query: KUERY, filters: [own, own] }, {}), { query: KUERY, filters: [own], linked: false });
+  });
+});
+
+describe('the aggregations the editor shows and draws', () => {
+  // What Discover's "Visualize" writes into the address for a field: a few parameters of each
+  const fromDiscover: AggConfig[] = [
+    { id: '1', type: 'count', schema: 'metric', params: {} },
+    { id: '2', type: 'terms', schema: 'segment', params: { field: 'machine.os.keyword', size: 20, orderBy: '1', order: 'desc' } },
+  ];
+
+  it("are the address's, each with the defaults of the parameters it lacks, as the original's AggConfig takes them", () => {
+    const aggs = editorAggs(fromDiscover, SAMPLE_PIE.aggs, true, { queryLanguage: 'kuery' });
+    assert.deepEqual(aggs, [
+      { id: '1', enabled: true, type: 'count', params: {}, schema: 'metric' },
+      {
+        id: '2',
+        enabled: true,
+        type: 'terms',
+        params: {
+          field: 'machine.os.keyword',
+          orderBy: '1',
+          order: 'desc',
+          size: 20,
+          otherBucket: false,
+          otherBucketLabel: 'Other',
+          missingBucket: false,
+          missingBucketLabel: 'Missing',
+        },
+        schema: 'segment',
+      },
+    ]);
+  });
+
+  it('are those that were saved when the address has none, and those of the address for a kind drawn from none', () => {
+    assert.equal(editorAggs(undefined, SAMPLE_PIE.aggs, true, {}), SAMPLE_PIE.aggs);
+    assert.equal(editorAggs(fromDiscover, [], false, {}), fromDiscover);
   });
 });
 
