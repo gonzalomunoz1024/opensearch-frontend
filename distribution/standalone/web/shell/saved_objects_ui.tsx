@@ -30,6 +30,10 @@ export function SaveModal({
   showDescription,
   intro,
   existing,
+  id,
+  initialAsNew,
+  confirmLabel,
+  options,
   children,
   onSave,
   onClose,
@@ -45,13 +49,21 @@ export function SaveModal({
   intro?: string;
   /** Whether it has been saved before: then it can also be saved as a new one */
   existing: boolean;
+  /** The id of what is saved: the title found on it alone is no duplicate, unless it is saved as new */
+  id?: string;
+  /** Whether "Save as new" starts switched on */
+  initialAsNew?: boolean;
+  /** What the button that saves says, when not "Save" */
+  confirmLabel?: string;
+  /** More options under the description, drawn from whether it is saved as new */
+  options?: (state: { asNew: boolean }) => ReactNode;
   children?: ReactNode;
   onSave: (result: SaveResult) => Promise<void>;
   onClose: () => void;
 }) {
   const [title, setTitle] = useState(initialTitle);
   const [description, setDescription] = useState(initialDescription ?? '');
-  const [asNew, setAsNew] = useState(false);
+  const [asNew, setAsNew] = useState(Boolean(initialAsNew));
   const [busy, setBusy] = useState(false);
   const [duplicate, setDuplicate] = useState(false);
 
@@ -69,7 +81,8 @@ export function SaveModal({
           fields: ['title'],
           perPage: 10,
         });
-        if (found.saved_objects.some((object) => object.attributes.title?.toLowerCase() === title.trim().toLowerCase())) {
+        const duplicate = found.saved_objects.find((object) => object.attributes.title?.toLowerCase() === title.trim().toLowerCase());
+        if (duplicate && !(id !== undefined && !asNew && duplicate.id === id)) {
           setDuplicate(true);
           setBusy(false);
           return;
@@ -102,7 +115,7 @@ export function SaveModal({
             onClick={() => void save(duplicate)}
             testId="confirmSaveSavedObjectButton"
           >
-            Save
+            {confirmLabel ?? 'Save'}
           </Button>
         </>
       }
@@ -147,6 +160,7 @@ export function SaveModal({
             <TextArea value={description} onChange={setDescription} rows={3} testId="viewDescription" />
           </FormRow>
         )}
+        {options?.({ asNew })}
         {children}
       </form>
     </Modal>
