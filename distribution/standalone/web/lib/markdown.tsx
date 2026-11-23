@@ -1,348 +1,338 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
 /*
- * Markdown as React elements: headings, paragraphs, lists, quotes, code, tables, rules, links,
- * images and emphasis. Nothing is ever set as HTML: HTML in the text is shown as the text it is,
- * and a link is kept only when it leads somewhere a page may safely send its reader.
+ * Markdown, read by the parser OpenSearch Dashboards reads it with, markdown-it 14.2.0, and drawn
+ * as it draws it there:
+ *
+ * - `Markdown`: the Markdown visualization, the Markdown panel of TSVB and the help of a Timeline
+ *   function. The original's Markdown component (opensearch_dashboards_react's markdownFactory)
+ *   gives markdown-it's default rules, with HTML off and links found in the text (linkify), and a
+ *   link that opens a new tab the `rel` of OUI's getSecureRelForTarget; it sets the HTML in a div.
+ * - `renderMarkdown`: the custom banner (notifications:banner), which core's UserBannerService
+ *   draws with react-markdown 6: CommonMark, each paragraph without its <p>, and a link that
+ *   leads to anything but a page, http(s), mailto or tel leading nowhere.
+ *
+ * HTML written in the text is shown as the text it is by both, and markdown-it makes no link of
+ * a javascript:, vbscript:, file: or data: address (but a data:image/ picture). Both take time in
+ * proportion to the text, however it is written.
  */
 
-import { Fragment, type ReactNode } from 'react';
+import MarkdownIt, { type RenderRule, type Token } from 'markdown-it';
+import { createElement, Fragment, useMemo, type ReactNode } from 'react';
 
 export interface MarkdownOptions {
+  /** As the visualization's "Open links in new tab" */
   openLinksInNewTab?: boolean;
 }
 
-const SAFE_LINK = /^(https?:|mailto:|tel:|#|\/|\.\.?\/|[^:]*$)/i;
-const SAFE_IMAGE = /^(https?:|\/|\.\.?\/|data:image\/(png|gif|jpeg|webp);|[^:]*$)/i;
+// --- The rel of a link that opens a new tab --------------------------------------------------------
 
-export const safeLink = (href: string): string | undefined => (SAFE_LINK.test(href.trim()) ? href.trim() : undefined);
-
-// --- Character references -------------------------------------------------------------------------
-
-// The named references a text may hold, as markdown-it reads them: HTML 4's, and HTML's names for
-// the ASCII punctuation; Latin-1 from U+00A0 and the Greek letters run in code point order
-const LATIN1 =
-  'nbsp iexcl cent pound curren yen brvbar sect uml copy ordf laquo not shy reg macr deg plusmn sup2 sup3 acute micro para middot cedil sup1 ' +
-  'ordm raquo frac14 frac12 frac34 iquest Agrave Aacute Acirc Atilde Auml Aring AElig Ccedil Egrave Eacute Ecirc Euml Igrave Iacute Icirc Iuml ' +
-  'ETH Ntilde Ograve Oacute Ocirc Otilde Ouml times Oslash Ugrave Uacute Ucirc Uuml Yacute THORN szlig agrave aacute acirc atilde auml aring ' +
-  'aelig ccedil egrave eacute ecirc euml igrave iacute icirc iuml eth ntilde ograve oacute ocirc otilde ouml divide oslash ugrave uacute ucirc ' +
-  'uuml yacute thorn yuml';
-const GREEK: Array<[number, string]> = [
-  [913, 'Alpha Beta Gamma Delta Epsilon Zeta Eta Theta Iota Kappa Lambda Mu Nu Xi Omicron Pi Rho'],
-  [931, 'Sigma Tau Upsilon Phi Chi Psi Omega'],
-  [945, 'alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigmaf sigma tau upsilon phi chi psi omega'],
-];
-const OTHERS =
-  'Tab:9 NewLine:10 excl:33 quot:34 num:35 dollar:36 percnt:37 amp:38 apos:39 lpar:40 rpar:41 ast:42 plus:43 comma:44 period:46 sol:47 ' +
-  'colon:58 semi:59 lt:60 equals:61 gt:62 quest:63 commat:64 lsqb:91 lbrack:91 bsol:92 rsqb:93 rbrack:93 Hat:94 lowbar:95 grave:96 ' +
-  'lcub:123 lbrace:123 verbar:124 vert:124 rcub:125 rbrace:125 OElig:338 oelig:339 Scaron:352 scaron:353 Yuml:376 fnof:402 circ:710 ' +
-  'tilde:732 thetasym:977 upsih:978 piv:982 ensp:8194 emsp:8195 thinsp:8201 zwnj:8204 zwj:8205 lrm:8206 rlm:8207 hyphen:8208 ndash:8211 ' +
-  'mdash:8212 lsquo:8216 rsquo:8217 sbquo:8218 ldquo:8220 rdquo:8221 bdquo:8222 dagger:8224 Dagger:8225 bull:8226 hellip:8230 permil:8240 ' +
-  'prime:8242 Prime:8243 lsaquo:8249 rsaquo:8250 oline:8254 frasl:8260 euro:8364 image:8465 weierp:8472 real:8476 trade:8482 alefsym:8501 ' +
-  'larr:8592 uarr:8593 rarr:8594 darr:8595 harr:8596 crarr:8629 lArr:8656 uArr:8657 rArr:8658 dArr:8659 hArr:8660 forall:8704 part:8706 ' +
-  'exist:8707 empty:8709 nabla:8711 isin:8712 notin:8713 ni:8715 prod:8719 sum:8721 minus:8722 lowast:8727 radic:8730 prop:8733 infin:8734 ' +
-  'ang:8736 and:8743 or:8744 cap:8745 cup:8746 int:8747 there4:8756 sim:8764 cong:8773 asymp:8776 ne:8800 equiv:8801 le:8804 ge:8805 ' +
-  'sub:8834 sup:8835 nsub:8836 sube:8838 supe:8839 oplus:8853 otimes:8855 perp:8869 sdot:8901 lceil:8968 rceil:8969 lfloor:8970 rfloor:8971 ' +
-  'loz:9674 starf:9733 star:9734 spades:9824 clubs:9827 hearts:9829 diams:9830 check:10003 cross:10007 lang:10216 rang:10217';
-
-const NAMED = new Map<string, number>([
-  ...LATIN1.split(' ').map((name, at): [string, number] => [name, 160 + at]),
-  ...GREEK.flatMap(([first, names]) => names.split(' ').map((name, at): [string, number] => [name, first + at])),
-  ...OTHERS.split(' ').map((pair): [string, number] => {
-    const [name, code] = pair.split(':');
-    return [name, Number(code)];
-  }),
-]);
-
-// A code point no text may hold is read as the replacement character
-const validCodePoint = (code: number) =>
-  !(
-    (code >= 0xd800 && code <= 0xdfff) ||
-    (code >= 0xfdd0 && code <= 0xfdef) ||
-    (code & 0xffff) === 0xffff ||
-    (code & 0xffff) === 0xfffe ||
-    code <= 0x08 ||
-    code === 0x0b ||
-    (code >= 0x0e && code <= 0x1f) ||
-    (code >= 0x7f && code <= 0x9f) ||
-    code > 0x10ffff
-  );
-
-/** The characters a text's references (`&amp;`, `&#x27;`, `&copy;`) stand for; any other `&` stays */
-export function decodeEntities(text: string): string {
-  if (!text.includes('&')) return text;
-  return text.replace(/&(?:#(x[a-f0-9]{1,6}|[0-9]{1,7})|([a-z][a-z0-9]{1,31}));/gi, (reference: string, digits?: string, name?: string) => {
-    if (digits) {
-      const code = digits[0].toLowerCase() === 'x' ? parseInt(digits.slice(1), 16) : parseInt(digits, 10);
-      return String.fromCodePoint(validCodePoint(code) ? code : 0xfffd);
-    }
-    const code = name ? NAMED.get(name) : undefined;
-    return code === undefined ? reference : String.fromCodePoint(code);
-  });
-}
-
-// --- Inline ---------------------------------------------------------------------------------------
-
-interface Rule {
-  pattern: RegExp;
-  render: (match: RegExpExecArray, options: MarkdownOptions, key: string) => ReactNode;
-}
-
-const link = (href: string, children: ReactNode, title: string | undefined, options: MarkdownOptions, key: string) => {
-  const safe = safeLink(decodeEntities(href));
-  if (!safe) return <Fragment key={key}>{children}</Fragment>;
-  return (
-    <a key={key} href={safe} title={title === undefined ? undefined : decodeEntities(title)} {...(options.openLinksInNewTab ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>
-      {children}
-    </a>
-  );
-};
-
-const RULES: Rule[] = [
-  // Any ASCII punctuation, as CommonMark
-  { pattern: /\\([!-/:-@[-`{-~])/, render: (match) => match[1] },
-  { pattern: /(`+)([\s\S]+?)\1(?!`)/, render: (match, _options, key) => <code key={key}>{match[2].trim()}</code> },
-  {
-    pattern: /!\[([^\]]*)\]\(\s*<?([^\s)>]+)>?(?:\s+["']([^"']*)["'])?\s*\)/,
-    render: (match, _options, key) => {
-      const [src, alt, title] = [match[2], match[1], match[3]].map((text) => (text === undefined ? undefined : decodeEntities(text)));
-      return src !== undefined && SAFE_IMAGE.test(src) ? <img key={key} src={src} alt={alt} title={title} /> : <Fragment key={key}>{alt}</Fragment>;
-    },
-  },
-  {
-    pattern: /\[((?:[^[\]]|\[[^\]]*\])*)\]\(\s*<?([^\s)>]*)>?(?:\s+["']([^"']*)["'])?\s*\)/,
-    render: (match, options, key) => link(match[2], renderInline(match[1], options, key), match[3], options, key),
-  },
-  {
-    pattern: /<((?:https?|mailto):[^\s>]+)>/,
-    render: (match, options, key) => link(match[1], decodeEntities(match[1].replace(/^mailto:/, '')), undefined, options, key),
-  },
-  { pattern: /\*\*([\s\S]+?)\*\*(?!\*)/, render: (match, options, key) => <strong key={key}>{renderInline(match[1], options, key)}</strong> },
-  { pattern: /(?<![A-Za-z0-9])__([\s\S]+?)__(?![A-Za-z0-9])/, render: (match, options, key) => <strong key={key}>{renderInline(match[1], options, key)}</strong> },
-  { pattern: /~~([\s\S]+?)~~/, render: (match, options, key) => <s key={key}>{renderInline(match[1], options, key)}</s> },
-  { pattern: /\*(?!\s)([^*]+?)(?<!\s)\*/, render: (match, options, key) => <em key={key}>{renderInline(match[1], options, key)}</em> },
-  { pattern: /(?<![A-Za-z0-9])_(?!\s)([^_]+?)(?<!\s)_(?![A-Za-z0-9])/, render: (match, options, key) => <em key={key}>{renderInline(match[1], options, key)}</em> },
-  { pattern: /(?: {2,}|\\)\n/, render: (_match, _options, key) => <br key={key} /> },
-  {
-    pattern: /\bhttps?:\/\/[^\s<>()]+(?:\([^\s<>()]*\))?[^\s<>().,;:!?'"]/,
-    render: (match, options, key) => link(match[0], decodeEntities(match[0]), undefined, options, key),
-  },
-];
-
-export function renderInline(text: string, options: MarkdownOptions = {}, keyPrefix = 'i'): ReactNode[] {
-  const nodes: ReactNode[] = [];
-  let rest = text;
-  let count = 0;
-  while (rest.length > 0) {
-    let first: { rule: Rule; match: RegExpExecArray } | undefined;
-    for (const rule of RULES) {
-      const match = rule.pattern.exec(rest);
-      if (match && (!first || match.index < first.match.index)) first = { rule, match };
-    }
-    if (!first) {
-      nodes.push(decodeEntities(rest));
-      break;
-    }
-    if (first.match.index > 0) nodes.push(decodeEntities(rest.slice(0, first.match.index)));
-    nodes.push(first.rule.render(first.match, options, `${keyPrefix}-${count}`));
-    count += 1;
-    rest = rest.slice(first.match.index + first.match[0].length);
-  }
-  return nodes;
-}
-
-// --- Blocks ---------------------------------------------------------------------------------------
-
-const FENCE = /^ {0,3}(`{3,}|~{3,})\s*([^\s`]*)\s*$/;
-const HEADING = /^ {0,3}(#{1,6})\s+(.*?)\s*#*\s*$/;
-const RULE = /^ {0,3}([-*_])(?:\s*\1){2,}\s*$/;
-const QUOTE = /^ {0,3}>\s?/;
-const ITEM = /^(\s*)([-*+]|\d{1,9}[.)])\s+(.*)$/;
-const TABLE_DIVIDER = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
-
-const cellsOf = (line: string): string[] =>
-  line
-    .trim()
-    .replace(/^\|/, '')
-    .replace(/\|$/, '')
-    .split(/(?<!\\)\|/)
-    .map((cell) => cell.trim().replace(/\\\|/g, '|'));
+const ELASTIC_PATH = /^[A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=]*$/;
+// What `.` does not match: the four characters that end a line
+const LINE_END = /[\n\r\u2028\u2029]/;
 
 /**
- * How deep quotes and lists may nest, as in the original's parser: a quote is one step, a list is
- * two, and what lies a hundred steps deep is left out. Without an end, a stored text of a few
- * thousand ">" ends the page that draws it with "Maximum call stack size exceeded".
+ * OUI 1.24.2's isDomainSecure: whether the first match of
+ * /(https?:\/\/(.+?\.)?elastic\.co((\/|\?)[A-Za-z0-9\-\._~:\/\?#\[\]@!$&'\(\)\*\+,;\=]*)?)/g in the
+ * address is the whole address. The same answer is worked out here in one pass over it, where the
+ * pattern itself runs to the end once for every "http://" a long address repeats.
  */
-const MAX_NESTING = 100;
+function isDomainSecure(url: string): boolean {
+  const scheme = /^https?:\/\//.exec(url);
+  if (!scheme) return false;
+  const host = scheme[0].length;
+  // The shortest `.+?\.` that "elastic.co" follows: at least one character, none of them ending a line
+  const lineEnd = url.slice(host).search(LINE_END);
+  const dot = url.indexOf('.elastic.co', host + 1);
+  let end: number;
+  if (dot !== -1 && (lineEnd === -1 || dot < host + lineEnd)) end = dot + '.elastic.co'.length;
+  else if (url.startsWith('elastic.co', host)) end = host + 'elastic.co'.length;
+  else return false;
+  if (end === url.length) return true;
+  return (url[end] === '/' || url[end] === '?') && ELASTIC_PATH.test(url.slice(end + 1));
+}
 
-function renderBlocks(lines: string[], options: MarkdownOptions, keyPrefix: string, depth = 0): ReactNode[] {
-  const nodes: ReactNode[] = [];
-  if (depth >= MAX_NESTING) return nodes;
-  let index = 0;
-  const key = () => `${keyPrefix}-${nodes.length}`;
+/** OUI 1.24.2's getSecureRelForTarget: noreferrer but to elastic.co, and noopener for a new tab */
+export function getSecureRelForTarget({ href, target = '', rel }: { href?: string; target?: string; rel?: string }): string {
+  const isElasticHref = !!href && isDomainSecure(href);
+  const relParts = rel ? rel.split(' ').filter((part) => !!part.length && part !== 'noreferrer') : [];
+  if (!isElasticHref) relParts.push('noreferrer');
+  if (target.includes('_blank') && relParts.indexOf('noopener') === -1) relParts.push('noopener');
+  return relParts.sort().join(' ').trim();
+}
 
-  while (index < lines.length) {
-    const line = lines[index];
-    if (line.trim() === '') {
-      index += 1;
-      continue;
-    }
+// --- The Markdown component -------------------------------------------------------------------------
 
-    const fence = FENCE.exec(line);
-    if (fence) {
-      const body: string[] = [];
-      index += 1;
-      while (index < lines.length && !new RegExp(`^ {0,3}${fence[1][0]}{${fence[1].length},}\\s*$`).test(lines[index])) {
-        body.push(lines[index]);
-        index += 1;
-      }
-      index += 1;
-      nodes.push(
-        <pre key={key()}>
-          <code>{body.join('\n')}</code>
-        </pre>
-      );
-      continue;
-    }
+// As the original's markdownFactory, one parser for each choice of the option, made once
+const parsers = new Map<boolean, MarkdownIt>();
 
-    const heading = HEADING.exec(line);
-    if (heading) {
-      const Tag = `h${heading[1].length}` as 'h1';
-      nodes.push(<Tag key={key()}>{renderInline(heading[2], options, key())}</Tag>);
-      index += 1;
-      continue;
-    }
-
-    if (RULE.test(line)) {
-      nodes.push(<hr key={key()} />);
-      index += 1;
-      continue;
-    }
-
-    if (QUOTE.test(line)) {
-      const body: string[] = [];
-      while (index < lines.length && lines[index].trim() !== '' && (QUOTE.test(lines[index]) || body.length > 0)) {
-        body.push(lines[index].replace(QUOTE, ''));
-        index += 1;
-      }
-      nodes.push(<blockquote key={key()}>{renderBlocks(body, options, key(), depth + 1)}</blockquote>);
-      continue;
-    }
-
-    const item = ITEM.exec(line);
-    if (item) {
-      const ordered = /\d/.test(item[2]);
-      const indent = item[1].length;
-      const items: string[][] = [];
-      let loose = false;
-      while (index < lines.length) {
-        const next = ITEM.exec(lines[index]);
-        if (next && next[1].length <= indent + 1 && /\d/.test(next[2]) === ordered) {
-          items.push([next[3]]);
-          index += 1;
-        } else if (lines[index].trim() === '') {
-          // A blank line stays in the list only when what follows still belongs to it: an item of
-          // the other kind (a numbered one after bullets) starts a list of its own
-          const after = lines[index + 1];
-          const following = after === undefined ? null : ITEM.exec(after);
-          const sameList = following !== null && following[1].length <= indent + 1 && /\d/.test(following[2]) === ordered;
-          if (after === undefined || (!/^\s{2,}\S/.test(after) && !sameList)) break;
-          loose = true;
-          items[items.length - 1].push('');
-          index += 1;
-        } else if (/^\s+\S/.test(lines[index]) && lines[index].search(/\S/) > indent) {
-          items[items.length - 1].push(lines[index].slice(Math.min(lines[index].search(/\S/), indent + item[2].length + 1)));
-          index += 1;
-        } else if (!next && !HEADING.test(lines[index]) && !FENCE.test(lines[index]) && !RULE.test(lines[index]) && !QUOTE.test(lines[index])) {
-          items[items.length - 1].push(lines[index].trim());
-          index += 1;
-        } else break;
-      }
-      const Tag = ordered ? 'ol' : 'ul';
-      const start = ordered ? Number.parseInt(item[2], 10) : undefined;
-      nodes.push(
-        <Tag key={key()} start={start !== undefined && start !== 1 ? start : undefined}>
-          {items.map((body, at) => {
-            const simple = !loose && !body.slice(1).some((text) => ITEM.test(text) || FENCE.test(text));
-            return (
-              <li key={at}>
-                {simple && depth + 2 < MAX_NESTING
-                  ? renderInline(body.join('\n').trim(), options, `${key()}-${at}`)
-                  : renderBlocks(body, { ...options }, `${key()}-${at}`, depth + 2)}
-              </li>
-            );
-          })}
-        </Tag>
-      );
-      continue;
-    }
-
-    if (line.includes('|') && index + 1 < lines.length && TABLE_DIVIDER.test(lines[index + 1]) && lines[index + 1].includes('-')) {
-      const head = cellsOf(line);
-      const aligns = cellsOf(lines[index + 1]).map((cell) =>
-        cell.startsWith(':') && cell.endsWith(':') ? 'center' : cell.endsWith(':') ? 'right' : cell.startsWith(':') ? 'left' : undefined
-      );
-      index += 2;
-      const body: string[][] = [];
-      while (index < lines.length && lines[index].trim() !== '' && lines[index].includes('|')) {
-        body.push(cellsOf(lines[index]));
-        index += 1;
-      }
-      nodes.push(
-        <table key={key()}>
-          <thead>
-            <tr>
-              {head.map((cell, at) => (
-                <th key={at} style={{ textAlign: aligns[at] }}>
-                  {renderInline(cell, options, `${key()}-h${at}`)}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {body.map((cells, row) => (
-              <tr key={row}>
-                {head.map((_, at) => (
-                  <td key={at} style={{ textAlign: aligns[at] }}>
-                    {renderInline(cells[at] ?? '', options, `${key()}-${row}-${at}`)}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      );
-      continue;
-    }
-
-    // A paragraph runs until a blank line or the start of another kind of block
-    const body: string[] = [];
-    while (
-      index < lines.length &&
-      lines[index].trim() !== '' &&
-      (body.length === 0 || (!HEADING.test(lines[index]) && !FENCE.test(lines[index]) && !RULE.test(lines[index]) && !QUOTE.test(lines[index]) && !ITEM.test(lines[index])))
-    ) {
-      // A line of = or - under text makes that text a heading
-      if (body.length > 0 && /^ {0,3}(=+|-+)\s*$/.test(lines[index])) {
-        const Tag = lines[index].trim().startsWith('=') ? 'h1' : 'h2';
-        const text = body.splice(0).join('\n');
-        nodes.push(<Tag key={key()}>{renderInline(text, options, key())}</Tag>);
-        index += 1;
-        break;
-      }
-      body.push(lines[index].replace(/^ {0,3}/, ''));
-      index += 1;
-    }
-    // As CommonMark, without the spaces it starts or ends with
-    if (body.length) nodes.push(<p key={key()}>{renderInline(body.join('\n').trim(), options, key())}</p>);
+function parserFor(openLinksInNewTab: boolean): MarkdownIt {
+  const known = parsers.get(openLinksInNewTab);
+  if (known) return known;
+  // HTML stays off: what markdown-it gives is set as HTML
+  const markdownIt = new MarkdownIt({ html: false, linkify: true });
+  if (openLinksInNewTab) {
+    const originalLinkRender: RenderRule =
+      markdownIt.renderer.rules.link_open ?? ((tokens, index, options, _env, self) => self.renderToken(tokens, index, options));
+    markdownIt.renderer.rules.link_open = (tokens, index, options, env, self) => {
+      const href = tokens[index].attrGet('href');
+      const target = '_blank';
+      const rel = getSecureRelForTarget({ href: href === null ? undefined : href, target });
+      tokens[index].attrPush(['target', target]);
+      if (rel) tokens[index].attrPush(['rel', rel]);
+      return originalLinkRender(tokens, index, options, env, self);
+    };
   }
-  return nodes;
+  parsers.set(openLinksInNewTab, markdownIt);
+  return markdownIt;
 }
 
-export function renderMarkdown(text: string, options: MarkdownOptions = {}): ReactNode[] {
-  return renderBlocks(text.replace(/\r\n?/g, '\n').replace(/\t/g, '    ').split('\n'), options, 'md');
+/** A text as the HTML the original's Markdown component sets: none for no text */
+export function markdownToHtml(text: string, options: MarkdownOptions = {}): string {
+  return typeof text === 'string' && text !== '' ? parserFor(Boolean(options.openLinksInNewTab)).render(text) : '';
 }
 
-export function Markdown({ text, openLinksInNewTab, className }: { text: string; openLinksInNewTab?: boolean; className?: string }) {
-  return <div className={`atlMarkdown${className ? ` ${className}` : ''}`}>{renderMarkdown(text, { openLinksInNewTab })}</div>;
+interface MarkdownProps {
+  text: string;
+  openLinksInNewTab?: boolean;
+  className?: string;
+  /** What the original's callers give the div, which its component passes on (the Markdown visualization's "markdownBody") */
+  'data-test-subj'?: string;
+}
+
+/** The original's Markdown component: its HTML set in a div */
+export function Markdown({ text, openLinksInNewTab, className, 'data-test-subj': dataTestSubj }: MarkdownProps) {
+  const html = useMemo(() => markdownToHtml(text, { openLinksInNewTab }), [text, openLinksInNewTab]);
+  return <div className={`atlMarkdown${className ? ` ${className}` : ''}`} data-test-subj={dataTestSubj} dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
+// --- The custom banner ------------------------------------------------------------------------------
+
+const PROTOCOLS = ['http', 'https', 'mailto', 'tel'];
+
+/** react-markdown 6.0.3's uriTransformer, which it gives every link (not pictures) */
+function uriTransformer(uri: string): string {
+  const url = (uri || '').trim();
+  const first = url.charAt(0);
+  if (first === '#' || first === '/') return url;
+  const colon = url.indexOf(':');
+  if (colon === -1) return url;
+  for (const protocol of PROTOCOLS) {
+    if (colon === protocol.length && url.slice(0, protocol.length).toLowerCase() === protocol) return url;
+  }
+  let index = url.indexOf('?');
+  if (index !== -1 && colon > index) return url;
+  index = url.indexOf('#');
+  if (index !== -1 && colon > index) return url;
+  return 'javascript:void(0)';
+}
+
+let commonMark: MarkdownIt | undefined;
+
+/**
+ * markdown-it's CommonMark rules, read as remark 9 (react-markdown 6's parser) reads a text: HTML
+ * stays text, every link is one, its address is encoded as mdast-util-to-hast encodes it and the
+ * text of an autolink is left as written. Quotes and lists nest a hundred steps deep, as in the
+ * Markdown component, where remark has no end.
+ */
+function commonMarkParser(): MarkdownIt {
+  if (commonMark) return commonMark;
+  const markdownIt = new MarkdownIt('commonmark', { html: false, maxNesting: 100 });
+  markdownIt.validateLink = () => true;
+  markdownIt.normalizeLink = (url) => markdownIt.utils.lib.mdurl.encode(url);
+  markdownIt.normalizeLinkText = (url) => url;
+  // The end of a line as micromark reads it: the spaces and tabs before it are not text, and make
+  // a hard break only when they are two spaces or more with no tab among them
+  markdownIt.inline.ruler.at('newline', (state, silent) => {
+    if (state.src.charCodeAt(state.pos) !== 0x0a) return false;
+    if (!silent) {
+      let start = state.pending.length;
+      while (start > 0 && (state.pending[start - 1] === ' ' || state.pending[start - 1] === '\t')) start -= 1;
+      const run = state.pending.slice(start);
+      state.pending = state.pending.slice(0, start);
+      state.push(run.length >= 2 && !run.includes('\t') ? 'hardbreak' : 'softbreak', 'br', 0);
+    }
+    let pos = state.pos + 1;
+    // Nor are the spaces and tabs the next line starts with
+    while (pos < state.posMax && markdownIt.utils.isSpace(state.src.charCodeAt(pos))) pos += 1;
+    state.pos = pos;
+    return true;
+  });
+  commonMark = markdownIt;
+  return markdownIt;
+}
+
+interface Block {
+  token: Token;
+  children: Block[];
+}
+
+/** The blocks of a parsed text as the tree their opening and closing tokens make */
+function blockTree(tokens: Token[]): Block[] {
+  const root: Block[] = [];
+  const open: Block[] = [];
+  for (const token of tokens) {
+    const siblings = open.length ? open[open.length - 1].children : root;
+    if (token.nesting === -1) {
+      open.pop();
+      continue;
+    }
+    const block = { token, children: [] };
+    siblings.push(block);
+    if (token.nesting === 1) open.push(block);
+  }
+  return root;
+}
+
+/** The alternative text of a picture, as mdast-util-to-string gives it */
+function altText(tokens: Token[]): string {
+  return tokens
+    .map((token) => (token.type === 'image' ? altText(token.children ?? []) : token.type === 'text' || token.type === 'code_inline' ? token.content : token.type === 'softbreak' ? '\n' : ''))
+    .join('');
+}
+
+/**
+ * An element keyed by its place among its siblings, as react-markdown keys them. Children are
+ * handed over as an array: a text of thousands of them would not fit in a call's arguments.
+ */
+function element(type: string, props: Record<string, unknown> | null, children: ReactNode[], key: number): ReactNode {
+  return children.length ? createElement(type, { ...props, key }, children) : createElement(type, { ...props, key });
+}
+
+const isBlank = (char: string) => char === ' ' || char === '\t';
+
+/**
+ * mdast-util-to-hast's text: no space or tab beside a line end. In one pass, where a pattern would
+ * go over a long run of spaces again from each of them.
+ */
+function trimLines(text: string): string {
+  if (!text.includes('\n')) return text;
+  const lines = text.split('\n');
+  return lines
+    .map((line, index) => {
+      let start = 0;
+      let end = line.length;
+      if (index > 0) while (start < end && isBlank(line[start])) start += 1;
+      if (index < lines.length - 1) while (end > start && isBlank(line[end - 1])) end -= 1;
+      return line.slice(start, end);
+    })
+    .join('\n');
+}
+
+function inlineNodes(tokens: Token[]): ReactNode[] {
+  const root: ReactNode[] = [];
+  const open: Array<{ token: Token; children: ReactNode[]; afterBreak: boolean }> = [];
+  const siblings = () => (open.length ? open[open.length - 1].children : root);
+  // Texts and soft breaks in a row are one text in mdast
+  let text = '';
+  // mdast-util-to-hast takes the white space off the start of what follows a hard break
+  let afterBreak = false;
+  const flush = () => {
+    if (text === '') return;
+    const value = afterBreak ? trimLines(text).trimStart() : trimLines(text);
+    text = '';
+    afterBreak = false;
+    if (value) siblings().push(value);
+  };
+  for (const token of tokens) {
+    if (token.type === 'text' || token.type === 'softbreak') {
+      text += token.type === 'text' ? token.content : '\n';
+      continue;
+    }
+    flush();
+    const into = siblings();
+    const breakBefore = afterBreak;
+    afterBreak = false;
+    if (token.type === 'hardbreak') {
+      into.push(element('br', null, [], into.length), '\n');
+      afterBreak = true;
+    } else if (token.type === 'code_inline') {
+      into.push(element('code', null, [breakBefore ? token.content.trimStart() : token.content], into.length));
+    } else if (token.type === 'image') {
+      const title = token.attrGet('title');
+      const props = { src: token.attrGet('src') ?? '', alt: altText(token.children ?? []), ...(title === null ? {} : { title }) };
+      into.push(element('img', props, [], into.length));
+    } else if (token.nesting === 1) open.push({ token, children: [], afterBreak: breakBefore });
+    else if (token.nesting === -1) {
+      const closed = open.pop();
+      if (!closed) continue;
+      const first = closed.children[0];
+      if (closed.afterBreak && typeof first === 'string') closed.children[0] = first.trimStart();
+      const title = closed.token.attrGet('title');
+      const props = closed.token.type === 'link_open' ? { href: uriTransformer(closed.token.attrGet('href') ?? ''), ...(title === null ? {} : { title }) } : null;
+      const parent = siblings();
+      parent.push(element(closed.token.tag, props, closed.children, parent.length));
+    }
+  }
+  flush();
+  return root;
+}
+
+/** mdast-util-to-hast's wrap: blocks one line apart, and a line before and after them in a container */
+function wrap(nodes: ReactNode[], loose: boolean): ReactNode[] {
+  const result: ReactNode[] = loose ? ['\n'] : [];
+  nodes.forEach((node, index) => {
+    if (index) result.push('\n');
+    result.push(node);
+  });
+  if (loose && nodes.length > 0) result.push('\n');
+  return result;
+}
+
+/** Whether a list is loose, as markdown-it marks it: the paragraphs of a tight list are hidden */
+const looseList = (list: Block) =>
+  list.children.some((item) => item.children.some((child) => child.token.type === 'paragraph_open' && !child.token.hidden));
+
+/** mdast-util-to-hast's list item: a tight item's first paragraph on the line of its mark */
+function listItem(item: Block, loose: boolean, key: number): ReactNode {
+  const wrapped: ReactNode[] = [];
+  item.children.forEach((child, index) => {
+    if (loose || index !== 0 || child.token.type !== 'paragraph_open') wrapped.push('\n');
+    wrapped.push(blockNode(child, index));
+  });
+  const last = item.children[item.children.length - 1];
+  if (last && (loose || last.token.type !== 'paragraph_open')) wrapped.push('\n');
+  return element('li', null, wrapped, key);
+}
+
+function blockNode(block: Block, key: number): ReactNode {
+  const { token } = block;
+  const inline = () => inlineNodes(block.children[0]?.token.children ?? []);
+  switch (token.type) {
+    case 'paragraph_open':
+      // react-markdown is given `components={{ p: Fragment }}`
+      return createElement(Fragment, { key }, inline());
+    case 'heading_open':
+      return element(token.tag, null, inline(), key);
+    case 'blockquote_open':
+      return element('blockquote', null, wrap(block.children.map(blockNode), true), key);
+    case 'bullet_list_open':
+    case 'ordered_list_open': {
+      const loose = looseList(block);
+      const start = token.attrGet('start');
+      const items = block.children.map((item, index) => listItem(item, loose, index));
+      return element(token.tag, start === null ? null : { start: Number(start) }, wrap(items, true), key);
+    }
+    case 'code_block':
+    case 'fence': {
+      // The first word of the line that opens the fence, read as remark reads it
+      const language = /^[^ \t]+/.exec(commonMarkParser().utils.unescapeAll(token.info).trim())?.[0];
+      // remark keeps the lines without their last line end, and mdast-util-to-hast ends any code
+      // that is not empty with one: a fence never closed gains it, one holding a blank line is empty
+      const lines = token.content.endsWith('\n') ? token.content.slice(0, -1) : token.content;
+      const code = element('code', language ? { className: `language-${language}` } : null, lines ? [`${lines}\n`] : [], 0);
+      return element('pre', null, [code], key);
+    }
+    case 'hr':
+      return element('hr', null, [], key);
+    default:
+      return null;
+  }
+}
+
+/** A text as React nodes, as the custom banner draws it (react-markdown 6, a paragraph without its <p>) */
+export function renderMarkdown(text: string): ReactNode[] {
+  if (typeof text !== 'string' || text === '') return [];
+  const blocks = blockTree(commonMarkParser().parse(text, {}));
+  return wrap(blocks.map(blockNode), false);
 }
