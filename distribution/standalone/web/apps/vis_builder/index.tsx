@@ -29,7 +29,7 @@ import type { RawHit } from '../../lib/docs';
 import { buildQuery, mergeFilters, sameFilter, timeRangeFilter } from '../../lib/query';
 import type { Filter, IndexPattern, Query } from '../../lib/types';
 import { appUrl, buildHash, encodeState } from '../../lib/url';
-import { getLocation, href, lastAddressOf, navigate, setHashParams, useLocation, useUrlState } from '../../router';
+import { getLocation, lastAddressOf, navigate, setHashParams, useLocation, useUrlState } from '../../router';
 import { services } from '../../services';
 import { HttpFetchError, errorMessage } from '../../services/http';
 import { patternName } from '../../services/index_patterns';
@@ -42,12 +42,11 @@ import { SearchBar } from '../../shell/search_bar';
 import { addRecentlyAccessed, currentGlobalParam, useAutoRefresh, useBreadcrumbs, useGlobalState } from '../../shell/state';
 import { visContext, type VisInput } from '../../vis/request';
 import { documentFields, sortClause } from '../discover/search';
-import { incomingEditorState, originatingAppUrl, type EmbeddableEditorState } from '../visualize/state_transfer';
+import { incomingEditorState } from '../visualize/state_transfer';
 import { returnSwitch } from '../visualize/top_nav';
 import { DataTab } from './data_tab';
 import {
   afterChange,
-  lastAddressIn,
   newAppState,
   openedState,
   originatingAppOf,
@@ -96,27 +95,6 @@ function writeApp(state: AppState) {
 
 const readApp = () => readAppState(getLocation().hashParams._a);
 
-/** The history of the tab, where the browser lists it (its Navigation API) */
-interface TabHistory {
-  entries?: () => Array<{ url?: string | null }>;
-  currentEntry?: { index?: number } | null;
-}
-
-/** The address an application was last at in this tab, where the browser tells */
-function lastAddressInTab(app: string): string | undefined {
-  const history = (window as { navigation?: TabHistory }).navigation;
-  const entries = history?.entries?.();
-  const at = history?.currentEntry?.index;
-  if (!entries || typeof at !== 'number') return undefined;
-  return lastAddressIn(
-    entries.map((entry) => entry.url),
-    at,
-    app,
-    window.location.origin,
-    href('')
-  );
-}
-
 function VisBuilderPage({ savedId }: { savedId?: string }) {
   const location = useLocation();
   const [global, setGlobal] = useGlobalState();
@@ -130,13 +108,6 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
   const [opened, setOpened] = useState<string | null | undefined>(null);
   const [saving, setSaving] = useState(false);
   const [tick, setTick] = useState(0);
-  // What the application that sent someone here handed over. The entry of the history the page
-  // was opened in carries it, those the page adds as its query or its time changes do not: it is
-  // kept from when it was last seen.
-  const sentFrom = useRef<EmbeddableEditorState | undefined>(undefined);
-  useEffect(() => {
-    sentFrom.current = incomingEditorState() ?? sentFrom.current;
-  }, [location]);
   // Whether the save dialog goes back to the application that opened the page
   const [returnToOrigin, setReturnToOrigin] = useState(false);
 
@@ -323,11 +294,7 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
         // Back where it came from, as the original's `navigateToApp(originatingApp)`: where the
         // dashboards were last, with the time range of now. What is new, or a copy, is handed over
         // to become a panel there; what was saved over itself is drawn again by the panel it has.
-        const back = originatingAppUrl(originatingApp, {
-          lastAddress: lastAddressOf(originatingApp) ?? lastAddressInTab(originatingApp),
-          containerInfo: sentFrom.current?.containerInfo,
-          globalParam: currentGlobalParam(),
-        });
+        const back = lastAddressOf(originatingApp);
         const newlyCreated = !savedId || asNew;
         navigate(back, { force: true, state: newlyCreated ? { type: VIS_BUILDER_TYPE, input: { savedObjectId: stored.id } } : undefined });
         return;
@@ -546,6 +513,13 @@ async function findIndexPatterns(): Promise<PatternOption[]> {
  * one option is active at a time, the chosen one when the search is focused; the arrows move it,
  * Enter takes it, and it carries the badge of the Return key.
  */
+/** Under the middle of the control, 8 px below, on a whole pixel as the original puts its panel */
+const UNDER_SOURCE = (anchor: DOMRect, panel: { width: number }) => ({
+  top: anchor.bottom + 8,
+  left: Math.round(anchor.left + (anchor.width - panel.width) / 2),
+  side: 'bottom' as const,
+});
+
 function DataSourceSelect({ selectedId, onChange }: { selectedId?: string; onChange: (id: string) => void }) {
   const [open, setOpen] = useState(false);
   const [patterns, setPatterns] = useState<PatternOption[]>();
@@ -599,8 +573,7 @@ function DataSourceSelect({ selectedId, onChange }: { selectedId?: string; onCha
     <Popover
       open={open}
       onClose={close}
-      align="center"
-      offset={8}
+      placeAt={UNDER_SOURCE}
       anchorStyle={{ display: 'flex', width: '100%' }}
       className="vbdSourceList"
       button={
@@ -660,6 +633,23 @@ function DataSourceSelect({ selectedId, onChange }: { selectedId?: string; onCha
                 if (!event.currentTarget.closest('.vbdSourceList')?.contains(event.relatedTarget as Node | null)) setActive(undefined);
               }}
               onKeyDown={onKeyDown}
+              append={
+                // The original's button that clears the search, which gives the focus back to it
+                search ? (
+                  <button
+                    type="button"
+                    className="vbdSourceList__clear"
+                    aria-label="Clear input"
+                    onClick={(event) => {
+                      setSearch('');
+                      setActive(firstActive(patterns ?? []));
+                      event.currentTarget.parentElement?.querySelector('input')?.focus();
+                    }}
+                  >
+                    <Icon name="cross" />
+                  </button>
+                ) : undefined
+              }
             />
           </div>
           {shown.length ? (

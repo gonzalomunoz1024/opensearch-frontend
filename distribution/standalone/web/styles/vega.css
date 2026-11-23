@@ -738,11 +738,6 @@
   width: 250px;
 }
 
-/* The original writes the column search in the colour of its placeholder */
-.vgaGrid__search.atlField {
-  color: var(--color-text-tertiary);
-}
-
 .atlPopover.vgaGrid__actions,
 .atlPopover.vgaGrid__fieldList {
   padding: 0;
