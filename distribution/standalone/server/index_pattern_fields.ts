@@ -56,7 +56,8 @@ export const kindOf = (esType: string) => KIND_OF.get(esType) ?? 'unknown';
 const META_OVERRIDES: Record<string, Partial<FieldDescriptor>> = {
   _source: { type: '_source', esTypes: ['_source'], searchable: false, aggregatable: false },
   _id: { type: 'string', esTypes: ['_id'], searchable: true, aggregatable: true },
-  _type: { type: 'string', esTypes: ['_type'], searchable: true, aggregatable: true },
+  // OpenSearch has no _type any more: the original describes it as it describes any field it lacks
+  _type: { type: 'string' },
   _index: { type: 'string', esTypes: ['_index'], searchable: true, aggregatable: true },
   _score: { type: 'number', searchable: false, aggregatable: false },
 };
