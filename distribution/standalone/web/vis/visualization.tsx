@@ -26,7 +26,7 @@ import { fetchVisData, type VisData, type VisInput } from './request';
 import { TableVis } from './table_vis';
 import { TagCloudVis } from './tag_cloud_vis';
 import { TileMapVis } from './tile_map/tile_map_vis';
-import { splitParts, splitTables, visFailure, type VisFailure, type VisRenderProps } from './types';
+import { splitDrawing, splitParts, splitTables, visFailure, type VisFailure, type VisRenderProps } from './types';
 import type { TsvbData, TsvbTableData } from './tsvb/data';
 import { TimelineVis } from './timeline/timeline_vis';
 import { TsvbVis } from './tsvb/vis';
@@ -93,10 +93,6 @@ export const takesTurn = (type: string) => type in DRAWN;
 // The maps filter as they always have; the other drawings' clicks go as the original's value click
 const MAPS = new Set(['region_map', 'tile_map']);
 
-// The kinds that lay out the charts of a split themselves, in vislib's frame: one legend for them
-// all, and a pie's titles beside the rows or under the columns (a gauge names itself under its gauges)
-const VISLIB_SPLITS = new Set(['pie', 'gauge', 'goal']);
-
 function AggVisualization({ vis: saved, input, tick, uiState, onUiState, onFilter, onTimeChange, onData, turn, onError }: VisualizationProps) {
   // Params a drawing sets on an aggregation (a map's bounds and precision), until the aggregations change
   const [aggPatch, setAggPatch] = useState<{ aggs: string; params: Record<string, Record<string, unknown>> }>();
@@ -147,10 +143,11 @@ function AggVisualization({ vis: saved, input, tick, uiState, onUiState, onFilte
   // it says rows, which its editor says once a chart is split
   const asRows = Boolean(vis.params.row);
   // A split its drawing lays out itself, the same while the data is
+  const splitBy = splitDrawing(vis.type);
   const splits = useMemo(() => {
-    const parts = data && VISLIB_SPLITS.has(vis.type) ? splitParts(data.table) : undefined;
+    const parts = data && splitBy === 'frame' ? splitParts(data.table) : undefined;
     return parts?.length ? { rows: asRows, parts } : undefined;
-  }, [data, vis.type, asRows]);
+  }, [data, splitBy, asRows]);
 
   const draw = DRAWN[vis.type];
   let body: ReactNode;
@@ -164,7 +161,8 @@ function AggVisualization({ vis: saved, input, tick, uiState, onUiState, onFilte
   } else if (!data) {
     body = null;
   } else {
-    const parts = vis.type === 'table' || vis.type in DRAWN ? splitTables(data.table) : [{ table: data.table }];
+    // A data table is handed the whole of a split: it draws a table of each bucket itself
+    const parts = splitBy === 'whole' ? [{ table: data.table }] : splitTables(data.table);
     const clicks = onFilter && !MAPS.has(vis.type) ? choice.apply : onFilter;
     const props = { vis, uiState: uiState ?? vis.uiState, onUiState, onFilter: clicks, onTimeChange, onAggParams };
     body = splits ? (
