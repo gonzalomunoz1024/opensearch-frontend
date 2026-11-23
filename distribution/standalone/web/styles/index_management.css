@@ -2598,11 +2598,17 @@
   width: 100%;
 }
 
-/* Cancel, flush as the plugin's: no padding inside its border, 8 px more before the button beside it */
+/* Cancel, flush as the plugin's: no padding inside its border, 8 px more before the button beside it,
+   its word on a line of 21 px as OUI's empty button sets it */
 .ismFlyoutFooter__cancel {
   padding-inline: 0;
   margin-right: var(--space-2);
   border: 1px solid transparent;
+  line-height: 1.5;
+}
+
+.ismSnapshotPolicyPage__footer > .atlButton--empty {
+  line-height: 1.5;
 }
 
 /* The button that acts is never narrower than the plugin's, and has its clear 1 px border */
@@ -2768,6 +2774,16 @@
   --ism-ace-band: color-mix(in srgb, var(--color-border) 70%, transparent);
   position: relative;
   width: 90%;
+}
+
+/* The dark theme's: its line and guides in the theme's border and faint text, ace's dark words */
+.themeDark .ismSnapEditor {
+  --ism-ace-gutter-line: var(--color-border);
+  --ism-ace-guide: var(--color-text-tertiary);
+  --ism-ace-key: hsl(196deg 47.83% 57.37%);
+  --ism-ace-language: rgb(149.7 152.3 249.3);
+  --ism-ace-string: rgb(76.9 183.8 103.5);
+  --ism-ace-comment: hsl(151deg 20.13% 59.2%);
 }
 
 .ismSnapEditor .atlCodeEditor {
@@ -3439,6 +3455,13 @@
 .ismSnapshotPolicyPage__footer > .atlButton {
   gap: var(--space-2);
   border: 1px solid transparent;
+}
+
+/* Beside a field, whose lines are of 21 px, the words keep the page's line, where they stand as
+   the plugin's do */
+.ismSnapshotPolicy__channels > .atlButton,
+.ismSnapshotForm__repository > .atlButton {
+  line-height: 1.43;
 }
 
 .ismSnapshotPolicyPage__footer > .atlButton--primary {
