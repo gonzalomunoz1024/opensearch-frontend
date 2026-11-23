@@ -156,7 +156,9 @@ function cellFormatter(column: TableColumn, context: AggContext): (value: unknow
     if (bucketLabel && (value === OTHER_KEY || value === MISSING_KEY)) return { text, bare: true };
     if (!rich || plainBucket || value === null || value === undefined) return { text };
     const formatted = rich(value);
-    return { ...formatted, text: formatted.href || formatted.image ? formatted.text : text };
+    // What the format draws keeps its own text: a link, a picture, a player, a list
+    const drawn = formatted.href || formatted.image || formatted.audio || formatted.parts;
+    return { ...formatted, text: drawn ? formatted.text : text };
   };
 }
 

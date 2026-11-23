@@ -3,7 +3,7 @@
 /* What every page uses: made once when the page loads, from what the server put in it. */
 
 import type { MapConfig } from '../../common/map_config';
-import { scaledDateRules, setDefaultTimeZone } from '../lib/dates';
+import { scaledDateRules, setDefaultTimeZone, setDefaultWeekStart } from '../lib/dates';
 import { DEFAULT_DATE_NANOS_FORMAT, DEFAULT_FORMAT_SETTINGS, type FormatSettings } from '../lib/field_formats';
 import type { QueryConfig } from '../lib/query';
 import type { FieldFormatSpec } from '../lib/types';
@@ -88,6 +88,20 @@ export function createServices(boot: BootData): Services {
   applyTimeZone();
   uiSettings.subscribe(applyTimeZone);
 
+  const weekStart = () => Math.max(0, DAYS.indexOf(uiSettings.get('dateFormat:dow', 'Sunday')));
+  // The weeks of a written date start on the day of the setting dateFormat:dow, as the original
+  // makes it the first day of the week of its dates
+  const applyWeekStart = () => setDefaultWeekStart(weekStart());
+  applyWeekStart();
+  uiSettings.subscribe(applyWeekStart);
+
+  // Where the page was loaded, as the original tells its formats when it starts: a link of the URL
+  // format that is not to an http or https address is made absolute from it
+  const parsedUrl =
+    typeof window === 'undefined' || !window.location
+      ? undefined
+      : { origin: window.location.origin, pathname: window.location.pathname, basePath: boot.basePath };
+
   let formats: { version: number; value: FormatSettings } | undefined;
   const formatSettings = () => {
     if (!formats || formats.version !== uiSettings.getVersion()) {
@@ -108,6 +122,7 @@ export function createServices(boot: BootData): Services {
           ),
           scaledDateRules: scaledDateRules(uiSettings.get('dateFormat:scaled')),
           dateNanosFormat: uiSettings.get<string>('dateNanosFormat', DEFAULT_DATE_NANOS_FORMAT),
+          parsedUrl,
         },
       };
     }
@@ -144,7 +159,7 @@ export function createServices(boot: BootData): Services {
       allowLeadingWildcards: uiSettings.get('query:allowLeadingWildcards', true),
     }),
     timeZone,
-    weekStart: () => Math.max(0, DAYS.indexOf(uiSettings.get('dateFormat:dow', 'Sunday'))),
+    weekStart,
   };
   return services;
 }

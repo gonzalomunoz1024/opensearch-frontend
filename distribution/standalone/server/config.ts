@@ -541,9 +541,6 @@ export function loadConfig(
         // `server: {}`: nothing set
       } else if (listed(CORE_KEYS_NOT_READ, key) || pluginNamespaceOf(key) !== undefined) {
         ignored.push(key);
-      } else if (key === 'csp' || key.startsWith('csp.')) {
-        // The settings of the content security policy are read where it is made (static.ts)
-        ignored.push(key);
       } else if (Object.prototype.hasOwnProperty.call(CORE_NAMESPACES, key.split('.')[0])) {
         if (isKnownPrefix(key)) {
           throw configError(key, `expected a plain object value, but found [${typeName(value)}] instead.`);
