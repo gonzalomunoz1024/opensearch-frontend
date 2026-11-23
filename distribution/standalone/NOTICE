@@ -17,7 +17,11 @@ keeps working, and parts of it are derived from it under the Apache License, Ver
     OpenSearch Dashboards 3.9.0), the field mappings of their indices, and their saved objects
     in the form OpenSearch Dashboards 3.9.0 writes them when it installs a set; and their
     preview pictures (web/static/plugins/home/assets/sample_data_resources, copied as they are
-    from src/plugins/home/public/assets/sample_data_resources).
+    from src/plugins/home/public/assets/sample_data_resources),
+  - the pictures of the welcome screen of a new instance: its illustration
+    (web/static/plugins/home/assets/common, copied as it is from
+    src/plugins/home/public/assets/common) and the shapes behind it (web/static/core_app/images,
+    copied as they are from src/core/public/core_app/images).
 
 OpenSearch Dashboards
 Copyright OpenSearch Contributors

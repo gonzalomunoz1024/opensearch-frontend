@@ -2,16 +2,25 @@
 
 /*
  * The first page, as the home plugin of OpenSearch Dashboards draws it (its "legacy" home, the one
- * the product opens on), and the two overviews: what the product has, one card each.
+ * the product opens on) with the welcome screen of a new instance, and the two overviews: what
+ * the product has, one card each.
  */
 
-import { useState, useSyncExternalStore, type ReactNode } from 'react';
-import { cx } from '../components/basic';
+import { useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { Button, cx } from '../components/basic';
 import { Icon, type IconName } from '../components/icon';
+import { Portal } from '../components/overlay';
 import { href, navigate, useLocation } from '../router';
 import { services } from '../services';
 import { useBreadcrumbs } from '../shell/state';
 import '../styles/home.css';
+import {
+  INDEX_PATTERN_QUERY,
+  isNewInstance,
+  putWelcomeAside,
+  welcomeEnabled,
+  type WelcomeStorage,
+} from './home_welcome';
 import { SampleDataPage } from './sample_data';
 
 interface Card {
@@ -340,8 +349,120 @@ function PageFooter() {
   );
 }
 
+/** The browser's storage, if it lets the page have it */
+function browserStorage(): WelcomeStorage | undefined {
+  try {
+    return window.localStorage;
+  } catch {
+    return undefined;
+  }
+}
+
+type WelcomeState = 'asking' | 'welcome' | 'page';
+
+/**
+ * Whether the first page is the welcome screen. While the answer is awaited the page stays blank,
+ * as the original's does, so that the screen does not fade in over a page already drawn.
+ */
+function useWelcome(): [WelcomeState, () => void] {
+  const [state, setState] = useState<WelcomeState>(() =>
+    welcomeEnabled(services.boot.home?.disableWelcomeScreen === true, browserStorage()) ? 'asking' : 'page'
+  );
+  useEffect(() => {
+    if (state !== 'asking') return undefined;
+    let live = true;
+    void isNewInstance(() => services.savedObjects.find(INDEX_PATTERN_QUERY)).then((isNew) => {
+      if (live) setState(isNew ? 'welcome' : 'page');
+    });
+    return () => {
+      live = false;
+    };
+  }, [state]);
+  const skip = useCallback(() => {
+    putWelcomeAside(browserStorage());
+    setState('page');
+  }, []);
+  return [state, skip];
+}
+
+const WELCOME_DESCRIPTION =
+  'Add data to your cluster from any source, then analyze and visualize it in real time. Use our solutions to add search anywhere, observe your ecosystem, and protect against security threats.';
+
+/** The welcome screen: over the whole window, it offers to add data or to go on to the page */
+function Welcome({ onSkip }: { onSkip: () => void }) {
+  const name = services.boot.name;
+  const dark = services.uiSettings.get<boolean>('theme:darkMode', false) === true;
+  useEffect(() => {
+    const hideOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onSkip();
+    };
+    document.addEventListener('keydown', hideOnEscape);
+    return () => document.removeEventListener('keydown', hideOnEscape);
+  }, [onSkip]);
+  return (
+    <Portal>
+      <div className="homWelcome">
+        <header className="homWelcome__header">
+          <div className="homWelcome__content homWelcome__intro">
+            <span className="homWelcome__logo">
+              <img src={href('/logo.svg')} alt="" />
+            </span>
+            <h1
+              className="homWelcome__title atlTitleL"
+              data-test-subj="welcomeCustomTitle"
+              data-test-title-message={`Welcome to ${name}`}
+            >
+              Welcome to {name}
+            </h1>
+          </div>
+        </header>
+        <div className="homWelcome__content homWelcome__body">
+          <div className="homWelcome__card">
+            <div className="homWelcome__cardImage">
+              <img
+                src={href(`/plugins/home/assets/common/illustration_integrations_${dark ? 'darkmode' : 'lightmode'}.png`)}
+                alt=""
+              />
+            </div>
+            <div className="homWelcome__cardContent">
+              <span className="homWelcome__cardTitle atlTitleS">Start by adding your data</span>
+              <div className="homWelcome__cardDescription">
+                <p>{WELCOME_DESCRIPTION}</p>
+              </div>
+            </div>
+            <footer className="homWelcome__cardFooter">
+              <Button
+                variant="primary"
+                className="homWelcome__footerAction homWelcome__add"
+                onClick={() => navigate('/app/home#/tutorial_directory')}
+              >
+                Add data
+              </Button>
+              <Button
+                variant="empty"
+                className="homWelcome__footerAction homWelcome__skip"
+                onClick={onSkip}
+                testId="skipWelcomeScreen"
+              >
+                Explore on my own
+              </Button>
+            </footer>
+          </div>
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
 function HomePage() {
   useBreadcrumbs([{ text: 'Home' }]);
+  const [welcome, skipWelcome] = useWelcome();
+  if (welcome === 'asking') return null;
+  if (welcome === 'welcome') return <Welcome onSkip={skipWelcome} />;
+  return <HomeContent />;
+}
+
+function HomeContent() {
   const name = services.boot.name;
   return (
     <main aria-labelledby="homHeader__title" className="homWrapper" data-test-subj="homeApp">
