@@ -4,10 +4,12 @@
 process.env.TZ = 'UTC';
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { AggEditor } from '../../web/apps/visualize/agg_editor';
+import { RangeControl } from '../../web/apps/visualize/editor_controls';
 import {
   addAgg,
   allowedAggs,
@@ -76,6 +78,21 @@ describe('a new visualization', () => {
     const [axis] = newVis('horizontal_bar', {}).params.valueAxes as Array<{ name: string; position: string }>;
     assert.equal(axis.name, 'LeftAxis-1');
     assert.equal(axis.position, 'bottom');
+  });
+});
+
+describe('the Options tab of a Markdown visualization', () => {
+  it("writes the font size as the original's RangeOption: the value beside the handle and in a field", () => {
+    // The tab's module loads the stylesheets of the maps, which a test cannot: its source is read
+    const source = readFileSync('web/apps/visualize/options.tsx', 'utf8');
+    const markdown = source.slice(source.indexOf('function MarkdownOptions('), source.indexOf('function JsonOptions('));
+    assert.match(markdown, /<RangeControl\s+min=\{8\}\s+max=\{36\}[^>]*\sshowInput\s/);
+    assert.match(markdown, /'Values must be on or between 8 and 36'/);
+    // The value beside the handle is the control's own, as RangeOption's showValue
+    assert.equal(/showValue=\{false\}/.test(markdown), false);
+    const out = renderToStaticMarkup(createElement(RangeControl, { min: 8, max: 36, value: 14, showInput: true, onChange: () => undefined }));
+    assert.match(out, /<output class="vzeRange__value"[^>]*>14(<!-- -->)?<\/output>/);
+    assert.match(out, /<input type="number"[^>]* min="8" max="36"[^>]* value="14"/);
   });
 });
 
