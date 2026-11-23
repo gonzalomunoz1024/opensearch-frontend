@@ -71,6 +71,12 @@ describe('a new visualization', () => {
   it('has no aggregations when its kind asks for none', () => {
     assert.deepEqual(newVis('markdown', {}).aggs, []);
   });
+
+  it('names the value axis of a horizontal bar chart LeftAxis-1, at the bottom, as the original', () => {
+    const [axis] = newVis('horizontal_bar', {}).params.valueAxes as Array<{ name: string; position: string }>;
+    assert.equal(axis.name, 'LeftAxis-1');
+    assert.equal(axis.position, 'bottom');
+  });
 });
 
 describe('the aggregations a part of a chart accepts', () => {

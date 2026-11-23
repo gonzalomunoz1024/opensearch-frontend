@@ -56,7 +56,8 @@ function xyDefaults(kind: 'area' | 'line' | 'histogram' | 'horizontal_bar'): Rec
     valueAxes: [
       {
         id: 'ValueAxis-1',
-        name: horizontal ? 'BottomAxis-1' : 'LeftAxis-1',
+        // As the original names it, at the bottom of a horizontal bar chart too
+        name: 'LeftAxis-1',
         type: 'value',
         position: horizontal ? 'bottom' : 'left',
         show: true,
