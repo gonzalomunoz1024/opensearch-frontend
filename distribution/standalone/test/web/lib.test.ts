@@ -276,6 +276,14 @@ describe('numbers', () => {
     assert.deepEqual([number([null]).text, number([1, null, 'x']).text], ['-', '1, -, ']);
   });
 
+  it('writes a list in a list value by value, as the original does', () => {
+    const string = createFormatter({ id: 'string' });
+    assert.equal(string([['a', 'b'], ['c']]).text, 'a, b, c');
+    assert.equal(string([[1, 2]]).text, '1, 2');
+    assert.equal(string([]).text, '');
+    assert.equal(createFormatter({ id: 'number' })([[1000, 2], [3]]).text, '1,000, 2, 3');
+  });
+
   it('writes an empty text with its format, as the original does, and no value at all as a dash', () => {
     // An empty term is a bucket of its own: its cell, its label and the pill of its filter
     const others = createFormatter({ id: 'static_lookup', params: { lookupEntries: [{ key: 'css', value: 'Style sheet' }], unknownKeyValue: 'other' } });

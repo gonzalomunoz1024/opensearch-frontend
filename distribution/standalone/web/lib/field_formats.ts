@@ -499,16 +499,16 @@ export function createFormatter(spec: FieldFormatSpec | undefined, settings = DE
   const format = single(spec ?? { id: 'string' }, settings);
   // No value, alone or in a list, is a dash whatever the format, as the original's lists write it
   const one = (value: unknown): Formatted => (isMissing(value) ? { text: MISSING } : format(value));
-  return (value) => {
-    if (Array.isArray(value)) {
-      if (value.length === 1) return one(value[0]);
-      const parts = value.map((item) => one(item));
-      // As the original joins a list: a line to each value when one of them takes several
-      const separator = parts.some((part) => part.text.includes('\n')) ? ',\n' : ', ';
-      return { ...parts[0], text: parts.map((part) => part.text).join(separator), href: undefined, image: undefined };
-    }
-    return one(value);
+  // As the original writes a list: each value, a list in it value by value too
+  const write = (value: unknown): Formatted => {
+    if (!Array.isArray(value)) return one(value);
+    if (value.length === 1) return write(value[0]);
+    const parts = value.map(write);
+    // As the original joins a list: a line to each value when one of them takes several
+    const separator = parts.some((part) => part.text.includes('\n')) ? ',\n' : ', ';
+    return { ...parts[0], text: parts.map((part) => part.text).join(separator), href: undefined, image: undefined };
   };
+  return write;
 }
 
 export function formatSpecOf(
