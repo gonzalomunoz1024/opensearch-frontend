@@ -274,6 +274,7 @@ export function ExternalLink({ href, children = 'Learn more' }: { href: string; 
     <a href={href} target="_blank" rel="noopener noreferrer" className="ismExternal">
       {children}
       <Icon name="external" />
+      <span className="atlScreenReaderOnly">(opens in a new tab or window)</span>
     </a>
   );
 }
@@ -527,6 +528,7 @@ export function SearchRow({
   placeholder = 'Search',
   children,
   className,
+  autoFocus,
 }: {
   search: string;
   onSearch: (text: string) => void;
@@ -534,6 +536,8 @@ export function SearchRow({
   children?: ReactNode;
   /** In the place of the row's own spacing and line under it */
   className?: string;
+  /** The box has the focus when the list opens */
+  autoFocus?: boolean;
 }) {
   // What is typed is shown at once and searched for a moment later
   const [text, setText] = useState(search);
@@ -556,7 +560,14 @@ export function SearchRow({
   return (
     <div className={className ?? 'ismSearchRow'}>
       <div className="atlGrow">
-        <SearchField compact value={text} onChange={setText} placeholder={placeholder} aria-label={placeholder} />
+        <SearchField
+          compact
+          value={text}
+          onChange={setText}
+          placeholder={placeholder}
+          aria-label={placeholder}
+          autoFocus={autoFocus}
+        />
       </div>
       {children}
     </div>

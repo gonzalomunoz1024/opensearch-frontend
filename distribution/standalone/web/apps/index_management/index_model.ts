@@ -661,3 +661,47 @@ export function dataStreamNameErrors(name: string, matched: boolean): string[] {
   if (!matched) errors.push(`No matching index template found for data stream [${name}]`);
   return errors;
 }
+
+/** The index templates each component template is part of, in the order the templates come */
+export function componentUsers(templates: Array<{ name: string; composed_of?: string[] }>): Map<string, string[]> {
+  const users = new Map<string, string[]>();
+  for (const template of templates) {
+    for (const component of template.composed_of ?? []) {
+      users.set(component, [...(users.get(component) ?? []), template.name]);
+    }
+  }
+  return users;
+}
+
+/** The value at a dotted path, or the fallback where there is none, as lodash's `get` reads it */
+export function valueAt(item: unknown, path: string, fallback: unknown): unknown {
+  let value = item;
+  for (const key of path.split('.')) {
+    if (value === null || value === undefined) return fallback;
+    value = (value as Record<string, unknown>)[key];
+  }
+  return value === undefined ? fallback : value;
+}
+
+/** Whether `left < right` holds in JavaScript, for the values a list holds */
+function lessThan(left: unknown, right: unknown): boolean {
+  const primitive = (value: unknown) => (typeof value === 'object' && value !== null ? String(value) : value);
+  const x = primitive(left);
+  const y = primitive(right);
+  if (typeof x === 'string' && typeof y === 'string') return x < y;
+  return Number(x) < Number(y);
+}
+
+/**
+ * Rows in the order the plugin's list of component templates puts them in: its comparator never
+ * says two rows are equal, and a row without the value has 0 in its place, which no text is
+ * smaller or larger than.
+ */
+export function pluginOrder<Row>(rows: Row[], sortField: string, sortDirection: string): Row[] {
+  return [...rows].sort((a, b) => {
+    const x = valueAt(a, sortField, 0);
+    const y = valueAt(b, sortField, 0);
+    if (sortDirection === 'asc') return lessThan(x, y) ? -1 : 1;
+    return lessThan(y, x) ? -1 : 1;
+  });
+}

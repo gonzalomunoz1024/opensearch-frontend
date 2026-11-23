@@ -219,17 +219,173 @@ tr:hover .ismRowActions > *,
   filter: none;
 }
 
+/* The theme's icon buttons of the primary and danger colours */
 .ismRowActions__info {
-  color: var(--color-accent);
+  color: var(--color-accent-button-text);
 }
 
 .ismRowActions__danger {
+  color: var(--color-critical-button-text);
+}
+
+/* The component templates' list alone colours them brighter under the pointer */
+.ismComponentTemplatesTable tr:hover .ismRowActions__info {
+  color: var(--color-accent);
+}
+
+.ismComponentTemplatesTable tr:hover .ismRowActions__danger {
   color: var(--color-critical);
 }
 
 /* "N more" after the first names of a cell */
 .ismFewNames__more {
   margin-left: var(--space-2);
+}
+
+/* What a component template holds: the theme's hollow badges, on lines 28 px high */
+.ismTypeBadges {
+  line-height: 28px;
+}
+
+.ismHollowBadge {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 1px var(--space-2);
+  border: 1px solid var(--color-border-light);
+  border-radius: 999px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 18px;
+  text-overflow: ellipsis;
+  text-transform: capitalize;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.ismHollowBadge + .ismHollowBadge {
+  margin-left: var(--space-1);
+}
+
+/* The controls above a list 8 px apart, the plugin's small gutter */
+.ismIndexControls.ismIndexControls--s {
+  gap: var(--space-2);
+}
+
+/* The plugin's group of one filter: the theme's filter group around its small filter button */
+.ismFilterBox {
+  display: inline-flex;
+  flex: none;
+  overflow: hidden;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+}
+
+.ismFilterBox__button {
+  display: inline-flex;
+  align-items: center;
+  min-width: 96px;
+  height: var(--control-height);
+  padding: 0 var(--space-2);
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 21px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ismFilterBox__button:hover,
+.ismFilterBox__button:focus-visible,
+.ismFilterBox__button[aria-expanded="true"] {
+  background: var(--color-border-light);
+}
+
+/* The name keeps the width of its bold self, as the theme's */
+.ismFilterBox__name {
+  min-width: 48px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ismFilterBox__name::after {
+  content: attr(data-text);
+  display: block;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: var(--font-weight-semibold);
+}
+
+/* How many values there are, or how many are ticked: the theme's notification badge */
+.ismFilterBox__count {
+  min-width: 24px;
+  height: 20px;
+  margin: 0 var(--space-2);
+  padding: 0 var(--space-1);
+  border-radius: 999px;
+  background: var(--color-surface-secondary);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  line-height: 20px;
+  text-align: center;
+}
+
+.ismFilterBox__count--active {
+  background: var(--color-accent);
+  color: var(--color-text-primary);
+}
+
+/* The values in its popover, as the theme's filter select items: a check before the ticked ones and
+   a cross before the others */
+.atlPopover.ismFilterSelect {
+  min-width: 112px;
+}
+
+.ismFilterSelect__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-1) var(--space-3);
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border-light) 70%, var(--color-surface));
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-s);
+  line-height: 21px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ismFilterSelect__item:hover,
+.ismFilterSelect__item:focus {
+  background: var(--color-surface-secondary);
+  outline: none;
+}
+
+.ismFilterSelect__item:focus {
+  color: var(--color-accent);
+}
+
+.ismFilterSelect__item .atlIcon {
+  flex: none;
+  color: var(--color-text-primary);
+}
+
+.ismFilterSelect__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* --- Indexes ---------------------------------------------------------------------------------- */

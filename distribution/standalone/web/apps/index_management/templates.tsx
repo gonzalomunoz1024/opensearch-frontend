@@ -5,33 +5,31 @@
  * components it is composed of, and the dialogs that unlink and delete them.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Badge, Button, IconButton } from '../../components/basic';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Button, IconButton, Spinner, cx } from '../../components/basic';
 import { Checkbox } from '../../components/form';
-import { Flyout, Modal, Tooltip, type MenuItem } from '../../components/overlay';
+import { Icon } from '../../components/icon';
+import { Flyout, Popover, Tooltip, type MenuItem } from '../../components/overlay';
 import { useBreadcrumbs } from '../../shell/state';
 import { FewNames } from './aliases';
 import {
   ActionsMenu,
-  ContentPanel as OldContentPanel,
   ExternalLink,
-  FilterButton,
   LocalTable,
-  Names,
-  PanelButton,
   SearchRow,
   Table,
   go,
   ism,
-  pageOf,
   to,
   toasts,
   useListQuery,
+  type Answer,
   type TableColumn,
 } from './common';
 import { ContentPanel, ContentPanelActions, ListEmpty, TitleHelp } from './content_panel';
+import { componentUsers, pluginOrder } from './index_model';
 import { pageChanges, pageQuery } from './model';
-import { DeleteModal, SimpleModal } from './plugin_modal';
+import { DeleteModal, ModalButtons, ModalNames, PluginModal, SimpleModal } from './plugin_modal';
 import { CRUMBS, ROUTES } from './routes';
 
 const TEMPLATE_DOCS = 'https://opensearch.org/docs/latest/opensearch/index-templates/';
@@ -67,21 +65,40 @@ export async function loadIndexTemplates(): Promise<Array<IndexTemplate & { name
   return (answer.response?.index_templates ?? []).map((item) => ({ ...item.index_template, name: item.name }));
 }
 
-/** Takes a component out of an index template, as the template is now */
-async function unlink(templateName: string, component: string): Promise<boolean> {
+/**
+ * Writes an index template again without one of its components, as the template is now. Nothing
+ * comes back when the template could not be read, which a toast says as the plugin's does.
+ */
+async function withoutComponent(templateName: string, component: string): Promise<Answer | undefined> {
   const current = await ism.request<IndexTemplates>('GET', `/_index_template/${templateName}?flat_settings=true`);
   const found = current.response?.index_templates?.find((item) => item.name === templateName);
   if (!current.ok || !found) {
     toasts.danger(current.ok ? `The template [${templateName}] does not exist.` : current.error || '');
-    return false;
+    return undefined;
   }
-  const answer = await ism.request('POST', `/_index_template/${templateName}`, {
+  return ism.request('POST', `/_index_template/${templateName}`, {
     ...found.index_template,
     composed_of: (found.index_template.composed_of ?? []).filter((item) => item !== component),
   });
+}
+
+/** Takes a component out of an index template, and says how that went */
+async function unlink(templateName: string, component: string): Promise<boolean> {
+  const answer = await withoutComponent(templateName, component);
+  if (!answer) return false;
   if (answer.ok) toasts.success(`${component} has been successfully unlinked from ${templateName}.`);
   else toasts.danger(answer.error);
   return answer.ok;
+}
+
+/** A page of the plugin in a new tab, as the theme's link says it to a screen reader */
+function NewTabLink({ path, children }: { path: string; children: ReactNode }) {
+  return (
+    <a href={to(path)} target="_blank" rel="noopener noreferrer">
+      {children}
+      <span className="atlScreenReaderOnly">(opens in a new tab or window)</span>
+    </a>
+  );
 }
 
 /** The plugin's question before a component leaves a template; `wording` is its last sentence */
@@ -142,9 +159,7 @@ function AssociatedComponents({
               field: 'name',
               name: 'Component template',
               render: (row: { name: string }) => (
-                <a href={to(`${ROUTES.CREATE_COMPOSABLE_TEMPLATE}/${row.name}`)} target="_blank" rel="noreferrer">
-                  {row.name}
-                </a>
+                <NewTabLink path={`${ROUTES.CREATE_COMPOSABLE_TEMPLATE}/${row.name}`}>{row.name}</NewTabLink>
               ),
             },
             {
@@ -421,44 +436,118 @@ export function Templates() {
 
 // --- Component templates --------------------------------------------------------------------------------------
 
-interface ComponentRow {
+interface ComponentTemplate {
   name: string;
   component_template: {
-    template: Record<string, unknown>;
+    template?: Record<string, unknown>;
     _meta?: { description?: string };
   };
-  /** The index templates composed of it */
-  associated: string[];
+}
+
+interface ComponentRow extends ComponentTemplate {
+  /** How many index templates are composed of it */
   associatedCount: number;
 }
 
+/** What a component template may hold, in the order of its badges */
 const TYPES = ['aliases', 'settings', 'mappings'];
+/** The same, in the order the filter offers them */
+const TYPE_FILTERS = ['aliases', 'mappings', 'settings'];
 
-function AssociatedTemplatesModal({
+/** The plugin's hollow badges of what a component template holds */
+function TypeBadges({ template }: { template?: Record<string, unknown> }) {
+  return (
+    <div className="ismTypeBadges">
+      {TYPES.filter((type) => template?.[type]).map((type) => (
+        <span key={type} className="ismHollowBadge">
+          {type}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The plugin's group of one filter: its name with how many values it has (how many are ticked, once
+ * some are), and the values in a popover that stays open while they are ticked
+ */
+function TypesFilter({ selected, onChange }: { selected: string[]; onChange: (selected: string[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  const active = selected.length > 0;
+  return (
+    <div className="ismFilterBox">
+      <Popover
+        open={open}
+        onClose={close}
+        align="center"
+        offset={8}
+        className="ismFilterSelect"
+        button={
+          <button
+            type="button"
+            className={cx('ismFilterBox__button', active && 'ismFilterBox__button--active')}
+            aria-expanded={open}
+            onClick={() => setOpen((was) => !was)}
+          >
+            {/* As wide as its bold self, so that ticking a value does not move what follows */}
+            <span className="ismFilterBox__name" data-text="Types">
+              Types
+            </span>
+            <span className={cx('ismFilterBox__count', active && 'ismFilterBox__count--active')}>
+              {active ? selected.length : TYPE_FILTERS.length}
+            </span>
+            <Icon name="chevronDown" />
+          </button>
+        }
+      >
+        {TYPE_FILTERS.map((type) => {
+          const on = selected.includes(type);
+          return (
+            <button
+              key={type}
+              type="button"
+              className="ismFilterSelect__item"
+              aria-pressed={on}
+              data-test-subj={`FilterGroupSelectItem-${type}`}
+              onClick={() => onChange(on ? selected.filter((item) => item !== type) : [...selected, type])}
+            >
+              <Icon name={on ? 'check' : 'cross'} />
+              <span className="ismFilterSelect__text">{type}</span>
+            </button>
+          );
+        })}
+      </Popover>
+    </div>
+  );
+}
+
+/** The plugin's flyout of the index templates composed of a component, each with a way to unlink it */
+function AssociatedTemplates({
   component,
   templates,
   onClose,
   onUnlink,
 }: {
   component: string;
-  templates: Array<IndexTemplate & { name: string }>;
+  /** The names of the index templates composed of it */
+  templates: string[];
   onClose: () => void;
   onUnlink: () => void;
 }) {
-  const [unlinking, setUnlinking] = useState<IndexTemplate & { name: string }>();
+  const [unlinking, setUnlinking] = useState<string>();
+  const rows = useMemo(() => templates.map((name) => ({ name })), [templates]);
   return (
     <>
-      <Modal title="Associated index templates" onClose={onClose}>
+      <Flyout title="Associated index templates" onClose={onClose}>
         <LocalTable
+          fixed
           columns={[
             {
               field: 'name',
               name: 'Templates',
-              sortable: true,
-              render: (row: IndexTemplate & { name: string }) => (
-                <a href={to(`${ROUTES.CREATE_TEMPLATE}/${row.name}`)} target="_blank" rel="noreferrer">
-                  {row.name}
-                </a>
+              render: (row: { name: string }) => (
+                <NewTabLink path={`${ROUTES.CREATE_TEMPLATE}/${row.name}`}>{row.name}</NewTabLink>
               ),
             },
             {
@@ -466,315 +555,366 @@ function AssociatedTemplatesModal({
               name: 'Actions',
               align: 'right',
               render: (row) => (
-                <IconButton icon="unlink" label={`Unlink from ${row.name}?`} onClick={() => setUnlinking(row)} />
+                <Tooltip content="Unlink">
+                  <IconButton
+                    icon="unlink"
+                    label={`Unlink from ${row.name}?`}
+                    title=""
+                    onClick={() => setUnlinking(row.name)}
+                  />
+                </Tooltip>
               ),
             },
           ]}
-          rows={templates}
+          rows={rows}
           rowId={(row) => row.name}
-          sortField="name"
-          empty={`No index templates associated to ${component}`}
+          pageSizes={[10, 25, 50]}
+          empty="No items found"
         />
-      </Modal>
+      </Flyout>
       {unlinking && (
         <UnlinkConfirm
-          template={unlinking.name}
+          template={unlinking}
           component={component}
           wording="This will affect any new indexes created with the template."
           onClose={() => setUnlinking(undefined)}
-          onDone={() => {
-            onUnlink();
-            onClose();
-          }}
+          onDone={onUnlink}
         />
       )}
     </>
   );
 }
 
+/**
+ * The plugin's question before a component template goes. The index templates composed of it lose
+ * it first, all at once, once that is ticked.
+ */
 export function DeleteComponentModal({
-  row,
-  templates,
+  name,
+  users,
+  loading,
   onClose,
   onDelete,
 }: {
-  row: Pick<ComponentRow, 'name' | 'associated'>;
-  templates: Array<IndexTemplate & { name: string }>;
+  name: string;
+  /** The index templates composed of it */
+  users: string[];
+  /** While it is not known yet which templates are composed of it */
+  loading?: boolean;
   onClose: () => void;
   onDelete: () => void;
 }) {
   const [checked, setChecked] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const linked = templates.filter((template) => row.associated.includes(template.name));
+  const linked = users.length > 0;
   const confirm = async () => {
-    setBusy(true);
-    // A component in use is taken out of its templates first
-    for (const template of linked) {
-      if (!(await unlink(template.name, row.name))) {
-        setBusy(false);
+    if (linked) {
+      const results = await Promise.all(users.map((template) => withoutComponent(template, name)));
+      // A template that could not be read said so, and the plugin goes no further
+      if (results.some((result) => result === undefined)) return;
+      const failed = results.filter((result) => !result?.ok);
+      if (failed.length > 0) {
+        toasts.danger(failed.map((result) => result?.error ?? '').join(', '));
         return;
       }
     }
-    const result = await ism.request('DELETE', `/_component_template/${row.name}`);
-    setBusy(false);
+    const result = await ism.request('DELETE', `/_component_template/${name}`);
     if (result.ok) {
-      toasts.success(`Delete [${row.name}] successfully`);
-      onClose();
+      toasts.success(`Delete [${name}] successfully`);
       onDelete();
     } else {
       toasts.danger(result.error || '');
     }
   };
+  let body;
+  if (loading) {
+    body = <Spinner size="l" />;
+  } else if (linked) {
+    body = (
+      <>
+        <p>
+          {`The component template ${name} will be permanently deleted. The component template will be unlinked from ${users.length} index templates:`}
+        </p>
+        {users.map((template, index) => (
+          <span key={template}>
+            {index > 0 && ', '}
+            <a href={to(`${ROUTES.CREATE_TEMPLATE}/${template}`)} target="_blank" rel="noreferrer">
+              {template}
+            </a>
+          </span>
+        ))}
+        <div className="ismSpacer ismSpacer--l" />
+        <Checkbox
+          checked={checked}
+          onChange={setChecked}
+          label={`Unlink index templates and delete ${name}`}
+          testId="UnlinkConfirmCheckBox"
+        />
+      </>
+    );
+  } else {
+    body = (
+      <>
+        <p>The following component template will be permanently deleted. This action cannot be undone.</p>
+        <ModalNames names={[name]} within="plain" />
+      </>
+    );
+  }
   return (
-    <Modal
-      title={`Delete ${row.name}`}
+    <PluginModal
+      title={<>Delete {name}</>}
       onClose={onClose}
       footer={
-        <>
-          <Button variant="empty" size="s" disabled={busy} onClick={onClose} testId="deletaCancelButton">
-            Cancel
-          </Button>
-          {linked.length === 0 ? (
-            <Button variant="dangerFill" size="s" loading={busy} onClick={confirm} testId="deleteConfirmButton">
-              Delete
-            </Button>
-          ) : (
-            <Button
-              variant="dangerFill"
-              size="s"
-              loading={busy}
-              disabled={!checked}
-              onClick={confirm}
-              testId="deleteConfirmUnlinkButton"
-            >
-              Apply changes
-            </Button>
-          )}
-        </>
+        <ModalButtons
+          label={linked ? 'Apply changes' : 'Delete'}
+          danger
+          disabled={loading || (linked && !checked)}
+          onCancel={onClose}
+          onConfirm={() => void confirm()}
+          cancelTestId="deletaCancelButton"
+          confirmTestId={linked ? 'deleteConfirmUnlinkButton' : 'deleteConfirmButton'}
+        />
       }
     >
-      <div className="ismDialog">
-        {linked.length === 0 ? (
-          <>
-            <p>The following component template will be permanently deleted. This action cannot be undone.</p>
-            <Names names={[row.name]} />
-          </>
-        ) : (
-          <>
-            <p>
-              {`The component template ${row.name} will be permanently deleted. The component template will be unlinked from ${linked.length} index templates:`}
-            </p>
-            <ul className="ismNames">
-              {linked.map((template) => (
-                <li key={template.name}>
-                  <a href={to(`${ROUTES.CREATE_TEMPLATE}/${template.name}`)} target="_blank" rel="noreferrer">
-                    {template.name}
-                  </a>
-                </li>
-              ))}
-            </ul>
-            <Checkbox
-              checked={checked}
-              onChange={setChecked}
-              label={`Unlink index templates and delete ${row.name}`}
-              testId="UnlinkConfirmCheckBox"
-            />
-          </>
-        )}
-      </div>
-    </Modal>
+      {body}
+    </PluginModal>
   );
 }
 
 export function ComposableTemplates() {
   useBreadcrumbs([CRUMBS.INDEX_MANAGEMENT, CRUMBS.TEMPLATES]);
   const [query, setQuery] = useListQuery({ sortField: 'name' });
-  const [all, setAll] = useState<ComponentRow[]>([]);
-  const [templates, setTemplates] = useState<Array<IndexTemplate & { name: string }>>([]);
+  const [all, setAll] = useState<ComponentTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<ComponentRow[]>([]);
+  // Not kept in the address, as the plugin keeps it
   const [types, setTypes] = useState<string[]>([]);
-  const [deleting, setDeleting] = useState<ComponentRow>();
-  const [associated, setAssociated] = useState<ComponentRow>();
+  const [deleting, setDeleting] = useState<string>();
+  const [associated, setAssociated] = useState<string>();
+  // Which index templates are composed of which component: read once, and again after an unlink
+  const [users, setUsers] = useState<Map<string, string[]>>(new Map());
+  const [usersLoading, setUsersLoading] = useState(true);
   const turn = useRef(0);
 
+  const loadUsers = async () => {
+    setUsersLoading(true);
+    setUsers(componentUsers(await loadIndexTemplates()));
+    setUsersLoading(false);
+  };
+  useEffect(() => {
+    void loadUsers();
+  }, []);
+
+  // As the plugin's, the list is read again whenever what it shows changes
   const load = async () => {
     const mine = (turn.current += 1);
     setLoading(true);
-    const [answer, indexTemplates] = await Promise.all([
-      ism.request<{ component_templates?: Array<Omit<ComponentRow, 'associated' | 'associatedCount'>> }>(
-        'GET',
-        `/_component_template/*${query.search}*`,
-        undefined,
-        true
-      ),
-      loadIndexTemplates(),
-    ]);
+    const answer = await ism.request<{ component_templates?: ComponentTemplate[] }>(
+      'GET',
+      `/_component_template/*${query.search}*`,
+      undefined,
+      true
+    );
     if (mine !== turn.current) return;
-    let rows: ComponentRow[] = [];
-    if (answer.ok) {
-      rows = (answer.response?.component_templates ?? []).map((item) => {
-        const users = indexTemplates
-          .filter((template) => template.composed_of?.includes(item.name))
-          .map((template) => template.name);
-        return { ...item, associated: users, associatedCount: users.length };
-      });
-    } else if (answer.error !== 'Not Found') {
-      toasts.danger(answer.error);
-    }
-    setTemplates(indexTemplates);
+    let rows: ComponentTemplate[] = [];
+    if (answer.ok) rows = answer.response?.component_templates ?? [];
+    else if (answer.error !== 'Not Found') toasts.danger(answer.error);
     setAll(rows);
-    setSelected((before) => before.flatMap((item) => rows.filter((remote) => remote.name === item.name)));
+    setSelected((before) => before.filter((item) => rows.some((remote) => remote.name === item.name)));
     setLoading(false);
   };
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query.search]);
+  }, [query.search, query.sortField, query.sortDirection, query.from, query.size, types]);
 
-  const columns: Array<TableColumn<ComponentRow>> = useMemo(
-    () => [
-      {
-        field: 'name',
-        name: 'Name',
-        sortable: true,
-        render: (row) => (
-          <a href={`#${ROUTES.CREATE_COMPOSABLE_TEMPLATE}/${row.name}`} data-test-subj={`templateDetail-${row.name}`}>
-            {row.name}
-          </a>
-        ),
-      },
-      {
-        field: 'templateTypes',
-        name: 'Type',
-        render: (row) => (
-          <span className="atlRow" style={{ gap: 'var(--space-1)', flexWrap: 'wrap' }}>
-            {TYPES.filter((type) => row.component_template.template?.[type]).map((type) => (
-              <Badge key={type}>
-                <span className="ismCapital">{type}</span>
-              </Badge>
-            ))}
-          </span>
-        ),
-      },
-      {
-        field: 'component_template._meta.description',
-        name: 'Description',
-        sortable: true,
-        value: (row) => row.component_template._meta?.description ?? '',
-        render: (row) => row.component_template._meta?.description || '-',
-      },
-      { field: 'associatedCount', name: 'Associated index templates', sortable: true, align: 'right', render: (row) => row.associatedCount },
-      {
-        field: 'actions',
-        name: 'Actions',
-        align: 'right',
-        render: (row) => (
-          <>
+  const columns: Array<TableColumn<ComponentRow>> = [
+    {
+      field: 'name',
+      name: 'Name',
+      sortable: true,
+      render: (row) => (
+        <a
+          className="ismCellLink"
+          href={`#${ROUTES.CREATE_COMPOSABLE_TEMPLATE}/${row.name}`}
+          data-test-subj={`templateDetail-${row.name}`}
+        >
+          {row.name}
+        </a>
+      ),
+    },
+    {
+      field: 'templateTypes',
+      name: 'Type',
+      render: (row) => <TypeBadges template={row.component_template.template} />,
+    },
+    {
+      field: 'component_template._meta.description',
+      name: 'Description',
+      sortable: true,
+      render: (row) => row.component_template._meta?.description || '-',
+    },
+    {
+      field: 'associatedCount',
+      name: 'Associated index templates',
+      sortable: true,
+      align: 'right',
+      render: (row) => row.associatedCount,
+    },
+    {
+      field: 'actions',
+      name: 'Actions',
+      align: 'right',
+      render: (row) => (
+        <span className="ismRowActions">
+          <Tooltip content="View associated index templates">
             <IconButton
               icon="kqlSelector"
               label="View associated index templates"
-              onClick={() => setAssociated(row)}
+              title=""
+              className="ismRowActions__info"
+              onClick={() => setAssociated(row.name)}
               testId={`ViewAssociatedIndexTemplates-${row.name}`}
             />
+          </Tooltip>
+          <Tooltip content="Delete component template">
             <IconButton
               icon="trash"
+              variant="dangerEmpty"
               label="Delete component template"
-              onClick={() => setDeleting(row)}
+              title=""
+              className="ismRowActions__danger"
+              onClick={() => setDeleting(row.name)}
               testId={`DeleteComponentTemplate-${row.name}`}
             />
-          </>
-        ),
-      },
-    ],
-    []
-  );
+          </Tooltip>
+        </span>
+      ),
+    },
+  ];
 
-  const shown = all.filter((row) => types.every((type) => row.component_template.template?.[type]));
-  const rows = pageOf(shown, columns, pageQuery(query));
-  const filtered = query.search !== '' || types.length > 0;
+  // Ordered, then filtered, then paged, as the plugin does; its count is of all of them
+  const counted = all.map((row) => ({ ...row, associatedCount: (users.get(row.name) ?? []).length }));
+  const shown = pluginOrder(counted, query.sortField, query.sortDirection).filter((row) =>
+    types.every((type) => row.component_template.template?.[type])
+  );
+  const rows = shown.slice(query.from * query.size, (query.from + 1) * query.size);
+  // Only a search counts as a filter: types that leave nothing say there are no templates
+  const filtered = query.search !== '';
 
   return (
-    <OldContentPanel
-      title="Component templates"
-      description={
+    <ContentPanel
+      bodyStyles={{ padding: 'initial' }}
+      title={
         <>
-          Component templates are reusable building blocks for composing index or data stream templates. You can
-          define component templates with common index configurations and associate them to an index template.{' '}
-          <ExternalLink href={COMPONENT_DOCS} />
+          <span className="ismContentPanel__title ismContentPanel__title--m">Component templates</span>
+          <TitleHelp>
+            Component templates are reusable building blocks for composing index or data stream templates. You can
+            define component templates with common index configurations and associate them to an index template.{' '}
+            <ExternalLink href={COMPONENT_DOCS} />
+          </TitleHelp>
         </>
       }
       actions={
-        <>
-          <Button
-            size="s"
-            variant="danger"
-            disabled={selected.length !== 1}
-            onClick={() => setDeleting(selected[0])}
-            testId="deleteAction"
-          >
-            Delete
-          </Button>
-          <PanelButton text="Create component template" variant="primary" to={to(ROUTES.CREATE_COMPOSABLE_TEMPLATE)} />
-        </>
+        <ContentPanelActions
+          actions={[
+            {
+              text: '',
+              children: (
+                <Button
+                  variant="danger"
+                  disabled={selected.length !== 1}
+                  onClick={() => setDeleting(selected[0]?.name)}
+                  testId="deleteAction"
+                >
+                  Delete
+                </Button>
+              ),
+            },
+            {
+              text: 'Create component template',
+              buttonProps: { variant: 'primary', onClick: () => go(ROUTES.CREATE_COMPOSABLE_TEMPLATE) },
+            },
+          ]}
+        />
       }
     >
-      <SearchRow search={query.search} onSearch={(search) => setQuery({ search, from: 0 })} placeholder="Search...">
-        <FilterButton name="Types" options={TYPES.map((value) => ({ value }))} selected={types} onChange={setTypes} />
+      <SearchRow
+        className="ismIndexControls ismIndexControls--s"
+        autoFocus
+        search={query.search}
+        onSearch={(search) => setQuery({ search, from: 0 })}
+        placeholder="Search..."
+      >
+        <TypesFilter
+          selected={types}
+          onChange={(next) => {
+            setTypes(next);
+            setQuery({ from: 0 });
+          }}
+        />
       </SearchRow>
-      <Table
-        columns={columns}
-        rows={rows}
-        total={shown.length}
-        query={pageQuery(query)}
-        onQuery={(changes) => setQuery(pageChanges(changes, query.size))}
-        rowId={(row) => row.name}
-        selected={selected}
-        onSelect={setSelected}
-        loading={loading}
-        empty={
-          <div className="ismEmpty">
-            <p>
-              {filtered
-                ? 'There are no templates matching your applied filters. Reset your filters to view your templates.'
-                : 'You have no templates.'}
-            </p>
-            {filtered ? (
-              <Button
-                variant="primary"
-                size="s"
-                onClick={() => {
-                  setTypes([]);
-                  setQuery({ search: '' });
-                }}
-              >
-                Reset filters
-              </Button>
-            ) : (
-              <Button
-                variant="primary"
-                size="s"
-                icon="plus"
-                to={to(ROUTES.CREATE_COMPOSABLE_TEMPLATE)}
-                testId="CreateComponentTemplateWhenNoTemplateFound"
-              >
-                Create component template
-              </Button>
-            )}
-          </div>
-        }
-      />
-      {deleting && (
-        <DeleteComponentModal row={deleting} templates={templates} onClose={() => setDeleting(undefined)} onDelete={load} />
-      )}
-      {associated && (
-        <AssociatedTemplatesModal
-          component={associated.name}
-          templates={templates.filter((template) => associated.associated.includes(template.name))}
-          onClose={() => setAssociated(undefined)}
-          onUnlink={load}
+      <hr className="ismContentPanel__rule" />
+      <div className="ismSpacer ismSpacer--s" />
+      <div className="ismComponentTemplatesTable" data-test-subj="templatesTable">
+        <Table
+          fixed
+          columns={columns}
+          rows={rows}
+          total={all.length}
+          query={pageQuery(query)}
+          onQuery={(changes) => setQuery(pageChanges(changes, query.size))}
+          rowId={(row) => row.name}
+          selected={selected}
+          onSelect={setSelected}
+          loading={loading || usersLoading}
+          empty={
+            <ListEmpty
+              text={
+                filtered
+                  ? 'There are no templates matching your applied filters. Reset your filters to view your templates.'
+                  : 'You have no templates.'
+              }
+            >
+              {filtered ? (
+                <Button variant="primary" onClick={() => setQuery({ search: '' })}>
+                  Reset filters
+                </Button>
+              ) : (
+                <Button
+                  variant="primary"
+                  onClick={() => go(ROUTES.CREATE_COMPOSABLE_TEMPLATE)}
+                  testId="CreateComponentTemplateWhenNoTemplateFound"
+                >
+                  Create component template
+                </Button>
+              )}
+            </ListEmpty>
+          }
+        />
+      </div>
+      {deleting !== undefined && (
+        <DeleteComponentModal
+          name={deleting}
+          users={users.get(deleting) ?? []}
+          loading={usersLoading}
+          onClose={() => setDeleting(undefined)}
+          onDelete={() => {
+            setDeleting(undefined);
+            void load();
+          }}
         />
       )}
-    </OldContentPanel>
+      {associated !== undefined && (
+        <AssociatedTemplates
+          component={associated}
+          templates={users.get(associated) ?? []}
+          onClose={() => setAssociated(undefined)}
+          onUnlink={() => {
+            void load();
+            void loadUsers();
+          }}
+        />
+      )}
+    </ContentPanel>
   );
 }

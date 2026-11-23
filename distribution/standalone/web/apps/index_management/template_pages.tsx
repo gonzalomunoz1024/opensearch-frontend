@@ -1100,8 +1100,8 @@ const ComponentForm = forwardRef<{ submit: () => void }, ComponentFormProps>(fun
       )}
       {deleting && (
         <DeleteComponentModal
-          row={{ name, associated: users.map((template) => template.name) }}
-          templates={users}
+          name={name}
+          users={users.map((template) => template.name)}
           onClose={() => setDeleting(false)}
           onDelete={() => go(ROUTES.COMPOSABLE_TEMPLATES)}
         />
