@@ -13,7 +13,8 @@ import { Popover, Tooltip } from '../../components/overlay';
 import { Pagination } from '../../components/table';
 import { services } from '../../services';
 import { HttpFetchError } from '../../services/http';
-import { askedOnce, getSavedObjectLabel, objectsDocTitle } from './saved_objects_lib';
+import { sectionCrumb } from './frame';
+import { askedOnce, getSavedObjectLabel } from './saved_objects_lib';
 import {
   QueryParseError,
   orFieldState,
@@ -25,22 +26,13 @@ import {
 } from './saved_objects_query';
 
 export const OBJECTS_ROOT = '/app/management/opensearch-dashboards/objects';
-export const MANAGEMENT_CRUMB = { text: 'Dashboards Management', to: '/app/management' };
+export { MANAGEMENT_CRUMB } from './frame';
+export const OBJECTS_CRUMB = sectionCrumb('objects');
 
 /** The types the page may show: asked when the section is first opened, by the list or by an object */
 export const allowedObjectTypes = askedOnce(() =>
   services.http.get<{ types: string[] }>('/api/opensearch-dashboards/management/saved_objects/_allowed_types').then((answer) => answer.types)
 );
-
-/**
- * The tab's title, after the header's hook wrote its own from the breadcrumbs: call it below
- * `useBreadcrumbs`, so that it has the last word.
- */
-export function useObjectsDocTitle() {
-  useEffect(() => {
-    document.title = objectsDocTitle(services.boot.name);
-  });
-}
 
 /** The message of a failed request, as the original's toasts write it */
 export function errorText(error: unknown): string {

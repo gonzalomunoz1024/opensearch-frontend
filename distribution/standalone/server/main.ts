@@ -41,18 +41,25 @@ async function main() {
     }
   }
 
-  const { config, ignored } = loadConfig({ file });
+  const { config, ignored, deprecations } = loadConfig({ file });
   const logger = createLogger(config.logging);
+  // What the original says of a deprecated setting, in its words
+  for (const message of deprecations) logger.warn(message, { tags: ['deprecation'] });
   if (ignored.length) {
     logger.warn(`Settings in ${file} that ${PRODUCT_NAME} does not read were ignored`, { ignored });
   }
 
   const app = createApp({ config, logger, distDirectory });
   await app.start();
-  logger.info(`${PRODUCT_NAME} is listening on http://${config.server.host}:${config.server.port}`, {
-    basePath: config.server.basePath,
-    opensearch: config.opensearch.hosts,
-  });
+  const { ssl } = config.server;
+  logger.listening(
+    `${PRODUCT_NAME} is listening on ${ssl.enabled ? 'https' : 'http'}://${config.server.host}:${config.server.port}`,
+    {
+      basePath: config.server.basePath,
+      opensearch: config.opensearch.hosts,
+      ...(ssl.enabled && ssl.redirectHttpFromPort !== undefined ? { redirectHttpFromPort: ssl.redirectHttpFromPort } : {}),
+    }
+  );
 
   let stopping = false;
   const stop = (signal: string) => {

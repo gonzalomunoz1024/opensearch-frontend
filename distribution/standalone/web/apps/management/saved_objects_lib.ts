@@ -419,9 +419,6 @@ export function askedOnce<T>(ask: () => Promise<T>): () => Promise<T> {
   };
 }
 
-/** The tab's title on every page of the section, the list and an object alike, as the original's */
-export const objectsDocTitle = (productName: string) => `Saved Objects - ${productName}`;
-
 /**
  * The object the inspect page shows, from the answer of the bulk get the original's client asks
  * with. One that is not there comes back with an error instead of attributes, and is shown as the

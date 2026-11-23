@@ -9,7 +9,6 @@ import {
   importItems,
   inspectDelete,
   inspectedObject,
-  objectsDocTitle,
   processImportResponse,
   resolveImportErrors,
   savedAttributes,
@@ -445,10 +444,6 @@ describe("the inspect page's delete", () => {
 });
 
 describe('what the section keeps for as long as the page lives', () => {
-  it("names the tab as the original's section does, on the list and on an object", () => {
-    assert.equal(objectsDocTitle('InfraDashboard'), 'Saved Objects - InfraDashboard');
-  });
-
   it('asks once, however often it is needed, and again only after an answer that failed', async () => {
     let asked = 0;
     let fail = true;

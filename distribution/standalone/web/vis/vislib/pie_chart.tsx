@@ -16,7 +16,7 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode
 import { useSize, type Size } from '../../charts/core';
 import { truncateLabel } from './axis';
 import { HandlerError, TOO_SMALL } from './handler_error';
-import { VisLegend, type LegendPosition, type VisLegendProps } from './legend';
+import { hoverAfter, VisLegend, type Hover, type LegendPosition, type VisLegendProps } from './legend';
 import { partition, percentText, type PieSlice } from './pie_data';
 import { arcCentroid, arcPath } from './shapes';
 import { SplitCharts, SplitTitles } from './split';
@@ -94,11 +94,6 @@ export function keptPieLabels(boxes: Array<LabelBox | undefined>): boolean[] {
     kept.push(current);
     return true;
   });
-}
-
-interface Hover {
-  label?: string;
-  touched: boolean;
 }
 
 const TWO_PI = 2 * Math.PI;
@@ -281,9 +276,7 @@ export function PieChart({ charts, rows, names, isDonut, labels, addTooltip, col
   const [cramped, setCramped] = useState<ReadonlySet<number>>(new Set());
   const split = rows !== undefined;
 
-  const highlight = useCallback((label: string | undefined) => {
-    setHover((current) => (label === undefined ? { touched: current.touched || current.label !== undefined } : { label, touched: true }));
-  }, []);
+  const highlight = useCallback((label: string | undefined) => setHover((current) => hoverAfter(current, label)), []);
   // Pointing at a name dims the others in every pie and in the legend, as vislib's highlight does
   const opacityOf = (label: string): number | undefined => {
     if (hover.label !== undefined) return hover.label === label ? 1 : dimming;

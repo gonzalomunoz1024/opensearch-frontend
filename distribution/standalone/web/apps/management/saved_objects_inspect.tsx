@@ -24,7 +24,7 @@ import {
   type ObjectField,
   type ObjectService,
 } from './saved_objects_lib';
-import { Callout, MANAGEMENT_CRUMB, OBJECTS_ROOT, SmallSwitch, allowedObjectTypes, errorText, useObjectsDocTitle } from './saved_objects_parts';
+import { Callout, MANAGEMENT_CRUMB, OBJECTS_CRUMB, OBJECTS_ROOT, SmallSwitch, allowedObjectTypes, errorText } from './saved_objects_parts';
 
 type StoredObject = SavedObject<Record<string, unknown>>;
 
@@ -83,8 +83,7 @@ export function InspectPage({ serviceName, id }: { serviceName: string; id: stri
   const [object, setObject] = useState<StoredObject>();
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  useBreadcrumbs([MANAGEMENT_CRUMB, { text: 'Saved objects', to: OBJECTS_ROOT }, { text: `Edit ${type}` }]);
-  useObjectsDocTitle();
+  useBreadcrumbs([MANAGEMENT_CRUMB, OBJECTS_CRUMB, { text: `Edit ${type}` }]);
 
   useEffect(() => {
     // As the original's section does when it is opened on an object: the types are asked for too

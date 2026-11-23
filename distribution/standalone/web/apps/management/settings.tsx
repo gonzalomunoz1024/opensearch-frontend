@@ -13,9 +13,11 @@ import { Button, CallOut } from '../../components/basic';
 import { Icon } from '../../components/icon';
 import { Tooltip } from '../../components/overlay';
 import { executeQuery, parseQuery, QuerySyntaxError, type QueryClause } from '../../lib/search_query';
+import { useLocation } from '../../router';
 import { services } from '../../services';
 import { errorMessage } from '../../services/http';
 import { useBreadcrumbs } from '../../shell/state';
+import { managementTrail } from './frame';
 import { Field } from './settings_field';
 import {
   ariaName,
@@ -151,7 +153,7 @@ function BottomBar({
 }
 
 export function AdvancedSettings({ query = '' }: { query?: string }) {
-  useBreadcrumbs([{ text: 'Dashboards Management', to: '/app/management' }, { text: 'Advanced settings' }]);
+  useBreadcrumbs(managementTrail(useLocation().pathname, [{ text: 'Advanced settings' }]));
   const client = services.uiSettings;
   const version = useSyncExternalStore(client.subscribe, client.getVersion);
   const [status, setStatus] = useState<'loading' | 'ready' | 'failed'>('loading');
