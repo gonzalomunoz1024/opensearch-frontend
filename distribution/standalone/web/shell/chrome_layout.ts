@@ -46,6 +46,57 @@ export function canDock(width: number): boolean {
   return isAtLeast(width, 'l');
 }
 
+/**
+ * Whether a page is embedded in another one, as the original's chrome service reads it when the
+ * page loads: an `embed` parameter in the query of the address's hash, whatever its value. An
+ * embedded page shows its application without the header and the navigation, for as long as it
+ * stays loaded; the query before the hash does not count.
+ */
+export function isEmbedParamInHash(hash: string): boolean {
+  try {
+    return new URL(hash.slice(1), 'http://localhost').searchParams.has('embed');
+  } catch {
+    return false;
+  }
+}
+
+/** How the navigation is shown: not at all, over the page behind a mask, or beside the page */
+export type NavMode = 'hidden' | 'overlay' | 'docked';
+
+/**
+ * How the original shows its navigation (EuiCollapsibleNav with the legacy header's state): docked
+ * for as long as it is locked and the window is wide enough to dock, whatever the menu button
+ * says; else over the page while the menu button has it open. Unlocking a navigation the button
+ * had opened leaves it open over the page; one the button had not opened goes away.
+ */
+export function navMode(state: {
+  /** It is set to dock: what the original keeps under its key */
+  locked: boolean;
+  /** The menu button has it open */
+  open: boolean;
+  /** The window is wide enough to dock in (see `canDock`) */
+  canDock: boolean;
+}): NavMode {
+  if (state.locked && state.canDock) return 'docked';
+  return state.open ? 'overlay' : 'hidden';
+}
+
+/** A click the browser handles itself (a new tab, a download), or one already handled */
+export function isModifiedClick(event: {
+  metaKey: boolean;
+  altKey: boolean;
+  ctrlKey: boolean;
+  shiftKey: boolean;
+  defaultPrevented: boolean;
+}): boolean {
+  return event.metaKey || event.altKey || event.ctrlKey || event.shiftKey || event.defaultPrevented;
+}
+
+/** Whether a path of this product is under an application's path: the application or a page of it */
+export function isUnderPath(pathname: string, base: string): boolean {
+  return pathname === base || pathname.startsWith(base + '/');
+}
+
 // --- Breadcrumbs ---------------------------------------------------------------------------------
 
 /** How many crumbs EuiBreadcrumbs shows at each breakpoint, its `responsive` default */
@@ -95,9 +146,14 @@ export function arrangeBreadcrumbs(count: number, limit: number): CrumbSlot[] {
 }
 
 /**
- * The test subject the original gives each crumb: `breadcrumb`, then `first` and `last`. "Last" is
- * counted on the trail the page set, so the application's name, shown when a page set none, is
- * only "first".
+ * What the header shows while a page has set no trail. The original falls back on the title of
+ * the application, and nothing ever changes that title from the one it starts with.
+ */
+export const APP_TITLE_FALLBACK = 'Overview';
+
+/**
+ * The test subject the original gives each crumb: `breadcrumb`, then `first` and `last`, by its
+ * place in the trail that is shown. A crumb keeps its subject when it is folded into the "…".
  */
 export function breadcrumbTestSubject(index: number, trailLength: number): string {
   return ['breadcrumb', index === 0 && 'first', index === trailLength - 1 && 'last']
@@ -298,6 +354,127 @@ export function anchorPlacement(anchorPosition: string): {
     position: sides[match?.[1] ?? 'down'],
     align: match?.[2] ? edges[match[2]] : undefined,
   };
+}
+
+export interface HeaderPlacement {
+  /** The side of the button it ended up on */
+  position: PopoverPosition;
+  top: number;
+  /** From the window's left edge, unless `right` is given */
+  left?: number;
+  /** From the window's right edge */
+  right?: number;
+}
+
+/** How far the theme draws an open popover back toward its button */
+const POPOVER_PULL: Readonly<Record<PopoverPosition, readonly [number, number]>> = {
+  top: [0, 8],
+  right: [-8, 0],
+  bottom: [0, -8],
+  left: [8, 0],
+};
+
+/**
+ * Where a popover of the header ends up, as EuiPopover with its arrow: found 16 pixels from its
+ * button and 16 from the window's edges, with the room of a 24 pixel arrow kept 10 from its
+ * corners; the theme then draws the open panel 8 pixels back toward the button
+ */
+export function placeHeaderPopover(request: {
+  anchor: Box;
+  popover: { width: number; height: number };
+  /** EuiPopover's `anchorPosition`: `downRight`, `downCenter` */
+  anchorPosition: string;
+  viewport: { width: number; height: number };
+  /** The side it opened on: an open popover stays there while its content changes */
+  keep?: PopoverPosition;
+}): Required<Omit<HeaderPlacement, 'right'>> {
+  const asked = anchorPlacement(request.anchorPosition);
+  const found = findPopoverPosition({
+    anchor: request.anchor,
+    popover: request.popover,
+    position: request.keep ?? asked.position,
+    align: asked.align,
+    forcePosition: request.keep !== undefined,
+    offset: 16,
+    buffer: 16,
+    arrow: { width: 24, buffer: 10 },
+    viewport: request.viewport,
+  });
+  const [x, y] = POPOVER_PULL[found.position];
+  return { position: found.position, top: found.top + y, left: found.left + x };
+}
+
+/**
+ * Where a tooltip of the header goes, as EuiToolTip: 16 pixels from its anchor, with the room of
+ * a 12 pixel arrow kept 4 from its corners. One that starts in the right half of the page is held
+ * by its right edge, which the original counts with its width in whole pixels.
+ */
+export function placeHeaderTooltip(request: {
+  anchor: Box;
+  tooltip: { width: number; height: number };
+  /** The tooltip's width as the browser rounds it: its `offsetWidth` */
+  roundedWidth: number;
+  position: PopoverPosition;
+  viewport: { width: number; height: number };
+  /** The page's width without its scroll bar */
+  pageWidth: number;
+}): HeaderPlacement {
+  const found = findPopoverPosition({
+    anchor: request.anchor,
+    popover: request.tooltip,
+    position: request.position,
+    offset: 16,
+    buffer: 16,
+    arrow: { width: 12, buffer: 4 },
+    viewport: request.viewport,
+  });
+  if (request.pageWidth / 2 < found.left) {
+    return {
+      position: found.position,
+      top: found.top,
+      right: request.pageWidth - found.left - request.roundedWidth,
+    };
+  }
+  return { position: found.position, top: found.top, left: found.left };
+}
+
+// --- The help menu -------------------------------------------------------------------------------
+
+/** What an application adds to the help menu, as the original's help extension of documentation */
+export interface HelpExtension {
+  /** The application's name, the heading of its part of the menu */
+  appName: string;
+  /** Where its "Documentation" leads */
+  documentation: string;
+}
+
+/** The applications that add to the help menu in OpenSearch Dashboards 3.9.0, by their paths */
+const HELP_EXTENSIONS: ReadonlyArray<readonly [string[], HelpExtension]> = [
+  [
+    ['/app/dashboards', '/app/dashboard'],
+    { appName: 'Dashboards', documentation: 'https://opensearch.org/docs/latest/dashboards/index/' },
+  ],
+  [
+    ['/app/visualize'],
+    {
+      appName: 'Visualize',
+      documentation: 'https://opensearch.org/docs/latest/dashboards/visualize/viz-index/',
+    },
+  ],
+  [
+    ['/app/dev_tools'],
+    {
+      appName: 'Dev Tools',
+      documentation: 'https://opensearch.org/docs/latest/dashboards/dev-tools/index-dev/',
+    },
+  ],
+];
+
+/** What the application at a path adds to the help menu; nothing for most */
+export function helpExtensionOf(pathname: string): HelpExtension | undefined {
+  return HELP_EXTENSIONS.find(([paths]) =>
+    paths.some((path) => pathname === path || pathname.startsWith(`${path}/`))
+  )?.[1];
 }
 
 // --- What the browser keeps ------------------------------------------------------------------------
