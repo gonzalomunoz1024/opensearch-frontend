@@ -6,10 +6,11 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, CallOut, EmptyPrompt, Panel } from '../../components/basic';
+import { Button, CallOut, EmptyPrompt, Panel, cx } from '../../components/basic';
 import { Checkbox } from '../../components/form';
 import { useBreadcrumbs } from '../../shell/state';
-import { Labeled, UnsavedBar, capital, ism, toasts } from './common';
+import { capital, ism, toasts } from './common';
+import { SmallRow, Spacer } from './job_parts';
 import { ChannelSelect, canSetNotifications, useChannels } from './notification_config';
 import {
   ACTION_DESCRIPTIONS,
@@ -147,22 +148,21 @@ export function NotificationSettings() {
 
   const errorCount = Object.keys(errors).length;
   const unsaved = unsavedCount(rows, loaded);
+  // As the plugin's page: the title over what the page is for, a panel with a row for each kind of
+  // operation (its name and what it is on the left, its fields on the right), and a bar at the foot
+  // of the window while something is not saved
   return (
-    <div className="ismSettingsPage">
-      <header className="ismSettingsPage__header">
-        <div>
-          <h1 className="ismPageTitle">Notification settings</h1>
-          <p className="ismSettingsPage__description">{DESCRIPTION}</p>
+    <div className={cx('ismNs', unsaved > 0 && 'ismNs--changed')}>
+      <div className="ismNs__header">
+        <div className="ismNs__headText">
+          <h1 className="ismNs__title">Notification settings</h1>
+          <div className="ismNs__description">{DESCRIPTION}</div>
         </div>
-        <Button
-          size="s"
-          icon="external"
-          iconSide="right"
-          onClick={() => window.open('/app/notifications-dashboards#/channels')}
-        >
+        <Button icon="external" iconSide="right" onClick={() => window.open('/app/notifications-dashboards#/channels')}>
           Manage channels
         </Button>
-      </header>
+      </div>
+      <Spacer />
 
       {noPermission ? (
         <Panel>
@@ -174,24 +174,29 @@ export function NotificationSettings() {
           </EmptyPrompt>
         </Panel>
       ) : (
-        <Panel className="ismNotificationDefaults">
-          <h2 className="ismPanel__heading">Defaults for index operations</h2>
+        <section className="atlPanel ismNs__panel">
+          <h2 className="atlTitleS">Defaults for index operations</h2>
           {submitClicked && errorCount > 0 && (
             <CallOut tone="critical" icon="info" title="Address the following error(s) in the form">
-              <ul>
+              <ul className="ismNs__errors">
                 {errorLines(rows, errors).map((line) => (
                   <li key={line}>{line}</li>
                 ))}
               </ul>
             </CallOut>
           )}
+          <Spacer />
           {rows.map((row) => {
             const error = errors[row.index];
             return (
-              <Labeled key={row.action_name} across title={<h3>{capital(row.title)}</h3>} help={descriptionOf(row)}>
-                <div className="ismNotificationDefaults__row">
-                  <Labeled title="Notify when operation">
-                    <div className="ismNotificationDefaults__ticks">
+              <div key={row.action_name} className="ismNsGroup">
+                <div className="ismNsGroup__about">
+                  <h3 className="ismNsGroup__title">{capital(row.title)}</h3>
+                  <div className="ismNsGroup__description">{descriptionOf(row)}</div>
+                </div>
+                <div className="ismNsGroup__fields">
+                  <SmallRow label="Notify when operation">
+                    <div className="ismNsGroup__ticks">
                       <Checkbox
                         checked={Boolean(row.failure)}
                         onChange={(value) => tick(row.index, 'failure', value)}
@@ -205,38 +210,52 @@ export function NotificationSettings() {
                         testId={`dataSource.${row.index}.success`}
                       />
                     </div>
-                  </Labeled>
+                  </SmallRow>
                   {(row.failure || row.success) && (
-                    <div className={error ? 'ismNotifications__channels--invalid' : undefined}>
-                      <Labeled title={CHANNELS_LABEL} error={error}>
-                        <ChannelSelect
-                          width={400}
-                          channels={channels}
-                          loading={loadingChannels}
-                          value={row.channels ?? []}
-                          onChange={(chosen) => pick(row.index, chosen)}
-                          invalid={Boolean(error)}
-                          testId={`dataSource.${row.index}.channels`}
-                        />
-                      </Labeled>
-                    </div>
+                    <>
+                      <Spacer />
+                      {/* The plugin's field keeps its plain edge when channels are missing */}
+                      <div data-test-subj={`dataSource.${row.index}.channels`}>
+                        <SmallRow label={CHANNELS_LABEL} error={error}>
+                          <ChannelSelect
+                            width={400}
+                            channels={channels}
+                            loading={loadingChannels}
+                            value={row.channels ?? []}
+                            onChange={(chosen) => pick(row.index, chosen)}
+                          />
+                        </SmallRow>
+                      </div>
+                    </>
                   )}
                 </div>
-              </Labeled>
+              </div>
             );
           })}
-        </Panel>
+        </section>
       )}
 
       {unsaved > 0 && (
-        <UnsavedBar
-          count={unsaved}
-          errors={errorCount}
-          busy={saving}
-          onCancel={cancel}
-          onSave={() => void submit()}
-          testId="submitNotifcationSettings"
-        />
+        <section className="ismNsBar">
+          <h2 className="atlScreenReaderOnly">Page level controls</h2>
+          <div className="ismNsBar__text">
+            <span className={cx('ismNsBar__block', errorCount > 0 && 'ismNsBar__block--danger')} />
+            {errorCount > 0 ? `${errorCount} form errors.` : `${unsaved} unsaved changes.`}
+          </div>
+          <Button variant="ghost" icon="cross" onClick={cancel}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            icon="check"
+            loading={saving}
+            disabled={saving}
+            onClick={() => void submit()}
+            testId="submitNotifcationSettings"
+          >
+            Save
+          </Button>
+        </section>
       )}
     </div>
   );

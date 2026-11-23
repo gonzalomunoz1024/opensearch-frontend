@@ -4092,73 +4092,204 @@
 
 /* --- Notification settings ------------------------------------------------------------------------ */
 
-.ismSettingsPage {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  /* The bar of unsaved changes does not cover the last row */
-  padding-bottom: 72px;
+/* As the plugin's page: a title of 28 px over a small sentence, the button at the right */
+.ismNs--changed {
+  /* The bar of what is not saved does not cover the last row: the page is as much longer as the
+     plugin's gets with its bar */
+  padding-bottom: 129px;
 }
 
-.ismSettingsPage__header {
+.ismNs__header {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
+  gap: var(--space-6);
 }
 
-.ismSettingsPage__header .atlButton {
+.ismNs__headText {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.ismNs__header .atlButton {
   flex: 0 0 auto;
 }
 
-.ismSettingsPage__description {
-  margin: var(--space-1) 0 0;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
-}
-
-.ismNotificationDefaults {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.ismNotificationDefaults .atlCallOut ul {
-  margin: var(--space-1) 0 0;
-  padding-left: var(--space-5);
-}
-
-.ismNotificationDefaults .ismLabeled--across h3 {
+.ismNs__title {
   margin: 0;
-  font-size: inherit;
-  font-weight: inherit;
+  font-size: 28px;
+  letter-spacing: -0.022em;
+  font-weight: var(--font-weight-semibold);
+  line-height: 34px;
 }
 
-.ismNotificationDefaults .ismLabeled--across > .ismLabeled__body {
-  max-width: none;
-}
-
-.ismNotificationDefaults__row {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  width: 100%;
-}
-
-/* The names of the fields of a row are small beside the name of the row */
-.ismNotificationDefaults__row .ismLabeled__title {
+.ismNs__description {
+  padding-bottom: var(--space-1);
+  color: var(--color-text-tertiary);
   font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
+  line-height: 18px;
 }
 
-.ismNotificationDefaults__row .ismNotifications__channels--invalid .ismLabeled__title {
-  color: var(--color-critical);
+.ismNs__errors {
+  margin: 0 0 0 21px;
+  padding: 0;
+  list-style: disc;
+  line-height: 21px;
 }
 
-.ismNotificationDefaults__ticks {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 200px));
-  gap: var(--space-3);
+/* A kind of operation: its name and what it is in the left half, its fields in the right half,
+   24 px between the halves and 36 px between two kinds */
+.ismNsGroup {
+  display: flex;
+  gap: var(--space-6);
+}
+
+.ismNsGroup + .ismNsGroup {
+  margin-top: 36px;
+}
+
+.ismNsGroup__about,
+.ismNsGroup__fields {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.ismNsGroup__title {
+  margin: 0;
+  letter-spacing: -0.022em;
+  font-size: var(--font-size-l);
+  font-weight: var(--font-weight-semibold);
+  line-height: 22px;
+}
+
+.ismNsGroup__description {
+  padding-top: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+.ismNsGroup__fields {
+  padding-top: 11px;
+}
+
+.ismNsGroup__ticks {
+  display: flex;
+  gap: var(--space-6);
+}
+
+.ismNsGroup__ticks .atlCheckbox {
+  flex: 1 1 0;
+  min-height: 24px;
+  line-height: 24px;
+}
+
+/* The box 3 px under the top of its line, as the component library's */
+.ismNsGroup__ticks .atlCheckbox input {
+  position: relative;
+  top: -1px;
+}
+
+/* The notifications of one operation, in the form that starts it: 24 px under what is before */
+.ismNc {
+  margin-top: var(--space-6);
+}
+
+/* In a panel of their own (shrink, split) nothing is before them */
+.ismAccordionPanel__body .ismNc {
+  margin-top: 0;
+}
+
+.ismNc__title {
+  margin: 0;
+  letter-spacing: -0.022em;
+  font-size: var(--font-size-l);
+  font-weight: var(--font-weight-semibold);
+  line-height: 22px;
+}
+
+.ismNc__defaults {
+  display: flex;
+  gap: var(--space-6);
+}
+
+.ismNc__defaults > .ismSr {
+  flex: 1 1 0;
+}
+
+.ismNc__list {
+  margin: 0;
+  padding: 0;
+  list-style: inside disc;
+  text-indent: 1.5em;
+}
+
+.ismNc__badges {
+  line-height: 1.5;
+}
+
+.ismNc__tick {
+  display: flex;
+  height: 24px;
+}
+
+.ismNc__tick .atlCheckbox {
+  min-height: 24px;
+  line-height: 24px;
+}
+
+.ismNc__tick .atlCheckbox input {
+  position: relative;
+  top: -1px;
+}
+
+/* The field of 292 px and the button beside it are wider together than their row */
+.ismNc__channels {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-6);
+}
+
+.ismNc__channels .atlButton {
+  flex: 0 0 auto;
+}
+
+/* The bar of what is not saved yet, as the component library's bottom bar */
+.ismNsBar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 800;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: #1c1c1e;
+  color: #ffffff;
+}
+
+.ismNsBar__text {
+  flex: 1 1 0;
+  font-size: var(--font-size-s);
+  line-height: 16px;
+}
+
+.ismNsBar__block {
+  display: inline-block;
+  width: 4px;
+  height: 16px;
+  margin-right: var(--space-2);
+  background: var(--color-warning);
+  vertical-align: bottom;
+}
+
+.ismNsBar__block--danger {
+  background: var(--color-critical);
+}
+
+.ismNsBar .atlButton--ghost {
+  color: #ffffff;
 }
 
 /* --- Snapshot Management ------------------------------------------------------------------------ */

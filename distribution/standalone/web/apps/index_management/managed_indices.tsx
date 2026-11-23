@@ -11,6 +11,7 @@ import { ComboBox } from '../../components/combo_box';
 import { SearchField, Select, Switch, TextField } from '../../components/form';
 import { Icon } from '../../components/icon';
 import { Popover, copyText } from '../../components/overlay';
+import { readSearch } from '../../lib/search_syntax';
 import { useBreadcrumbs } from '../../shell/state';
 import { PanelButton, Table, go, ism, to, toasts, useListQuery, type TableColumn } from './common';
 import {
@@ -630,7 +631,11 @@ export function ManagedIndices() {
         <ListSearch
           className="ismLs--center"
           search={query.search}
-          onSearch={(search) => setQuery({ search, from: 0 })}
+          onSearch={(search) => {
+            // A text that cannot be read as a search leaves the last readable one in place, as the plugin's
+            if (readSearch(search) === undefined) return;
+            setQuery({ search, from: 0 });
+          }}
           placeholder="Search index name"
           ariaLabel="This is a search bar. As you type, the results lower in the page will automatically filter."
           filters={

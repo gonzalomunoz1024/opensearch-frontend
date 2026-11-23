@@ -7,10 +7,11 @@
  */
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { Badge, Button, CallOut, IconButton, cx } from '../../components/basic';
+import { Badge, Button, CallOut, IconButton } from '../../components/basic';
 import { ComboBox } from '../../components/combo_box';
 import { Checkbox } from '../../components/form';
-import { Labeled, ism, to, toasts } from './common';
+import { ism, to, toasts } from './common';
+import { SmallRow, Spacer } from './job_parts';
 import {
   ACTION_NAMES,
   CHANNELS_LABEL,
@@ -142,9 +143,12 @@ function NotificationCallout({
     ),
   };
   return (
-    <div data-test-subj="defaultNotificationCallout">
-      <CallOut icon="info" title={texts[known] ?? <></>} />
-    </div>
+    <>
+      <Spacer size="s" />
+      <div data-test-subj="defaultNotificationCallout">
+        <CallOut icon="info" title={texts[known] ?? <></>} />
+      </div>
+    </>
   );
 }
 
@@ -229,9 +233,11 @@ export const NotificationConfig = forwardRef<
     if (!next.success && !next.failure) setError(undefined);
   };
 
+  // As the plugin's: a heading, what is known of the defaults, the defaults, and what this one
+  // operation sends besides, each 8 or 24 px under the one before
   const content = (
-    <div className="ismNotifications">
-      <h3 className="ismDefinition__title">Notifications</h3>
+    <div className="ismNc">
+      <h3 className="ismNc__title">Notifications</h3>
       <NotificationCallout
         title={OPERATION_TITLES[operationType ?? actionType]}
         canView={canView}
@@ -239,53 +245,67 @@ export const NotificationConfig = forwardRef<
         hasDefault={hasDefault}
       />
       {hasDefault && (
-        <div className="ismNotifications__defaults">
-          <Labeled title="Notify when operation">
-            <ul className="ismNotifications__list">
-              {config?.lron_condition?.failure ? <li>Has failed</li> : null}
-              {config?.lron_condition?.success ? <li>Has completed</li> : null}
-            </ul>
-          </Labeled>
-          <Labeled title="Channels to notify">
-            <div className="atlRow" style={{ gap: 'var(--space-1)', flexWrap: 'wrap' }}>
-              {selected.map((channel) => (
-                <Badge key={channel.name}>
-                  {channel.name} ({channel.config_type})
-                </Badge>
-              ))}
-            </div>
-          </Labeled>
-        </div>
+        <>
+          <Spacer />
+          <div className="ismNc__defaults">
+            <SmallRow label="Notify when operation">
+              <ul className="ismNc__list">
+                {config?.lron_condition?.failure ? <li>Has failed</li> : null}
+                {config?.lron_condition?.success ? <li>Has completed</li> : null}
+              </ul>
+            </SmallRow>
+            <SmallRow label="Channels to notify">
+              <div className="ismNc__badges">
+                {selected.map((channel) => (
+                  <Badge key={channel.name}>
+                    {channel.name} ({channel.config_type})
+                  </Badge>
+                ))}
+              </div>
+            </SmallRow>
+          </div>
+        </>
       )}
       {hasDefault && canCreate && (
-        <Checkbox
-          checked={customize}
-          onChange={setCustomize}
-          label="Send additional notifications"
-          testId="sendAddtionalNotificationsCheckBox"
-        />
+        <>
+          <Spacer />
+          <div className="ismNc__tick">
+            <Checkbox
+              checked={customize}
+              onChange={setCustomize}
+              label="Send additional notifications"
+              testId="sendAddtionalNotificationsCheckBox"
+            />
+          </div>
+        </>
       )}
       {customize && canCreate && (
         <>
-          <Labeled title="Send additional notifications when operation">
-            <div className="atlStack" style={{ gap: 'var(--space-2)' }}>
+          <Spacer size="s" />
+          <SmallRow label={<h4 className="ismSr__heading">Send additional notifications when operation</h4>}>
+            <div className="ismNc__tick">
               <Checkbox
                 checked={condition.failure}
                 onChange={(failure) => change({ ...condition, failure })}
                 label="Has failed / timed out"
                 testId="notificationCustomConditionHasFailed"
               />
+            </div>
+            <Spacer size="s" />
+            <div className="ismNc__tick">
               <Checkbox
                 checked={condition.success}
                 onChange={(success) => change({ ...condition, success })}
                 label="Has completed"
               />
             </div>
-          </Labeled>
+          </SmallRow>
           {(condition.failure || condition.success) && (
-            <div className={cx('ismNotifications__channels', error && 'ismNotifications__channels--invalid')}>
-              <Labeled title={CHANNELS_LABEL} error={error}>
-                <div className="atlRow" style={{ gap: 'var(--space-4)', alignItems: 'center' }}>
+            <>
+              <Spacer />
+              {/* The plugin's field keeps its plain edge when channels are missing */}
+              <SmallRow label={CHANNELS_LABEL} error={error}>
+                <div className="ismNc__channels">
                   <ChannelSelect
                     channels={channels}
                     loading={loading}
@@ -294,11 +314,10 @@ export const NotificationConfig = forwardRef<
                       setChosen(next);
                       if (next.length > 0) setError(undefined);
                     }}
-                    invalid={Boolean(error)}
+                    width={292}
                     testId="notificationCustomChannelsSelect"
                   />
                   <Button
-                    size="s"
                     icon="external"
                     iconSide="right"
                     onClick={() => window.open('/app/notifications-dashboards#/channels')}
@@ -306,8 +325,8 @@ export const NotificationConfig = forwardRef<
                     Manage channels
                   </Button>
                 </div>
-              </Labeled>
-            </div>
+              </SmallRow>
+            </>
           )}
         </>
       )}
