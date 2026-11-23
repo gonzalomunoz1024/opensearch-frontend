@@ -5,7 +5,17 @@ import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { cloneBase, cloneTitle, fullAppState, ownTime, sameQuery, type UrlAppState } from '../../web/apps/dashboard/app_state';
+import {
+  cloneBase,
+  cloneTitle,
+  fullAppState,
+  marksDiffer,
+  openingMarks,
+  ownTime,
+  sameQuery,
+  type ChangeMarks,
+  type UrlAppState,
+} from '../../web/apps/dashboard/app_state';
 import {
   MIN_PANEL,
   cellUnder,
@@ -604,6 +614,48 @@ describe("a dashboard's own time", () => {
     assert.deepEqual(ownTime(kept, {}).time, { from: 'now-7d', to: 'now' });
     assert.deepEqual(ownTime(kept, { time: { from: 'now-1h', to: 'now' } }), { refreshInterval: { pause: false, value: 900000 } });
     assert.deepEqual(ownTime(kept, { refreshInterval: { pause: false, value: 5000 } }), { time: { from: 'now-7d', to: 'now' } });
+  });
+});
+
+// As the original counts a change of a dashboard (its isDirty), which says "(unsaved)" and asks
+// before changes are discarded, measured on its page
+describe('what changes a dashboard', () => {
+  const panel = (i: string, x: number): PanelState => ({
+    panelIndex: i,
+    gridData: { x, y: 0, w: 24, h: 15, i },
+    type: 'visualization',
+    id: `v${i}`,
+    embeddableConfig: {},
+  });
+  const opened: ChangeMarks = { panels: [panel('1', 0)], query: { query: '', language: 'kuery' }, filters: [] };
+  const lastWeek = { from: 'now-7d', to: 'now' };
+  const paused = { pause: true, value: 0 };
+
+  it('is a change of its panels, its query or its filters, not of the order of their keys', () => {
+    assert.equal(marksDiffer(opened, { ...opened, query: { language: 'kuery', query: '' } }), false);
+    assert.equal(marksDiffer(opened, { ...opened, query: { query: 'customer_gender:MALE', language: 'kuery' } }), true);
+    assert.equal(marksDiffer(opened, { ...opened, panels: [panel('1', 24)] }), true);
+    // A panel an editor hands back as a new one, after the page opened
+    assert.equal(marksDiffer(opened, { ...opened, panels: [panel('1', 0), panel('2', 24)] }), true);
+    assert.equal(marksDiffer(opened, { ...opened, filters: [existsFilter({ name: 'customer_first_name' }, 'ecommerce')] }), true);
+  });
+
+  it('is a change of its time and refresh interval while it keeps its own', () => {
+    const own = { ...opened, time: lastWeek, refreshInterval: paused };
+    assert.equal(marksDiffer(own, { ...own, time: { from: 'now-1d', to: 'now' } }), true);
+    assert.equal(marksDiffer(own, { ...own, refreshInterval: { pause: false, value: 5000 } }), true);
+    assert.equal(marksDiffer(own, { ...own, refreshInterval: { value: 0, pause: true } }), false);
+  });
+
+  it('opens with the time it keeps, as the page puts it in place: its coming is no change', () => {
+    const dashboard = { timeRestore: true, timeFrom: 'now-15d', timeTo: 'now', refreshInterval: { pause: false, value: 900000 } };
+    const loading = { ...opened, time: { from: 'now-15m', to: 'now' }, refreshInterval: paused };
+    const start = openingMarks(loading, dashboard);
+    assert.equal(marksDiffer(start, { ...opened, time: { from: 'now-15d', to: 'now' }, refreshInterval: { pause: false, value: 900000 } }), false);
+    // A time the address named is the one it opens with
+    assert.deepEqual(openingMarks(loading, dashboard, { time: { from: 'now-15m', to: 'now' } }).time, { from: 'now-15m', to: 'now' });
+    // Without a time of its own, it opens with what the page shows
+    assert.equal(openingMarks(opened, { ...dashboard, timeRestore: false }), opened);
   });
 });
 

@@ -8,7 +8,7 @@
 import type { TimeRange } from '../../lib/dates';
 import { encodeState } from '../../lib/url';
 import type { Filter, Query, RefreshInterval } from '../../lib/types';
-import { dashboardQuery, panelsToUrl, type Dashboard, type DashboardOptions, type PanelState } from './model';
+import { dashboardQuery, panelsDiffer, panelsToUrl, type Dashboard, type DashboardOptions, type PanelState } from './model';
 
 export interface UrlAppState {
   description?: string;
@@ -95,6 +95,44 @@ export function ownTime(
     own.refreshInterval = value > 0 ? { pause: pause !== false, value } : { pause: true, value: 0 };
   }
   return own;
+}
+
+/**
+ * What the original counts as a change of a dashboard (its `isDirty`, create_dashboard_container.tsx):
+ * its panels, its query and its filters, and its time and refresh interval while it keeps its own
+ */
+export interface ChangeMarks {
+  panels: PanelState[];
+  query: Query;
+  filters: Filter[];
+  time?: TimeRange;
+  refreshInterval?: RefreshInterval;
+}
+
+/** Whether a dashboard changed between two moments, by what the original counts as a change */
+export function marksDiffer(a: ChangeMarks, b: ChangeMarks): boolean {
+  return (
+    panelsDiffer(a.panels, b.panels) ||
+    !sameQuery(a.query, b.query) ||
+    !sameState(a.filters, b.filters) ||
+    !sameState(a.time ?? null, b.time ?? null) ||
+    !sameState(a.refreshInterval ?? null, b.refreshInterval ?? null)
+  );
+}
+
+/**
+ * What a dashboard is opened with, a change of which makes it changed: what the page shows as it
+ * opens it, with the dashboard's own time as the page puts it in place (`named`: the `_g` the
+ * page opened with), as the original sets the time before its dashboard starts
+ */
+export function openingMarks(
+  marks: ChangeMarks,
+  dashboard: Pick<Dashboard, 'timeRestore' | 'timeFrom' | 'timeTo' | 'refreshInterval'>,
+  named: { time?: unknown; refreshInterval?: unknown } = {}
+): ChangeMarks {
+  if (!dashboard.timeRestore) return marks;
+  const own = ownTime(dashboard, named);
+  return { ...marks, time: own.time ?? marks.time, refreshInterval: own.refreshInterval ?? marks.refreshInterval };
 }
 
 /**

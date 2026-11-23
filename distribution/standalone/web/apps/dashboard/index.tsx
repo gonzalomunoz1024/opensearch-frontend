@@ -10,7 +10,7 @@ import { uniqueFilters } from '../../lib/query';
 import { parseSearchSource } from '../../lib/search_source';
 import type { Filter, IndexPattern, Query } from '../../lib/types';
 import { appUrl, decodeState, encodeQueryValue, encodeState } from '../../lib/url';
-import { getLocation, href, locationState, navigate, setHashParams, setLeaveGuard, setLocationState, useLocation } from '../../router';
+import { enteredAnotherApplication, getLocation, href, locationState, navigate, setHashParams, setLocationState, useLocation } from '../../router';
 import { services } from '../../services';
 import { errorMessage } from '../../services/http';
 import type { SavedObject } from '../../services/saved_objects';
@@ -27,7 +27,18 @@ import type { VisInput } from '../../vis/request';
 import { makeTurns } from '../../vis/turns';
 import { NewVisModal } from '../visualize';
 import { VIS_BUILDER_TITLE, VIS_BUILDER_TYPE } from '../vis_builder/model';
-import { asHeld, cloneBase, cloneTitle, fullAppState, ownTime, restoredOptions, sameQuery, sameState, type UrlAppState } from './app_state';
+import {
+  asHeld,
+  cloneBase,
+  cloneTitle,
+  fullAppState,
+  marksDiffer,
+  openingMarks,
+  ownTime,
+  restoredOptions,
+  type ChangeMarks,
+  type UrlAppState,
+} from './app_state';
 import {
   CloneModal,
   CustomizePanelModal,
@@ -52,7 +63,6 @@ import {
   newPanelIndex,
   openedEmbedded,
   orderAsOriginal,
-  panelsDiffer,
   panelsFromUrl,
   panelsToUrl,
   placeBeside,
@@ -381,31 +391,36 @@ function DashboardPage({ savedId }: { savedId?: string }) {
   }, [patternIds]);
 
   // --- The page's state ---
-  // Changed since saved, as the original counts it: the panels, the query and filters, and the
-  // time when the dashboard keeps its own (its options are not counted)
-  const dirty = useMemo(() => {
-    if (!saved || !editing) return false;
-    const timeChanged =
-      saved.timeRestore && (global.time.from !== saved.timeFrom || global.time.to !== saved.timeTo);
-    return (
-      panelsDiffer(panels, saved.panels) ||
-      !sameQuery(query, saved.query ?? defaultQuery) ||
-      !sameState(appFilters.filter((filter) => !isPinned(filter)), saved.filters) ||
-      Boolean(timeChanged)
-    );
-  }, [saved, editing, panels, query, appFilters, global.time, defaultQuery]);
+  // Changed, as the original counts it (its `isDirty`): the panels, the query or the filters, or
+  // the time while the dashboard keeps its own (not its options), changed after the page opened
+  // it, even if changed back since; a save or a discard clears it. A page that opens the
+  // dashboard again, by a reload or on the way back from an editor, starts unchanged, whatever its
+  // address carries. Being left, the original asks nothing: its address keeps the changes.
+  const [changed, setChanged] = useState(false);
+  const openedWith = useRef<ChangeMarks>();
+  const marks = useMemo<ChangeMarks>(
+    () => ({ panels, query, filters, ...(timeRestore ? { time: global.time, refreshInterval: global.refreshInterval } : {}) }),
+    [panels, query, filters, timeRestore, global.time, global.refreshInterval]
+  );
+  useEffect(() => {
+    if (!saved) return;
+    if (!openedWith.current) openedWith.current = openingMarks(marks, saved, cameWithGlobal.current);
+    else if (!changed && marksDiffer(marks, openedWith.current)) setChanged(true);
+  }, [saved, marks, changed]);
+  const dirty = editing && changed;
 
   const trailTitle = savedId ? saved?.title ?? '' : 'New Dashboard';
   useBreadcrumbs([
     { text: 'Dashboards', to: appUrl(BASE, '/list') },
     { text: editing ? `Editing ${trailTitle}${dirty ? ' (unsaved)' : ''}` : trailTitle || 'Dashboard' },
   ]);
-
+  // The document's title as the original's: a saved dashboard's own title before the product's
+  // name; a new one leaves it as it was, which is the product's name when the page opens on it
+  const [titleBefore] = useState(() => (enteredAnotherApplication() ? services.boot.name : document.title));
+  const docTitle = savedId && saved ? [saved.title, services.boot.name].join(' - ') : titleBefore;
   useEffect(() => {
-    if (!editing || !dirty) return undefined;
-    setLeaveGuard(() => window.confirm('Leave this dashboard? Changes you made to it have not been saved.'));
-    return () => setLeaveGuard(undefined);
-  }, [editing, dirty]);
+    document.title = docTitle;
+  });
 
   useEffect(() => {
     setFullScreen(fullScreen);
@@ -600,7 +615,6 @@ function DashboardPage({ savedId }: { savedId?: string }) {
       return;
     }
     setDialog(undefined);
-    setLeaveGuard(undefined);
     services.toasts.success(`Dashboard '${result.title}' was saved`);
     const shown: Partial<UrlAppState> = { title: result.title, description: result.description, timeRestore: result.timeRestore, viewMode: 'view' };
     if (object.id !== savedId) {
@@ -611,17 +625,20 @@ function DashboardPage({ savedId }: { savedId?: string }) {
       );
       return;
     }
-    // What was saved, read back as a dashboard is read
+    // What was saved, read back as a dashboard is read; it is not changed any more
     setSaved(dashboardFromSavedObject({ id: object.id, attributes, references, version: object.version }));
     setViewPanels(undefined);
+    openedWith.current = undefined;
+    setChanged(false);
     writeApp(shown);
   };
 
   const discard = () => {
     if (!saved) return;
     setDialog(undefined);
-    setLeaveGuard(undefined);
     setViewPanels(undefined);
+    openedWith.current = undefined;
+    setChanged(false);
     held.current = { query: saved.query ?? defaultQuery, options: restoredOptions(saved.options) };
     // In place of the step being discarded, as the original writes it
     writeApp(
