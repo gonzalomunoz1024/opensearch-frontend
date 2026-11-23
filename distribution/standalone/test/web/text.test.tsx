@@ -19,14 +19,15 @@ describe('Markdown', () => {
     assert.match(out, /<em>slanted<\/em>/);
     assert.match(out, /<strong>strong<\/strong>/);
     assert.match(out, /<code>code<\/code>/);
-    assert.match(out, /<ul[^>]*><li[^>]*>one<\/li><li[^>]*>two<\/li><\/ul>/);
+    // markdown-it's HTML, a line after each block, as the original sets it
+    assert.match(out, /<ul>\n<li>one<\/li>\n<li>two<\/li>\n<\/ul>/);
   });
 
   it('keeps a list tight when a list of the other kind follows it after a blank line', () => {
     const out = html('- one\n- two\n\n1. first\n2. second');
-    assert.match(out, /<ul><li>one<\/li><li>two<\/li><\/ul><ol><li>first<\/li><li>second<\/li><\/ol>/);
+    assert.match(out, /<ul>\n<li>one<\/li>\n<li>two<\/li>\n<\/ul>\n<ol>\n<li>first<\/li>\n<li>second<\/li>\n<\/ol>/);
     // A blank line between two items of one list still makes it loose
-    assert.match(html('- one\n\n- two'), /<ul><li><p>one<\/p><\/li><li><p>two<\/p><\/li><\/ul>/);
+    assert.match(html('- one\n\n- two'), /<ul>\n<li>\n<p>one<\/p>\n<\/li>\n<li>\n<p>two<\/p>\n<\/li>\n<\/ul>/);
   });
 
   it('shows HTML as the text it is', () => {

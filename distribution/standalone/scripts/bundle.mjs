@@ -111,7 +111,12 @@ export function bundle({ entry, root, alias = {}, define = {} }) {
       }
     }
 
-    code = code.replace(/\brequire\(\s*(["'])([^"']+)\1\s*\)/g, (_match, _quote, request) => {
+    code = code.replace(/\brequire\(\s*(["'])([^"']+)\1\s*\)/g, (match, _quote, request, offset) => {
+      // A require in a package's comment is none: markdown-it's documentation shows some
+      // (" * var hljs = require('highlight.js')"), on lines a block or line comment starts
+      if (!ownCode && /^\s*(\*|\/\/)/.test(code.slice(code.lastIndexOf('\n', offset) + 1, offset))) {
+        return match;
+      }
       if (request.endsWith('.css')) {
         const sheet = resolveRequest(request, file);
         if (!seenStyles.has(sheet)) {
