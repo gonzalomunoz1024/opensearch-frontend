@@ -7,6 +7,7 @@
  * 7.10.0 it relies on written here: the same requests, in the same order, with the same answers.
  */
 
+import { markdownToHtml } from '../lib/markdown';
 import { ORIGIN, type MapConfig, type TilemapConfig } from './config';
 
 const TMS_IN_YML_ID = 'TMS in config/opensearch_dashboards.yml';
@@ -101,16 +102,12 @@ export function anchorHtml(label: string, url: string): string {
   return `<a rel="noreferrer noopener"${href}>${text}</a>`;
 }
 
-/** markdown-it's rendering of an attribution (html off, linkify on), for one paragraph */
+/**
+ * maps_legacy's rendering of the attribution of map.tilemap: markdown-it, as it is set up there
+ * (HTML off, links found in the text), given the text as it is
+ */
 export function renderAttributionMarkdown(markdown: string): string {
-  if (markdown.trim() === '') return '';
-  let html = escapeHtml(markdown.trim());
-  html = html.replace(/\[([^\]]*)\]\(([^)\s]+)\)/g, (_m, label: string, href: string) => `<a href="${href}">${label}</a>`);
-  html = html.replace(/(^|[\s(])((?:https?:\/\/|www\.)[^\s<]+[^\s<.,;:!?)])/g, (_m, before: string, url: string) => {
-    const href = url.startsWith('www.') ? `http://${url}` : url;
-    return `${before}<a href="${href}">${url}</a>`;
-  });
-  return `<p>${html.replace(/\n/g, '\n')}</p>\n`;
+  return markdownToHtml(markdown);
 }
 
 /**
@@ -253,34 +250,32 @@ export class ServiceSettings {
     return this.catalogue;
   }
 
+  /**
+   * The base maps of the catalogue. As the client's `_.once`, the first answer is kept, and so is a
+   * failure: a maps service that cannot be reached is asked once on a page, and every map after
+   * the first is given its failure without asking again.
+   */
   private tmsConfigs(): Promise<TmsServiceConfig[]> {
-    const pending = (this.tmsServices ??= (async () => {
+    this.tmsServices ??= (async () => {
       const catalogue = await this.mainCatalogue();
       const first = catalogue.services.find((service) => service.type === 'tms');
       if (!first) return [];
       const manifest = await this.getManifest<{ services?: TmsServiceConfig[] }>(first.manifest);
       return manifest?.services ?? [];
-    })());
-    // A failure is not kept: the next map asks again, as the client's _.once of a rejection does not
-    pending.catch(() => {
-      if (this.tmsServices === pending) this.tmsServices = undefined;
-      if (this.catalogue) this.catalogue.catch(() => (this.catalogue = undefined));
-    });
-    return pending;
+    })();
+    return this.tmsServices;
   }
 
+  /** The layers of shapes of the catalogue, kept as the base maps are, failure included */
   private fileConfigs(): Promise<FileLayerConfig[]> {
-    const pending = (this.fileLayers ??= (async () => {
+    this.fileLayers ??= (async () => {
       const catalogue = await this.mainCatalogue();
       const first = catalogue.services.find((service) => service.type === 'file');
       if (!first) return [];
       const manifest = await this.getManifest<{ layers?: FileLayerConfig[] }>(first.manifest);
       return manifest?.layers ?? [];
-    })());
-    pending.catch(() => {
-      if (this.fileLayers === pending) this.fileLayers = undefined;
-    });
-    return pending;
+    })();
+    return this.fileLayers;
   }
 
   private rasterStyles = new Map<string, Promise<{ tiles: string[]; minzoom?: number; maxzoom?: number } | undefined>>();

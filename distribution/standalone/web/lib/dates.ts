@@ -6,7 +6,9 @@
  * interval a histogram over a time range gets.
  */
 
-export type TimeUnit = 'ms' | 's' | 'm' | 'h' | 'd' | 'w' | 'M' | 'y';
+import { ZONE_NAME_MAPS, ZONE_NAME_TABLES } from './zone_names';
+
+export type TimeUnit ='ms' | 's' | 'm' | 'h' | 'd' | 'w' | 'M' | 'y';
 
 export const UNIT_MS: Record<TimeUnit, number> = {
   ms: 1,
@@ -461,6 +463,17 @@ function weekOfYear(parts: Parts, dow: number, doy: number): { week: number; yea
 // The weeks of moment's English locale start on Sunday, the first one holding 1 January; ISO
 // weeks start on Monday, the first one holding 4 January
 const LOCALE_WEEK = { dow: 0, doy: 6 };
+
+/**
+ * The day the weeks of a written date start on (0 is Sunday): the setting dateFormat:dow, which
+ * the services set when the settings load and when they change, as OpenSearch Dashboards makes it
+ * the first day of the week of its dates. The week of the year (w, ww, wo), its year (gg, gggg)
+ * and the day of the week (e) count from it.
+ */
+export function setDefaultWeekStart(day: number): void {
+  LOCALE_WEEK.dow = Number.isInteger(day) && day >= 0 && day <= 6 ? day : 0;
+}
+
 const ISO_WEEK = { dow: 1, doy: 4 };
 
 // The long date formats of moment's English locale, written out before a format is read; each
@@ -482,10 +495,58 @@ const LONG_DATE_TOKENS = /(\[[^[]*\])|(\\)?(LTS|LT|LL?L?L?|l{1,4})/g;
 
 const zoneNames = new Map<string, Intl.DateTimeFormat>();
 
-/** The short name of a zone at a moment ("EST"); none for the browser's own, as moment gives none */
+// The eras of each zone moment-timezone names: where each starts, and the names of its offsets
+type ZoneEras = Array<{ start: number; names: Map<number, string> }>;
+let zoneEras: Map<string, ZoneEras> | undefined;
+
+function readZoneEras(): Map<string, ZoneEras> {
+  const maps = ZONE_NAME_MAPS.map(
+    (map) =>
+      new Map(
+        map.split(',').map((entry): [number, string] => {
+          const at = entry.indexOf(':');
+          return [Number(entry.slice(0, at)), entry.slice(at + 1)];
+        })
+      )
+  );
+  const zones = new Map<string, ZoneEras>();
+  for (const table of ZONE_NAME_TABLES) {
+    const [history, names] = table.split('|');
+    const eras = history.split(';').map((era) => {
+      const at = era.indexOf('@');
+      return {
+        start: at < 0 ? -Infinity : parseInt(era.slice(0, at), 36) * UNIT_MS.m,
+        names: maps[parseInt(era.slice(at + 1), 36)],
+      };
+    });
+    for (const name of names.split(' ')) zones.set(name, eras);
+  }
+  return zones;
+}
+
+/**
+ * The short name of a zone at a moment, as moment-timezone names it ("CET", "IST", "-03"): the
+ * name its data gives the zone's offset in the era of that moment. A zone it does not know, or an
+ * offset its data does not have there, gets the browser's short name ("GMT+1"). None for the
+ * browser's own zone, as moment gives none.
+ */
 function zoneAbbreviation(date: Date, timeZone?: string): string {
   if (!timeZone || timeZone === 'Browser') return '';
-  if (timeZone === 'UTC') return 'UTC';
+  zoneEras ??= readZoneEras();
+  const eras = zoneEras.get(timeZone);
+  if (eras) {
+    const time = date.getTime();
+    let index = eras.length - 1;
+    while (index > 0 && eras[index].start > time) index -= 1;
+    const offset = timeZoneOffset(time, timeZone);
+    const name = eras[index].names.get(offset);
+    if (name !== undefined) return name;
+    // An offset the zone has taken since: by its number when the zone's names are numbers ("+05")
+    if ([...eras[index].names.values()].every((known) => /^[+-]\d/.test(known))) {
+      const minutes = Math.abs(offset);
+      return `${offset < 0 ? '-' : '+'}${pad(Math.floor(minutes / 60))}${minutes % 60 ? pad(minutes % 60) : ''}`;
+    }
+  }
   let format = zoneNames.get(timeZone);
   if (!format) {
     format = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'short' });
@@ -502,8 +563,8 @@ const TOKENS =
 /**
  * A date written with a format of moment's tokens, as the product's date settings and formats
  * name them, in moment's English locale: `[text]` and an escaped letter are written as they are.
- * The zone's abbreviation (z, zz) is the browser's short name of the zone, which is moment's in UTC
- * and the US zones; there is none for the browser's own zone, as moment gives none.
+ * The zone's abbreviation (z, zz) is moment-timezone's; there is none for the browser's own zone,
+ * as moment gives none. Locale weeks start on the day of setDefaultWeekStart.
  */
 export function formatDate(date: Date, pattern: string, timeZone?: string): string {
   if (Number.isNaN(date.getTime())) return 'Invalid date';
@@ -668,6 +729,397 @@ export function formatDate(date: Date, pattern: string, timeZone?: string): stri
         return match.replace(/\\/g, '');
     }
   });
+}
+
+// --- Reading a value as moment(value) reads it ---------------------------------------------------
+
+// The ISO 8601 forms moment reads: extended ("2024-02-29T13:45:30.123+02:00") and basic ("20240229T1345Z")
+const ISO_EXTENDED =
+  /^\s*((?:[+-]\d{6}|\d{4})-(?:\d\d-\d\d|W\d\d-\d|W\d\d|\d\d\d|\d\d))(?:(T| )(\d\d(?::\d\d(?::\d\d(?:[.,]\d+)?)?)?)([+-]\d\d(?::?\d\d)?|\s*Z)?)?$/;
+const ISO_BASIC =
+  /^\s*((?:[+-]\d{6}|\d{4})(?:\d\d\d\d|W\d\d\d|W\d\d|\d\d\d|\d\d|))(?:(T| )(\d\d(?:\d\d(?:\d\d(?:[.,]\d+)?)?)?)([+-]\d\d(?::?\d\d)?|\s*Z)?)?$/;
+
+// Its date forms in moment's order, each with whether a time may follow it, and its time forms
+const ISO_DATES: Array<[string, RegExp, boolean]> = [
+  ['YYYYYY-MM-DD', /[+-]\d{6}-\d\d-\d\d/, true],
+  ['YYYY-MM-DD', /\d{4}-\d\d-\d\d/, true],
+  ['GGGG-[W]WW-E', /\d{4}-W\d\d-\d/, true],
+  ['GGGG-[W]WW', /\d{4}-W\d\d/, false],
+  ['YYYY-DDD', /\d{4}-\d{3}/, true],
+  ['YYYY-MM', /\d{4}-\d\d/, false],
+  ['YYYYYYMMDD', /[+-]\d{10}/, true],
+  ['YYYYMMDD', /\d{8}/, true],
+  ['GGGG[W]WWE', /\d{4}W\d{3}/, true],
+  ['GGGG[W]WW', /\d{4}W\d{2}/, false],
+  ['YYYYDDD', /\d{7}/, true],
+  ['YYYYMM', /\d{6}/, false],
+  ['YYYY', /\d{4}/, false],
+];
+const ISO_TIMES: Array<[string, RegExp]> = [
+  ['HH:mm:ss.SSSS', /\d\d:\d\d:\d\d\.\d+/],
+  ['HH:mm:ss,SSSS', /\d\d:\d\d:\d\d,\d+/],
+  ['HH:mm:ss', /\d\d:\d\d:\d\d/],
+  ['HH:mm', /\d\d:\d\d/],
+  ['HHmmss.SSSS', /\d\d\d\d\d\d\.\d+/],
+  ['HHmmss,SSSS', /\d\d\d\d\d\d,\d+/],
+  ['HHmmss', /\d\d\d\d\d\d/],
+  ['HHmm', /\d\d\d\d/],
+  ['HH', /\d\d/],
+];
+
+// The tokens of those forms, and what each reads, as moment reads a text by a format that is not
+// strict: the first run of such characters in what is left of the text; any other character of
+// the form is passed over where it is found
+const FORM_TOKENS = /YYYYYY|YYYY|GGGG|SSSS|DDD|MM|DD|WW|HH|mm|ss|E|Z|\[[^\]]*\]|./g;
+const TOKEN_READS: Record<string, RegExp> = {
+  YYYYYY: /[+-]?\d{1,6}/,
+  YYYY: /\d{1,4}/,
+  GGGG: /\d{1,4}/,
+  SSSS: /\d+/,
+  DDD: /\d{1,3}/,
+  MM: /\d\d?/,
+  DD: /\d\d?/,
+  WW: /\d\d?/,
+  HH: /\d\d?/,
+  mm: /\d\d?/,
+  ss: /\d\d?/,
+  E: /\d/,
+  Z: /Z|[+-]\d\d(?::?\d\d)?/i,
+};
+
+const RFC_2822 =
+  /^(?:(Mon|Tue|Wed|Thu|Fri|Sat|Sun),?\s)?(\d{1,2})\s(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s(\d{2,4})\s(\d\d):(\d\d)(?::(\d\d))?\s(?:(UT|GMT|[ECMP][SD]T)|([Zz])|([+-]\d{4}))$/;
+const RFC_2822_ZONES: Record<string, number> = {
+  UT: 0,
+  GMT: 0,
+  EDT: -240,
+  EST: -300,
+  CDT: -300,
+  CST: -360,
+  MDT: -360,
+  MST: -420,
+  PDT: -420,
+  PST: -480,
+};
+
+/** What moment reads into the fields a date is made from, before the ones left out are filled */
+interface Reading {
+  /** Year, month, day, hour, minute, second, millisecond */
+  fields: Array<number | undefined>;
+  dayOfYear?: number;
+  isoWeek?: { year?: number; week?: number; weekday?: number };
+  /** The minutes east of UTC the text names */
+  offset?: number;
+}
+
+// moment's toInt: towards zero, and 0 for what is no number
+function toInt(value: unknown): number {
+  const number = Number(value);
+  if (number === 0 || !Number.isFinite(number)) return 0;
+  return number < 0 ? Math.ceil(number) || 0 : Math.floor(number);
+}
+
+// moment's createDate and createUTCDate: the years 0 to 99 are not read as 1900 to 1999
+function localDate([year = 0, month = 0, day = 1, hour = 0, minute = 0, second = 0, ms = 0]: Array<number | undefined>): Date {
+  if (year < 100 && year >= 0) {
+    const date = new Date(year + 400, month, day, hour, minute, second, ms);
+    if (Number.isFinite(date.getFullYear())) date.setFullYear(year);
+    return date;
+  }
+  return new Date(year, month, day, hour, minute, second, ms);
+}
+
+function utcDate([year = 0, month = 0, day = 1, hour = 0, minute = 0, second = 0, ms = 0]: Array<number | undefined>): Date {
+  if (year < 100 && year >= 0) {
+    const date = new Date(Date.UTC(year + 400, month, day, hour, minute, second, ms));
+    if (Number.isFinite(date.getUTCFullYear())) date.setUTCFullYear(year);
+    return date;
+  }
+  return new Date(Date.UTC(year, month, day, hour, minute, second, ms));
+}
+
+/**
+ * The moment a clock reading (a time whose UTC fields are what the clock shows) is in a named zone,
+ * as moment-timezone finds it for its default zone: a reading the clocks skip is counted with the
+ * offset from before the change, and one they show twice is its first pass
+ */
+function fromZoneClock(reading: number, timeZone: string): number {
+  // Within a day of the first and the last moment there are, by the offset there
+  const limit = 8.64e15 - 2 * UNIT_MS.d;
+  if (!(Math.abs(reading) < limit)) {
+    return reading - timeZoneOffset(Math.max(-limit, Math.min(limit, reading)) || 0, timeZone) * UNIT_MS.m;
+  }
+  const before = timeZoneOffset(reading - UNIT_MS.d, timeZone);
+  if (timeZoneOffset(reading - before * UNIT_MS.m, timeZone) === before) return reading - before * UNIT_MS.m;
+  const after = timeZoneOffset(reading + UNIT_MS.d, timeZone);
+  const fits = timeZoneOffset(reading - after * UNIT_MS.m, timeZone) === after;
+  return reading - (fits ? after : before) * UNIT_MS.m;
+}
+
+function daysInMonth(year: number, month: number): number {
+  return month === 1 ? daysInYear(year) - 337 : 31 - ((month % 7) % 2);
+}
+
+// moment's dayOfYearFromWeeks
+function dayOfYearFromWeeks(year: number, week: number, weekday: number, dow: number, doy: number) {
+  const dayOfYear = 1 + 7 * (week - 1) + ((7 + weekday - dow) % 7) + firstWeekOffset(year, dow, doy);
+  if (dayOfYear <= 0) return { year: year - 1, dayOfYear: daysInYear(year - 1) + dayOfYear };
+  if (dayOfYear > daysInYear(year)) return { year: year + 1, dayOfYear: dayOfYear - daysInYear(year) };
+  return { year, dayOfYear };
+}
+
+/**
+ * The date of what moment read, as its configFromArray makes it: a day of the year or an ISO week
+ * gives the month and the day; the year, month and day left out are today's, and the rest 0 (the
+ * day 1); a field out of its range is no date. With no offset named it is read on the clock of the
+ * zone of the settings, or the browser's own.
+ */
+function dateOfReading(reading: Reading, timeZone: string | undefined, now: number): Date | undefined {
+  const fields = [...reading.fields];
+  const named = reading.offset !== undefined;
+  const today = new Date(now);
+  const current = named
+    ? [today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()]
+    : [today.getFullYear(), today.getMonth(), today.getDate()];
+  let { dayOfYear } = reading;
+  let overflow = -1;
+  const week = reading.isoWeek;
+  if (week && fields[2] === undefined && fields[1] === undefined) {
+    const weekYear = week.year ?? fields[0] ?? weekOfYear(partsOf(today, timeZone), ISO_WEEK.dow, ISO_WEEK.doy).year;
+    const number = week.week ?? 1;
+    const weekday = week.weekday ?? 1;
+    if (number < 1 || number > weeksInYear(weekYear, ISO_WEEK.dow, ISO_WEEK.doy)) overflow = 7;
+    else if (weekday < 1 || weekday > 7) overflow = 8;
+    else {
+      const found = dayOfYearFromWeeks(weekYear, number, weekday, ISO_WEEK.dow, ISO_WEEK.doy);
+      fields[0] = found.year;
+      dayOfYear = found.dayOfYear;
+    }
+  }
+  let dayOfYearOverflows = false;
+  if (dayOfYear !== undefined) {
+    const year = fields[0] ?? current[0];
+    dayOfYearOverflows = dayOfYear > daysInYear(year) || dayOfYear === 0;
+    const date = utcDate([year, 0, dayOfYear]);
+    fields[1] = date.getUTCMonth();
+    fields[2] = date.getUTCDate();
+  }
+  let index = 0;
+  for (; index < 3 && fields[index] === undefined; index += 1) fields[index] = current[index];
+  for (; index < 7; index += 1) if (fields[index] === undefined) fields[index] = index === 2 ? 1 : 0;
+  const [year, month, day, hour, minute, second, ms] = fields as number[];
+  const fieldOverflow =
+    month < 0 || month > 11
+      ? 1
+      : day < 1 || day > daysInMonth(year, month)
+        ? 2
+        : hour < 0 || hour > 24 || (hour === 24 && (minute !== 0 || second !== 0 || ms !== 0))
+          ? 3
+          : minute < 0 || minute > 59
+            ? 4
+            : second < 0 || second > 59
+              ? 5
+              : ms < 0 || ms > 999
+                ? 6
+                : -1;
+  if (fieldOverflow !== -1 || dayOfYearOverflows || overflow !== -1) return undefined;
+  // 24:00 is the start of the next day
+  const nextDay = hour === 24;
+  const clock = nextDay ? [year, month, day, 0, 0, 0, 0] : fields;
+  let date: Date;
+  if (named) date = new Date(utcDate(clock).getTime() - (reading.offset ?? 0) * UNIT_MS.m);
+  else if (!timeZone || timeZone === 'Browser') date = localDate(clock);
+  else date = new Date(fromZoneClock(utcDate(clock).getTime(), timeZone));
+  if (nextDay) date = addUnits(date, 1, 'd');
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
+// moment's offsetFromString: the sign and the hours and minutes of "+02:00", "-0530", "+05" or "Z"
+function offsetOf(text: string): number {
+  const parts = text.match(/[+-]|\d\d/g) ?? ['-', '0', '0'];
+  const minutes = Number(parts[1] ?? 0) * 60 + toInt(parts[2]);
+  return minutes === 0 ? 0 : parts[0] === '+' ? minutes : -minutes;
+}
+
+/** A text read by one of the ISO forms, as moment reads it by a format that is not strict */
+function readByForm(text: string, form: string): Reading | undefined {
+  const reading: Reading = { fields: [] };
+  let rest = text;
+  let read = false;
+  for (const token of form.match(FORM_TOKENS) ?? []) {
+    const pattern = TOKEN_READS[token];
+    const literal = token.replace(/^\[|\]$/g, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const found = (pattern ?? new RegExp(literal)).exec(rest)?.[0];
+    if (found) rest = rest.slice(rest.indexOf(found) + found.length);
+    if (!pattern || !found) continue;
+    read = true;
+    const isoWeek = () => (reading.isoWeek ??= {});
+    switch (token) {
+      case 'YYYYYY':
+        reading.fields[0] = toInt(found);
+        break;
+      case 'YYYY':
+        reading.fields[0] = found.length === 2 ? toInt(found) + (toInt(found) > 68 ? 1900 : 2000) : toInt(found);
+        break;
+      case 'MM':
+        reading.fields[1] = toInt(found) - 1;
+        break;
+      case 'DD':
+        reading.fields[2] = toInt(found);
+        break;
+      case 'DDD':
+        reading.dayOfYear = toInt(found);
+        break;
+      case 'HH':
+        reading.fields[3] = toInt(found);
+        break;
+      case 'mm':
+        reading.fields[4] = toInt(found);
+        break;
+      case 'ss':
+        reading.fields[5] = toInt(found);
+        break;
+      case 'SSSS':
+        reading.fields[6] = toInt(Number(`0.${found}`) * 1000);
+        break;
+      case 'GGGG':
+        isoWeek().year = toInt(found);
+        break;
+      case 'WW':
+        isoWeek().week = toInt(found);
+        break;
+      case 'E':
+        isoWeek().weekday = toInt(found);
+        break;
+      default:
+        reading.offset = offsetOf(found);
+    }
+  }
+  return read ? reading : undefined;
+}
+
+type Read = { date: Date | undefined } | undefined;
+
+/** moment's configFromISO: undefined when the text is not in one of its forms, to be read otherwise */
+function readIso(text: string, timeZone: string | undefined, now: number): Read {
+  const match = ISO_EXTENDED.exec(text) ?? ISO_BASIC.exec(text);
+  if (!match) return undefined;
+  const dateForm = ISO_DATES.find(([, pattern]) => pattern.test(match[1]));
+  if (!dateForm) return undefined;
+  let timeForm = '';
+  if (match[3]) {
+    const found = ISO_TIMES.find(([, pattern]) => pattern.test(match[3]));
+    if (!found) return undefined;
+    timeForm = (match[2] || ' ') + found[0];
+  }
+  if (!dateForm[2] && timeForm) return undefined;
+  const reading = readByForm(text, dateForm[0] + timeForm + (match[4] ? 'Z' : ''));
+  return { date: reading ? dateOfReading(reading, timeZone, now) : undefined };
+}
+
+/** moment's configFromRFC2822: "Thu, 29 Feb 2024 13:45:30 +0000" */
+function readRfc2822(text: string): Read {
+  const cleaned = text
+    .replace(/\([^()]*\)|[\n\t]/g, ' ')
+    .replace(/(\s\s+)/g, ' ')
+    .replace(/^\s\s*/, '')
+    .replace(/\s\s*$/, '');
+  const match = RFC_2822.exec(cleaned);
+  if (!match) return undefined;
+  const shortYear = parseInt(match[4], 10);
+  const year = shortYear <= 49 ? 2000 + shortYear : shortYear <= 999 ? 1900 + shortYear : shortYear;
+  const month = MONTHS.findIndex((name) => name.startsWith(match[3]));
+  const day = parseInt(match[2], 10);
+  // A weekday that is not that date's makes it no date, whatever the browser would read in it
+  if (match[1] && DAYS.findIndex((name) => name.startsWith(match[1])) !== new Date(year, month, day).getDay()) {
+    return { date: undefined };
+  }
+  const hour = parseInt(match[5], 10);
+  const minute = parseInt(match[6], 10);
+  const second = match[7] ? parseInt(match[7], 10) : undefined;
+  let offset = 0;
+  if (match[8]) offset = RFC_2822_ZONES[match[8]];
+  else if (!match[9]) {
+    const hoursAndMinutes = parseInt(match[10], 10);
+    const minutes = hoursAndMinutes % 100;
+    offset = ((hoursAndMinutes - minutes) / 100) * 60 + minutes;
+  }
+  const overflows =
+    month > 11 ||
+    day < 1 ||
+    day > daysInMonth(year, month) ||
+    hour > 24 ||
+    hour === 24 ||
+    minute > 59 ||
+    (second !== undefined && second > 59);
+  if (overflows) return { date: undefined };
+  const date = new Date(utcDate([year, month, day, hour, minute, second]).getTime() - offset * UNIT_MS.m);
+  return { date: Number.isNaN(date.getTime()) ? undefined : date };
+}
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  Object.prototype.toString.call(value) === '[object Object]';
+
+// The units an object given to moment may name, by each name moment knows them by; a name is
+// looked up as it is written, then in lower case
+const OBJECT_UNITS = new Map<string, string>();
+for (const [unit, ...names] of [
+  ['year', 'y', 'years'],
+  ['month', 'M', 'months'],
+  ['date', 'D', 'dates'],
+  ['day', 'd', 'days'],
+  ['hour', 'h', 'hours'],
+  ['minute', 'm', 'minutes'],
+  ['second', 's', 'seconds'],
+  ['millisecond', 'ms', 'milliseconds'],
+]) {
+  for (const name of [unit, ...names]) OBJECT_UNITS.set(name, unit);
+}
+
+/** moment's configFromObject: { year: 2024, month: 1, day: 29, ... }, months counted from 0 */
+function readObject(value: Record<string, unknown>, timeZone: string | undefined, now: number): Date | undefined {
+  const units: Record<string, unknown> = {};
+  for (const key of Object.keys(value)) {
+    const unit = OBJECT_UNITS.get(key) ?? OBJECT_UNITS.get(key.toLowerCase());
+    if (unit) units[unit] = value[key];
+  }
+  // "day" is the day of the month here, as moment reads it, before "date"
+  const day = units.day === undefined ? units.date : units.day;
+  // Each as `value && parseInt(value, 10)`: null and undefined are left out, the rest that is
+  // nothing is 0
+  const fields = [units.year, units.month, day, units.hour, units.minute, units.second, units.millisecond].map((unit) => {
+    if (unit === null || unit === undefined) return undefined;
+    return unit ? parseInt(String(unit), 10) : Number(unit);
+  });
+  return dateOfReading({ fields }, timeZone, now);
+}
+
+/**
+ * The moment a value is, as moment(value) reads it in the zone of the settings (the browser's own
+ * when none): a date; a number of milliseconds; text in an ISO 8601 form (on that zone's clock
+ * when it names no offset), in RFC 2822, or else as the browser's Date reads it; an object of
+ * units, the ones left out from today. undefined when moment finds no date in it.
+ */
+export function readMoment(value: unknown, timeZone?: string, now = Date.now()): Date | undefined {
+  const valid = (date: Date) => (Number.isNaN(date.getTime()) ? undefined : date);
+  if (value === undefined) return new Date(now);
+  if (value === null || value === '') return undefined;
+  if (Object.prototype.toString.call(value) === '[object Date]') return valid(new Date((value as Date).getTime()));
+  if (typeof value === 'number') return valid(new Date(value));
+  if (typeof value === 'string') {
+    const asp = /^\/?Date\((-?\d+)/i.exec(value);
+    if (asp) return valid(new Date(Number(asp[1])));
+    const read = readIso(value, timeZone, now) ?? readRfc2822(value);
+    return read ? read.date : valid(new Date(value));
+  }
+  if (Array.isArray(value)) {
+    if (value.length === 0) return new Date(now);
+    return dateOfReading({ fields: value.slice(0, 7).map((item) => parseInt(String(item), 10)) }, timeZone, now);
+  }
+  if (isPlainObject(value)) {
+    return Object.getOwnPropertyNames(value).length === 0 ? new Date(now) : readObject(value, timeZone, now);
+  }
+  return valid(new Date(String(value)));
 }
 
 export const DEFAULT_DATE_FORMAT = 'MMM D, YYYY @ HH:mm:ss.SSS';

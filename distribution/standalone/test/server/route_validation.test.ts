@@ -115,4 +115,14 @@ describe('request checks', () => {
       '[request query]: cannot use [overwrite] with [createNewCopies]'
     );
   });
+
+  it("checks a text with the route's own check, after its type", () => {
+    const named = object({ path: string({ validate: (path) => (path === '' ? 'Expected non-empty string' : undefined) }) });
+    const at = (query: string) => messageOf(() => validateRequestPart(named, queryObject(new URLSearchParams(query)), 'query'));
+    assert.equal(at('path='), '[request query.path]: Expected non-empty string');
+    assert.equal(at('path=a'), '');
+    // a list is no text, whatever the route's check says (config-schema hands it the list)
+    assert.equal(at('path=a&path=b'), '[request query.path]: expected value of type [string] but got [Array]');
+    assert.equal(at(''), '[request query.path]: expected value of type [string] but got [undefined]');
+  });
 });

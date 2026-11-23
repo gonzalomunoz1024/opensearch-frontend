@@ -6,11 +6,27 @@
  * null, and comments. Anchors, tags, multi-line strings and documents are not YAML this reads;
  * it says so instead of guessing.
  *
+ * Where it reads a file the way the reader of OpenSearch Dashboards (js-yaml) does not, it reads
+ * it as that one: a key written twice in one map is an error, a key `__proto__` is left out, and
+ * numbers and switches are those of YAML 1.2 (0x10, .inf, True).
+ *
  * The result is flat: `server: { port: 5601 }` and `server.port: 5601` both come out as
  * `{ 'server.port': 5601 }`, which is how the settings are named everywhere else.
  */
 
 export type YamlValue = string | number | boolean | null | YamlValue[] | { [key: string]: YamlValue };
+
+/** A map of the file: no key of it is taken from the prototype of an object */
+const newMap = (): { [key: string]: YamlValue } => Object.create(null) as { [key: string]: YamlValue };
+
+/**
+ * Puts a key into a map as the reader of OpenSearch Dashboards does: a key that is already there
+ * is an error, and `__proto__` is dropped, as its way of setting a value drops it
+ */
+function setKey(map: { [key: string]: YamlValue }, key: string, value: YamlValue, line: number) {
+  if (Object.prototype.hasOwnProperty.call(map, key)) throw new YamlError('duplicated mapping key', line);
+  if (key !== '__proto__') map[key] = value;
+}
 
 export class YamlError extends Error {
   constructor(message: string, line: number) {
@@ -118,33 +134,43 @@ function scalar(raw: string, line: number): YamlValue {
   if (text.startsWith('{')) {
     if (!text.endsWith('}')) throw new YamlError('a map is not closed', line);
     const inner = text.slice(1, -1).trim();
-    const map: { [key: string]: YamlValue } = {};
+    const map = newMap();
     if (inner === '') return map;
     for (const pair of splitTopLevel(inner, ',', line)) {
       const colon = keyEnd(pair.trim());
       if (colon === -1) throw new YamlError(`"${pair.trim()}" is not a key and a value`, line);
-      map[unquoteKey(pair.trim().slice(0, colon))] = scalar(pair.trim().slice(colon + 1), line);
+      setKey(map, unquoteKey(pair.trim().slice(0, colon)), scalar(pair.trim().slice(colon + 1), line), line);
     }
     return map;
   }
   if (/^[|>&*!]/.test(text)) {
     throw new YamlError(`"${text[0]}" starts a kind of YAML this reader does not read`, line);
   }
-  if (text === 'true') return true;
-  if (text === 'false') return false;
+  // The scalars of YAML 1.2's core schema, which is what js-yaml reads
+  if (/^(null|Null|NULL)$/.test(text)) return null;
+  if (/^(true|True|TRUE)$/.test(text)) return true;
+  if (/^(false|False|FALSE)$/.test(text)) return false;
   if (/^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/.test(text)) return Number(text);
+  const radix = /^[-+]?0([xob])([0-9a-fA-F]+)$/.exec(text);
+  const base = radix ? { x: 16, o: 8, b: 2 }[radix[1] as 'x' | 'o' | 'b'] : undefined;
+  if (radix && base && [...radix[2]].every((digit) => parseInt(digit, 16) < base)) {
+    const value = parseInt(radix[2], base);
+    return text.startsWith('-') ? -value : value;
+  }
+  if (/^[-+]?\.(inf|Inf|INF)$/.test(text)) return text.startsWith('-') ? -Infinity : Infinity;
+  if (/^\.(nan|NaN|NAN)$/.test(text)) return NaN;
   return text;
 }
 
 function parseBlock(lines: Line[], start: number, indent: number): [YamlValue, number] {
   let index = start;
-  if (lines[index].text.startsWith('- ') || lines[index].text === '-') {
+  const isItem = (text: string) => text.startsWith('- ') || text === '-';
+  if (isItem(lines[index].text)) {
     const list: YamlValue[] = [];
-    while (index < lines.length && lines[index].indent === indent) {
+    // A list ends at the first line that is no item of it: a list may sit at the indentation of
+    // its key, and the next key follows it there
+    while (index < lines.length && lines[index].indent === indent && isItem(lines[index].text)) {
       const { text, number } = lines[index];
-      if (!(text.startsWith('- ') || text === '-')) {
-        throw new YamlError('a list item was expected', number);
-      }
       const rest = text.slice(1).trim();
       if (rest === '') {
         if (index + 1 < lines.length && lines[index + 1].indent > indent) {
@@ -173,7 +199,7 @@ function parseBlock(lines: Line[], start: number, indent: number): [YamlValue, n
     return [list, index];
   }
 
-  const map: { [key: string]: YamlValue } = {};
+  const map = newMap();
   while (index < lines.length && lines[index].indent === indent) {
     const { text, number } = lines[index];
     const colon = keyEnd(text);
@@ -183,7 +209,7 @@ function parseBlock(lines: Line[], start: number, indent: number): [YamlValue, n
     if (rest === '') {
       if (index + 1 < lines.length && lines[index + 1].indent > indent) {
         const [value, next] = parseBlock(lines, index + 1, lines[index + 1].indent);
-        map[key] = value;
+        setKey(map, key, value, number);
         index = next;
       } else if (
         index + 1 < lines.length &&
@@ -192,14 +218,14 @@ function parseBlock(lines: Line[], start: number, indent: number): [YamlValue, n
       ) {
         // a list may sit at the indentation of its key
         const [value, next] = parseBlock(lines, index + 1, indent);
-        map[key] = value;
+        setKey(map, key, value, number);
         index = next;
       } else {
-        map[key] = null;
+        setKey(map, key, null, number);
         index += 1;
       }
     } else {
-      map[key] = scalar(rest, number);
+      setKey(map, key, scalar(rest, number), number);
       index += 1;
     }
   }
@@ -227,10 +253,17 @@ export function parseYaml(source: string): YamlValue {
   return value;
 }
 
-/** Nested maps become dotted keys; lists and scalars are the values. */
-export function flatten(value: YamlValue, prefix = '', out: Record<string, YamlValue> = {}) {
-  if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-    for (const [key, inner] of Object.entries(value)) {
+/**
+ * Nested maps become dotted keys; lists and scalars are the values, and so is a map with no keys.
+ * A file that is a list has the keys "0", "1" and so on, as OpenSearch Dashboards reads it.
+ */
+export function flatten(value: YamlValue, prefix = '', out: Record<string, YamlValue> = Object.create(null)) {
+  if (!prefix && Array.isArray(value)) {
+    value.forEach((item, index) => flatten(item, String(index), out));
+  } else if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+    const entries = Object.entries(value);
+    if (prefix && entries.length === 0) out[prefix] = value;
+    for (const [key, inner] of entries) {
       flatten(inner, prefix ? `${prefix}.${key}` : key, out);
     }
   } else if (prefix) {

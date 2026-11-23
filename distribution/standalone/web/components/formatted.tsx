@@ -1,7 +1,11 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
-/* A value of a field, drawn the way the field's format says: text, a link, a picture, a colour. */
+/*
+ * A value of a field, drawn the way the field's format says: text, a link, a picture, a sound, a
+ * colour; a list value by value.
+ */
 
+import { Fragment } from 'react';
 import type { Formatted } from '../lib/field_formats';
 import { fieldFormatter } from '../lib/field_formats';
 import { highlightsOf, splitHighlights, type RawHit } from '../lib/docs';
@@ -9,28 +13,39 @@ import type { IndexPattern } from '../lib/types';
 import { services } from '../services';
 
 export function FormattedText({ formatted, highlights }: { formatted: Formatted; highlights?: string[] }) {
+  if (formatted.parts) {
+    return (
+      <>
+        {formatted.parts.map((part, index) => (
+          <Fragment key={index}>
+            {index > 0 ? formatted.separator : null}
+            <FormattedText formatted={part} highlights={highlights} />
+          </Fragment>
+        ))}
+      </>
+    );
+  }
+  // A player that loads nothing until it is played, as the original draws one
+  if (formatted.audio) return <audio controls preload="none" src={formatted.audio.src} />;
+  if (formatted.image) {
+    const { src, alt, width, height } = formatted.image;
+    return (
+      <img
+        src={src}
+        alt={alt ?? formatted.text}
+        style={{ width: 'auto', height: 'auto', maxWidth: width ?? 'none', maxHeight: height ?? 'none' }}
+      />
+    );
+  }
   const text =
     highlights && highlights.length > 0
       ? splitHighlights(formatted.text, highlights).map((part, index) =>
           part.marked ? <mark key={index}>{part.text}</mark> : part.text
         )
       : formatted.text;
-  if (formatted.image) {
-    return (
-      <img
-        src={formatted.image.src}
-        alt={formatted.text}
-        style={{ maxWidth: formatted.image.width ?? 'none', maxHeight: formatted.image.height ?? 'none' }}
-      />
-    );
-  }
   if (formatted.href) {
     return (
-      <a
-        href={formatted.href}
-        target={formatted.newTab === false ? undefined : '_blank'}
-        rel="noopener noreferrer"
-      >
+      <a href={formatted.href} target={formatted.newTab === false ? '_self' : '_blank'} rel="noopener noreferrer">
         {text}
       </a>
     );
