@@ -39,7 +39,9 @@ export function histogramAgg(indexPattern: IndexPattern, interval: string | unde
 export function aggContext(indexPattern: IndexPattern, range: AbsoluteRange | undefined) {
   return {
     indexPattern,
-    timeRange: range,
+    // As the original's TimeBuckets: the interval suits the time between the two ends, whichever
+    // comes first (the search keeps them as they are)
+    timeRange: range && range.from.getTime() > range.to.getTime() ? { from: range.to, to: range.from } : range,
     timeZone: services.timeZone(),
     barTarget: services.uiSettings.get<number>('histogram:barTarget', 50),
     maxBars: services.uiSettings.get<number>('histogram:maxBars', 100),
