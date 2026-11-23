@@ -153,6 +153,8 @@ export interface VisType {
   aggBased: boolean;
   /** The parts aggregations can play in it, in the order the editor lists them */
   schemas?: Array<{ name: string; title: string; group: 'metrics' | 'buckets'; min?: number; max?: number }>;
+  /** Still being tried out, as OpenSearch Dashboards 3.9.0 marks its input controls */
+  stage?: 'experimental';
 }
 
 const XY_SCHEMAS: VisType['schemas'] = [
@@ -171,6 +173,7 @@ export const VIS_TYPES: VisType[] = [
     description: 'Create interactive controls for easy dashboard manipulation',
     icon: 'controls',
     aggBased: false,
+    stage: 'experimental',
   },
   {
     name: 'tile_map',

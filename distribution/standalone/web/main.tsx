@@ -10,13 +10,15 @@ import { App, registerRoute } from './app';
 import { setColorMapping } from './charts/core';
 import { Dashboards } from './apps/dashboard';
 import { DevTools } from './apps/dev_tools';
-import { IndexManagement } from './apps/index_management';
+import { IndexManagement, startJobs } from './apps/index_management';
 import { QueryWorkbench } from './apps/query_workbench';
 import { Discover } from './apps/discover';
 import { Visualize } from './apps/visualize';
+import { VisBuilder } from './apps/vis_builder';
 import { Management } from './apps/management';
 import { startRouter } from './router';
 import { createServices, type BootData } from './services';
+import { DEFAULT_MAP_CONFIG } from '../common/map_config';
 
 function readBootData(): BootData {
   const element = document.getElementById('boot-data');
@@ -27,7 +29,8 @@ function readBootData(): BootData {
     settings: {},
     settingsDefaults: {},
     settingsOverrides: {},
-    map: { tileUrl: '', attribution: '' },
+    map: DEFAULT_MAP_CONFIG,
+    libraries: { vega: '', vegaLite: '' },
   };
   if (!element?.textContent) return fallback;
   try {
@@ -41,6 +44,8 @@ const boot = readBootData();
 const services = createServices(boot);
 setColorMapping(services.uiSettings.get<Record<string, string>>('visualization:colorMapping', {}));
 startRouter(boot.basePath);
+// Work a page opened earlier left going is followed from wherever the product is opened again
+startJobs();
 
 // The theme is a class on the page; the server wrote the one the setting names
 const applyTheme = () => {
@@ -59,6 +64,7 @@ registerRoute({ paths: ['/app/data-explorer/discover', '/app/data-explorer'], re
 registerRoute({ paths: ['/app/dashboards', '/app/dashboard'], render: () => <Dashboards /> });
 registerRoute({ paths: ['/app/discover'], render: () => <Discover basePath="/app/discover" /> });
 registerRoute({ paths: ['/app/visualize'], render: () => <Visualize /> });
+registerRoute({ paths: ['/app/vis-builder'], render: () => <VisBuilder /> });
 registerRoute({ paths: ['/app/management', '/app/indexPatterns', '/app/objects', '/app/settings'], render: () => <Management /> });
 registerRoute({ paths: ['/app/dev_tools'], render: () => <DevTools /> });
 registerRoute({ paths: ['/app/opensearch-query-workbench'], render: () => <QueryWorkbench /> });

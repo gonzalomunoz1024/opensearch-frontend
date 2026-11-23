@@ -90,7 +90,8 @@
   --space-6: 24px;
   --space-8: 32px;
 
-  --header-height: 48px;
+  /* The header's 48 px and the line under it, as the original's */
+  --header-height: 49px;
   --nav-width: 260px;
   --control-height: 32px;
   --control-height-s: 28px;

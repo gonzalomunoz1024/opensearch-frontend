@@ -2,10 +2,10 @@
 
 /* The page that creates an index, and the page that shows one index and changes what can be changed. */
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type ReactNode } from 'react';
 import { Button, CallOut, Health, Panel, Spinner, Tabs, type Tone } from '../../components/basic';
 import { TextField } from '../../components/form';
-import { ConfirmModal } from '../../components/overlay';
+import { ConfirmModal, MenuButton, Portal } from '../../components/overlay';
 import { useBreadcrumbs } from '../../shell/state';
 import { Labeled, UnsavedBar, capital, go, ism, to, toasts } from './common';
 import {
@@ -22,6 +22,7 @@ import {
   countChanges,
   defaultIndex,
   fieldsHaveErrors,
+  importedIndex,
   indexAliasActions,
   localMappings,
   mappingErrorMessage,
@@ -33,7 +34,7 @@ import {
 } from './index_model';
 import { IndicesActions, type IndexRow } from './indices';
 import { INDEX_NAMING_MESSAGE, INDEX_NAMING_PATTERN, SYSTEM_INDEX, matchesAny } from './model';
-import { onJobDone } from './operations';
+import { onJobDone } from './jobs';
 import { CRUMBS, INDEX_MANAGEMENT_PATH, ROUTES } from './routes';
 
 const MAPPINGS_DOCS = 'https://opensearch.org/docs/latest/opensearch/mappings/';
@@ -65,18 +66,42 @@ function FormPanel({ title, help, children }: { title: ReactNode; help?: ReactNo
 
 // --- Create index -------------------------------------------------------------------------------------------
 
-export function CreateIndex() {
-  useBreadcrumbs([CRUMBS.INDEX_MANAGEMENT, CRUMBS.INDICES, CRUMBS.CREATE_INDEX]);
+export interface IndexFormHandle {
+  /** Shows what is wrong with the form, and says whether nothing is */
+  validate(): boolean;
+  value(): IndexItem;
+  /** The mapping as its JSON editor has it: the messages of OpenSearch name a place in it */
+  editorText(): string;
+  /** Gives the index a name, and what the templates that match the name say */
+  rename(name: string): void;
+  /** Takes the settings and the mapping of an index there is */
+  importSettings(index: string): void;
+}
+
+/**
+ * The form of a new index: its name, its aliases, its settings and its mapping. A page of its own
+ * shows each part in a panel; inside another page's panel the parts follow each other.
+ */
+export const IndexForm = forwardRef<
+  IndexFormHandle,
+  {
+    withoutPanel?: boolean;
+    /** Indexes whose settings and mapping the form offers to take over */
+    sourceIndices?: string[];
+  }
+>(function IndexForm({ withoutPanel, sourceIndices = [] }, ref) {
   const [item, setItem] = useState<IndexItem>(defaultIndex);
   const [submitted, setSubmitted] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [simulating, setSimulating] = useState(false);
   const [matching, setMatching] = useState(false);
   const [offered, setOffered] = useState<IndexItem>();
+  const [importing, setImporting] = useState<string>();
   // Whether anything but the name was filled in since the templates were last asked
   const edited = useRef(false);
   const editorText = useRef('');
   const gone = useRef(false);
+  const latest = useRef(item);
+  latest.current = item;
   useEffect(
     () => () => {
       gone.current = true;
@@ -90,8 +115,7 @@ export function CreateIndex() {
   };
 
   // An index gets what the templates that match its name say, so the form shows it once the name is known
-  const simulate = async () => {
-    const name = item.index;
+  const simulate = async (name: string) => {
     if (!name) return;
     setSimulating(true);
     const answer = await ism.request<{ template?: unknown }>('POST', `/_index_template/_simulate_index/${name}`);
@@ -109,99 +133,160 @@ export function CreateIndex() {
     }
   };
 
+  const importFrom = async (index: string) => {
+    setImporting(undefined);
+    const answer = await ism.call<Record<string, Record<string, unknown>>>('indices.get', {
+      index,
+      flat_settings: true,
+    });
+    if (gone.current) return;
+    const found = answer.ok ? answer.response?.[index] : undefined;
+    if (!found) {
+      toasts.danger(answer.error);
+      return;
+    }
+    setItem((before) => importedIndex(found, before.index));
+    toasts.success(`Settings and mappings of [${index}] have been import successfully`);
+    edited.current = false;
+  };
+
+  const importSettings = (index: string) => {
+    if (edited.current) setImporting(index);
+    else void importFrom(index);
+  };
+
   const nameError = INDEX_NAMING_PATTERN.test(item.index) ? undefined : 'Invalid index name.';
   const aliasError = aliasesError(item.aliases);
   const errors = settingsErrors(item.settings);
 
-  const submit = async () => {
-    setSubmitted(true);
-    const wrongFields = fieldsHaveErrors(item.mappings?.properties ?? [], undefined, false);
-    if (nameError || aliasError || Object.keys(errors).length > 0 || wrongFields) return;
-    setBusy(true);
-    const { index, mappings, ...others } = item;
-    const result = await ism.call('indices.create', { index, body: { ...others, mappings: remoteMappings(mappings) } });
-    setBusy(false);
-    if (result.ok) {
-      toasts.success(`${index} has been successfully created.`);
-      go(ROUTES.INDICES);
-    } else {
-      toasts.danger(mappingErrorMessage(result.error || '', editorText.current));
-    }
-  };
+  useImperativeHandle(ref, () => ({
+    validate() {
+      setSubmitted(true);
+      const now = latest.current;
+      return (
+        INDEX_NAMING_PATTERN.test(now.index) &&
+        !aliasesError(now.aliases) &&
+        Object.keys(settingsErrors(now.settings)).length === 0 &&
+        !fieldsHaveErrors(now.mappings?.properties ?? [], undefined, false)
+      );
+    },
+    value: () => latest.current,
+    editorText: () => editorText.current,
+    rename(name) {
+      setItem((before) => ({ ...before, index: name }));
+      void simulate(name);
+    },
+    importSettings,
+  }));
+
+  const importButton =
+    sourceIndices.length > 0 ? (
+      <div data-test-subj="moreAction">
+        <MenuButton
+          align="left"
+          button={(toggle) => (
+            <Button size="s" icon="chevronDown" iconSide="right" onClick={toggle} testId="importSettingMappingBtn">
+              Import settings and mappings
+            </Button>
+          )}
+          items={sourceIndices.map((index) => ({
+            id: index,
+            label: index,
+            testId: `import-settings-${index}`,
+            onClick: () => importSettings(index),
+          }))}
+        />
+      </div>
+    ) : null;
+
+  const define = (
+    <div className="ismForm">
+      <Labeled title="Index name" testId="form-name-index" error={submitted ? nameError : undefined}>
+        <TextField
+          compact
+          value={item.index}
+          onChange={(index) => setItem((before) => ({ ...before, index }))}
+          onBlur={() => void simulate(item.index)}
+          placeholder="Specify a name for the new index."
+          invalid={submitted && Boolean(nameError)}
+        />
+        <div className="ismLabeled__help">{INDEX_NAMING_MESSAGE}</div>
+      </Labeled>
+      {matching && (
+        <CallOut tone="accent" title="The index name matches one or more index templates">
+          Index alias, settings, and mappings are automatically inherited from matching index templates.
+        </CallOut>
+      )}
+      <Labeled
+        title="Index alias"
+        optional
+        testId="form-name-aliases"
+        help="Allow this index to be referenced by existing aliases or specify a new alias."
+        error={submitted ? aliasError : undefined}
+      >
+        <AliasSelect
+          value={item.aliases}
+          onChange={(aliases) => change({ aliases })}
+          invalid={submitted && Boolean(aliasError)}
+        />
+      </Labeled>
+    </div>
+  );
+  const settings = (
+    <SettingsFields
+      value={item.settings}
+      onChange={(next) => change({ settings: next })}
+      errors={submitted ? errors : {}}
+    />
+  );
+  const mappings = (
+    <MappingEditor
+      value={item.mappings}
+      onChange={(next) => change({ mappings: next })}
+      showErrors={submitted}
+      onEditorText={(text) => {
+        editorText.current = text;
+      }}
+    />
+  );
 
   return (
-    <div className="ismPage ismPage--form">
-      <h1 className="ismPageTitle">Create index</h1>
-      <FormPanel title="Define index">
-        <div className="ismForm">
-          <Labeled title="Index name" testId="form-name-index" error={submitted ? nameError : undefined}>
-            <TextField
-              compact
-              value={item.index}
-              onChange={(index) => setItem((before) => ({ ...before, index }))}
-              onBlur={() => void simulate()}
-              placeholder="Specify a name for the new index."
-              invalid={submitted && Boolean(nameError)}
-            />
-            <div className="ismLabeled__help">{INDEX_NAMING_MESSAGE}</div>
-          </Labeled>
-          {matching && (
-            <CallOut tone="accent" title="The index name matches one or more index templates">
-              Index alias, settings, and mappings are automatically inherited from matching index templates.
-            </CallOut>
-          )}
-          <Labeled
-            title="Index alias"
-            optional
-            testId="form-name-aliases"
-            help="Allow this index to be referenced by existing aliases or specify a new alias."
-            error={submitted ? aliasError : undefined}
+    <>
+      {withoutPanel ? (
+        <div className="ismDefinition ismDefinition--index">
+          <h3 className="ismDefinition__title">Define index</h3>
+          {define}
+          {importButton}
+          <h3 className="ismDefinition__title">Index settings</h3>
+          {settings}
+          <h3 className="ismDefinition__title">Index mapping</h3>
+          {mappings}
+        </div>
+      ) : (
+        <>
+          <FormPanel title="Define index">{define}</FormPanel>
+          {importButton}
+          <FormPanel title="Index settings">{settings}</FormPanel>
+          <FormPanel
+            title={
+              <>
+                Index mapping<i> – optional</i>
+              </>
+            }
+            help={<MappingsHelp after="Mappings and field types cannot be changed after the index is created." />}
           >
-            <AliasSelect
-              value={item.aliases}
-              onChange={(aliases) => change({ aliases })}
-              invalid={submitted && Boolean(aliasError)}
-            />
-          </Labeled>
-        </div>
-      </FormPanel>
-      <FormPanel title="Index settings">
-        <SettingsFields
-          value={item.settings}
-          onChange={(settings) => change({ settings })}
-          errors={submitted ? errors : {}}
-        />
-      </FormPanel>
-      <FormPanel
-        title={
-          <>
-            Index mapping<i> – optional</i>
-          </>
-        }
-        help={<MappingsHelp after="Mappings and field types cannot be changed after the index is created." />}
-      >
-        <MappingEditor
-          value={item.mappings}
-          onChange={(mappings) => change({ mappings })}
-          showErrors={submitted}
-          onEditorText={(text) => {
-            editorText.current = text;
-          }}
-        />
-      </FormPanel>
-      <div className="ismButtons">
-        <Button variant="empty" size="s" onClick={() => go(ROUTES.INDICES)} testId="createIndexCancelButton">
-          Cancel
-        </Button>
-        <Button variant="primary" size="s" loading={busy} onClick={submit} testId="createIndexCreateButton">
-          Create
-        </Button>
-      </div>
+            {mappings}
+          </FormPanel>
+        </>
+      )}
       {simulating && (
-        <div className="ismMask">
-          <Spinner size="l" />
-          We are simulating your template with existing templates, please wait for a second.
-        </div>
+        // Over the page, and under a flyout the form may be in
+        <Portal>
+          <div className="ismMask">
+            <Spinner size="l" />
+            We are simulating your template with existing templates, please wait for a second.
+          </div>
+        </Portal>
       )}
       {offered && (
         <ConfirmModal
@@ -227,6 +312,58 @@ export function CreateIndex() {
           </p>
         </ConfirmModal>
       )}
+      {importing && (
+        <ConfirmModal
+          title="Confirm"
+          confirmLabel="Overwrite"
+          cancelLabel="do not import"
+          onCancel={() => setImporting(undefined)}
+          onConfirm={() => void importFrom(importing)}
+        >
+          <p>We find that you made some changes to this draft, what action do you want to make?</p>
+        </ConfirmModal>
+      )}
+    </>
+  );
+});
+
+/** Creates the index a form describes, and gives its name once the index is there */
+export async function createIndex(form: IndexFormHandle | null): Promise<string | undefined> {
+  if (!form?.validate()) return undefined;
+  const { index, mappings, ...others } = form.value();
+  const result = await ism.call('indices.create', { index, body: { ...others, mappings: remoteMappings(mappings) } });
+  if (result.ok) {
+    toasts.success(`${index} has been successfully created.`);
+    return index;
+  }
+  toasts.danger(mappingErrorMessage(result.error || '', form.editorText()));
+  return undefined;
+}
+
+export function CreateIndex() {
+  useBreadcrumbs([CRUMBS.INDEX_MANAGEMENT, CRUMBS.INDICES, CRUMBS.CREATE_INDEX]);
+  const [busy, setBusy] = useState(false);
+  const form = useRef<IndexFormHandle>(null);
+
+  const submit = async () => {
+    setBusy(true);
+    const created = await createIndex(form.current);
+    setBusy(false);
+    if (created) go(ROUTES.INDICES);
+  };
+
+  return (
+    <div className="ismPage ismPage--form">
+      <h1 className="ismPageTitle">Create index</h1>
+      <IndexForm ref={form} />
+      <div className="ismButtons">
+        <Button variant="empty" size="s" onClick={() => go(ROUTES.INDICES)} testId="createIndexCancelButton">
+          Cancel
+        </Button>
+        <Button variant="primary" size="s" loading={busy} onClick={submit} testId="createIndexCreateButton">
+          Create
+        </Button>
+      </div>
     </div>
   );
 }

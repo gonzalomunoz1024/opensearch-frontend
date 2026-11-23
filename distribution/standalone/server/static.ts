@@ -2,6 +2,7 @@
 
 /* The files of the browser side, and the one page that loads them. */
 
+import type { MapConfig } from '../common/map_config';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import type { IncomingMessage } from 'node:http';
 import { extname, join, normalize, sep } from 'node:path';
@@ -22,7 +23,8 @@ const TYPES: Record<string, string> = {
 export interface Build {
   version: string;
   builtAt: string;
-  assets: { script: string; styles: string };
+  /** The app's script and style sheet, and the browser builds of Vega and Vega-Lite */
+  assets: { script: string; styles: string; vega?: string; vegaLite?: string };
 }
 
 export function readBuild(distDirectory: string): Build {
@@ -74,7 +76,7 @@ export interface PageOptions {
   bootData: unknown;
 }
 
-export const CONTENT_SECURITY_POLICY = [
+const BASE_POLICY = [
   "default-src 'self'",
   "script-src 'self'",
   // React writes styles on elements; nothing here writes style sheets at run time
@@ -82,12 +84,56 @@ export const CONTENT_SECURITY_POLICY = [
   // A markdown panel may show a picture from elsewhere
   "img-src 'self' data: blob: https: http:",
   "font-src 'self' data:",
-  "connect-src 'self'",
+  'CONNECT',
   "worker-src 'self' blob:",
   "frame-ancestors 'self'",
   "base-uri 'self'",
   "form-action 'self'",
-].join('; ');
+];
+
+/** The origins of URLs a page fetches from outside the server: the maps service and the shapes of region maps */
+export function mapOrigins(map: MapConfig): string[] {
+  const urls = [
+    map.opensearchManifestServiceUrl,
+    map.manifestServiceUrl,
+    map.emsFileApiUrl,
+    map.emsTileApiUrl,
+    ...map.regionmap.layers.map((layer) => layer.url),
+  ];
+  const origins = new Set<string>();
+  for (const url of urls) {
+    try {
+      if (url) origins.add(new URL(url).origin);
+    } catch {
+      // Not an absolute URL: the browser resolves it against the page, which 'self' covers
+    }
+  }
+  return [...origins].filter((origin) => origin !== 'null');
+}
+
+/** What `csp.allowedConnectSources`, `csp.allowedFrameAncestorSources` and `csp.allowedImgSources` add */
+export interface AllowedSources {
+  allowedConnectSources?: string[];
+  allowedFrameAncestorSources?: string[];
+  allowedImgSources?: string[];
+}
+
+/**
+ * The page's policy: the browser may fetch from the server and from the map services of map.*,
+ * and each csp.allowed*Sources setting adds its sources to its rule, as in OpenSearch Dashboards
+ */
+export function contentSecurityPolicy(map?: MapConfig, allowed: AllowedSources = {}): string {
+  const connect = ["'self'", ...(map ? mapOrigins(map) : []), ...(allowed.allowedConnectSources ?? [])];
+  const add = (rule: string, sources?: string[]) => (sources?.length ? `${rule} ${sources.join(' ')}` : rule);
+  return BASE_POLICY.map((rule) => {
+    if (rule === 'CONNECT') return `connect-src ${connect.join(' ')}`;
+    if (rule.startsWith('frame-ancestors ')) return add(rule, allowed.allowedFrameAncestorSources);
+    if (rule.startsWith('img-src ')) return add(rule, allowed.allowedImgSources);
+    return rule;
+  }).join('; ');
+}
+
+export const CONTENT_SECURITY_POLICY = contentSecurityPolicy();
 
 export function renderPage({ basePath, build, title, dark, bootData }: PageOptions): string {
   const data = JSON.stringify(bootData).replace(/</g, '\\u003c');

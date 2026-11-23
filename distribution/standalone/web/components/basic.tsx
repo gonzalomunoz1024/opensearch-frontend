@@ -22,6 +22,7 @@ export type ButtonVariant =
   | 'tint'
   | 'danger'
   | 'dangerFill'
+  | 'dangerOutline'
   | 'empty'
   | 'ghost';
 
@@ -159,16 +160,22 @@ const CALLOUT_ICONS: Record<string, IconName> = {
 
 export function CallOut({
   tone = 'accent',
+  size = 'm',
+  icon,
   title,
   children,
 }: {
   tone?: Tone;
+  /** 's': the original's small call-out, a line in less padding */
+  size?: 's' | 'm';
+  /** The icon, when not the one of its tone */
+  icon?: IconName;
   title?: ReactNode;
   children?: ReactNode;
 }) {
   return (
-    <div className={cx('atlCallOut', tone !== 'accent' && `atlCallOut--${tone}`)} role="status">
-      <Icon name={CALLOUT_ICONS[tone]} />
+    <div className={cx('atlCallOut', tone !== 'accent' && `atlCallOut--${tone}`, size === 's' && 'atlCallOut--s')} role="status">
+      <Icon name={icon ?? CALLOUT_ICONS[tone]} />
       <div className="atlGrow">
         {title && <div className="atlCallOut__title">{title}</div>}
         {children && <div>{children}</div>}
@@ -246,6 +253,7 @@ export interface TabItem {
   id: string;
   label: ReactNode;
   to?: string;
+  testId?: string;
 }
 
 export function Tabs({
@@ -267,6 +275,7 @@ export function Tabs({
             className="atlTab"
             aria-selected={tab.id === selected}
             href={toHref(tab.to)}
+            data-test-subj={tab.testId}
           >
             {tab.label}
           </a>
@@ -278,6 +287,7 @@ export function Tabs({
             className="atlTab"
             aria-selected={tab.id === selected}
             onClick={() => onSelect?.(tab.id)}
+            data-test-subj={tab.testId}
           >
             {tab.label}
           </button>

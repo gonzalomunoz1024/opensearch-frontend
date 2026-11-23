@@ -14,7 +14,8 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { services } from '../services';
-import { Button, IconButton, cx } from './basic';
+import type { Toast } from '../services/toasts';
+import { Button, CallOut, CodeBlock, IconButton, cx } from './basic';
 import { Icon, type IconName } from './icon';
 
 export function Portal({ children }: { children: ReactNode }) {
@@ -27,7 +28,8 @@ export interface PopoverProps {
   open: boolean;
   onClose: () => void;
   children: ReactNode;
-  align?: 'left' | 'right';
+  /** Which edge of the button it lines up with; 'center' hangs it under the middle */
+  align?: 'left' | 'right' | 'center';
   padded?: boolean;
   /** As wide as its button at least: a list under a field */
   matchWidth?: boolean;
@@ -57,11 +59,18 @@ export function Popover({
 
   const place = useCallback(() => {
     const anchorBox = anchor.current?.getBoundingClientRect();
-    const panelBox = panel.current?.getBoundingClientRect();
-    if (!anchorBox || !panelBox) return;
+    const panelElement = panel.current;
+    if (!anchorBox || !panelElement) return;
+    // Its size as laid out, which the opening animation's scale does not change
+    const panelBox = { width: panelElement.offsetWidth, height: panelElement.offsetHeight };
     const margin = 8;
     const panelWidth = Math.max(panelBox.width, matchWidth ? anchorBox.width : 0);
-    let left = align === 'right' ? anchorBox.right - panelWidth : anchorBox.left;
+    let left =
+      align === 'right'
+        ? anchorBox.right - panelWidth
+        : align === 'center'
+          ? anchorBox.left + (anchorBox.width - panelWidth) / 2
+          : anchorBox.left;
     left = Math.max(margin, Math.min(left, window.innerWidth - panelWidth - margin));
     const below = window.innerHeight - anchorBox.bottom - margin;
     const above = anchorBox.top - margin;
@@ -159,6 +168,8 @@ export interface MenuItem {
   icon?: IconName;
   onClick?: () => void;
   to?: string;
+  /** A page elsewhere, opened in a new tab */
+  href?: string;
   danger?: boolean;
   disabled?: boolean;
   selected?: boolean;
@@ -184,23 +195,42 @@ export function Menu({
       {items.map((item, index) => (
         <div key={item.id ?? index}>
           {item.separated && <div className="atlMenu__separator" />}
-          <button
-            type="button"
-            role="menuitem"
-            className={cx('atlMenu__item', item.danger && 'atlMenu__item--danger')}
-            aria-selected={item.selected}
-            disabled={item.disabled}
-            title={item.title}
-            data-test-subj={item.testId}
-            onClick={() => {
-              item.onClick?.();
-              onDone?.();
-            }}
-          >
-            {item.icon && <Icon name={item.icon} />}
-            <span className="atlGrow atlTruncate">{item.label}</span>
-            {item.selected && <Icon name="check" />}
-          </button>
+          {item.href !== undefined ? (
+            <a
+              role="menuitem"
+              className="atlMenu__item"
+              href={item.href}
+              target="_blank"
+              rel="noreferrer"
+              title={item.title}
+              data-test-subj={item.testId}
+              onClick={() => {
+                item.onClick?.();
+                onDone?.();
+              }}
+            >
+              {item.icon && <Icon name={item.icon} />}
+              <span className="atlGrow atlTruncate">{item.label}</span>
+            </a>
+          ) : (
+            <button
+              type="button"
+              role="menuitem"
+              className={cx('atlMenu__item', item.danger && 'atlMenu__item--danger')}
+              aria-selected={item.selected}
+              disabled={item.disabled}
+              title={item.title}
+              data-test-subj={item.testId}
+              onClick={() => {
+                item.onClick?.();
+                onDone?.();
+              }}
+            >
+              {item.icon && <Icon name={item.icon} />}
+              <span className="atlGrow atlTruncate">{item.label}</span>
+              {item.selected && <Icon name="check" />}
+            </button>
+          )}
         </div>
       ))}
     </div>
@@ -245,6 +275,8 @@ export function Modal({
   onClose,
   wide,
   testId,
+  className,
+  titleSize = 'm',
 }: {
   title: ReactNode;
   children: ReactNode;
@@ -252,6 +284,9 @@ export function Modal({
   onClose: () => void;
   wide?: boolean;
   testId?: string;
+  className?: string;
+  /** 'l': the larger title the original's save dialogs have */
+  titleSize?: 'm' | 'l';
 }) {
   useEscape(onClose);
   const box = useRef<HTMLDivElement>(null);
@@ -271,16 +306,16 @@ export function Modal({
       >
         <div
           ref={box}
-          className={cx('atlModal', wide && 'atlModal--wide')}
+          className={cx('atlModal', wide && 'atlModal--wide', className)}
           role="dialog"
           aria-modal="true"
           tabIndex={-1}
           data-test-subj={testId}
         >
           <div className="atlModal__header">
-            <h2 className="atlTitleM">{title}</h2>
-            <IconButton icon="cross" label="Close" onClick={onClose} />
+            <h2 className={titleSize === 'l' ? 'atlTitleM' : 'atlModal__title'}>{title}</h2>
           </div>
+          <IconButton icon="cross" label="Closes this modal window" onClick={onClose} className="atlModal__close" />
           <div className="atlModal__body">{children}</div>
           {footer && <div className="atlModal__footer">{footer}</div>}
         </div>
@@ -342,6 +377,9 @@ export function Flyout({
   onClose,
   wide,
   testId,
+  hideClose,
+  mask,
+  className,
 }: {
   title: ReactNode;
   children: ReactNode;
@@ -349,18 +387,24 @@ export function Flyout({
   onClose: () => void;
   wide?: boolean;
   testId?: string;
+  /** No cross in the header: the buttons at the foot close it */
+  hideClose?: boolean;
+  /** The page behind is dimmed, and a click on it closes the flyout */
+  mask?: boolean;
+  className?: string;
 }) {
   useEscape(onClose);
   return (
     <Portal>
+      {mask && <div className="atlFlyoutMask" onMouseDown={onClose} />}
       <aside
-        className={cx('atlFlyout', wide && 'atlFlyout--wide')}
+        className={cx('atlFlyout', wide && 'atlFlyout--wide', className)}
         role="dialog"
         data-test-subj={testId}
       >
         <div className="atlFlyout__header">
           <h2 className="atlTitleM atlTruncate">{title}</h2>
-          <IconButton icon="cross" label="Close" onClick={onClose} testId="flyoutCloseButton" />
+          {!hideClose && <IconButton icon="cross" label="Close" onClick={onClose} testId="flyoutCloseButton" />}
         </div>
         <div className="atlFlyout__body">{children}</div>
         {footer && <div className="atlFlyout__footer">{footer}</div>}
@@ -369,37 +413,167 @@ export function Flyout({
   );
 }
 
+// The original's icons: a check, an i, a question mark in a ring, and a triangle for what failed
 const TOAST_ICONS: Record<string, IconName> = {
-  healthy: 'checkCircle',
+  healthy: 'check',
   info: 'info',
-  warning: 'warning',
-  critical: 'error',
+  warning: 'help',
+  critical: 'warning',
 };
 
 export function ToastList() {
   const { toasts } = services;
   const items = useSyncExternalStore(toasts.subscribe, toasts.get);
-  if (items.length === 0) return null;
+  // The whole error stays open when its message goes, as the original's does
+  const [full, setFull] = useState<{ title: ReactNode; error: Error }>();
   return (
-    <Portal>
-      <div className="atlToasts" role="region" aria-live="polite" data-test-subj="globalToastList">
-        {items.map((toast) => (
-          <div key={toast.id} className={`atlToast atlMaterial atlToast--${toast.kind}`}>
-            <Icon name={TOAST_ICONS[toast.kind]} />
-            <div className="atlToast__body">
-              <div className="atlToast__title">{toast.title}</div>
-              {toast.text && <div className="atlToast__text">{toast.text}</div>}
-            </div>
-            <IconButton
-              icon="cross"
-              label="Dismiss"
-              size="s"
-              onClick={() => toasts.dismiss(toast.id)}
-            />
+    <>
+      {items.length > 0 && (
+        <Portal>
+          <div className="atlToasts" role="region" aria-live="polite" data-test-subj="globalToastList">
+            {items.map((toast) => (
+              <div key={toast.id} className={`atlToast atlMaterial atlToast--${toast.kind}`}>
+                <div className="atlToast__header">
+                  <Icon name={TOAST_ICONS[toast.kind]} />
+                  <div className="atlToast__title">{toast.title}</div>
+                </div>
+                <ToastText toast={toast} onFullError={setFull} />
+                <IconButton
+                  icon="cross"
+                  label="Dismiss toast"
+                  size="s"
+                  className="atlToast__close"
+                  onClick={() => toasts.dismiss(toast.id)}
+                  testId="toastCloseButton"
+                />
+              </div>
+            ))}
           </div>
-        ))}
+        </Portal>
+      )}
+      {full && <FullError title={full.title} error={full.error} onClose={() => setFull(undefined)} />}
+    </>
+  );
+}
+
+function ToastText({ toast, onFullError }: { toast: Toast; onFullError: (full: { title: ReactNode; error: Error }) => void }) {
+  const { error } = toast;
+  if (!error) return toast.text ? <div className="atlToast__text">{toast.text}</div> : null;
+  return (
+    <>
+      <p className="atlToast__text atlToast__message" data-test-subj="errorToastMessage">
+        {toast.text}
+      </p>
+      <div className="atlToast__actions">
+        <Button variant="dangerOutline" onClick={() => onFullError({ title: toast.title, error })}>
+          See the full error
+        </Button>
       </div>
-    </Portal>
+    </>
+  );
+}
+
+/**
+ * What a failed request was refused for, as OpenSearch answered: the first lines of the whole
+ * error, as the original writes them from the `caused_by` of the answer
+ */
+function requestCause(error: Error): string {
+  const body = (error as { body?: unknown }).body;
+  const answer = body && typeof body === 'object' ? (body as { error?: unknown }).error : undefined;
+  const cause = answer && typeof answer === 'object' ? (answer as { caused_by?: { type?: unknown; reason?: unknown } }).caused_by : undefined;
+  return cause ? `${String(cause.type)}\n${String(cause.reason)}\n\n` : '';
+}
+
+/** "See the full error": the message, then what OpenSearch said and the stack, to copy */
+function FullError({ title, error, onClose }: { title: ReactNode; error: Error; onClose: () => void }) {
+  const text = `${requestCause(error)}${error.stack ?? ''}`;
+  return (
+    <Modal
+      title={title}
+      onClose={onClose}
+      className="atlFullError"
+      testId="fullErrorModal"
+      footer={
+        <Button variant="primary" onClick={onClose}>
+          Close
+        </Button>
+      }
+    >
+      <CallOut tone="critical" size="s" icon="warning" title={error.message} />
+      {text && <CopyableCode size="s">{text}</CopyableCode>}
+    </Modal>
+  );
+}
+
+/** Code in a box, with a button that copies it */
+export function CopyableCode({ children, size = 'm' }: { children: string; size?: 's' | 'm' }) {
+  return (
+    <div className={size === 's' ? 'atlCodeCopy atlCodeCopy--s' : 'atlCodeCopy'}>
+      <CodeBlock>{children}</CodeBlock>
+      <IconButton icon="copy" label="Copy" size="s" onClick={() => copyText(children)} />
+    </div>
+  );
+}
+
+/** A short text shown over what the pointer or the focus is on */
+export function Tooltip({
+  content,
+  children,
+  testId,
+  block,
+  className,
+}: {
+  content: ReactNode;
+  children: ReactNode;
+  testId?: string;
+  /** The anchor a block as wide as its line, as the original's `eui-displayBlock` anchors */
+  block?: boolean;
+  /** A class for the box of the text */
+  className?: string;
+}) {
+  const anchor = useRef<HTMLSpanElement>(null);
+  const [place, setPlace] = useState<{ left: number; top: number }>();
+  const box = useRef<HTMLDivElement>(null);
+  const [shown, setShown] = useState(false);
+  useLayoutEffect(() => {
+    if (!shown || !anchor.current || !box.current) return;
+    const target = anchor.current.getBoundingClientRect();
+    const own = box.current.getBoundingClientRect();
+    const left = Math.max(8, Math.min(target.left + target.width / 2 - own.width / 2, window.innerWidth - own.width - 8));
+    // Above, as the original's, 16 px from its anchor, unless there is no room
+    const top = target.top - own.height - 16 >= 8 ? target.top - own.height - 16 : target.bottom + 16;
+    setPlace({ left, top });
+  }, [shown, content]);
+  return (
+    <span
+      ref={anchor}
+      className={block ? 'atlTooltipAnchor atlTooltipAnchor--block' : 'atlTooltipAnchor'}
+      onMouseEnter={() => setShown(true)}
+      onMouseLeave={() => {
+        setShown(false);
+        setPlace(undefined);
+      }}
+      onFocus={() => setShown(true)}
+      onBlur={() => {
+        setShown(false);
+        setPlace(undefined);
+      }}
+    >
+      {children}
+      {shown && (
+        <Portal>
+          <div
+            ref={box}
+            className={cx('atlTooltip', 'atlMaterial', className)}
+            role="tooltip"
+            data-test-subj={testId}
+            style={{ left: place?.left ?? -9999, top: place?.top ?? -9999 }}
+          >
+            {content}
+          </div>
+        </Portal>
+      )}
+    </span>
   );
 }
 

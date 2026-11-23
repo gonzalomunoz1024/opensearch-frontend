@@ -10,13 +10,17 @@ import { DataTable } from '../components/table';
 import type { Table } from '../lib/aggs';
 import { toCsv } from '../lib/docs';
 import { services } from '../services';
+import { stringifyJson } from '../services/http';
 import { totalOf, type RequestRecord, type SearchResponse } from '../services/search';
+import { VegaDebugView, type VegaDebugValues } from '../vis/vega/debug_view';
 
 export interface InspectorProps {
   title: string;
   requests: RequestRecord[];
   /** The table a visualization is drawn from */
   table?: Table;
+  /** The view and spec of a Vega visualization */
+  vega?: VegaDebugValues;
   onClose: () => void;
 }
 
@@ -79,7 +83,7 @@ function RequestsView({ requests }: { requests: RequestRecord[] }) {
   const [tab, setTab] = useState('statistics');
   const request = requests[Math.min(selected, requests.length - 1)];
   const response = request?.response as SearchResponse | undefined;
-  const body = useMemo(() => JSON.stringify(request?.body ?? {}, null, 2), [request]);
+  const body = useMemo(() => stringifyJson(request?.body ?? {}, 2), [request]);
   const answer = useMemo(() => JSON.stringify(request?.response ?? {}, null, 2), [request]);
   if (!request) return <EmptyPrompt title="No requests logged">The element has not logged any requests yet.</EmptyPrompt>;
   const text = tab === 'request' ? body : answer;
@@ -149,25 +153,34 @@ function RequestsView({ requests }: { requests: RequestRecord[] }) {
   );
 }
 
-export function Inspector({ title, requests, table, onClose }: InspectorProps) {
+export function Inspector({ title, requests, table, vega, onClose }: InspectorProps) {
   const [view, setView] = useState(table ? 'data' : 'requests');
+  // the views in the original's order: what the element has to show decides which there are
+  const views = [
+    ...(table ? [{ value: 'data', label: 'View: Data' }] : []),
+    { value: 'requests', label: 'View: Requests' },
+    ...(vega ? [{ value: 'vega', label: 'View: Vega debug' }] : []),
+  ];
   return (
     <Flyout title={title || 'Inspector'} onClose={onClose} wide testId="inspectorPanel">
       <div className="atlStack">
-        {table && (
+        {views.length > 1 && (
           <Select
             value={view}
             onChange={setView}
-            options={[
-              { value: 'data', label: 'View: Data' },
-              { value: 'requests', label: 'View: Requests' },
-            ]}
+            options={views}
             style={{ width: 200 }}
             aria-label="View"
             testId="inspectorViewChooser"
           />
         )}
-        {view === 'data' && table ? <DataView table={table} title={title} /> : <RequestsView requests={requests} />}
+        {view === 'data' && table ? (
+          <DataView table={table} title={title} />
+        ) : view === 'vega' && vega ? (
+          <VegaDebugView values={vega} />
+        ) : (
+          <RequestsView requests={requests} />
+        )}
       </div>
     </Flyout>
   );

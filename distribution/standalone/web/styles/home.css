@@ -1,18 +1,556 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
-.homPage {
-  max-width: 1120px;
+/* --- The first page, measured on the original in the Atlas theme ----------------------------- */
+
+.homWrapper {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  background: var(--color-surface);
 }
 
-.homHero {
+.homHeader {
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+/* The panel below reaches over the header's line, so the header leaves room under its title */
+.homHeader__inner {
+  display: flex;
+  gap: var(--space-6);
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-4) calc(var(--space-8) + var(--space-6));
+}
+
+.homHeader__title {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+.homHeader__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+}
+
+/* A link of the header or the footer: the theme's empty button, flush, in its colour of links */
+.homLink {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--control-height);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: none;
+  color: #0371e9;
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.5;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+:root.themeDark .homLink {
+  color: var(--color-accent);
+}
+
+.homLink:hover,
+.homLink:focus-visible {
+  background: var(--color-accent-tint);
+  text-decoration: none;
+}
+
+.homLink__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.homContent {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-4);
+}
+
+.homScreenReaderOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The product's panel stands 24 px over the header's line, as the original's solutions do */
+.homSolutions {
+  margin-top: calc(-2 * var(--space-8) - var(--space-1));
+}
+
+.homSolutions__content {
+  display: flex;
+  justify-content: space-around;
+  min-height: 256px;
+  margin: calc(-1 * var(--space-3));
+}
+
+.homSolutions__item {
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  max-width: calc(50% - var(--space-6));
+  margin: var(--space-3);
+}
+
+.homSolutionPanel {
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  transition:
+    transform var(--duration-fast) var(--ease-out-quint),
+    box-shadow var(--duration-fast) var(--ease-out-quint);
+}
+
+.homSolutionPanel:hover,
+.homSolutionPanel:focus-visible {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+  text-decoration: none;
+}
+
+.homSolutionPanel:hover .homSolutionPanel__title,
+.homSolutionPanel:focus-visible .homSolutionPanel__title {
+  text-decoration: underline;
+}
+
+.homSolutionPanel__inner {
+  display: flex;
+  flex: 1 1 auto;
+  overflow: hidden;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+/* Its left half in the accent, with the product's mark in a white disc, its name and a subtitle */
+.homSolutionPanel__header {
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--space-4);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  text-align: center;
+}
+
+.homSolutionPanel__icon {
   display: flex;
   align-items: center;
-  gap: var(--space-5);
-  padding: var(--space-6) 0 var(--space-4);
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin: 0 auto var(--space-2);
+  border-radius: 50%;
+  background: var(--color-surface);
 }
 
-.homSection {
-  margin: var(--space-6) 0 var(--space-3);
+.homSolutionPanel__subtitle {
+  margin-top: var(--space-1);
+  line-height: 1.5;
+}
+
+.homSolutionPanel__subtitle .atlIcon {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* Its right half: what the product is for, a line each */
+.homSolutionPanel__content {
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  line-height: 1.5;
+}
+
+.homRule {
+  height: 1px;
+  margin: var(--space-8) 0;
+  border: 0;
+  background: var(--color-border-light);
+}
+
+.homData {
+  display: flex;
+  gap: var(--space-6);
+}
+
+.homDataAdd,
+.homDataManage {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+.homData__title {
+  margin-bottom: var(--space-4);
+}
+
+/* A card that leads somewhere: an icon beside its title and description */
+.homSynopsis__card {
+  display: flex;
+  align-items: flex-start;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out-quint);
+}
+
+.homSynopsis__card:hover,
+.homSynopsis__card:focus-within {
+  border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+  box-shadow: var(--shadow-md);
+}
+
+.homSynopsis__card:active {
+  transform: scale(0.99);
+}
+
+.homSynopsis__top {
+  flex: none;
+  min-height: 1px;
+}
+
+.homSynopsis__icon.atlIcon {
+  display: block;
+  width: 24px;
+  height: 24px;
+  margin-right: var(--space-4);
+  color: var(--color-text-primary);
+}
+
+.homSynopsis__content {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.homSynopsis__titleAnchor {
+  color: var(--color-text-primary);
+}
+
+.homSynopsis__card:hover .homSynopsis__titleAnchor {
+  text-decoration: underline;
+}
+
+.homSynopsis__description {
+  margin-top: var(--space-2);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.homFooter {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-6);
+}
+
+/* The footer's links are the theme's smallest buttons, their icons 12 px */
+.homFooter__button {
+  height: var(--space-6);
+}
+
+.homFooter__button .atlIcon {
+  width: 12px;
+  height: 12px;
+}
+
+/* On a narrow screen what stands side by side stands one under the other */
+@media (max-width: 767px) {
+  .homHeader__inner,
+  .homSolutions__content,
+  .homSolutionPanel__inner,
+  .homData,
+  .homFooter {
+    flex-direction: column;
+  }
+
+  .homSolutions__item {
+    max-width: none;
+  }
+}
+
+/* --- The welcome screen of a new instance ------------------------------------------------------ */
+
+/*
+ * Over the whole window, as the original's full-screen pages: their shapes in two corners, faded
+ * in. It covers the page's frame and stays under the messages in the corner. The shapes are found
+ * from this style sheet, which is served under assets/, so that a base path is kept.
+ */
+.homWelcome {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  overflow: auto;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  opacity: 0;
+  animation: homWelcomeFadeIn 500ms var(--ease-out-quint) forwards;
+}
+
+.homWelcome::before {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  width: 310px;
+  height: 477px;
+  content: url("../core_app/images/bg_top_branded.svg");
+}
+
+.homWelcome::after {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  width: 313px;
+  height: 461px;
+  content: url("../core_app/images/bg_bottom_branded.svg");
+}
+
+:root.themeDark .homWelcome::before {
+  content: url("../core_app/images/bg_top_branded_dark.svg");
+}
+
+:root.themeDark .homWelcome::after {
+  content: url("../core_app/images/bg_bottom_branded_dark.svg");
+}
+
+@keyframes homWelcomeFadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.homWelcome__header {
+  position: relative;
+  z-index: 10;
+  padding: var(--space-8);
+}
+
+.homWelcome__content {
+  position: relative;
+  z-index: 10;
+  max-width: 512px;
+  margin: 0 auto;
+  padding: 0 var(--space-8);
+}
+
+.homWelcome__intro {
+  padding-top: var(--space-8);
+  padding-bottom: var(--space-4);
+  text-align: center;
+}
+
+/* The product's mark in a white disc */
+.homWelcome__logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  height: 80px;
+  margin: 0 auto var(--space-8);
+  border-radius: 50%;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+}
+
+/* The size of the mark in the original's picture of it, which leaves 13 of its 90 units round it */
+.homWelcome__logo img {
+  width: calc(64px * 64 / 90);
+  height: calc(64px * 64 / 90);
+}
+
+/* Under the card, what the original's spacer and the margin of its row leave below it */
+.homWelcome__body {
+  padding-bottom: calc(var(--space-2) + var(--space-3));
+}
+
+/* The card: its picture to the edges, then its words and its two buttons */
+.homWelcome__card {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.homWelcome__cardImage {
+  margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-4)) 0;
+  overflow: hidden;
+  border-radius: calc(var(--radius-sm) - 1px) calc(var(--radius-sm) - 1px) 0 0;
+}
+
+.homWelcome__cardImage img {
+  display: block;
+  width: 100%;
+}
+
+.homWelcome__cardContent {
+  margin-top: var(--space-4);
+}
+
+.homWelcome__cardTitle {
+  display: block;
+}
+
+.homWelcome__cardDescription {
+  margin-top: var(--space-2);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.homWelcome__cardFooter {
+  display: flex;
+  margin-top: var(--space-4);
+}
+
+.atlButton.homWelcome__footerAction {
+  margin-right: var(--space-2);
+  border: 1px solid transparent;
+}
+
+.atlButton.homWelcome__add {
+  min-width: 112px;
+  box-shadow: var(--shadow-sm);
+  transition:
+    filter var(--duration-fast) ease-out,
+    transform var(--duration-fast) ease-out;
+}
+
+/* The original's filled button grows brighter under the pointer, where the kit's grows darker */
+.atlButton.homWelcome__add:hover,
+.atlButton.homWelcome__add:focus {
+  background: var(--color-accent);
+  filter: brightness(1.1);
+}
+
+/* The original's empty button, its words in the colour of links on lines of 1.5 */
+.atlButton.homWelcome__skip {
+  color: #0371e9;
+  line-height: 1.5;
+}
+
+:root.themeDark .atlButton.homWelcome__skip {
+  color: var(--color-accent);
+}
+
+@media (max-width: 767px) {
+  .homWelcome__body {
+    padding-bottom: calc(var(--space-2) + var(--space-4));
+  }
+}
+
+/* --- The app directory ------------------------------------------------------------------------- */
+
+.homDirectory {
+  display: flex;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-4);
+}
+
+.homDirectory__body {
+  display: flex;
+  flex: 1 1 100%;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* The theme's small tabs: words in a pill, the chosen one filled */
+.homDirectory__tabs {
+  display: flex;
+  gap: var(--space-1);
+  margin: var(--space-4) 0 var(--space-6);
+  overflow-x: auto;
+}
+
+.homDirectory__tab {
+  flex: none;
+  padding: var(--space-1) 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.5;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.homDirectory__tab:hover {
+  color: var(--color-text-primary);
+}
+
+.homDirectory__tab--selected {
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+}
+
+/* Four a row: a quarter of the row less the gutters, as the original's grid counts it */
+.homDirectory__grid {
+  display: flex;
+  flex-wrap: wrap;
+  margin: calc(-1 * var(--space-3));
+}
+
+.homDirectory__item {
+  display: flex;
+  flex: 0 1 calc(25% - var(--space-6));
+  flex-direction: column;
+  min-width: 1px;
+  margin: var(--space-3);
+}
+
+.homDirectory__item > .homSynopsis__card {
+  flex-grow: 1;
+}
+
+@media (max-width: 767px) {
+  .homDirectory__grid {
+    margin-right: 0;
+    margin-left: 0;
+  }
+
+  .homDirectory__item {
+    flex-basis: 100%;
+    margin-right: 0;
+    margin-left: 0;
+  }
+}
+
+/* --- The overviews ----------------------------------------------------------------------------- */
+
+.homPage {
+  max-width: 1120px;
 }
 
 .homLead {
@@ -55,20 +593,4 @@
   border-radius: var(--radius-md);
   background: var(--color-accent-tint);
   color: var(--color-accent);
-}
-
-.homRecent {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: var(--space-2);
-}
-
-.homRecent__item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-secondary);
-  color: var(--color-text-primary);
 }

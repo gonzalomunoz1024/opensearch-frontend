@@ -1,0 +1,172 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/* Maps: Leaflet's controls, popups and tiles as maps_legacy's _leaflet_overrides and _legend draw them. */
+
+.mapVis {
+  position: absolute;
+  inset: 0;
+}
+
+.visualization.leaflet-container,
+.visualization .leaflet-container {
+  background: var(--color-surface);
+  font-family: var(--font-family);
+  min-width: 1px !important;
+  min-height: 1px !important;
+}
+
+.visualization .leaflet-bar,
+.visualization.leaflet-touch .leaflet-bar,
+.visualization .leaflet-touch .leaflet-bar,
+.visualization .leaflet-draw-actions {
+  box-shadow: var(--shadow-md);
+  border: none;
+}
+
+.visualization .leaflet-clickable:hover {
+  stroke-width: 8px;
+  stroke-opacity: 0.8;
+}
+
+.visualization .leaflet-draw-actions a,
+.visualization .leaflet-control a {
+  background-color: var(--color-surface);
+  border-color: var(--color-border-light) !important;
+  color: var(--color-text-primary) !important;
+}
+
+.visualization .leaflet-draw-actions a:hover,
+.visualization .leaflet-control a:hover {
+  background-color: var(--color-surface-secondary);
+}
+
+.visualization .leaflet-bar a:first-child {
+  border-top-left-radius: var(--radius-sm);
+  border-top-right-radius: var(--radius-sm);
+}
+
+.visualization .leaflet-bar a:last-child {
+  border-bottom-left-radius: var(--radius-sm);
+  border-bottom-right-radius: var(--radius-sm);
+}
+
+/* The popup looks like a tooltip */
+.visualization .leaflet-popup-content-wrapper {
+  margin: 0;
+  padding: 0;
+  background: var(--color-text-primary);
+  color: var(--color-surface);
+  border-radius: var(--radius-sm) !important;
+}
+
+.visualization .leaflet-popup {
+  pointer-events: none;
+}
+
+.visualization .leaflet-popup-content {
+  margin: 0;
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-regular);
+  word-wrap: break-word;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.visualization .leaflet-popup-content > * {
+  margin: 8px 8px 0;
+}
+
+.visualization .leaflet-popup-content > :last-child {
+  margin-bottom: 8px;
+}
+
+.visualization .leaflet-popup-content table td,
+.visualization .leaflet-popup-content table th {
+  padding: 4px;
+}
+
+.visualization .leaflet-popup-tip-container,
+.visualization .leaflet-popup-close-button,
+.visualization .leaflet-draw-tooltip {
+  display: none !important;
+}
+
+.visualization .leaflet-container .leaflet-control-attribution {
+  background-color: var(--color-surface);
+  color: var(--color-text-secondary);
+}
+
+.visualization .leaflet-container .leaflet-control-attribution p {
+  display: inline;
+}
+
+.visualization .leaflet-control-zoom-in,
+.visualization .leaflet-control-zoom-out {
+  text-indent: -10000px;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+.visualization .leaflet-control-zoom-in {
+  background-image: url("data:image/svg+xml,%3Csvg width='15px' height='15px' viewBox='0 0 15 15' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='rgb(52,55,65)' d='M8,7 L8,3.5 C8,3.22385763 7.77614237,3 7.5,3 C7.22385763,3 7,3.22385763 7,3.5 L7,7 L3.5,7 C3.22385763,7 3,7.22385763 3,7.5 C3,7.77614237 3.22385763,8 3.5,8 L7,8 L7,11.5 C7,11.7761424 7.22385763,12 7.5,12 C7.77614237,12 8,11.7761424 8,11.5 L8,8 L11.5,8 C11.7761424,8 12,7.77614237 12,7.5 C12,7.22385763 11.7761424,7 11.5,7 L8,7 Z M7.5,15 C3.35786438,15 0,11.6421356 0,7.5 C0,3.35786438 3.35786438,0 7.5,0 C11.6421356,0 15,3.35786438 15,7.5 C15,11.6421356 11.6421356,15 7.5,15 Z' /%3E%3C/svg%3E");
+}
+
+.visualization .leaflet-control-zoom-out {
+  background-image: url("data:image/svg+xml,%3Csvg width='15px' height='15px' viewBox='0 0 15 15' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='rgb(52,55,65)' d='M7.5,0 C11.6355882,0 15,3.36441176 15,7.5 C15,11.6355882 11.6355882,15 7.5,15 C3.36441176,15 0,11.6355882 0,7.5 C0,3.36441176 3.36441176,0 7.5,0 Z M3.5,7 C3.22385763,7 3,7.22385763 3,7.5 C3,7.77614237 3.22385763,8 3.5,8 L11.5,8 C11.7761424,8 12,7.77614237 12,7.5 C12,7.22385763 11.7761424,7 11.5,7 L3.5,7 Z' /%3E%3C/svg%3E");
+}
+
+/* The fit button: a crop glyph */
+.visualization .leaflet-control-fit a.mapButton {
+  display: block;
+  width: 30px;
+  height: 30px;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 16 16'%3E%3Cpath fill='rgb(52,55,65)' d='M4 0v4H0v1h4v8h8v3h1v-3h3v-1h-3V4H5V0H4zm1 5h7v7H5V5z'/%3E%3C/svg%3E");
+}
+
+/* Desaturated tiles, unless the base map asks for its own colours */
+.visualization img.leaflet-tile {
+  filter: brightness(1.03) grayscale(0.73);
+}
+
+.visualization img.leaflet-tile.filters-off {
+  filter: none;
+}
+
+.themeDark .visualization img.leaflet-tile {
+  filter: invert(1) brightness(1.75) grayscale(1);
+}
+
+/* The legend */
+.visMapLegend {
+  font-size: 11px;
+  box-shadow: var(--shadow-md);
+  font-family: var(--font-family);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+  padding: 8px;
+  background: color-mix(in srgb, var(--color-surface) 80%, transparent);
+  border-radius: var(--radius-sm);
+}
+
+.visMapLegend i {
+  width: 10px;
+  height: 10px;
+  display: inline-block;
+  margin: 3px 4px 0 0;
+  border-radius: 50%;
+  border: 1px solid var(--color-text-secondary);
+  background: var(--color-text-secondary);
+}
+
+.visMapLegend__title {
+  font-weight: 700;
+}
+
+.leaflet-top.leaflet-left .visMapLegend__wrapper {
+  position: absolute;
+  left: 40px;
+  white-space: nowrap;
+}

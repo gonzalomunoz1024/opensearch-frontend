@@ -14,6 +14,9 @@ export interface ComboOption {
   prepend?: ReactNode;
   disabled?: boolean;
   group?: string;
+  /** Said after the label in the list only: the field shows the label alone */
+  detail?: string;
+  testId?: string;
 }
 
 export interface ComboBoxProps {
@@ -32,8 +35,12 @@ export interface ComboBoxProps {
   loading?: boolean;
   /** Called as the text changes: the list may come from a search */
   onSearch?: (text: string) => void;
+  /** The options are the answer of that search already: they are listed as given */
+  searched?: boolean;
   testId?: string;
   fullWidth?: boolean;
+  /** The id of the field's text, for a label */
+  id?: string;
 }
 
 const MAX_SHOWN = 200;
@@ -51,8 +58,10 @@ export function ComboBox({
   invalid,
   loading,
   onSearch,
+  searched,
   testId,
   fullWidth = true,
+  id,
 }: ComboBoxProps) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
@@ -62,33 +71,48 @@ export function ComboBox({
 
   const labels = useMemo(() => new Map(options.map((option) => [option.value, option.label])), [options]);
   const matches = useMemo(() => {
-    const needle = text.trim().toLowerCase();
+    const needle = searched ? '' : text.trim().toLowerCase();
     const found = options.filter(
       (option) =>
         (single || !selected.includes(option.value)) &&
         (needle === '' || option.label.toLowerCase().includes(needle))
     );
     if (needle !== '') {
-      // What starts with the text comes before what merely contains it
-      found.sort(
-        (a, b) =>
-          Number(b.label.toLowerCase().startsWith(needle)) - Number(a.label.toLowerCase().startsWith(needle))
-      );
+      // What is the text comes first, then what starts with it, then what merely contains it
+      const rank = (label: string) => (label === needle ? 2 : label.startsWith(needle) ? 1 : 0);
+      found.sort((a, b) => rank(b.label.toLowerCase()) - rank(a.label.toLowerCase()));
     }
     return found;
-  }, [options, selected, single, text]);
+  }, [options, searched, selected, single, text]);
   const custom =
     allowCustom && text.trim() !== '' && !options.some((option) => option.label === text.trim())
       ? text.trim()
       : undefined;
   const shown = matches.slice(0, MAX_SHOWN);
 
+  // A list that came from a search is asked for again whole once the text is gone
+  const typed = useRef(text);
+  typed.current = text;
+  const forget = useCallback(() => {
+    if (searched && typed.current !== '') onSearch?.('');
+    setText('');
+  }, [onSearch, searched]);
   const close = useCallback(() => {
     setOpen(false);
-    setText('');
-  }, []);
+    forget();
+  }, [forget]);
 
-  useEffect(() => setActive(0), [text, open]);
+  // The option Enter takes: what the arrow keys or the pointer went to, else what was typed out in
+  // full wherever the list has it, else the first
+  const moved = useRef(false);
+  const exact = shown.findIndex((option) => !option.disabled && option.label === text.trim());
+  const first = exact === -1 ? 0 : exact + (custom ? 1 : 0);
+  useEffect(() => {
+    moved.current = false;
+  }, [text, open]);
+  useEffect(() => {
+    if (!moved.current) setActive(first);
+  }, [first, text, open]);
   useEffect(() => {
     list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
   }, [active]);
@@ -100,7 +124,7 @@ export function ComboBox({
       input.current?.blur();
     } else {
       onChange([...selected, value]);
-      setText('');
+      forget();
       input.current?.focus();
     }
   };
@@ -110,9 +134,13 @@ export function ComboBox({
     if (event.key === 'ArrowDown') {
       event.preventDefault();
       if (!open) setOpen(true);
-      else setActive((index) => Math.min(index + 1, count - 1));
+      else {
+        moved.current = true;
+        setActive((index) => Math.min(index + 1, count - 1));
+      }
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
+      moved.current = true;
       setActive((index) => Math.max(index - 1, 0));
     } else if (event.key === 'Enter') {
       if (!open) return;
@@ -174,6 +202,7 @@ export function ComboBox({
             ))}
           <input
             ref={input}
+            id={id}
             value={open ? text : singleLabel}
             placeholder={selected.length === 0 || (single && open) ? (singleLabel || placeholder) : undefined}
             disabled={disabled}
@@ -198,7 +227,7 @@ export function ComboBox({
               onMouseDown={(event) => event.stopPropagation()}
               onClick={() => {
                 onChange([]);
-                setText('');
+                forget();
               }}
             >
               <Icon name="cross" />
@@ -233,19 +262,38 @@ export function ComboBox({
                 className="atlMenu__item"
                 aria-selected={position === active}
                 disabled={option.disabled}
+                data-test-subj={option.testId}
                 onMouseDown={(event) => event.preventDefault()}
-                onMouseEnter={() => setActive(position)}
+                onMouseEnter={() => {
+                  moved.current = true;
+                  setActive(position);
+                }}
                 onClick={() => choose(option.value)}
               >
                 {option.prepend}
-                <span className="atlGrow atlTruncate">{option.label}</span>
+                <span className="atlGrow atlTruncate">
+                  {option.label}
+                  {option.detail ? ` ${option.detail}` : ''}
+                </span>
                 {single && selected[0] === option.value && <Icon name="check" />}
               </button>
             </div>
           );
         })}
         {shown.length === 0 && !custom && (
-          <div className="atlCombo__empty">{loading ? 'Loading' : 'Nothing matches'}</div>
+          <div className="atlCombo__empty">
+            {loading ? (
+              'Loading options'
+            ) : text.trim() !== '' ? (
+              <>
+                <strong>{text}</strong> doesn&apos;t match any options
+              </>
+            ) : options.length > 0 && !single && options.every((option) => selected.includes(option.value)) ? (
+              "You've selected all available options"
+            ) : (
+              "There aren't any options available"
+            )}
+          </div>
         )}
         {matches.length > MAX_SHOWN && (
           <div className="atlCombo__empty">

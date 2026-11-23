@@ -3,9 +3,9 @@
 /* Discover: search an index pattern's documents, see when they happened, look into each one. */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, CallOut, EmptyPrompt, Loading, Panel } from '../../components/basic';
+import { Button, EmptyPrompt, Loading, Panel, Tabs } from '../../components/basic';
 import { Select } from '../../components/form';
-import { downloadFile } from '../../components/overlay';
+import { CopyableCode, downloadFile } from '../../components/overlay';
 import { XYChart } from '../../charts/xy';
 import { dateInterval, tabify } from '../../lib/aggs';
 import { formatDate, resolveTimeRange } from '../../lib/dates';
@@ -18,13 +18,16 @@ import { href, navigate, navigateHash, setHashParams, useLocation } from '../../
 import { services } from '../../services';
 import type { IndexPatternSummary } from '../../services/index_patterns';
 import type { SavedObject } from '../../services/saved_objects';
+import type { SavedQuery } from '../../lib/saved_query';
 import { totalOf, type RequestRecord, type SearchResponse } from '../../services/search';
 import { TopNav } from '../../shell/chrome';
 import { isPinned, splitFilters } from '../../shell/filter_bar';
 import { Inspector } from '../../shell/inspect';
 import { defaultQueryLanguage } from '../../shell/query_bar';
 import { OpenFlyout, SaveModal, ShareModal } from '../../shell/saved_objects_ui';
+import { pageFiltersOf, savedQueryGlobalParam, type SavedQueryChange } from '../../shell/saved_query';
 import { SearchBar } from '../../shell/search_bar';
+import { showSearchError } from '../../shell/search_error';
 import { addRecentlyAccessed, currentGlobalParam, useAutoRefresh, useBreadcrumbs, useGlobalState } from '../../shell/state';
 import { DocDetails } from './doc_viewer';
 import { DocTable, type SortPair } from './doc_table';
@@ -45,7 +48,7 @@ interface SavedSearchAttributes {
 }
 
 interface UrlAppState {
-  discover?: { columns?: string[]; sort?: unknown; interval?: string; isDirty?: boolean };
+  discover?: { columns?: string[]; sort?: unknown; interval?: string; isDirty?: boolean; savedQuery?: string };
   metadata?: { indexPattern?: string; view?: string };
   // The shape of older addresses
   columns?: string[];
@@ -54,6 +57,7 @@ interface UrlAppState {
   index?: string;
   query?: Query;
   filters?: Filter[];
+  savedQuery?: string;
 }
 
 interface UrlQueryState {
@@ -78,6 +82,53 @@ interface Result {
   total: number;
   response: SearchResponse;
   range?: { from: Date; to: Date };
+}
+
+/**
+ * The original's "No Results", for a search that found nothing and one that failed; under it the
+ * saved queries of the query's language, each in a box to copy, when there are any
+ */
+function NoResults({ query }: { query: Query }) {
+  const [savedQueries, setSavedQueries] = useState<SavedQuery[]>([]);
+  const queryKey = JSON.stringify(query);
+  useEffect(() => {
+    let live = true;
+    services.savedQueries.findSavedQueries('', 1000).then(
+      ({ queries }) => live && setSavedQueries(queries.filter((item) => item.attributes.query.language === query.language)),
+      () => live && setSavedQueries([])
+    );
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryKey]);
+  return (
+    <div className="dscNoResults">
+      <div data-test-subj="discoverNoResults">
+        <EmptyPrompt icon="codeBlock" title="No Results">
+          <p data-test-subj="discoverNoResultsTimefilter">
+            Try selecting a different data source, expanding your time range or modifying the query &amp; filters.
+          </p>
+        </EmptyPrompt>
+      </div>
+      {savedQueries.length > 0 && (
+        <div className="dscNoResults__samples" data-test-subj="discoverNoResultsSampleContainer">
+          <Tabs tabs={[{ id: 'saved_queries', label: 'Saved Queries' }]} selected="saved_queries" />
+          <div className="dscNoResults__queries">
+            {savedQueries.map((item) => {
+              const value = item.attributes.query.query;
+              return (
+                <div key={item.id} className="dscNoResults__query">
+                  <div className="atlSmall">{item.id}</div>
+                  <CopyableCode>{typeof value === 'string' ? value : JSON.stringify(value)}</CopyableCode>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function Discover({ basePath }: { basePath: string }) {
@@ -105,7 +156,8 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
   const [indexPattern, setIndexPattern] = useState<IndexPattern>();
   const [patternError, setPatternError] = useState<string>();
   const [result, setResult] = useState<Result>();
-  const [error, setError] = useState<string>();
+  // The search failed: no results, and a "Search Error" message says why, as in the original
+  const [failed, setFailed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [tick, setTick] = useState(0);
   const [records, setRecords] = useState<RequestRecord[]>([]);
@@ -139,21 +191,41 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
     [urlQuery, urlApp, savedSource]
   );
   const filters = useMemo(() => [...global.filters, ...appFilters.filter((filter) => !isPinned(filter))], [global.filters, appFilters]);
+  // The saved query loaded into the search bar; an older address keeps it beside the columns
+  const savedQueryId = urlApp.discover?.savedQuery ?? urlApp.savedQuery;
 
-  const writeApp = useCallback(
-    (changes: { columns?: string[]; sort?: SortPair[]; interval?: string; indexPattern?: string }, replace = false) => {
-      const next = {
+  const appParam = useCallback(
+    (changes: { columns?: string[]; sort?: SortPair[]; interval?: string; indexPattern?: string; savedQuery?: string }) =>
+      encodeState({
         discover: {
           columns: changes.columns ?? columns,
           interval: changes.interval ?? interval,
           isDirty: Boolean(savedId),
+          savedQuery: 'savedQuery' in changes ? changes.savedQuery : savedQueryId,
           sort: changes.sort ?? sort,
         },
         metadata: { indexPattern: changes.indexPattern ?? indexPatternId, view: 'discover' },
-      };
-      setHashParams({ _a: encodeState(next) }, { replace });
+      }),
+    [columns, interval, sort, indexPatternId, savedId, savedQueryId]
+  );
+  const writeApp = useCallback(
+    (changes: { columns?: string[]; sort?: SortPair[]; interval?: string; indexPattern?: string }, replace = false) => {
+      setHashParams({ _a: appParam(changes) }, { replace });
     },
-    [columns, interval, sort, indexPatternId, savedId]
+    [appParam]
+  );
+  const onSavedQueryChange = useCallback(
+    (change: SavedQueryChange) => {
+      setHashParams(
+        {
+          _g: savedQueryGlobalParam(change),
+          _a: appParam({ savedQuery: change.id }),
+          _q: encodeState({ filters: pageFiltersOf(change), query: change.query }),
+        },
+        { replace: change.replace }
+      );
+    },
+    [appParam]
   );
   const writeQuery = useCallback(
     (changes: { query?: Query; filters?: Filter[] }) => {
@@ -240,7 +312,10 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
     try {
       body = buildDiscoverRequest({ indexPattern, query, filters, range, sort, size: sampleSize, interval });
     } catch (failure) {
-      setError((failure as Error).message);
+      // A query that cannot be read: the original's search fails before it is sent
+      setFailed(true);
+      setLoading(false);
+      showSearchError(failure);
       return undefined;
     }
     const record: RequestRecord = { name: 'data', index: indexPattern.title, body, startedAt: Date.now() };
@@ -249,15 +324,16 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
       .search(indexPattern.title, body, { signal: controller.signal, record })
       .then((response) => {
         setResult({ rows: response.hits.hits as RawHit[], total: totalOf(response), response, range });
-        setError(undefined);
+        setFailed(false);
         setRecords([record]);
         setLoading(false);
       })
       .catch((failure) => {
         if ((failure as Error).name === 'AbortError') return;
-        setError((failure as Error).message);
+        setFailed(true);
         setRecords([record]);
         setLoading(false);
+        showSearchError(failure);
       });
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -453,8 +529,8 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
   if (!indexPattern || !patterns) return <Loading />;
 
   const dateFormat = services.uiSettings.get<string>('dateFormat', 'MMM D, YYYY @ HH:mm:ss.SSS');
-  const total = result?.total ?? 0;
-  const rows = result?.rows ?? [];
+  const total = failed ? 0 : result?.total ?? 0;
+  const rows = failed ? [] : result?.rows ?? [];
 
   return (
     <div className="dscPage" data-test-subj="discoverApp">
@@ -473,7 +549,10 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
         onIndexPatternChange={(id) => {
           setResult(undefined);
           setHashParams({
-            _a: encodeState({ discover: { columns: ['_source'], interval: 'auto', isDirty: false, sort: [] }, metadata: { indexPattern: id, view: 'discover' } }),
+            _a: encodeState({
+              discover: { columns: ['_source'], interval: 'auto', isDirty: false, savedQuery: savedQueryId, sort: [] },
+              metadata: { indexPattern: id, view: 'discover' },
+            }),
             _q: encodeState({ filters: [], query }),
           });
         }}
@@ -510,23 +589,15 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
           onRefresh={refresh}
           loading={loading}
           showTime={Boolean(indexPattern.timeFieldName)}
+          savedQueryId={savedQueryId}
+          onSavedQueryChange={onSavedQueryChange}
         />
         <Panel flush className="dscCanvas">
           {loading && <div className="atlProgress" />}
-          {error ? (
-            <div style={{ padding: 'var(--space-4)' }}>
-              <CallOut tone="critical" title="The search failed">
-                {error}
-              </CallOut>
-            </div>
+          {failed || (result && total === 0) ? (
+            <NoResults query={query} />
           ) : !result ? (
             <Loading>Searching</Loading>
-          ) : total === 0 ? (
-            <EmptyPrompt icon="search" title="No results match your search criteria">
-              {indexPattern.timeFieldName
-                ? 'Expand your time range: the documents may be older or newer than the range in the time picker. Or adjust your query and filters.'
-                : 'Adjust your query and filters.'}
-            </EmptyPrompt>
           ) : (
             <>
               {histogram && result.range && (
@@ -621,6 +692,7 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
       {dialog === 'save' && (
         <SaveModal
           objectType="search"
+          intro="Save your Discover search so you can use it in visualizations and dashboards"
           title={saved?.attributes.title ?? ''}
           existing={Boolean(saved)}
           onSave={save}
