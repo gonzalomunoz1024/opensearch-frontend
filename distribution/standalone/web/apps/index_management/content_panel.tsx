@@ -45,7 +45,10 @@ export function ContentPanel({
           {typeof title === 'string' ? (
             <h1 className="ismContentPanel__title">
               {title}
-              <span className="panel-header-count"> {itemCount > 0 ? `(${itemCount})` : null} </span>
+              <span className="panel-header-count">
+                {' '}
+                {itemCount > 0 ? `(${itemCount})` : null}{' '}
+              </span>
             </h1>
           ) : (
             title
@@ -69,7 +72,11 @@ export function ContentPanel({
   const content = (
     <>
       {header}
-      {!ghost && <hr className={cx('ismContentPanel__rule', noExtraPadding && 'ismContentPanel__rule--none')} />}
+      {!ghost && (
+        <hr
+          className={cx('ismContentPanel__rule', noExtraPadding && 'ismContentPanel__rule--none')}
+        />
+      )}
       {children ? (
         <div className={cx(!ghost && 'ismContentPanel__body')} style={bodyStyles}>
           {children}
@@ -109,6 +116,33 @@ export function ContentPanelActions({ actions }: { actions: PanelAction[] }) {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * What a list is for, under its title: the plugin's form row with no field, of which only the help
+ * text shows. `half` keeps the text to half the width, as the list of aliases has it.
+ */
+export function TitleHelp({ children, half }: { children: ReactNode; half?: boolean }) {
+  return (
+    <div className="ismCustomRow__help">
+      <div className={half ? 'ismContentPanel__half' : undefined}>{children}</div>
+    </div>
+  );
+}
+
+/**
+ * What a list says when it has nothing to show: the theme's empty prompt as the plugin fills it,
+ * a small text and, under it, what to do next.
+ */
+export function ListEmpty({ text, children }: { text: string; children?: ReactNode }) {
+  return (
+    <div className="ismListEmpty">
+      <div className="ismListEmpty__text">
+        <p>{text}</p>
+      </div>
+      {children ? <div className="ismListEmpty__actions">{children}</div> : null}
     </div>
   );
 }

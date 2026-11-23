@@ -8,12 +8,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Badge, Button, IconButton } from '../../components/basic';
 import { Checkbox } from '../../components/form';
-import { ConfirmModal, Modal, type MenuItem } from '../../components/overlay';
+import { Flyout, Modal, Tooltip, type MenuItem } from '../../components/overlay';
 import { useBreadcrumbs } from '../../shell/state';
 import { FewNames } from './aliases';
 import {
   ActionsMenu,
-  ContentPanel,
+  ContentPanel as OldContentPanel,
   ExternalLink,
   FilterButton,
   LocalTable,
@@ -21,7 +21,6 @@ import {
   PanelButton,
   SearchRow,
   Table,
-  TypeToConfirmModal,
   go,
   ism,
   pageOf,
@@ -30,7 +29,9 @@ import {
   useListQuery,
   type TableColumn,
 } from './common';
+import { ContentPanel, ContentPanelActions, ListEmpty, TitleHelp } from './content_panel';
 import { pageChanges, pageQuery } from './model';
+import { DeleteModal, SimpleModal } from './plugin_modal';
 import { CRUMBS, ROUTES } from './routes';
 
 const TEMPLATE_DOCS = 'https://opensearch.org/docs/latest/opensearch/index-templates/';
@@ -66,18 +67,24 @@ export async function loadIndexTemplates(): Promise<Array<IndexTemplate & { name
   return (answer.response?.index_templates ?? []).map((item) => ({ ...item.index_template, name: item.name }));
 }
 
-/** Takes a component out of an index template */
-async function unlink(template: IndexTemplate & { name: string }, component: string): Promise<boolean> {
-  const { name, ...rest } = template;
-  const answer = await ism.request('POST', `/_index_template/${name}`, {
-    ...rest,
-    composed_of: (template.composed_of ?? []).filter((item) => item !== component),
+/** Takes a component out of an index template, as the template is now */
+async function unlink(templateName: string, component: string): Promise<boolean> {
+  const current = await ism.request<IndexTemplates>('GET', `/_index_template/${templateName}?flat_settings=true`);
+  const found = current.response?.index_templates?.find((item) => item.name === templateName);
+  if (!current.ok || !found) {
+    toasts.danger(current.ok ? `The template [${templateName}] does not exist.` : current.error || '');
+    return false;
+  }
+  const answer = await ism.request('POST', `/_index_template/${templateName}`, {
+    ...found.index_template,
+    composed_of: (found.index_template.composed_of ?? []).filter((item) => item !== component),
   });
-  if (answer.ok) toasts.success(`${component} has been successfully unlinked from ${name}.`);
+  if (answer.ok) toasts.success(`${component} has been successfully unlinked from ${templateName}.`);
   else toasts.danger(answer.error);
   return answer.ok;
 }
 
+/** The plugin's question before a component leaves a template; `wording` is its last sentence */
 function UnlinkConfirm({
   template,
   component,
@@ -85,32 +92,35 @@ function UnlinkConfirm({
   onClose,
   onDone,
 }: {
-  template: IndexTemplate & { name: string };
+  template: string;
   component: string;
   wording: string;
   onClose: () => void;
   onDone: () => void;
 }) {
   return (
-    <ConfirmModal
-      title={`Unlink from ${template.name}?`}
+    <SimpleModal
+      title={`Unlink from ${template}?`}
       confirmLabel="Unlink"
-      onCancel={onClose}
+      danger
+      onClose={onClose}
       onConfirm={async () => {
-        onClose();
-        if (await unlink(template, component)) onDone();
+        const done = await unlink(template, component);
+        if (done) onDone();
+        return done;
       }}
     >
       <p>
-        The component {component} will be removed from the template {template.name}. {wording}
+        The component {component} will be removed from the template {template}. {wording}
       </p>
-    </ConfirmModal>
+    </SimpleModal>
   );
 }
 
 // --- Index templates ----------------------------------------------------------------------------------------
 
-function AssociatedComponentsModal({
+/** The plugin's flyout of the components a template is composed of, each with a way to unlink it */
+function AssociatedComponents({
   template,
   onClose,
   onUnlink,
@@ -120,16 +130,16 @@ function AssociatedComponentsModal({
   onUnlink: () => void;
 }) {
   const [unlinking, setUnlinking] = useState<string>();
-  const components = (template.composed_of ?? []).map((name) => ({ name }));
+  const components = useMemo(() => (template.composed_of ?? []).map((name) => ({ name })), [template.composed_of]);
   return (
     <>
-      <Modal title="Associated component templates" onClose={onClose}>
+      <Flyout title="Associated component templates" onClose={onClose}>
         <LocalTable
+          fixed
           columns={[
             {
               field: 'name',
               name: 'Component template',
-              sortable: true,
               render: (row: { name: string }) => (
                 <a href={to(`${ROUTES.CREATE_COMPOSABLE_TEMPLATE}/${row.name}`)} target="_blank" rel="noreferrer">
                   {row.name}
@@ -141,33 +151,45 @@ function AssociatedComponentsModal({
               name: 'Actions',
               align: 'right',
               render: (row) => (
-                <IconButton icon="unlink" label={`Unlink ${row.name}?`} onClick={() => setUnlinking(row.name)} />
+                <Tooltip content="Unlink">
+                  <IconButton
+                    icon="unlink"
+                    label={`Unlink ${row.name}?`}
+                    title=""
+                    onClick={() => setUnlinking(row.name)}
+                  />
+                </Tooltip>
               ),
             },
           ]}
           rows={components}
           rowId={(row) => row.name}
-          sortField="name"
-          empty={`No components associated to ${template.name}`}
+          pageSizes={[10, 25, 50]}
+          empty="No items found"
         />
-      </Modal>
+      </Flyout>
       {unlinking && (
         <UnlinkConfirm
-          template={template}
+          template={template.name}
           component={unlinking}
           wording="This will affect any new indexes created with this template."
           onClose={() => setUnlinking(undefined)}
-          onDone={() => {
-            onUnlink();
-            onClose();
-          }}
+          onDone={onUnlink}
         />
       )}
     </>
   );
 }
 
-export function DeleteTemplateModal({ names, onClose, onDelete }: { names: string[]; onClose: () => void; onDelete: () => void }) {
+export function DeleteTemplateModal({
+  names,
+  onClose,
+  onDelete,
+}: {
+  names: string[];
+  onClose: () => void;
+  onDelete: () => void;
+}) {
   const remove = async () => {
     const result = await ism.request('DELETE', `/_index_template/${names.join(',')}`);
     if (result.ok) {
@@ -179,20 +201,13 @@ export function DeleteTemplateModal({ names, onClose, onDelete }: { names: strin
     }
   };
   return (
-    <TypeToConfirmModal
+    <DeleteModal
       title="Delete Templates"
-      label="Delete"
-      word="delete"
-      danger
+      tips="The following template will be permanently deleted. This action cannot be undone."
+      names={names}
       onClose={onClose}
-      onConfirm={remove}
-      inputTestId="deleteInput"
-      cancelTestId="deletaCancelButton"
-      confirmTestId="deleteConfirmButton"
-    >
-      <p>The following template will be permanently deleted. This action cannot be undone.</p>
-      <Names names={names} />
-    </TypeToConfirmModal>
+      onConfirm={() => void remove()}
+    />
   );
 }
 
@@ -203,7 +218,8 @@ export function Templates() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<TemplateRow[]>([]);
   const [deleting, setDeleting] = useState<string[]>();
-  const [associated, setAssociated] = useState<TemplateRow>();
+  // By its name: the flyout shows the template as the list has it now
+  const [associated, setAssociated] = useState<string>();
   const turn = useRef(0);
 
   const load = async () => {
@@ -250,14 +266,19 @@ export function Templates() {
       field: 'index_patterns',
       name: 'Index patterns',
       sortable: true,
-      render: (row) => (
-        <FewNames
-          names={row.templateDetail?.index_patterns ?? []}
-          title={`Index patterns in ${row.name}`}
-          column="Index pattern"
-          testId="indexPatternsTable"
-        />
-      ),
+      render: (row) => {
+        const patterns = row.templateDetail?.index_patterns ?? [];
+        return (
+          <FewNames
+            names={patterns}
+            // "in in" is the plugin's
+            title={`Index patterns in in ${row.name} (${patterns.length})`}
+            hint={`Index patterns in ${row.name} (${patterns.length})`}
+            column="Index pattern"
+            testId="indexPatternsTable"
+          />
+        );
+      },
     },
     { field: 'order', name: 'Priority', sortable: true, align: 'right', render: (row) => row.order },
     {
@@ -271,10 +292,28 @@ export function Templates() {
       name: 'Actions',
       align: 'right',
       render: (row) => (
-        <>
-          <IconButton icon="kqlSelector" label="View associated index templates" onClick={() => setAssociated(row)} />
-          <IconButton icon="trash" label="Delete template" onClick={() => setDeleting([row.name])} />
-        </>
+        <span className="ismRowActions">
+          {/* the plugin's words for the components of a template */}
+          <Tooltip content="View associated index templates">
+            <IconButton
+              icon="kqlSelector"
+              label="View associated index templates"
+              title=""
+              className="ismRowActions__info"
+              onClick={() => setAssociated(row.name)}
+            />
+          </Tooltip>
+          <Tooltip content="Delete template">
+            <IconButton
+              icon="trash"
+              variant="dangerEmpty"
+              label="Delete template"
+              title=""
+              className="ismRowActions__danger"
+              onClick={() => setDeleting([row.name])}
+            />
+          </Tooltip>
+        </span>
       ),
     },
   ];
@@ -292,31 +331,46 @@ export function Templates() {
       label: 'Delete',
       disabled: selected.length !== 1,
       testId: 'deleteAction',
-      separated: true,
       onClick: () => setDeleting(selected.map((item) => item.name)),
     },
   ];
   const filtered = query.search !== '';
+  const shown = associated ? all.find((row) => row.name === associated)?.templateDetail : undefined;
 
   return (
     <ContentPanel
-      title="Templates"
-      description={
+      bodyStyles={{ padding: 'initial' }}
+      title={
         <>
-          Index templates let you initialize new indexes or data streams with predefined mappings and settings.{' '}
-          <ExternalLink href={TEMPLATE_DOCS} />
+          <span className="ismContentPanel__title ismContentPanel__title--m">Templates</span>
+          <TitleHelp>
+            Index templates let you initialize new indexes or data streams with predefined mappings and settings.{' '}
+            <ExternalLink href={TEMPLATE_DOCS} />
+          </TitleHelp>
         </>
       }
       actions={
-        <>
-          <ActionsMenu items={items} />
-          <PanelButton text="Create template" variant="primary" icon="plus" to={to(ROUTES.CREATE_TEMPLATE)} />
-        </>
+        <ContentPanelActions
+          actions={[
+            { text: '', children: <ActionsMenu items={items} size="m" /> },
+            {
+              text: 'Create template',
+              buttonProps: { variant: 'primary', icon: 'plus', onClick: () => go(ROUTES.CREATE_TEMPLATE) },
+            },
+          ]}
+        />
       }
     >
-      <SearchRow search={query.search} onSearch={(search) => setQuery({ search, from: 0 })} />
-      <div data-test-subj="templatesTable">
+      <SearchRow
+        className="ismIndexControls"
+        search={query.search}
+        onSearch={(search) => setQuery({ search, from: 0 })}
+        placeholder="Search..."
+      />
+      <hr className="ismContentPanel__rule" />
+      <div className="ismTemplatesTable" data-test-subj="templatesTable">
         <Table
+          fixed
           columns={columns}
           rows={rows}
           total={all.length}
@@ -327,32 +381,29 @@ export function Templates() {
           onSelect={setSelected}
           loading={loading}
           empty={
-            <div className="ismEmpty">
-              <p>
-                {filtered
+            <ListEmpty
+              text={
+                filtered
                   ? 'There are no templates matching your applied filters. Reset your filters to view your templates.'
-                  : 'You have no templates.'}
-              </p>
+                  : 'You have no templates.'
+              }
+            >
               {filtered ? (
-                <Button variant="primary" size="s" onClick={() => setQuery({ search: '' })}>
+                <Button variant="primary" onClick={() => setQuery({ search: '' })}>
                   Reset filters
                 </Button>
               ) : (
-                <Button variant="primary" size="s" icon="plus" to={to(ROUTES.CREATE_TEMPLATE)}>
+                <Button variant="primary" icon="plus" onClick={() => go(ROUTES.CREATE_TEMPLATE)}>
                   Create template
                 </Button>
               )}
-            </div>
+            </ListEmpty>
           }
         />
       </div>
       {deleting && <DeleteTemplateModal names={deleting} onClose={() => setDeleting(undefined)} onDelete={load} />}
-      {associated?.templateDetail && (
-        <AssociatedComponentsModal
-          template={associated.templateDetail}
-          onClose={() => setAssociated(undefined)}
-          onUnlink={load}
-        />
+      {shown && (
+        <AssociatedComponents template={shown} onClose={() => setAssociated(undefined)} onUnlink={() => void load()} />
       )}
     </ContentPanel>
   );
@@ -634,7 +685,7 @@ export function ComposableTemplates() {
   const filtered = query.search !== '' || types.length > 0;
 
   return (
-    <ContentPanel
+    <OldContentPanel
       title="Component templates"
       description={
         <>
@@ -714,6 +765,6 @@ export function ComposableTemplates() {
           onUnlink={load}
         />
       )}
-    </ContentPanel>
+    </OldContentPanel>
   );
 }
