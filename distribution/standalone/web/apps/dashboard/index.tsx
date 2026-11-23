@@ -2,7 +2,7 @@
 
 /* Dashboards: the list of them, and one of them on screen, looked at or edited. */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, EmptyPrompt, Link, Loading } from '../../components/basic';
 import { ConfirmModal, ContextMenu, Flyout, Popover } from '../../components/overlay';
 import type { TimeRange } from '../../lib/dates';
@@ -15,7 +15,7 @@ import { services } from '../../services';
 import { errorMessage } from '../../services/http';
 import type { SavedObject } from '../../services/saved_objects';
 import { TopNav, type TopNavItem } from '../../shell/chrome';
-import { isPinned, splitFilters } from '../../shell/filter_bar';
+import { FilterBar, isPinned, splitFilters } from '../../shell/filter_bar';
 import { Inspector } from '../../shell/inspect';
 import { Listing, ListingEmpty, type ListingColumn } from '../../shell/listing';
 import { defaultQueryLanguage } from '../../shell/query_bar';
@@ -41,6 +41,7 @@ import { DashboardGrid } from './grid';
 import {
   DEFAULT_PANEL,
   createNewState,
+  dashboardBars,
   dashboardFromSavedObject,
   dashboardQuery,
   dashboardToSavedObject,
@@ -49,6 +50,7 @@ import {
   handedPanel,
   layoutsDiffer,
   newPanelIndex,
+  openedEmbedded,
   orderAsOriginal,
   panelsDiffer,
   panelsFromUrl,
@@ -71,6 +73,10 @@ import type { PanelAction } from './panel_menu';
 import '../../styles/dashboard.css';
 
 const BASE = '/app/dashboards';
+
+// The header stays hidden while a page opened to be embedded in another is open, as the
+// original's: what the dashboard shows over its panels then follows from it
+const HEADER_SHOWN = !openedEmbedded(window.location.hash);
 
 const FINDER_TYPES: PanelFinderType[] = [
   { type: 'visualization', name: 'Visualization', icon: 'visualize' },
@@ -711,12 +717,27 @@ function DashboardPage({ savedId }: { savedId?: string }) {
   const inspected = dialog?.kind === 'inspect' ? panelOf(dialog.panel) : undefined;
   const renamed = dialog?.kind === 'rename' ? panelOf(dialog.panel) : undefined;
   const replaced = dialog?.kind === 'replace' ? panelOf(dialog.panel) : undefined;
+  const bars = dashboardBars(location.hashParams, {
+    headerShown: HEADER_SHOWN,
+    fullScreen,
+    hasFilters: appFilters.some((filter) => !isPinned(filter)),
+  });
 
   return (
     <div className={`dshPage${fullScreen ? ' dshPage--fullScreen' : ''}`} data-test-subj="dashboardViewport">
-      {!fullScreen && <TopNav items={navItems} />}
-      {!fullScreen && (
+      {bars.topMenu && (HEADER_SHOWN ? <TopNav items={navItems} /> : <InlineTopNav items={navItems} />)}
+      {!bars.queryInput && !bars.datePicker ? (
+        bars.filterBar && (
+          // The filters alone, without the row of the query and the time, as the original's bar has them
+          <div className="shlSearchBar" data-test-subj="globalQueryBar">
+            <FilterBar filters={filters} onChange={setFilters} indexPatterns={patterns} />
+          </div>
+        )
+      ) : (
         <SearchBar
+          showQuery={bars.queryInput}
+          showTime={bars.datePicker}
+          showFilters={bars.filterBar}
           indexPatterns={patterns}
           query={query}
           onQuerySubmit={(next) => {
@@ -875,6 +896,31 @@ function DashboardPage({ savedId }: { savedId?: string }) {
 }
 
 const NO_PANELS: PanelState[] = [];
+
+/** The dashboard's menu in the page, where the original's goes when there is no header to hold it */
+function InlineTopNav({ items }: { items: TopNavItem[] }) {
+  return (
+    <div className="dshTopNav" data-test-subj="top-nav">
+      {items.map((item) => {
+        const button = (
+          <Button
+            key={item.id}
+            variant={item.emphasize ? 'default' : 'empty'}
+            icon={item.icon}
+            onClick={item.onClick}
+            to={item.to}
+            disabled={item.disabled}
+            title={item.title}
+            testId={item.testId ?? `topNav-${item.id}`}
+          >
+            {item.label}
+          </Button>
+        );
+        return item.wrap ? <Fragment key={item.id}>{item.wrap(button)}</Fragment> : button;
+      })}
+    </div>
+  );
+}
 
 /** The original's "Create new" of the "Add panels" flyout: a button and the kinds it creates */
 function CreateNewMenu({ onCreate }: { onCreate: () => void }) {

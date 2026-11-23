@@ -8,6 +8,7 @@ import {
   cellUnder,
   compact,
   createNewState,
+  dashboardBars,
   dashboardFromSavedObject,
   dashboardToSavedObject,
   editorStateFor,
@@ -19,6 +20,7 @@ import {
   moveItem,
   newPanelIndex,
   offersInspector,
+  openedEmbedded,
   orderAsOriginal,
   panelTitle,
   panelTitleHidden,
@@ -37,6 +39,7 @@ import {
   timeAsSaved,
   withHandedPanel,
   type Dashboard,
+  type DashboardBars,
   type GridItem,
   type PanelState,
 } from '../../web/apps/dashboard/model';
@@ -728,6 +731,44 @@ describe("a panel's title", () => {
   });
 });
 
+// As OpenSearch Dashboards 3.9.0 shows them, measured on a page opened afresh with each address
+describe('the bar over a dashboard', () => {
+  const page = { headerShown: true, fullScreen: false, hasFilters: false };
+  const embedded = { ...page, headerShown: false };
+  const shown = (bars: DashboardBars) =>
+    Object.entries(bars)
+      .filter(([, visible]) => visible)
+      .map(([part]) => part);
+  const all = ['topMenu', 'queryInput', 'datePicker', 'filterBar'];
+
+  it('shows every part under the header, whatever the address asks for', () => {
+    assert.deepEqual(shown(dashboardBars({}, page)), all);
+    assert.deepEqual(shown(dashboardBars({ 'show-top-menu': 'false', 'hide-filter-bar': 'true' }, page)), all);
+  });
+
+  it('shows only the filters in a page embedded in another, unless its address asks for more', () => {
+    assert.deepEqual(shown(dashboardBars({ embed: 'true' }, embedded)), ['filterBar']);
+    assert.deepEqual(shown(dashboardBars({ embed: 'true', 'show-top-menu': 'true' }, embedded)), ['topMenu', 'filterBar']);
+    assert.deepEqual(shown(dashboardBars({ embed: 'true', 'show-query-input': 'true' }, embedded)), ['queryInput', 'filterBar']);
+    assert.deepEqual(shown(dashboardBars({ embed: 'true', 'show-time-filter': 'true' }, embedded)), ['datePicker', 'filterBar']);
+    assert.deepEqual(shown(dashboardBars({ embed: 'true', 'hide-filter-bar': 'true' }, embedded)), []);
+    // Any value asks, "false" too; none does not
+    assert.deepEqual(shown(dashboardBars({ embed: 'false', 'show-query-input': 'true' }, embedded)), ['queryInput', 'filterBar']);
+    assert.deepEqual(shown(dashboardBars({ embed: '', 'show-top-menu': 'true' }, embedded)), ['filterBar']);
+  });
+
+  it('keeps only the filters in full screen, and only when the dashboard has some of its own', () => {
+    assert.deepEqual(shown(dashboardBars({}, { ...page, fullScreen: true })), []);
+    assert.deepEqual(shown(dashboardBars({}, { ...page, fullScreen: true, hasFilters: true })), ['filterBar']);
+    assert.deepEqual(shown(dashboardBars({ embed: 'true', 'show-top-menu': 'true', 'show-time-filter': 'true' }, { ...embedded, fullScreen: true })), []);
+  });
+
+  it('takes the page as embedded when it was opened with embed in its address, with a value or not', () => {
+    assert.equal(openedEmbedded('#/view/d1?embed=true&_g=()'), true);
+    assert.equal(openedEmbedded('#/view/d1?embed=&_g=()'), true);
+    assert.equal(openedEmbedded('#/view/d1?_g=()'), false);
+  });
+});
 
 describe('the round trip to an editor', () => {
   const container = { containerName: 'My dashboard', containerId: 'mine' };

@@ -20,6 +20,32 @@
   margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) 0;
 }
 
+/* The menu in the page of one embedded in another, which has no header: the header's links at
+   the top left, as the original draws them there */
+.dshTopNav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: calc(-1 * var(--space-2)) 0 0 calc(-1 * var(--space-1));
+}
+
+.dshTopNav .atlButton--empty {
+  height: var(--space-6);
+  padding: 0 9px;
+}
+
+.dshTopNav > .atlButton:not(.atlButton--empty) {
+  gap: var(--space-2);
+  min-width: 112px;
+  border: 1px solid transparent;
+}
+
+/* ...and the bar under it follows at once */
+.dshTopNav + .shlSearchBar {
+  padding-top: 0;
+}
+
 .dshGrid {
   position: relative;
   width: 100%;

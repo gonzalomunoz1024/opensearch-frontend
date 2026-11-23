@@ -9,7 +9,7 @@
 import type { SavedObjectReference } from '../../../common/saved_objects';
 import { parseSearchSource, serializeSearchSource } from '../../lib/search_source';
 import type { Filter, Query, RefreshInterval } from '../../lib/types';
-import { encodeState } from '../../lib/url';
+import { encodeState, parseHash } from '../../lib/url';
 import { visType as visTypeOf } from '../../lib/vis';
 
 export const GRID_COLUMNS = 48;
@@ -708,6 +708,45 @@ export function panelTitle(panel: Pick<PanelState, 'embeddableConfig' | 'title'>
 /** Whether a panel's title is hidden: the original hides it when the dashboard or the panel itself does */
 export const panelTitleHidden = (panel: Pick<PanelState, 'embeddableConfig'>, dashboardHides: boolean): boolean =>
   dashboardHides || Boolean(panel.embeddableConfig.hidePanelTitles);
+
+// --- The bar over a dashboard ------------------------------------------------------------------------
+
+/** The parts of the bar over a dashboard that are shown */
+export interface DashboardBars {
+  topMenu: boolean;
+  queryInput: boolean;
+  datePicker: boolean;
+  filterBar: boolean;
+}
+
+/**
+ * Whether the page was opened to be embedded in another: `embed` in its address, which hides the
+ * original's header for as long as the page stays open (its chrome service)
+ */
+export const openedEmbedded = (hash: string): boolean => 'embed' in parseHash(hash).hashParams;
+
+/**
+ * The parts of the bar over a dashboard, as the original's top nav shows them
+ * (dashboard_top_nav.tsx). Without the header (a page embedded in another), only the filters
+ * stay, unless the address asks for the menu (`show-top-menu`), the query (`show-query-input`)
+ * or the time (`show-time-filter`), or takes the filters away (`hide-filter-bar`): those count
+ * with `embed` and a value, as `embed` itself does here. In full screen only the filters stay,
+ * and only when the dashboard has some of its own.
+ */
+export function dashboardBars(
+  params: Readonly<Record<string, string | undefined>>,
+  page: { headerShown: boolean; fullScreen: boolean; hasFilters: boolean }
+): DashboardBars {
+  const embedded = Boolean(params.embed);
+  const asked = (param: string) => embedded && Boolean(params[param]);
+  const shown = (force: boolean) => (force || page.headerShown) && !page.fullScreen;
+  return {
+    topMenu: shown(asked('show-top-menu')),
+    queryInput: shown(asked('show-query-input')),
+    datePicker: shown(asked('show-time-filter')),
+    filterBar: !asked('hide-filter-bar') && (page.hasFilters || !page.fullScreen),
+  };
+}
 
 // --- The round trip to an editor -----------------------------------------------------------------
 
