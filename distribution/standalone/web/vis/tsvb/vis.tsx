@@ -20,6 +20,8 @@ import {
   fetchTsvbTable,
   TooMuchDataError,
   isSortable,
+  metricBackground,
+  metricRule,
   ruleFor,
   seriesFormatter,
   splitParts,
@@ -293,13 +295,6 @@ function useClientSize<T extends HTMLElement>(): [(element: T | null) => void, B
 
 /** The style of a box laid over a panel, hidden until both are measured */
 const placed = (placement: Placement | null): CSSProperties => (placement ? placedStyle(placement) : { visibility: 'hidden' });
-
-/** The colour rule of a metric's panel: the last one its first series' last value meets, 0 without one */
-const metricRule = (params: TsvbParams, data: TsvbData) => ruleFor(params.background_color_rules, data.series[0]?.last ?? 0);
-
-/** The background of a metric's panel: that of its colour rule, or the panel's own */
-const metricBackground = (params: TsvbParams, data: TsvbData): string | undefined =>
-  metricRule(params, data)?.background_color || params.background_color || undefined;
 
 /**
  * A metric as the product draws it: its label at half the size of its value, a second series at

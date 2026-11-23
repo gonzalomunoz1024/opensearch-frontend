@@ -445,6 +445,18 @@ export function ruleFor(rules: ColorRule[] | undefined, value: number | null): C
   return found;
 }
 
+/** The colour rule of a metric's panel: the last one its first series' last value meets, 0 without one */
+export const metricRule = (params: TsvbParams, data: Pick<TsvbData, 'series'>): ColorRule | undefined =>
+  ruleFor(params.background_color_rules, data.series[0]?.last ?? 0);
+
+/**
+ * The background of a metric's panel: its colour rule's, and no other. The product's metric does
+ * not take the panel's background colour, which its options do not offer and which a panel
+ * switched from another type keeps.
+ */
+export const metricBackground = (params: TsvbParams, data: Pick<TsvbData, 'series'>): string | undefined =>
+  metricRule(params, data)?.background_color || undefined;
+
 async function patternFor(title: string): Promise<IndexPattern | undefined> {
   try {
     const all = await services.indexPatterns.list();
