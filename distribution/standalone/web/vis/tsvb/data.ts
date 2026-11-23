@@ -364,6 +364,9 @@ const METRIC_NAMES: Record<string, string> = {
   sum_of_squares_bucket: 'Overall Sum of Sq.',
 };
 
+// The metrics named after the metric they are worked out from, as the product's calculateLabel names them
+const OF_METRIC = ['cumulative_sum', 'derivative', 'moving_average', 'avg_bucket', 'sum_bucket', 'min_bucket', 'max_bucket', 'std_deviation_bucket', 'variance_bucket', 'sum_of_squares_bucket', 'serial_diff', 'positive_only'];
+
 /** The name a series goes by when it was given none: its last metric, as TSVB words it */
 export function metricLabel(series: TsvbSeries, metric: TsvbMetric | undefined = series.metrics?.[series.metrics.length - 1]): string {
   if (!metric) return 'Unknown';
@@ -372,10 +375,15 @@ export function metricLabel(series: TsvbSeries, metric: TsvbMetric | undefined =
   if (metric.type === 'math') return 'Math';
   if (metric.type === 'series_agg') return `Series Agg (${String((metric as { function?: string }).function ?? 'sum')})`;
   if (metric.type === 'filter_ratio') return 'Filter Ratio';
+  if (metric.type === 'positive_rate') return `Positive Rate of ${metric.field ?? ''}`;
   if (metric.type === 'static') return `Static Value of ${String((metric as { value?: unknown }).value ?? '')}`;
   const name = METRIC_NAMES[metric.type ?? ''] ?? metric.type ?? 'Unknown';
-  const target = (series.metrics ?? []).find((other) => other.id === metric.field);
-  return `${name} of ${target ? metricLabel(series, target) : (metric.field ?? '')}`;
+  if (!OF_METRIC.includes(metric.type)) return `${name} of ${metric.field ?? ''}`;
+  // The metric it is worked out from, which a percentile's "<id>[50.0]" names by its id first
+  const field = metric.field ?? '';
+  const target = (series.metrics ?? []).find((other) => field.startsWith(other.id));
+  const percentile = target?.type === 'percentile' ? /\[([0-9.]+)\]$/.exec(field) : null;
+  return `${name} of ${target ? metricLabel(series, target) : 'Unknown'}${percentile ? ` (${percentile[1]})` : ''}`;
 }
 
 /**
