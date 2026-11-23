@@ -423,15 +423,21 @@ interface CreatedObject {
 
 async function createSavedObjects(
   repository: SavedObjectsRepository,
-  options: { objects: ImportObject[]; accumulatedErrors: ImportError[]; importIdMap: IdMap; overwrite?: boolean }
+  options: {
+    objects: ImportObject[];
+    accumulatedErrors: ImportError[];
+    importIdMap: IdMap;
+    overwrite?: boolean;
+    workspaces?: string[];
+  }
 ): Promise<{ createdObjects: CreatedObject[]; errors: ImportError[] }> {
-  const { objects, accumulatedErrors, importIdMap, overwrite } = options;
+  const { objects, accumulatedErrors, importIdMap, overwrite, workspaces } = options;
   const errorSet = new Set(accumulatedErrors.map(key));
   const filtered = objects.filter((object) => !errorSet.has(key(object)));
   if (filtered.length === 0) return { createdObjects: [], errors: [] };
 
   const originals = new Map(filtered.map((object) => [key(object), object]));
-  const toCreate = filtered.map(({ version: _version, ...object }) => {
+  const toCreate = filtered.map(({ version: _version, ...object }): ImportObject => {
     const references = object.references?.map((reference) => {
       const entry = importIdMap.get(key(reference));
       return entry?.id ? { ...reference, id: entry.id } : reference;
@@ -457,9 +463,13 @@ async function createSavedObjects(
           references: object.references,
           migrationVersion: object.migrationVersion,
           originId: object.originId,
+          // The original hands the whole line on, and its bulk create reads these from it too
+          ...(object.initialNamespaces !== undefined ? { initialNamespaces: object.initialNamespaces } : {}),
+          ...(object.workspaces !== undefined ? { workspaces: object.workspaces } : {}),
+          ...(object.permissions !== undefined ? { permissions: object.permissions } : {}),
         })
       ),
-      { overwrite }
+      { overwrite, ...(workspaces ? { workspaces } : {}) }
     )) as CreatedObject[];
   }
 
@@ -514,6 +524,8 @@ export interface ImportOptions {
   limit: number;
   /** Whether the person may change advanced settings, which a `config` object is */
   canImportConfig: boolean;
+  /** Given to each object the import makes new, as in the original (`?workspaces=`) */
+  workspaces?: string[];
 }
 
 /** `POST /api/saved_objects/_import`: the objects of a file, written unless something is wrong */
@@ -562,6 +574,7 @@ export async function importObjects(
     accumulatedErrors: errors,
     importIdMap,
     overwrite: options.overwrite,
+    ...(options.workspaces ? { workspaces: options.workspaces } : {}),
   });
   errors = [...errors, ...created.errors];
 
@@ -592,7 +605,7 @@ export async function resolveImportErrors(
   repository: SavedObjectsRepository,
   lines: unknown[],
   retries: ImportRetry[],
-  options: { createNewCopies: boolean; limit: number; canImportConfig: boolean }
+  options: { createNewCopies: boolean; limit: number; canImportConfig: boolean; workspaces?: string[] }
 ): Promise<ImportResponse> {
   validateRetries(retries);
   const retryKeys = new Set(retries.map(key));
@@ -647,7 +660,13 @@ export async function resolveImportErrors(
   let successResults: ImportSuccess[] = [];
   const accumulatedErrors = [...errors];
   const create = async (list: ImportObject[], overwrite?: boolean) => {
-    const created = await createSavedObjects(repository, { objects: list, accumulatedErrors, importIdMap, overwrite });
+    const created = await createSavedObjects(repository, {
+      objects: list,
+      accumulatedErrors,
+      importIdMap,
+      overwrite,
+      ...(options.workspaces ? { workspaces: options.workspaces } : {}),
+    });
     errors = [...errors, ...created.errors];
     successCount += created.createdObjects.length;
     successResults = [
