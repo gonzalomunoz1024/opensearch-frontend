@@ -32,6 +32,18 @@ interface SettingsAnswer {
   settings: Record<string, { userValue?: unknown; isOverridden?: boolean }>;
 }
 
+/**
+ * The original's client has a settings API, each with a queue of its own, for a write without a
+ * scope (`default`) and for each scope a write names. The advanced settings page names one.
+ */
+type Lane = 'default' | 'global' | 'dashboard_admin';
+
+/** Changes waiting for the request on their way to be answered, and who waits for them */
+interface Batch {
+  values: Record<string, unknown>;
+  waiting: Array<{ resolve: (answer: SettingsAnswer) => void; reject: (error: unknown) => void }>;
+}
+
 /** The type of a setting: the one it is registered with, else that of its default or value */
 export function settingType(definition: SettingDefinition | undefined, value?: unknown): string {
   if (definition?.type) return definition.type;
@@ -75,6 +87,7 @@ export class UiSettingsClient {
   private browser: Record<string, { userValue?: unknown }>;
   private readonly listeners = new Set<() => void>();
   private version = 0;
+  private readonly lanes = new Map<Lane, { pending?: Batch; sending: boolean }>();
 
   constructor(
     private readonly http: Http,
@@ -200,16 +213,10 @@ export class UiSettingsClient {
     const toServer: Record<string, unknown> = {};
     let local = false;
     for (const [key, value] of Object.entries(changes)) {
-      if (this.isOverridden(key)) {
-        throw new Error(`Unable to update "${key}" because its value is overridden by the OpenSearch Dashboards server`);
-      }
+      this.assertUpdateAllowed(key);
       if (this.prefersBrowser(key)) {
         local = true;
-        const values = { ...readBrowserValues() };
-        if (value === null || value === undefined) delete values[key];
-        else values[key] = { userValue: value };
-        writeBrowserValues(values);
-        this.browser = values;
+        this.keepInBrowser(key, value);
       } else {
         toServer[key] = value;
       }
@@ -224,26 +231,51 @@ export class UiSettingsClient {
       this.changed();
     }
   }
+
   /**
-   * One setting, as the original's client sets one (its `update`). A value that is already the
+   * One setting, as the original's client sets one without a scope. A value that is already the
    * one held is not sent again, so a second click while the first is on its way asks the server
-   * nothing. Another value is held here at once, for the page to show, and put back as it was
-   * when the server refuses it.
+   * nothing.
    */
-  async set(key: string, value: unknown) {
+  set(key: string, value: unknown) {
+    return this.update(key, value, 'default', true);
+  }
+  remove(key: string) {
+    return this.set(key, null);
+  }
+
+  /**
+   * One setting as the advanced settings page writes it: in the scope it is kept in, which the
+   * original's page always names, so the value is sent even when it is the one held
+   */
+  save(key: string, value: unknown) {
+    const lane = settingScopes(this.definitions[key]).includes('dashboard_admin') ? 'dashboard_admin' : 'global';
+    return this.update(key, value, lane, false);
+  }
+
+  private assertUpdateAllowed(key: string) {
     if (this.isOverridden(key)) {
       throw new Error(`Unable to update "${key}" because its value is overridden by the OpenSearch Dashboards server`);
     }
-    if (this.userValue(key) === value) return;
+  }
+
+  /**
+   * As the original's client `update`: the value is held here at once, for the page to show, then
+   * sent; when the server refuses it, the value held before is put back and the error given
+   */
+  private async update(key: string, value: unknown, lane: Lane, skipUnchanged: boolean) {
+    this.assertUpdateAllowed(key);
+    if (skipUnchanged && this.userValue(key) === value) return;
     if (this.prefersBrowser(key)) {
-      await this.setMany({ [key]: value });
+      this.keepInBrowser(key, value);
+      this.changed();
       return;
     }
     const had = Object.hasOwn(this.user, key);
     const before = this.user[key];
     this.hold(key, value);
     try {
-      await this.setMany({ [key]: value });
+      this.apply(await this.batchSet(lane, key, value));
     } catch (error) {
       const user = { ...this.user };
       if (had) user[key] = before;
@@ -253,8 +285,48 @@ export class UiSettingsClient {
       throw error;
     }
   }
-  remove(key: string) {
-    return this.set(key, null);
+
+  /**
+   * As the original's `batchSet`: a change is sent at once when nothing of its queue is on its
+   * way; else it waits, and the changes that waited go together when the request is answered
+   */
+  private batchSet(name: Lane, key: string, value: unknown): Promise<SettingsAnswer> {
+    const lane = this.lanes.get(name) ?? { sending: false };
+    this.lanes.set(name, lane);
+    return new Promise<SettingsAnswer>((resolve, reject) => {
+      const batch = lane.pending ?? { values: {}, waiting: [] };
+      batch.values = { ...batch.values, [key]: value };
+      batch.waiting.push({ resolve, reject });
+      lane.pending = batch;
+      void this.flush(lane);
+    });
+  }
+
+  private async flush(lane: { pending?: Batch; sending: boolean }) {
+    const batch = lane.pending;
+    if (!batch || lane.sending) return;
+    lane.pending = undefined;
+    lane.sending = true;
+    try {
+      const answer = await this.http.post<SettingsAnswer>('/api/opensearch-dashboards/settings', {
+        body: { changes: batch.values },
+      });
+      for (const waiting of batch.waiting) waiting.resolve(answer);
+    } catch (error) {
+      for (const waiting of batch.waiting) waiting.reject(error);
+    } finally {
+      lane.sending = false;
+      void this.flush(lane);
+    }
+  }
+
+  /** Dark mode and the theme version, while users choose the look themselves */
+  private keepInBrowser(key: string, value: unknown) {
+    const values = { ...readBrowserValues() };
+    if (value === null || value === undefined) delete values[key];
+    else values[key] = { userValue: value };
+    writeBrowserValues(values);
+    this.browser = values;
   }
 
   /** A value held before the server has it, as the original's `setLocally`: JSON as its text */

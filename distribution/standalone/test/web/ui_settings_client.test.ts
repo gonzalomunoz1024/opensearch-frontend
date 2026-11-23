@@ -8,11 +8,12 @@ import { UiSettingsClient } from '../../web/services/ui_settings';
 /**
  * The settings route of the server, which stores what it is sent; while `holding`, it answers
  * only once it is let go, so that a request can be on its way while the page goes on. It can also
- * refuse a request, as the server refuses a value its schema does not take.
+ * refuse a request, as the server refuses one with a value its schema does not take: all of it.
  */
 class SettingsRoute extends Http {
   readonly posted: Array<Record<string, unknown>> = [];
-  refuse?: string;
+  /** The message a request is refused with, if it is */
+  refuse?: (changes: Record<string, unknown>) => string | undefined;
   holding = false;
   private waiting: Array<() => void> = [];
 
@@ -33,7 +34,8 @@ class SettingsRoute extends Http {
       const { changes } = options.body as { changes: Record<string, unknown> };
       this.posted.push(changes);
       if (this.holding) await new Promise<void>((resolve) => this.waiting.push(resolve));
-      if (this.refuse) throw new HttpFetchError(400, this.refuse, undefined, 'Bad Request');
+      const refused = this.refuse?.(changes);
+      if (refused !== undefined) throw new HttpFetchError(400, refused, undefined, 'Bad Request');
       for (const [key, value] of Object.entries(changes)) {
         if (value === null) delete this.stored[key];
         else this.stored[key] = value;
@@ -96,6 +98,10 @@ describe('a setting set in the browser, as the original sets one', () => {
     assert.deepEqual(client.get('visualization:colorMapping'), { error: '#ff0000' });
     const again = client.set('visualization:colorMapping', '{"error":"#ff0000"}');
     await settle();
+    // The second waits for the first to be answered, as the original's queue has it wait
+    assert.deepEqual(route.posted, [{ defaultRoute: '/app/discover' }]);
+    route.release();
+    await settle();
     route.release();
     await Promise.all([saving, mapping, again]);
     assert.deepEqual(route.posted, [
@@ -108,7 +114,7 @@ describe('a setting set in the browser, as the original sets one', () => {
     const route = new SettingsRoute({ 'csv:separator': ';' });
     const client = new UiSettingsClient(route, { 'csv:separator': ';' }, {}, {});
     route.holding = true;
-    route.refuse = '[validation [defaultRoute]]: Must be a relative URL.';
+    route.refuse = () => '[validation [defaultRoute]]: Must be a relative URL.';
     const saving = client.set('defaultRoute', 'app/home');
     assert.equal(client.get('defaultRoute'), 'app/home');
     await settle();
@@ -139,5 +145,77 @@ describe('a setting set in the browser, as the original sets one', () => {
     const refused = await refusal(client.set('defaultRoute', '/app/home'));
     assert.match(refused ?? '', /overridden by the OpenSearch Dashboards server/);
     assert.deepEqual(route.posted, []);
+  });
+});
+
+describe('settings saved by the advanced settings page, as the original saves them', () => {
+  const RELATIVE = '[validation [defaultRoute]]: Must be a relative URL.';
+
+  it('sends the first alone and the others together, so only the request refused fails', async () => {
+    const route = new SettingsRoute();
+    route.holding = true;
+    route.refuse = (changes) => ('defaultRoute' in changes ? RELATIVE : undefined);
+    const client = new UiSettingsClient(route, {}, {}, {});
+    // The page saves each change at once, in the order they were made
+    const saves = [
+      client.save('csv:separator', ';'),
+      client.save('defaultRoute', 'app/home'),
+      client.save('csv:quoteValues', false),
+    ].map((save) => refusal(save));
+    await settle();
+    assert.deepEqual(route.posted, [{ 'csv:separator': ';' }]);
+    route.release();
+    await settle();
+    assert.deepEqual(route.posted, [
+      { 'csv:separator': ';' },
+      { defaultRoute: 'app/home', 'csv:quoteValues': false },
+    ]);
+    route.release();
+    assert.deepEqual(await Promise.all(saves), [undefined, RELATIVE, RELATIVE]);
+    // What the server took is saved; what it refused is put back
+    assert.equal(client.get('csv:separator'), ';');
+    assert.equal(client.storedValue('defaultRoute'), undefined);
+    assert.equal(client.get('csv:quoteValues'), true);
+    assert.deepEqual(client.storedKeys(), ['csv:separator']);
+  });
+
+  it('sends a value even when it is the one held, as the page names a scope', async () => {
+    const route = new SettingsRoute({ 'csv:separator': ';' });
+    const client = new UiSettingsClient(route, { 'csv:separator': ';' }, {}, {});
+    await client.save('csv:separator', ';');
+    assert.deepEqual(route.posted, [{ 'csv:separator': ';' }]);
+  });
+
+  it('writes a setting of the administrators in a queue of its own', async () => {
+    const route = new SettingsRoute();
+    route.holding = true;
+    const client = new UiSettingsClient(route, {}, {}, {});
+    const saves = [
+      client.save('csv:separator', ';'),
+      client.save('enableAIFeatures', false),
+      client.save('dateFormat', 'YYYY'),
+    ];
+    await settle();
+    assert.deepEqual(route.posted, [{ 'csv:separator': ';' }, { enableAIFeatures: false }]);
+    route.release();
+    await settle();
+    route.release();
+    await Promise.all(saves);
+    assert.deepEqual(route.posted, [
+      { 'csv:separator': ';' },
+      { enableAIFeatures: false },
+      { dateFormat: 'YYYY' },
+    ]);
+  });
+
+  it('keeps the writes of the page and those of other pages in queues of their own', async () => {
+    const route = new SettingsRoute();
+    route.holding = true;
+    const client = new UiSettingsClient(route, {}, {}, {});
+    const writes = [client.set('defaultRoute', '/app/discover'), client.save('csv:separator', ';')];
+    await settle();
+    assert.deepEqual(route.posted, [{ defaultRoute: '/app/discover' }, { 'csv:separator': ';' }]);
+    route.release();
+    await Promise.all(writes);
   });
 });
