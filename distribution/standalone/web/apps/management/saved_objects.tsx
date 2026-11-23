@@ -28,21 +28,29 @@ interface TypeInfo {
   /** The name of the type in the address of its page here */
   service: string;
   inApp?: (id: string) => string;
+  /** False for the types the original has no page to inspect: settings, saved queries, short URLs */
+  inspect?: false;
 }
 
 const TYPES: Record<string, TypeInfo> = {
-  config: { icon: 'gear', service: 'config', inApp: () => '/app/management/opensearch-dashboards/settings' },
+  config: { icon: 'gear', service: 'config', inApp: () => '/app/management/opensearch-dashboards/settings', inspect: false },
   dashboard: { icon: 'dashboard', service: 'savedDashboards', inApp: (id) => `/app/dashboards#/view/${encodeURIComponent(id)}` },
   'index-pattern': {
     icon: 'index',
     service: 'indexPatterns',
     inApp: (id) => `/app/management/opensearch-dashboards/indexPatterns/patterns/${encodeURIComponent(id)}`,
   },
-  query: { icon: 'search', service: 'savedQueries' },
+  // A saved query opens in Discover, which loads it
+  query: {
+    icon: 'search',
+    service: 'savedQueries',
+    inApp: (id) => `/app/discover#/?_a=(savedQuery:'${encodeURIComponent(id)}')`,
+    inspect: false,
+  },
   search: { icon: 'discover', service: 'savedSearches', inApp: (id) => `/app/discover#/view/${encodeURIComponent(id)}` },
-  url: { icon: 'link', service: 'url' },
+  url: { icon: 'link', service: 'url', inspect: false },
   visualization: { icon: 'visualize', service: 'savedVisualizations', inApp: (id) => `/app/visualize#/edit/${encodeURIComponent(id)}` },
-  'visualization-visbuilder': { icon: 'visualize', service: 'savedVisBuilder' },
+  'visualization-visbuilder': { icon: 'visualize', service: 'savedVisBuilder', inApp: (id) => `/app/vis-builder/edit/${encodeURIComponent(id)}` },
 };
 const ALL_TYPES = Object.keys(TYPES);
 
@@ -51,14 +59,29 @@ const keyOf = (object: { type: string; id: string }) => `${object.type}:${object
 
 export function titleOf(object: { type: string; id: string; attributes?: Record<string, unknown> }): string {
   if (object.type === 'config') return `Advanced Settings [${object.id}]`;
+  // A short URL is named by the address that opens it
+  if (object.type === 'url') return `/goto/${encodeURIComponent(object.id)}`;
   const title = object.attributes?.title ?? object.attributes?.name;
   return typeof title === 'string' && title ? title : `${object.type} [id=${object.id}]`;
 }
 
 const inspectPath = (object: { type: string; id: string }) =>
   `${ROOT}/${TYPES[object.type]?.service ?? object.type}/${encodeURIComponent(object.id)}`;
-const inAppPath = (object: { type: string; id: string }) => TYPES[object.type]?.inApp?.(object.id) ?? inspectPath(object);
+const canInspect = (type: string) => TYPES[type]?.inspect !== false;
+/** Where the title of an object leads: its page, or its inspection; nowhere for a short URL */
+const inAppPath = (object: { type: string; id: string }) =>
+  TYPES[object.type]?.inApp?.(object.id) ?? (canInspect(object.type) ? inspectPath(object) : undefined);
 const typeOfService = (service: string) => ALL_TYPES.find((type) => TYPES[type].service === service) ?? service;
+
+function ObjectTitle({ object, testId }: { object: { type: string; id: string; attributes?: Record<string, unknown> }; testId?: string }) {
+  const to = inAppPath(object);
+  if (to === undefined) return <span data-test-subj={testId}>{titleOf(object)}</span>;
+  return (
+    <Link to={to} testId={testId}>
+      {titleOf(object)}
+    </Link>
+  );
+}
 
 function TypeIcon({ type }: { type: string }) {
   return (
@@ -111,7 +134,8 @@ function SavedObjectsTable() {
           .find<Record<string, unknown>>({
             type: ALL_TYPES,
             search: search.trim() || undefined,
-            searchFields: ['title', 'name'],
+            // A short URL has no title: it is found by its address, as in the original
+            searchFields: ['title', 'name', 'url'],
             fields: ['title', 'name'],
             perPage: 10000,
             sortField: 'type',
@@ -161,11 +185,7 @@ function SavedObjectsTable() {
     {
       id: 'title',
       name: 'Title',
-      render: (object) => (
-        <Link to={inAppPath(object)} testId="savedObjectsTableRowTitle">
-          {titleOf(object)}
-        </Link>
-      ),
+      render: (object) => <ObjectTitle object={object} testId="savedObjectsTableRowTitle" />,
       sortValue: titleOf,
     },
     {
@@ -182,7 +202,9 @@ function SavedObjectsTable() {
       align: 'right',
       render: (object) => (
         <span className="atlRow" style={{ justifyContent: 'flex-end' }}>
-          {object.type !== 'config' && <IconButton icon="inspect" label="Inspect" size="s" to={inspectPath(object)} testId="savedObjectsTableAction-inspect" />}
+          {canInspect(object.type) && (
+            <IconButton icon="inspect" label="Inspect" size="s" to={inspectPath(object)} testId="savedObjectsTableAction-inspect" />
+          )}
           <IconButton icon="link" label="Relationships" size="s" onClick={() => setRelationsOf(object)} testId="savedObjectsTableAction-relationships" />
         </span>
       ),
@@ -418,13 +440,13 @@ function Relationships({ object, onClose }: { object: Row; onClose: () => void }
   const columns: Array<Column<Row & { relationship: string }>> = [
     { id: 'type', name: 'Type', width: 64, render: (row) => <TypeIcon type={row.type} />, sortValue: (row) => row.type },
     { id: 'relationship', name: 'Direct relationship', width: 170, render: (row) => row.relationship, sortValue: (row) => row.relationship },
-    { id: 'title', name: 'Title', render: (row) => <Link to={inAppPath(row)}>{titleOf(row)}</Link>, sortValue: titleOf },
+    { id: 'title', name: 'Title', render: (row) => <ObjectTitle object={row} />, sortValue: titleOf },
     {
       id: 'actions',
       name: 'Actions',
       width: 80,
       align: 'right',
-      render: (row) => (row.type === 'config' ? null : <IconButton icon="inspect" label="Inspect" size="s" to={inspectPath(row)} />),
+      render: (row) => (canInspect(row.type) ? <IconButton icon="inspect" label="Inspect" size="s" to={inspectPath(row)} /> : null),
     },
   ];
 

@@ -2,25 +2,35 @@
 
 /* One panel of a dashboard: its title, its menu, and the visualization or saved search in it. */
 
-import { memo, useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { ChartMessage } from '../../charts/core';
-import { IconButton, cx } from '../../components/basic';
-import { MenuButton, type MenuItem } from '../../components/overlay';
+import { Badge, IconButton, cx } from '../../components/basic';
+import { MenuButton, Tooltip, type MenuItem } from '../../components/overlay';
 import type { Table } from '../../lib/aggs';
 import { resolveTimeRange, type TimeRange } from '../../lib/dates';
 import type { RawHit } from '../../lib/docs';
 import { phraseFilter } from '../../lib/query';
 import { parseSearchSource } from '../../lib/search_source';
 import type { Filter, IndexPattern, Query } from '../../lib/types';
-import { visFromSavedObject, type UiState, type VisualizationAttributes } from '../../lib/vis';
+import { visFromSavedObject, type UiState, type Vis, type VisualizationAttributes } from '../../lib/vis';
 import { services } from '../../services';
 import { errorMessage } from '../../services/http';
 import type { SavedObject } from '../../services/saved_objects';
-import { totalOf, type RequestRecord } from '../../services/search';
+import { searchFailure, totalOf, type RequestRecord } from '../../services/search';
 import type { VisInput } from '../../vis/request';
+import type { VisFailure } from '../../vis/types';
 import type { Turn } from '../../vis/turns';
+import type { VegaDebugValues } from '../../vis/vega/debug_view';
 import { Visualization, takesTurn } from '../../vis/visualization';
 import { DocTable, type SortPair } from '../discover/doc_table';
+import {
+  VIS_BUILDER_TYPE,
+  schemaProblem,
+  visBuilderEditUrl,
+  visBuilderFromSavedObject,
+  visFromVisBuilder,
+  type VisBuilderAttributes,
+} from '../vis_builder/model';
 import { DocDetails } from '../discover/doc_viewer';
 import { buildDiscoverRequest } from '../discover/search';
 import { normalizeSort } from '../discover/sort';
@@ -34,6 +44,7 @@ export interface LoadedObject {
 export interface PanelData {
   requests: RequestRecord[];
   table?: Table;
+  vega?: VegaDebugValues;
 }
 
 interface SearchAttributes {
@@ -49,12 +60,15 @@ function SearchPanel({
   tick,
   onFilter,
   onData,
+  onError,
 }: {
   object: SavedObject<SearchAttributes>;
   input: VisInput;
   tick: number;
   onFilter?: (filters: Filter[]) => void;
   onData?: (data: PanelData) => void;
+  /** Takes a failed search, and nothing once one succeeds: the panel's "Error" badge */
+  onError?: (failure: VisFailure | undefined) => void;
 }) {
   const source = useMemo(
     () => parseSearchSource(object.attributes.kibanaSavedObjectMeta?.searchSourceJSON, object.references),
@@ -62,8 +76,12 @@ function SearchPanel({
   );
   const [indexPattern, setIndexPattern] = useState<IndexPattern>();
   const [rows, setRows] = useState<RawHit[]>();
-  const [total, setTotal] = useState(0);
+  // Unknown until a search succeeds; the original says "No results found" only for none found
+  const [total, setTotal] = useState<number>();
+  const [failed, setFailed] = useState(false);
   const [error, setError] = useState<string>();
+  const reportError = useRef(onError);
+  reportError.current = onError;
   const [sort, setSort] = useState<SortPair[]>(() => normalizeSort(object.attributes.sort));
   const columns = object.attributes.columns?.length ? object.attributes.columns : ['_source'];
 
@@ -87,15 +105,27 @@ function SearchPanel({
     if (!indexPattern) return undefined;
     const controller = new AbortController();
     const queries = [input.query, source.query].filter((query): query is Query => Boolean(query));
-    const body = buildDiscoverRequest({
-      indexPattern,
-      query: queries,
-      filters: [...input.filters, ...source.filters],
-      range: indexPattern.timeFieldName ? resolveTimeRange(input.time, { weekStart: services.weekStart() }) : undefined,
-      sort,
-      size: services.uiSettings.get<number>('discover:sampleSize', 500),
-      documentsOnly: true,
-    });
+    // A failed search keeps the rows shown last, and the panel says it failed, as the original
+    const fail = (failure: unknown) => {
+      const original = searchFailure(failure instanceof Error ? failure : new Error(String(failure)));
+      setFailed(true);
+      reportError.current?.({ message: original.message, original });
+    };
+    let body: Record<string, unknown>;
+    try {
+      body = buildDiscoverRequest({
+        indexPattern,
+        query: queries,
+        filters: [...input.filters, ...source.filters],
+        range: indexPattern.timeFieldName ? resolveTimeRange(input.time, { weekStart: services.weekStart() }) : undefined,
+        sort,
+        size: services.uiSettings.get<number>('discover:sampleSize', 500),
+        documentsOnly: true,
+      });
+    } catch (failure) {
+      fail(failure);
+      return undefined;
+    }
     const record: RequestRecord = { name: 'Data', index: indexPattern.title, body, startedAt: Date.now() };
     services.search
       .search(indexPattern.title, body, { signal: controller.signal, record })
@@ -103,10 +133,14 @@ function SearchPanel({
         setRows(response.hits.hits as RawHit[]);
         setTotal(totalOf(response));
         setError(undefined);
+        setFailed(false);
+        reportError.current?.(undefined);
         onData?.({ requests: [record] });
       })
       .catch((failure) => {
-        if ((failure as Error).name !== 'AbortError') setError(errorMessage(failure));
+        if ((failure as Error).name === 'AbortError') return;
+        onData?.({ requests: [record] });
+        fail(failure);
       });
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -120,12 +154,12 @@ function SearchPanel({
       </div>
     );
   }
-  if (!rows || !indexPattern) return null;
-  if (rows.length === 0) return <ChartMessage>No results found</ChartMessage>;
+  if (!indexPattern || (!rows && !failed)) return null;
+  if (total === 0) return <ChartMessage>No results found</ChartMessage>;
   return (
     <div className="dshSearch" data-test-subj="embeddedSavedSearchDocTable">
       <DocTable
-        rows={rows}
+        rows={rows ?? []}
         indexPattern={indexPattern}
         columns={columns}
         sort={sort}
@@ -141,7 +175,7 @@ function SearchPanel({
         }
         details={(hit) => <DocDetails hit={hit} indexPattern={indexPattern} basePath="/app/discover" />}
       />
-      {rows.length < total && (
+      {rows && total !== undefined && rows.length < total && (
         <div className="dscFooter">
           These are the first {rows.length.toLocaleString()} of {total.toLocaleString()} documents.
         </div>
@@ -172,7 +206,6 @@ export interface DashboardPanelProps {
 }
 
 const TYPE_NAMES: Record<string, string> = {
-  'visualization-visbuilder': 'VisBuilder visualizations',
   map: 'Maps',
   'observability-visualization': 'Observability visualizations',
 };
@@ -198,16 +231,27 @@ export const DashboardPanel = memo(function DashboardPanel({
 }: DashboardPanelProps) {
   const id = panel.panelIndex;
   const object = loaded?.object;
-  const vis = useMemo(
-    () => (object && panel.type === 'visualization' ? visFromSavedObject(object as unknown as SavedObject<VisualizationAttributes>) : undefined),
-    [object, panel.type]
-  );
-  // What was changed on the panel lies over what the visualization was saved with
+  const visBuilder = panel.type === VIS_BUILDER_TYPE;
+  // A VisBuilder object is drawn as the visualization of Visualize it stands for
+  const { vis, visError } = useMemo<{ vis?: Vis; visError?: string }>(() => {
+    if (!object) return {};
+    if (panel.type === 'visualization') return { vis: visFromSavedObject(object as unknown as SavedObject<VisualizationAttributes>) };
+    if (!visBuilder) return {};
+    try {
+      const saved = visBuilderFromSavedObject(object as unknown as SavedObject<VisBuilderAttributes>);
+      const problem = schemaProblem(saved.state.visualization);
+      return problem ? { visError: problem } : { vis: visFromVisBuilder(saved) };
+    } catch (failure) {
+      return { visError: errorMessage(failure) };
+    }
+  }, [object, panel.type, visBuilder]);
+  // What was changed on the panel lies over what the visualization was saved with; a VisBuilder
+  // panel keeps it under `uiState`
   const uiState = useMemo<UiState | undefined>(() => {
     if (!vis) return undefined;
-    const config = panel.embeddableConfig as UiState;
+    const config = (visBuilder ? (panel.embeddableConfig.uiState ?? {}) : panel.embeddableConfig) as UiState;
     return { ...vis.uiState, ...config, vis: { ...vis.uiState.vis, ...config.vis } };
-  }, [vis, panel.embeddableConfig]);
+  }, [vis, visBuilder, panel.embeddableConfig]);
 
   // A panel that takes no colours from the page's memory lets the next one go at once
   const waits = Boolean(vis && takesTurn(vis.type));
@@ -215,17 +259,28 @@ export const DashboardPanel = memo(function DashboardPanel({
     if (loaded && !waits) turn?.done();
   }, [loaded, waits, turn]);
 
+  // A failed search or query, told by the original's red "Error" badge over what was drawn last.
+  // It belongs to the object it was reported for: a panel given another one starts without it.
+  const [failed, setFailed] = useState<{ object: unknown; failure: VisFailure }>();
+  const objectNow = useRef<unknown>(object);
+  objectNow.current = object;
+  const setFailure = useCallback(
+    (next: VisFailure | undefined) => setFailed(next && { object: objectNow.current, failure: next }),
+    []
+  );
+  const failure = failed && failed.object === object ? failed.failure : undefined;
+
   const objectTitle = (object?.attributes as { title?: string } | undefined)?.title ?? '';
   const title = panel.title ?? objectTitle;
   const titleHidden = hideTitle || panel.embeddableConfig.hidePanelTitles === true || title === '';
 
   let body: ReactNode;
   if (!loaded) body = null;
-  else if (loaded.error || !object) {
+  else if (loaded.error || !object || visError) {
     body = (
       <div className="visError" role="alert" data-test-subj="embeddableError">
         <strong>This panel could not be loaded</strong>
-        <span>{loaded.error ?? 'Its saved object was not found'}</span>
+        <span>{loaded.error ?? visError ?? 'Its saved object was not found'}</span>
       </div>
     );
   } else if (vis) {
@@ -235,12 +290,13 @@ export const DashboardPanel = memo(function DashboardPanel({
         input={input}
         tick={tick}
         uiState={uiState}
-        onUiState={(next) => onConfig(id, { ...panel.embeddableConfig, ...next })}
+        onUiState={(next) => onConfig(id, visBuilder ? { ...panel.embeddableConfig, uiState: next } : { ...panel.embeddableConfig, ...next })}
         onFilter={onFilter}
         onFiltersChange={onFiltersChange}
         onTimeChange={onTimeChange}
         onData={(data) => onData(id, data)}
         turn={turn}
+        onError={setFailure}
       />
     );
   } else if (panel.type === 'search') {
@@ -251,6 +307,7 @@ export const DashboardPanel = memo(function DashboardPanel({
         tick={tick}
         onFilter={onFilter}
         onData={(data) => onData(id, data)}
+        onError={setFailure}
       />
     );
   } else {
@@ -259,7 +316,15 @@ export const DashboardPanel = memo(function DashboardPanel({
 
   const items: MenuItem[] = [
     ...(editing && vis && vis.id
-      ? [{ id: 'edit', label: 'Edit visualization', icon: 'pencil' as const, to: `/app/visualize#/edit/${encodeURIComponent(vis.id)}`, testId: 'embeddablePanelAction-editPanel' }]
+      ? [
+          {
+            id: 'edit',
+            label: 'Edit visualization',
+            icon: 'pencil' as const,
+            to: visBuilder ? visBuilderEditUrl(vis.id) : `/app/visualize#/edit/${encodeURIComponent(vis.id)}`,
+            testId: 'embeddablePanelAction-editPanel',
+          },
+        ]
       : []),
     ...(editing ? [{ id: 'rename', label: 'Edit panel title', icon: 'text' as const, onClick: () => onAction('rename', id) }] : []),
     { id: 'inspect', label: 'Inspect', icon: 'inspect', onClick: () => onAction('inspect', id), testId: 'embeddablePanelAction-openInspector' },
@@ -314,7 +379,18 @@ export const DashboardPanel = memo(function DashboardPanel({
           )}
         />
       </header>
-      <div className="dshPanel__body">{body}</div>
+      {failure && (
+        <div className="dshPanel__label">
+          <Tooltip content={failure.message} testId="embeddableErrorMessage">
+            <span data-test-subj="embeddableErrorLabel">
+              <Badge tone="critical">Error</Badge>
+            </span>
+          </Tooltip>
+        </div>
+      )}
+      <div className="dshPanel__body" data-error={failure ? true : undefined}>
+        {body}
+      </div>
       {editing && onResizeStart && (
         <span
           className="dshPanel__resize"

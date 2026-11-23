@@ -5,23 +5,32 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChartMessage, fitText, readableOn, useSize, type LegendPosition } from '../../charts/core';
 import { XYChart, type XYAxis, type XYSeries } from '../../charts/xy';
+import { Icon } from '../../components/icon';
 import { formatDate, scaledDateFormat, type TimeRange } from '../../lib/dates';
 import { Markdown } from '../../lib/markdown';
-import { renderTemplate } from '../../lib/template';
-import type { Vis } from '../../lib/vis';
+import { renderTemplate, TemplateError } from '../../lib/template';
+import type { UiState, Vis } from '../../lib/vis';
 import { services } from '../../services';
-import { errorMessage } from '../../services/http';
 import type { RequestRecord } from '../../services/search';
 import type { VisInput } from '../request';
 import {
   fetchTsvb,
   fetchTsvbTable,
+  metricLabel,
+  isSortable,
   ruleFor,
   seriesFormatter,
+  splitParts,
   type TsvbData,
   type TsvbParams,
+  type TsvbSeries,
+  type TsvbSeriesData,
   type TsvbTableData,
+  type TsvbTableSort,
 } from './data';
+import { panelError, TsvbError, type TsvbPanelError } from './error';
+import { annotationIcon } from './icons';
+import { convertSeriesToVars } from './markdown_vars';
 
 const number = (value: unknown, fallback: number): number => {
   const parsed = typeof value === 'string' && value.trim() !== '' ? Number(value) : value;
@@ -45,11 +54,20 @@ function perInterval(ms: number): string {
   return `per ${ms} milliseconds`;
 }
 
-/** The latest value of a series as its legend shows it: its share of the stack when the stack is of shares */
-function lastText(item: TsvbData['series'][number], all: TsvbData['series']): string {
-  if (item.series.stacked !== 'percent') return item.format(item.last);
-  const total = all.filter((other) => other.series.stacked === 'percent').reduce((sum, other) => sum + Math.abs(other.last ?? 0), 0);
-  return seriesFormatter('percent', item.series.value_template)(total === 0 ? 0 : (item.last ?? 0) / total);
+/** The value of the last bucket of a series, none when it has none */
+const lastBucket = (item: TsvbSeriesData): number | null => item.data[item.data.length - 1]?.[1] ?? null;
+
+/**
+ * The latest value of a series as its legend shows it: that of its last bucket, nothing when the
+ * bucket has none (as the product's charts show it), and its share of the stack when the stack is
+ * of shares
+ */
+function lastText(item: TsvbSeriesData, all: TsvbSeriesData[]): string {
+  const value = lastBucket(item);
+  if (value === null) return '';
+  if (item.series.stacked !== 'percent') return item.format(value);
+  const total = all.filter((other) => other.series.stacked === 'percent').reduce((sum, other) => sum + Math.abs(lastBucket(other) ?? 0), 0);
+  return seriesFormatter('percent', item.series.value_template)(total === 0 ? 0 : value / total);
 }
 
 /** Whether the values of a series rise or fall over its time: the slope of the line that fits them best */
@@ -64,7 +82,9 @@ function slopeOf(data: Array<[number, number | null]>): number {
     above += (x - meanX) * (y - meanY);
     below += (x - meanX) ** 2;
   }
-  return below === 0 ? 0 : above / below;
+  // Rounded to two decimals, as the product's regression gives it: over time in milliseconds,
+  // nearly every slope rounds to 0, which the product draws as falling
+  return below === 0 ? 0 : Math.round((above / below) * 100) / 100;
 }
 
 function TimeSeries({ params, data, onTimeChange }: { params: TsvbParams; data: TsvbData; onTimeChange?: (range: TimeRange) => void }) {
@@ -141,7 +161,12 @@ function TimeSeries({ params, data, onTimeChange }: { params: TsvbParams; data: 
       legendValues={Object.fromEntries(data.series.map((item) => [item.id, lastText(item, data.series)]))}
       grid={{ value: params.show_grid !== 0, category: false }}
       annotations={data.annotations.flatMap(({ annotation, marks }) =>
-        marks.map((mark) => ({ x: mark.time, color: annotation.color, label: mark.text || formatDate(new Date(mark.time), 'MMM D, YYYY @ HH:mm:ss', zone) }))
+        marks.map((mark) => ({
+          x: mark.time,
+          color: annotation.color,
+          label: mark.text || formatDate(new Date(mark.time), 'MMM D, YYYY @ HH:mm:ss', zone),
+          icon: annotationIcon(annotation.icon),
+        }))
       )}
       onBrush={onTimeChange ? (from, to) => onTimeChange({ from: new Date(from).toISOString(), to: new Date(to).toISOString() }) : undefined}
       testId="tsvbChart"
@@ -149,7 +174,7 @@ function TimeSeries({ params, data, onTimeChange }: { params: TsvbParams; data: 
   );
 }
 
-function Metric({ params, data }: { params: TsvbParams; data: TsvbData }) {
+function Metric({ params, data, extra }: { params: TsvbParams; data: TsvbData; extra?: string }) {
   const [primary, secondary] = data.series;
   if (!primary) return <ChartMessage>No results found</ChartMessage>;
   const rule = ruleFor(params.background_color_rules, primary.last);
@@ -166,6 +191,41 @@ function Metric({ params, data }: { params: TsvbParams; data: TsvbData }) {
           <span>{secondary.label}</span> <strong>{secondary.format(secondary.last)}</strong>
         </div>
       )}
+      {extra && <div className="visTsvbMetric__additional">{extra}</div>}
+    </div>
+  );
+}
+
+/** A metric or a gauge, or one of either for each part of its split, each in the frame of a panel */
+function Splits({
+  params,
+  data,
+  framed,
+  draw,
+}: {
+  params: TsvbParams;
+  data: TsvbData;
+  framed: boolean;
+  draw: (data: TsvbData, extra?: string) => ReactNode;
+}) {
+  const parts = splitParts(params, data);
+  const background = params.background_color || undefined;
+  if (!parts) {
+    return framed ? (
+      <div className="visTsvbFrame" style={{ background }}>
+        {draw(data)}
+      </div>
+    ) : (
+      <>{draw(data)}</>
+    );
+  }
+  return (
+    <div className="visTsvbSplit" data-test-subj="tsvbSplitVis">
+      {parts.map((part) => (
+        <div key={part.key} className="visTsvbSplit__part" style={framed ? { background } : undefined}>
+          {draw(part.data, part.label)}
+        </div>
+      ))}
     </div>
   );
 }
@@ -200,20 +260,48 @@ function TopN({ params, data }: { params: TsvbParams; data: TsvbData }) {
   );
 }
 
-function Gauge({ params, data }: { params: TsvbParams; data: TsvbData }) {
+// The lines the product writes over a gauge: their height, the middle of their text from their
+// top, and the size of their text, in the box it lays over the arc
+const GAUGE_LINES = { label: [11, 3.5, 7], value: [12.6, 6.3, 12.6], extra: [10.72, 5.36, 5.6] } as const;
+type GaugeLine = keyof typeof GAUGE_LINES;
+
+/**
+ * Where the product writes the lines of a gauge, in the square of 120 its arc is drawn in: in a
+ * box of 100 by 70 laid over the arc, stacked at its foot, for a half gauge, or in the middle of
+ * one of 100 by 100 for a circle, the value first; the box is scaled to the panel apart from the
+ * arc, to 82/70 (124/100 for a circle) of its scale.
+ */
+function gaugeLines(half: boolean, extra: boolean): Record<GaugeLine, { y: number; size: number }> {
+  const scale = half ? 82 / 70 : 124 / 100;
+  const order: GaugeLine[] = half ? ['label', 'value'] : ['value', 'label'];
+  if (extra) order.push('extra');
+  const total = order.reduce((sum, line) => sum + GAUGE_LINES[line][0], 0);
+  let top = half ? 62 - total : 50 - total / 2;
+  const at = { label: { y: 0, size: 0 }, value: { y: 0, size: 0 }, extra: { y: 0, size: 0 } };
+  for (const line of order) {
+    const [height, middle, size] = GAUGE_LINES[line];
+    at[line] = { y: (top + middle) * scale, size: size * scale };
+    top += height;
+  }
+  return at;
+}
+
+function Gauge({ params, data, extra }: { params: TsvbParams; data: TsvbData; extra?: string }) {
   const [ref, size] = useSize<HTMLDivElement>();
   const series = data.series[0];
   if (!series) return <ChartMessage>No results found</ChartMessage>;
   const half = params.gauge_style !== 'circle';
   const rule = ruleFor(params.gauge_color_rules, series.last);
-  const color = rule?.gauge ?? series.color;
+  const color = rule?.gauge ?? (series.color || '#8ac336');
   const value = series.last ?? 0;
-  const max = number(params.gauge_max, 0) || Math.max(1, value);
+  // Without a maximum of its own, a gauge goes up to the largest value of its series
+  const largest = Math.max(...series.data.map(([, y]) => y ?? Number.NEGATIVE_INFINITY));
+  const max = number(params.gauge_max, 0) || (Number.isFinite(largest) && largest !== 0 ? largest : 1);
   const share = Math.max(0, Math.min(1, value / max));
   // Drawn in a square of 120 with the ring's middle 50 from the centre, as TSVB draws it, so
   // that the widths a panel was saved with mean what they meant
-  const stroke = number(params.gauge_width, 10);
-  const track = number(params.gauge_inner_width, 10);
+  const stroke = number(params.gauge_width, 0) || 10;
+  const track = number(params.gauge_inner_width, 0) || 2;
   const radius = 50;
   const edge = Math.max(stroke, track) / 2;
   const sweep = half ? 0.6 : 1;
@@ -226,67 +314,162 @@ function Gauge({ params, data }: { params: TsvbParams; data: TsvbData }) {
   const height = half ? 60 + radius * Math.cos(Math.PI * (1 - sweep)) + edge + 2 : 120;
   const scale = Math.max(0.1, Math.min(size.width / 120, size.height / height));
   const text = series.format(series.last);
+  const lines = gaugeLines(half, Boolean(extra));
+  // On a background of the panel's own, the text takes the colour that reads on it
+  const background = params.background_color || undefined;
+  const ink = background ? readableOn(background) : undefined;
   return (
     <div ref={ref} className="visTsvbGauge" data-test-subj="tsvbGauge">
       {size.width > 0 && (
         <svg width={120 * scale} height={height * scale} viewBox={`0 0 120 ${height}`} role="img" aria-label={`${series.label}: ${text}`}>
           <path d={arc(1)} fill="none" stroke={params.gauge_inner_color || 'var(--chart-band)'} strokeWidth={track} />
           {share > 0 && <path d={arc(share)} fill="none" stroke={color} strokeWidth={stroke} />}
-          <text x={60} y={half ? 62 : 52} textAnchor="middle" fontSize={8} fill="var(--color-text-secondary)">
-            {fitText(series.label, (radius - edge) * 1.7, 8)}
+          <text
+            x={60}
+            y={lines.label.y}
+            dominantBaseline="central"
+            textAnchor="middle"
+            fontSize={lines.label.size}
+            fill={ink ?? 'var(--color-text-secondary)'}
+            fillOpacity={ink ? 0.6 : undefined}
+          >
+            {fitText(series.label, (half ? 60 : 68) * (lines.label.size / 7), lines.label.size)}
           </text>
-          <text x={60} y={half ? 79 : 70} textAnchor="middle" fontSize={14} fill={rule?.text ?? 'var(--color-text-primary)'} data-test-subj="tsvbGaugeValue">
+          <text
+            x={60}
+            y={lines.value.y}
+            dominantBaseline="central"
+            textAnchor="middle"
+            fontSize={lines.value.size}
+            fill={rule?.text ?? ink ?? 'var(--color-text-primary)'}
+            data-test-subj="tsvbGaugeValue"
+          >
             {text}
           </text>
+          {extra && (
+            <text x={60} y={lines.extra.y} dominantBaseline="central" textAnchor="middle" fontSize={lines.extra.size} fill={ink ?? 'var(--color-text-primary)'}>
+              {fitText(extra, (half ? 68 : 76) * (lines.extra.size / 5.6), lines.extra.size)}
+            </text>
+          )}
         </svg>
       )}
     </div>
   );
 }
 
-const snake = (text: string) =>
-  text
-    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
+const MARKDOWN_ERROR = 'Error processing your markdown';
+
+/**
+ * The text of a markdown panel filled in as the product fills it, in strict mode: while it is not
+ * well formed (being typed) it shows as written, and a name it has no variable for, or a block it
+ * cannot use, is an error the panel shows instead of the text
+ */
+function fillMarkdown(markdown: string, variables: Record<string, unknown>): { text?: string; error?: TsvbPanelError } {
+  try {
+    return { text: renderTemplate(markdown, { _all: variables, ...variables, args: {} }, { strict: true }) };
+  } catch (failure) {
+    if (failure instanceof TemplateError && failure.kind === 'parse') return { text: markdown };
+    const reason =
+      failure instanceof TemplateError && failure.kind === 'unknown'
+        ? `{{${failure.variable}}} is an unknown variable`
+        : 'Please verify you are only using markdown, known variables, and built-in Handlebars expressions';
+    return { error: { error: { caused_by: { title: MARKDOWN_ERROR, reason } } } };
+  }
+}
 
 function MarkdownPanel({ params, data }: { params: TsvbParams; data: TsvbData }) {
-  const variables: Record<string, unknown> = {};
-  for (const series of data.series) {
-    const entry = {
-      label: series.label,
-      last: { raw: series.last, formatted: series.format(series.last) },
-      data: { raw: series.data, formatted: series.data.map(([time, value]) => [time, series.format(value)]) },
-    };
-    variables[series.series.var_name || snake(series.label)] = entry;
-  }
-  let text: string;
-  try {
-    text = renderTemplate(params.markdown ?? '', { ...variables, _all: variables });
-  } catch (failure) {
-    text = `The text of this panel could not be filled in: ${(failure as Error).message}`;
-  }
+  // The panel's custom CSS names it by its id; each drawing of it gets an id of its own instead
+  const [elementId] = useState(() => `markdown-${Math.random().toString(36).slice(2)}`);
+  const background = params.background_color || undefined;
+  if (!params.markdown) return <div className="visTsvbFrame" style={{ background }} />;
+  const dateFormat = services.uiSettings.get<string>('dateFormat', 'MMM D, YYYY @ HH:mm:ss.SSS');
+  const variables = convertSeriesToVars(data.series, params, dateFormat, services.timeZone());
+  const { text, error } = fillMarkdown(params.markdown, variables);
+  const css = params.markdown_css ? params.markdown_css.split(`markdown-${params.id}`).join(elementId) : '';
+  const align = params.markdown_vertical_align;
   return (
-    <div className="visMarkdown" style={{ background: params.background_color }} data-test-subj="tsvbMarkdown">
-      <Markdown text={text} openLinksInNewTab />
+    <div className="visTsvbFrame" style={{ background }}>
+      <div className="visTsvbMarkdown" data-test-subj="tsvbMarkdown">
+        {error && <TsvbError error={error} />}
+        <style>{css}</style>
+        <div
+          className={[
+            'visTsvbMarkdown__content',
+            align === 'middle' || align === 'bottom' ? `visTsvbMarkdown__content--${align}` : '',
+            params.markdown_scrollbars ? 'visTsvbMarkdown__content--scroll' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+        >
+          <div id={elementId}>{text !== undefined && <Markdown text={text} openLinksInNewTab={Boolean(params.markdown_openLinksInNewTab)} />}</div>
+        </div>
+      </div>
     </div>
   );
 }
 
-function PivotTable({ params, data }: { params: TsvbParams; data: TsvbTableData }) {
+/** The sort of a table its UI state keeps, if it keeps one */
+function tableSortOf(uiState: Vis['uiState'] | undefined): TsvbTableSort | undefined {
+  const table = uiState?.table;
+  const sort = table && typeof table === 'object' ? (table as { sort?: unknown }).sort : undefined;
+  return sort && typeof sort === 'object' ? (sort as TsvbTableSort) : undefined;
+}
+
+/** A column's title, as the product writes it: the series' label or its metric's, with the percentile it shows */
+function columnLabel(series: TsvbSeries): string {
+  const metric = series.metrics?.[series.metrics.length - 1];
+  const label = series.label || metricLabel(series);
+  if (metric?.type === 'percentile') return `${label} (${metric.percentiles?.[metric.percentiles.length - 1]?.value || 0})`;
+  if (metric?.type === 'percentile_rank') return `${label} (${metric.values?.[metric.values.length - 1] || 0})`;
+  return label;
+}
+
+function PivotTable({
+  params,
+  data,
+  sort = { column: '_default_', order: 'asc' },
+  onSort,
+}: {
+  params: TsvbParams;
+  data: TsvbTableData;
+  sort?: TsvbTableSort;
+  onSort?: (sort: TsvbTableSort) => void;
+}) {
   if (data.rows.length === 0) return <ChartMessage>No results found</ChartMessage>;
   const columns = (params.series ?? []).filter((series) => !series.hidden);
+  // The column the rows are sorted by shows an arrow, and the others that could sort them room for
+  // one; a click on one sorts by it, or the other way round when it already does, as the product's
+  const header = (column: string, label: string, sortable: boolean) => {
+    const arrow =
+      sort.column === column ? (
+        <Icon name={sort.order === 'desc' ? 'sortDown' : 'sortUp'} className="visTsvbTable__sort" />
+      ) : sortable ? (
+        <span className="visTsvbTable__noSort" />
+      ) : null;
+    if (!sortable || !onSort) {
+      return (
+        <>
+          {label} {arrow}
+        </>
+      );
+    }
+    const order = sort.column === column && sort.order === 'asc' ? 'desc' : 'asc';
+    return (
+      <button type="button" className="atlTable__sort" onClick={() => onSort({ column, order })}>
+        {label} {arrow}
+      </button>
+    );
+  };
   return (
     <div className="visTable" data-test-subj="tsvbTable">
       <div className="visTable__scroll">
         <table className="atlTable atlTable--compact">
           <thead>
             <tr>
-              <th>{params.pivot_label || params.pivot_id}</th>
+              <th>{header('_default_', params.pivot_label || params.pivot_id || '', true)}</th>
               {columns.map((series) => (
                 <th key={series.id} className="atlTable__numeric">
-                  {series.label || 'Value'}
+                  {header(series.id, columnLabel(series), isSortable(series.metrics?.[series.metrics.length - 1]))}
                 </th>
               ))}
             </tr>
@@ -302,8 +485,10 @@ function PivotTable({ params, data }: { params: TsvbParams; data: TsvbTableData 
                     <td key={series.id} className="atlTable__numeric" style={{ color }}>
                       {found ? found.format(found.last) : '-'}
                       {found && Number(series.trend_arrows) === 1 && (
-                        <span className="visTsvbTable__trend" aria-label={slopeOf(found.data) > 0 ? 'Rising' : 'Falling'}>
-                          {slopeOf(found.data) > 0 ? '↑' : '↓'}
+                        // The product's arrow: its sort icons, after a space
+                        <span className="visTsvbTable__trend">
+                          {'  '}
+                          <Icon name={slopeOf(found.data) > 0 ? 'sortUp' : 'sortDown'} title={slopeOf(found.data) > 0 ? 'Rising' : 'Falling'} />
                         </span>
                       )}
                     </td>
@@ -318,11 +503,20 @@ function PivotTable({ params, data }: { params: TsvbParams; data: TsvbTableData 
   );
 }
 
+function NoData() {
+  return (
+    <div className="visError visTsvbNoData" data-test-subj="noTSVBDataMessage">
+      <Icon name="visualize" />
+      <p>No data to display for the selected metrics</p>
+    </div>
+  );
+}
+
 const PANELS: Record<string, (props: { params: TsvbParams; data: TsvbData; onTimeChange?: (range: TimeRange) => void }) => ReactNode> = {
   timeseries: (props) => <TimeSeries {...props} />,
-  metric: (props) => <Metric {...props} />,
+  metric: ({ params, data }) => <Splits params={params} data={data} framed={false} draw={(part, extra) => <Metric params={params} data={part} extra={extra} />} />,
   top_n: (props) => <TopN {...props} />,
-  gauge: (props) => <Gauge {...props} />,
+  gauge: ({ params, data }) => <Splits params={params} data={data} framed draw={(part, extra) => <Gauge params={params} data={part} extra={extra} />} />,
   markdown: (props) => <MarkdownPanel {...props} />,
 };
 
@@ -330,41 +524,60 @@ export function TsvbVis({
   vis,
   input,
   tick,
+  uiState,
+  onUiState,
   onTimeChange,
   onData,
 }: {
   vis: Vis;
   input: VisInput;
   tick?: number;
+  /** The panel's UI state, where it differs from the visualization's own (on a dashboard) */
+  uiState?: UiState;
+  /** Takes the UI state a click on a table's column gives: the table sorted by that column */
+  onUiState?: (next: UiState) => void;
   onTimeChange?: (range: TimeRange) => void;
-  onData?: (data: { requests: RequestRecord[] }) => void;
+  onData?: (data: { requests: RequestRecord[]; tsvb?: TsvbData | TsvbTableData }) => void;
 }) {
   const params = vis.params as TsvbParams;
   const kind = params.type ?? 'timeseries';
   const [data, setData] = useState<{ kind: string; series?: TsvbData; table?: TsvbTableData }>();
-  const [error, setError] = useState<string>();
+  const [error, setError] = useState<TsvbPanelError>();
   const [loading, setLoading] = useState(true);
   const report = useRef(onData);
   report.current = onData;
+  const state = uiState ?? vis.uiState;
+  const sort = kind === 'table' ? tableSortOf(state) : undefined;
+  // A click on a column of a table keeps its sort under `table.sort`, as the product does
+  const onSort = onUiState
+    ? (next: TsvbTableSort) => onUiState({ ...state, table: { ...(state?.table && typeof state.table === 'object' ? state.table : {}), sort: next } })
+    : undefined;
 
-  const key = JSON.stringify([params, input]);
+  const key = JSON.stringify([params, input, sort]);
   useEffect(() => {
+    // While its editor holds an interval OpenSearch would refuse, the panel is not asked for
+    if (params.isModelInvalid) {
+      setLoading(false);
+      return undefined;
+    }
     const controller = new AbortController();
     setLoading(true);
     const work =
       kind === 'table'
-        ? fetchTsvbTable(params, input, controller.signal).then((table) => ({ kind, table, requests: table.requests }))
+        ? fetchTsvbTable(params, input, controller.signal, sort).then((table) => ({ kind, table, requests: table.requests }))
         : fetchTsvb(params, input, controller.signal).then((series) => ({ kind, series, requests: series.requests }));
     work
       .then((answer) => {
         setData(answer);
         setError(undefined);
         setLoading(false);
-        report.current?.({ requests: answer.requests });
+        report.current?.({ requests: answer.requests, tsvb: 'series' in answer ? answer.series : answer.table });
       })
       .catch((failure) => {
         if ((failure as Error).name === 'AbortError') return;
-        setError(errorMessage(failure));
+        // A request that could not be made (a query in DQL that cannot be read) or that OpenSearch
+        // refused is shown in the panel, as the product shows it, and nowhere else
+        setError(panelError(failure));
         setLoading(false);
       });
     return () => controller.abort();
@@ -372,15 +585,17 @@ export function TsvbVis({
   }, [key, tick]);
 
   let body: ReactNode = null;
-  if (error) {
+  if (params.isModelInvalid) body = <NoData />;
+  else if (error) {
     body = (
-      <div className="visError" role="alert" data-test-subj="visError">
-        <strong>This visualization could not be drawn</strong>
-        <span>{error}</span>
+      <div className="visTsvbFrame">
+        <TsvbError error={error} />
       </div>
     );
   } else if (data && data.kind === kind) {
-    if (kind === 'table' && data.table) body = <PivotTable params={params} data={data.table} />;
+    // A panel none of whose series drew anything says so, whatever its kind
+    if (kind === 'table' ? !data.table?.rows.length : !data.series?.series.length) body = <NoData />;
+    else if (kind === 'table' && data.table) body = <PivotTable params={params} data={data.table} sort={sort} onSort={onSort} />;
     else if (data.series && PANELS[kind]) body = PANELS[kind]({ params, data: data.series, onTimeChange });
     else body = <ChartMessage>This kind of TSVB panel is not drawn by this build.</ChartMessage>;
   }

@@ -2,14 +2,25 @@
 
 /* The bar a data page starts with: the query, the time range, and under them the filters. */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '../components/basic';
+import { Icon } from '../components/icon';
 import type { TimeRange } from '../lib/dates';
-import { KuerySyntaxError, parseKuery } from '../lib/kuery';
+import { hasLuceneSyntax } from '../lib/kuery';
+import {
+  savedQueryAttributes,
+  stateFromSavedQuery,
+  type SaveQueryMeta,
+  type SavedQuery,
+} from '../lib/saved_query';
 import type { Filter, IndexPattern, Query, RefreshInterval } from '../lib/types';
 import { services } from '../services';
-import { FilterBar } from './filter_bar';
-import { QueryBar } from './query_bar';
+import { errorMessage } from '../services/http';
+import { FilterBar, isPinned } from './filter_bar';
+import { DQL_DOCS, QueryBar, defaultQueryLanguage } from './query_bar';
+import { RefreshPicker } from './refresh_picker';
+import { SaveQueryForm, SavedQueryManagement, saveFailureText, type SavedQueryChange } from './saved_query';
+import { readStored, writeStored } from './state';
 import { TimePicker } from './time_picker';
 
 export interface SearchBarProps {
@@ -28,18 +39,51 @@ export interface SearchBarProps {
   showFilters?: boolean;
   /** Whether a time range means anything here: not for an index pattern without a time field */
   showTime?: boolean;
+  /** The picker without its dates: only how often the page refreshes (the original's "auto refresh only") */
+  refreshOnly?: boolean;
   placeholder?: string;
+  /** The saved query the page has loaded, by the id its address keeps */
+  savedQueryId?: string;
+  /**
+   * Takes what loading, saving or clearing a saved query gives the page. Without it the bar
+   * offers no saved queries.
+   */
+  onSavedQueryChange?: (change: SavedQueryChange) => void;
 }
 
-/** Why a query cannot be run, or nothing when it can */
-export function queryError(query: Query): string | undefined {
-  if (query.language !== 'kuery' || typeof query.query !== 'string') return undefined;
-  try {
-    parseKuery(query.query);
-    return undefined;
-  } catch (error) {
-    return error instanceof KuerySyntaxError ? error.message : String(error);
-  }
+const LUCENE_OPT_OUT = 'luceneSyntaxWarningOptOut';
+
+/**
+ * The original's "Lucene syntax warning": a DQL query that looks written in Lucene is run all the
+ * same, and the person is told, each time it is submitted, until they ask not to be.
+ */
+export function warnOfLuceneSyntax(query: Query) {
+  if (query.language !== 'kuery' || typeof query.query !== 'string') return;
+  if (readStored(LUCENE_OPT_OUT, false) || !hasLuceneSyntax(query.query)) return;
+  const id = services.toasts.warning(
+    'Lucene syntax warning',
+    <div className="shlLuceneWarning">
+      <p>
+        It looks like you may be trying to use Lucene query syntax, although you have
+        opensearchDashboards Query Language (DQL) selected. Please review the DQL docs{' '}
+        <a className="shlExternal" href={DQL_DOCS} target="_blank" rel="noopener noreferrer">
+          here
+          <Icon name="external" title="External link" />
+        </a>
+        .
+      </p>
+      <div className="atlToast__actions">
+        <Button
+          onClick={() => {
+            writeStored(LUCENE_OPT_OUT, true);
+            services.toasts.dismiss(id);
+          }}
+        >
+          Don&apos;t show again
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 export function SearchBar({
@@ -57,7 +101,10 @@ export function SearchBar({
   showQuery = true,
   showFilters = true,
   showTime = true,
+  refreshOnly = false,
   placeholder,
+  savedQueryId,
+  onSavedQueryChange,
 }: SearchBarProps) {
   const committed = typeof query?.query === 'string' ? query.query : JSON.stringify(query?.query ?? '');
   const [draft, setDraft] = useState(committed);
@@ -65,18 +112,110 @@ export function SearchBar({
   useEffect(() => setDraft(committed), [committed]);
   useEffect(() => setLanguage(query?.language ?? 'kuery'), [query?.language]);
 
+  // A query that cannot be read is run all the same, as in the original: the search fails and
+  // says why
   const submit = (text: string, withLanguage = language) => {
     const next = { query: text, language: withLanguage };
-    const problem = queryError(next);
-    if (problem) {
-      services.toasts.danger('The query cannot be read', problem);
-      return;
-    }
+    warnOfLuceneSyntax(next);
     if (text === committed && withLanguage === query?.language) onRefresh();
     else onQuerySubmit?.(next);
   };
 
   const dirty = showQuery && (draft !== committed || language !== (query?.language ?? 'kuery'));
+
+  // --- Saved queries, as the original's search bar keeps them ---
+  const [savedQuery, setSavedQuery] = useState<SavedQuery>();
+  const [saving, setSaving] = useState<'changes' | 'new'>();
+  // What a saved query that arrives later is applied over: the page as it is by then
+  const latest = useRef({ filters, refreshInterval, onSavedQueryChange });
+  latest.current = { filters, refreshInterval, onSavedQueryChange };
+
+  const apply = useCallback((loaded: SavedQuery, replace: boolean) => {
+    const page = latest.current;
+    page.onSavedQueryChange?.({
+      id: loaded.id,
+      replace,
+      ...stateFromSavedQuery(loaded.attributes, {
+        pinnedFilters: page.filters.filter(isPinned),
+        refreshInterval: page.refreshInterval,
+        pinnedByDefault: services.uiSettings.get('filters:pinnedByDefault', false),
+      }),
+    });
+  }, []);
+
+  // Clearing leaves the time range, and takes every filter away, the pinned ones too
+  const clear = useCallback((id?: string) => {
+    setSavedQuery(undefined);
+    latest.current.onSavedQueryChange?.({
+      id,
+      replace: id !== undefined,
+      query: { query: '', language: defaultQueryLanguage() },
+      filters: [],
+    });
+  }, []);
+
+  const offersSavedQueries = Boolean(onSavedQueryChange);
+  useEffect(() => {
+    if (!savedQueryId || !offersSavedQueries) {
+      setSavedQuery(undefined);
+      return undefined;
+    }
+    let live = true;
+    services.savedQueries.getSavedQuery(savedQueryId).then(
+      (found) => {
+        if (!live) return;
+        setSavedQuery(found);
+        apply(found, true);
+      },
+      (failure: unknown) => {
+        if (!live) return;
+        // The page keeps the id it was given, as the original does, and loses its query
+        clear(savedQueryId);
+        services.toasts.warning(`Unable to load saved query ${savedQueryId}`, errorMessage(failure));
+      }
+    );
+    return () => {
+      live = false;
+    };
+  }, [savedQueryId, offersSavedQueries, apply, clear]);
+
+  const load = (chosen: SavedQuery) => {
+    setSavedQuery(chosen);
+    apply(chosen, false);
+  };
+
+  const save = async (meta: SaveQueryMeta) => {
+    // What is saved is the query as it stands in the bar, run or not
+    const attributes = savedQueryAttributes(meta, {
+      query: { query: draft, language },
+      filters,
+      time,
+      refreshInterval,
+    });
+    try {
+      const stored =
+        savedQuery && saving === 'changes'
+          ? await services.savedQueries.saveQuery(attributes, { overwrite: true })
+          : await services.savedQueries.saveQuery(attributes);
+      services.toasts.success(`Your query "${stored.attributes.title}" was saved`);
+      setSaving(undefined);
+      setSavedQuery(stored);
+      apply(stored, false);
+    } catch (failure) {
+      services.toasts.danger(saveFailureText(failure));
+    }
+  };
+
+  const savedQueries =
+    offersSavedQueries && showFilters && onFiltersChange ? (
+      <SavedQueryManagement
+        loaded={savedQuery}
+        onLoad={load}
+        onClear={() => clear()}
+        onSave={() => setSaving('changes')}
+        onSaveAsNew={() => setSaving('new')}
+      />
+    ) : undefined;
   return (
     <div className="shlSearchBar" data-test-subj="globalQueryBar">
       <div className="shlSearchBar__row">
@@ -94,10 +233,16 @@ export function SearchBar({
             onSubmit={(text) => submit(text)}
             indexPatterns={indexPatterns}
             placeholder={placeholder}
+            prepend={savedQueries}
           />
         )}
         {!showQuery && <div className="atlGrow" />}
-        {showTime && time && refreshInterval && onTimeChange && onRefreshChange ? (
+        {showTime && refreshOnly && refreshInterval && onRefreshChange ? (
+          <>
+            <RefreshPicker refreshInterval={refreshInterval} onRefreshChange={onRefreshChange} />
+            <TimePickerLess loading={loading} dirty={dirty} onClick={() => (dirty ? submit(draft) : onRefresh())} />
+          </>
+        ) : showTime && time && refreshInterval && onTimeChange && onRefreshChange ? (
           <TimePicker
             time={time}
             refreshInterval={refreshInterval}
@@ -115,10 +260,18 @@ export function SearchBar({
       {showFilters && onFiltersChange && (
         <FilterBar filters={filters} onChange={onFiltersChange} indexPatterns={indexPatterns} />
       )}
+      {saving && (
+        <SaveQueryForm
+          savedQuery={saving === 'changes' ? savedQuery?.attributes : undefined}
+          showFilterOption={Boolean(showFilters && onFiltersChange)}
+          showTimeFilterOption={Boolean(time)}
+          onSave={(meta) => void save(meta)}
+          onClose={() => setSaving(undefined)}
+        />
+      )}
     </div>
   );
 }
-
 
 function TimePickerLess({ loading, dirty, onClick }: { loading?: boolean; dirty?: boolean; onClick: () => void }) {
   return (
@@ -127,6 +280,7 @@ function TimePickerLess({ loading, dirty, onClick }: { loading?: boolean; dirty?
       icon={dirty ? 'arrowRight' : 'refresh'}
       loading={loading && !dirty}
       onClick={onClick}
+      className="shlTime__submit"
       testId="querySubmitButton"
     >
       {dirty ? 'Update' : 'Refresh'}

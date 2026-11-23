@@ -6,11 +6,33 @@ export class HttpFetchError extends Error {
   constructor(
     public readonly status: number,
     message: string,
-    public readonly body?: unknown
+    public readonly body?: unknown,
+    /** The words of the answer's status, "Bad Request" */
+    public readonly statusText = ''
   ) {
     super(message);
     this.name = 'HttpFetchError';
   }
+}
+
+const BIG = '\u0000bigint:';
+
+/**
+ * JSON with whole numbers too long for JavaScript (BigInt, as DQL reads them) written out in full,
+ * as OpenSearch Dashboards sends them with data:withLongNumerals
+ */
+export function stringifyJson(value: unknown, space?: number): string {
+  let big = false;
+  const text = JSON.stringify(
+    value,
+    (_key, item: unknown) => {
+      if (typeof item !== 'bigint') return item;
+      big = true;
+      return `${BIG}${item.toString()}\u0000`;
+    },
+    space
+  );
+  return big ? text.replace(/"\\u0000bigint:(-?\d+)\\u0000"/g, '$1') : text;
 }
 
 export interface FetchOptions {
@@ -45,7 +67,7 @@ export class Http {
       body = options.body;
       if (typeof options.body === 'string') headers['content-type'] ??= 'application/json';
     } else if (options.body !== undefined) {
-      body = JSON.stringify(options.body);
+      body = stringifyJson(options.body);
       headers['content-type'] ??= 'application/json';
     }
 
@@ -73,7 +95,7 @@ export class Http {
       }
     }
     if (!response.ok) {
-      throw new HttpFetchError(response.status, messageOf(parsed, response.status), parsed);
+      throw new HttpFetchError(response.status, messageOf(parsed, response.status), parsed, response.statusText);
     }
     return parsed as T;
   }

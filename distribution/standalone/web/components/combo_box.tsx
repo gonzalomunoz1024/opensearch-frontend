@@ -16,6 +16,7 @@ export interface ComboOption {
   group?: string;
   /** Said after the label in the list only: the field shows the label alone */
   detail?: string;
+  testId?: string;
 }
 
 export interface ComboBoxProps {
@@ -38,6 +39,8 @@ export interface ComboBoxProps {
   searched?: boolean;
   testId?: string;
   fullWidth?: boolean;
+  /** The id of the field's text, for a label */
+  id?: string;
 }
 
 const MAX_SHOWN = 200;
@@ -58,6 +61,7 @@ export function ComboBox({
   searched,
   testId,
   fullWidth = true,
+  id,
 }: ComboBoxProps) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
@@ -198,6 +202,7 @@ export function ComboBox({
             ))}
           <input
             ref={input}
+            id={id}
             value={open ? text : singleLabel}
             placeholder={selected.length === 0 || (single && open) ? (singleLabel || placeholder) : undefined}
             disabled={disabled}
@@ -257,6 +262,7 @@ export function ComboBox({
                 className="atlMenu__item"
                 aria-selected={position === active}
                 disabled={option.disabled}
+                data-test-subj={option.testId}
                 onMouseDown={(event) => event.preventDefault()}
                 onMouseEnter={() => {
                   moved.current = true;

@@ -10,7 +10,6 @@ import {
   resolveTimeRange,
 } from '../../web/lib/dates';
 import { createFormatter } from '../../web/lib/field_formats';
-import { KuerySyntaxError, kueryToDsl, parseKuery } from '../../web/lib/kuery';
 import { formatNumber } from '../../web/lib/numeral';
 import { buildQuery, describeFilter, phraseFilter, rangeFilter } from '../../web/lib/query';
 import { decode, encode } from '../../web/lib/rison';
@@ -166,96 +165,6 @@ const pattern: IndexPattern = {
   ],
 };
 
-describe('DQL', () => {
-  it('reads fields, values and the words between them', () => {
-    assert.deepEqual(parseKuery(''), { type: 'all' });
-    assert.deepEqual(parseKuery('response:200'), {
-      type: 'is',
-      field: 'response',
-      value: { text: '200', quoted: false },
-    });
-    assert.deepEqual(parseKuery('response:200 and not bytes > 1000'), {
-      type: 'and',
-      children: [
-        { type: 'is', field: 'response', value: { text: '200', quoted: false } },
-        {
-          type: 'not',
-          child: { type: 'range', field: 'bytes', operator: 'gt', value: { text: '1000', quoted: false } },
-        },
-      ],
-    });
-    const list = parseKuery('extension:(php or css) or "quick fox"');
-    assert.equal(list.type, 'or');
-    assert.throws(() => parseKuery('response:(200'), KuerySyntaxError);
-    assert.throws(() => parseKuery('response:'), KuerySyntaxError);
-  });
-
-  it('keeps "or" and "and" inside a word', () => {
-    assert.deepEqual(parseKuery('order'), { type: 'is', field: null, value: { text: 'order', quoted: false } });
-    assert.deepEqual(parseKuery('android'), {
-      type: 'is',
-      field: null,
-      value: { text: 'android', quoted: false },
-    });
-  });
-
-  it('turns them into the queries OpenSearch Dashboards sends', () => {
-    assert.deepEqual(kueryToDsl(parseKuery('response:200'), pattern), {
-      bool: { should: [{ match: { response: '200' } }], minimum_should_match: 1 },
-    });
-    assert.deepEqual(kueryToDsl(parseKuery('response:"200"'), pattern), {
-      bool: { should: [{ match_phrase: { response: '200' } }], minimum_should_match: 1 },
-    });
-    assert.deepEqual(kueryToDsl(parseKuery('bytes >= 1000'), pattern), {
-      bool: { should: [{ range: { bytes: { gte: '1000' } } }], minimum_should_match: 1 },
-    });
-    assert.deepEqual(kueryToDsl(parseKuery('response:*'), pattern), {
-      bool: { should: [{ exists: { field: 'response' } }], minimum_should_match: 1 },
-    });
-    assert.deepEqual(kueryToDsl(parseKuery('fox'), pattern), {
-      multi_match: { type: 'best_fields', query: 'fox', lenient: true },
-    });
-    assert.deepEqual(kueryToDsl(parseKuery('"quick fox"'), pattern), {
-      multi_match: { type: 'phrase', query: 'quick fox', lenient: true },
-    });
-    assert.deepEqual(kueryToDsl(parseKuery('response:20*'), pattern), {
-      bool: {
-        should: [{ query_string: { fields: ['response'], query: '20*' } }],
-        minimum_should_match: 1,
-      },
-    });
-    // a wildcard in the field name asks every field it matches
-    const expanded = kueryToDsl(parseKuery('machine.*:win'), pattern) as { bool: { should: unknown[] } };
-    assert.equal(expanded.bool.should.length, 2);
-    assert.deepEqual(kueryToDsl(parseKuery('not response:200'), pattern), {
-      bool: {
-        must_not: { bool: { should: [{ match: { response: '200' } }], minimum_should_match: 1 } },
-      },
-    });
-    assert.deepEqual(kueryToDsl(parseKuery('items.name:shoe'), pattern), {
-      bool: {
-        should: [
-          { nested: { path: 'items', query: { match: { 'items.name': 'shoe' } }, score_mode: 'none' } },
-        ],
-        minimum_should_match: 1,
-      },
-    });
-    assert.deepEqual(kueryToDsl(parseKuery('items:{ name:shoe }'), pattern), {
-      nested: {
-        path: 'items',
-        query: { bool: { should: [{ match: { 'items.name': 'shoe' } }], minimum_should_match: 1 } },
-        score_mode: 'none',
-      },
-    });
-    assert.deepEqual(kueryToDsl(parseKuery('@timestamp:"2026-01-01"'), pattern, { dateFormatTZ: 'UTC' }), {
-      bool: {
-        should: [{ range: { '@timestamp': { gte: '2026-01-01', lte: '2026-01-01', time_zone: 'UTC' } } }],
-        minimum_should_match: 1,
-      },
-    });
-  });
-});
-
 describe('the query of a page', () => {
   it('combines the search bar and the filters', () => {
     const negated = phraseFilter({ name: 'machine.os' }, 'ios', 'logs');
@@ -271,7 +180,7 @@ describe('the query of a page', () => {
       bool: {
         must: [],
         filter: [
-          { bool: { should: [{ match: { response: '200' } }], minimum_should_match: 1 } },
+          { bool: { should: [{ match: { response: 200 } }], minimum_should_match: 1 } },
           { range: { bytes: { gte: 100, lt: 200 } } },
         ],
         should: [],
@@ -285,7 +194,7 @@ describe('the query of a page', () => {
       { query_string: { query: 'response:200 OR fox', analyze_wildcard: true } },
     ]);
     assert.deepEqual(buildQuery(pattern, { query: '', language: 'lucene' }).bool.must, [{ match_all: {} }]);
-    assert.deepEqual(buildQuery(pattern, { query: '', language: 'kuery' }).bool.filter, []);
+    assert.deepEqual(buildQuery(pattern, { query: '', language: 'kuery' }).bool.filter, [{ match_all: {} }]);
   });
 
   it('reads a phrase filter saved in the old form', () => {

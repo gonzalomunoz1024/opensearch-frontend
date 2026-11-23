@@ -1,11 +1,13 @@
 # The standalone InfraDashboard
 
-A re-creation of OpenSearch Dashboards 3.9.0 that is built from **two npm packages**, React and
-React DOM, where the fork around it needs about 2,360. It exists because the fork cannot be
-built where its packages cannot be fetched: a registry that serves only the versions it already
-holds refused 174 of them. Nothing here imports a package of OpenSearch Dashboards, of its
-component library or of its charts; the server, the components, the charts, the query language
-and the formats are written in this directory.
+A re-creation of OpenSearch Dashboards 3.9.0 that is built from **five npm packages**: React and
+React DOM, and the libraries OpenSearch Dashboards itself draws Vega visualizations and maps
+with, Vega, Vega-Lite and Leaflet. With what they bring and the compiler, that is 89 packages,
+where the fork around it needs about 2,360. It exists because the fork cannot be built where its
+packages cannot be fetched: a registry that serves only the versions it already holds refused
+174 of them. Nothing here imports a package of OpenSearch Dashboards, of its component library or
+of its charts; the server, the components, the charts, the query language and the formats are
+written in this directory.
 
 What it keeps, so that it can stand where OpenSearch Dashboards stood:
 
@@ -29,7 +31,7 @@ Node.js 22 and npm are all it needs.
 
 ```bash
 cd distribution/standalone
-npm ci                      # twelve packages: react, react-dom, typescript, their types
+npm ci                      # react, react-dom, vega, vega-lite, leaflet, typescript, types
 npm test                    # the unit tests, with node --test
 node scripts/build.mjs      # dist/: the server as plain files, the browser side as one script
 node dist/server/main.js --config config/opensearch_dashboards.yml
@@ -37,7 +39,8 @@ node dist/server/main.js --config config/opensearch_dashboards.yml
 
 `OPENSEARCH_HOSTS='["http://localhost:9200"]' SERVER_PORT=5601 node dist/server/main.js` does the
 same from the environment. What runs has no `node_modules`: the server uses Node's own modules
-only, and React is inside the browser script.
+only, React and Leaflet are inside the browser script, and Vega and Vega-Lite are served as
+their own browser builds, fetched only when a Vega visualization is drawn.
 
 ### Will it build where I am?
 
@@ -46,8 +49,8 @@ node scripts/preflight.mjs                      # asks the registry npm is set u
 node scripts/preflight.mjs --registry <url>     # or another one
 ```
 
-fetches each of the twelve packages from the registry, past the local cache, and names any that
-cannot be had. Run it once on the machine or in the pipeline that will build the image.
+fetches each of the 89 packages of `package-lock.json` from the registry, past the local cache,
+and names any that cannot be had. Run it once on the machine or in the pipeline that will build the image.
 
 `node scripts/check_lockfile.mjs` is the same question asked of the three lists in `registry/`
 (what that registry could not serve when the fork was tried) and of the fork's lockfile, with no
@@ -87,15 +90,17 @@ The last two lines only give back what this server does not need: it holds about
 | Home, navigation, search bar (DQL and Lucene), filters, time picker, auto-refresh | done |
 | Discover: fields, histogram, table, a document in place, surrounding documents, saved searches, CSV | done |
 | Dashboards: list, view, edit (move, resize, add, replace, rename), save, clone, share, full screen | done |
-| Visualizations drawn: area, line, bar, horizontal bar, pie, metric, gauge, goal, heat map, tag cloud, data table, markdown, controls, TSVB | done |
+| Visualizations drawn: area, line, bar, horizontal bar, pie, metric, gauge, goal, heat map, tag cloud, data table, markdown, controls, TSVB, coordinate map, region map (the map.* settings of OpenSearch Dashboards, the maps service and its tiles and vector layers, custom vector maps from `*-map` indexes with the `/api/geospatial` routes) | done |
 | Inspect (requests, responses, the table behind a chart) | done |
-| Visualize: the list, the kinds to choose from, and the editor (metrics and buckets, the options of each kind, save, share, inspect) | done for the kinds above; TSVB is edited as JSON; clicking the "Other" slice adds no filter; "Show values on chart" and "Order buckets by sum" are not offered |
+| Visualize: the list, the kinds to choose from, and the editor (metrics and buckets, the options of each kind, save, share, inspect) | done for the kinds above; TSVB has its own editor (the panel types, their data, options and annotations, markdown and its CSS); clicking the "Other" slice adds no filter; "Show values on chart" and "Order buckets by sum" are not offered |
 | Management: index patterns (create, fields, formats, scripted fields, source filters), saved objects (export, import, relationships, inspect), advanced settings | done |
+| Sample data: the four sets of OpenSearch Dashboards (flights, web logs, eCommerce orders, OpenTelemetry logs, traces and metrics) with their indices, documents and saved objects, the `/api/sample_data` routes, and the page that adds, opens and removes them | done; no usage counters (`sample-data-telemetry`) are written |
 | Dev Tools: the console (several requests, send, auto indent, copy as cURL, paste cURL, history, settings, import, export) and the Grok debugger | done; suggestions cover methods, paths, index names and the body of a search, not every API; no folding of a body |
 | Query Workbench: SQL and PPL, the list of indices, results a page at a time with rows that open, search, downloads (JDBC, CSV, text), Explain, full screen; the plugin's `/api/sql_console` routes | done; the "Output" tab also says why a query failed, where the plugin leaves that out; `pplcsv` and `ppltext` answer the text, where the plugin answers 400 with the text as its message; no Spark or S3 data sources |
 | Index Management: the plugin's `/api/ism` routes; indexes with their actions, the page that creates one and the page of one (settings, mappings, aliases); state management policies (list, JSON editor, visual editor, details); policy managed indexes and change policy; aliases; templates and component templates with the pages that create and change them; data streams with the page that creates one and the page of one; the index operations (reindex, shrink, split, force merge, roll over), each followed in the background until OpenSearch has finished it; rollup jobs (the list, the form in four steps, the page of one and the page that changes its schedule); transform jobs (the list, the form in four steps with its sample of the source and its look at the result, the page of one and the page that changes its schedule); notification settings (whom to tell when a reindex, a shrink, split or clone, a force merge or an open has failed or completed); Snapshot Management, the plugin's second application: snapshots (the list with its filters, the page of one, taking one, restoring one with its renaming and index settings, and the restores followed until OpenSearch has finished them), snapshot policies (the list, the form that creates and changes one with its schedules, retention and notifications, the page of one with what it did last, starting and stopping) and repositories (the list, registering one, deleting some) | done |
+| Vega: the spec read as OpenSearch Dashboards reads it (HJSON, `config.kibana`, requests to OpenSearch with their context and time, PPL, maps service files), drawn by Vega and Vega-Lite, on a map too; the editor with its colours, help and reformatting; Inspect's view of the data sets, signals and spec; `vis_type_vega.enableExternalUrls` | done |
 | Timeline: the expression language and every function of the original on the server (`/api/timeline/run`, `/api/timeline/functions`, `/api/timeline/validate/es`), the chart as Flot draws it (lines, bars, points, stacks, several y axes with units, the legend that follows the cursor, the crosshair shared by every Timeline chart of a page, a drag across the chart to set the time range), the editor with its suggestions and the interval | done |
-| Vega, coordinate and region maps, VisBuilder objects | not drawn yet; the panel says so |
+| VisBuilder objects | not drawn yet; the panel says so |
 
 Until the pages in the lower half exist, the fork's build does those jobs on the same saved
 objects.
@@ -105,18 +110,22 @@ objects.
 ```
 server/    Node.js: HTTP, the OpenSearch client, saved objects, settings, import and export,
            the routes of Query Workbench and of Index Management
+  sample_data/  the sample data routes, and in data_sets/ what each set loads: its documents
+               (gzipped, 6.6 MB in all), the mappings of its indices, its saved objects
 common/    what both sides share
 web/       the browser side
   components/  the Atlas kit: buttons, forms, tables, overlays      (class prefix atl)
   shell/       the page frame, search bar, filter bar, time picker   (shl)
   charts/      SVG charts: axes, scales, legends, tooltips           (cht)
   vis/         one file per kind of visualization, and TSVB          (vis)
-  apps/        home, discover (dsc), dashboard (dsh), visualize (vze), management (mgt),
-               dev_tools (dvt), query_workbench (qwb), index_management (ism)
+  apps/        home and its sample data page (hom), discover (dsc), dashboard (dsh),
+               visualize (vze; its TSVB editor tvb), management (mgt), dev_tools (dvt),
+               query_workbench (qwb), index_management (ism)
   lib/         DQL, rison, date math, number and date formats, aggregations, markdown,
                the syntax of a search box
 scripts/   build.mjs (TypeScript compiler and a small bundler), the two registry checks
 registry/  the packages the target registry could not serve, as it reported them
+licenses/  the licences of the packages parts of the browser side are written after (NOTICE)
 ```
 
 ### The rule for a dependency
@@ -129,4 +138,4 @@ transcribed from the registry's own report; when the registry changes, change th
 ## Licence
 
 Apache-2.0, as the fork. [`NOTICE`](NOTICE) says what was derived from OpenSearch Dashboards and
-what the browser script bundles.
+from the packages it draws Vega visualizations with, and what the browser side bundles.

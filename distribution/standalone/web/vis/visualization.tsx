@@ -20,15 +20,28 @@ import { HeatmapVis } from './heatmap_vis';
 import { MarkdownVis } from './markdown_vis';
 import { MetricVis } from './metric_vis';
 import { PieVis } from './pie_vis';
+import { RegionMapVis } from './region_map/region_map_vis';
 import { fetchVisData, type VisData, type VisInput } from './request';
 import { TableVis } from './table_vis';
 import { TagCloudVis } from './tag_cloud_vis';
-import { splitTables, type VisRenderProps } from './types';
+import { TileMapVis } from './tile_map/tile_map_vis';
+import { splitTables, visFailure, type VisFailure, type VisRenderProps } from './types';
+import type { TsvbData, TsvbTableData } from './tsvb/data';
 import { TimelineVis } from './timeline/timeline_vis';
 import { TsvbVis } from './tsvb/vis';
+import type { VegaDebugValues } from './vega/debug_view';
+import { VegaVis } from './vega/vega_vis';
 import { XYVis } from './xy_vis';
 import { waitTurn, type Turn } from './turns';
 import '../styles/vis.css';
+
+/** What Inspect shows of a visualization; for TSVB, the data it drew, which its editor reads */
+export interface VisInspectData {
+  requests: RequestRecord[];
+  table?: Table;
+  vega?: VegaDebugValues;
+  tsvb?: TsvbData | TsvbTableData;
+}
 
 export interface VisualizationProps {
   vis: Vis;
@@ -42,10 +55,15 @@ export interface VisualizationProps {
   /** Controls replace their own among the page's filters */
   onFiltersChange?: (filters: Filter[]) => void;
   onTimeChange?: (range: TimeRange) => void;
-  /** What Inspect shows: the requests made and the table drawn */
-  onData?: (data: { requests: RequestRecord[]; table?: Table }) => void;
+  /** What Inspect shows: the requests made, and the table drawn or the Vega view; for TSVB, the data it drew */
+  onData?: (data: VisInspectData) => void;
   /** This chart's place among the charts of the page, when the page keeps one */
   turn?: Turn;
+  /**
+   * Takes the failure of the visualization's data, and nothing once it draws again. The drawing
+   * then shows no error of its own and keeps what it last drew, as the original's does.
+   */
+  onError?: (failure: VisFailure | undefined) => void;
 }
 
 const DRAWN: Record<string, (props: VisRenderProps) => ReactNode> = {
@@ -58,25 +76,40 @@ const DRAWN: Record<string, (props: VisRenderProps) => ReactNode> = {
   gauge: (props) => <GaugeVis {...props} />,
   goal: (props) => <GaugeVis {...props} />,
   heatmap: (props) => <HeatmapVis {...props} />,
+  region_map: (props) => <RegionMapVis {...props} />,
   tagcloud: (props) => <TagCloudVis {...props} />,
   table: (props) => <TableVis {...props} />,
+  tile_map: (props) => <TileMapVis {...props} />,
 };
 
 // The kinds whose legend can be opened and closed from the corner of the chart
 const LEGEND_KINDS = new Set(['area', 'line', 'histogram', 'horizontal_bar', 'pie', 'heatmap']);
 
 /** Whether this product draws a kind of visualization */
-export const canDraw = (type: string) => type in DRAWN || type === 'markdown' || type === 'input_control_vis' || type === 'metrics' || type === 'timelion';
+export const canDraw = (type: string) =>
+  type in DRAWN || type === 'markdown' || type === 'input_control_vis' || type === 'metrics' || type === 'vega' || type === 'timelion';
 
 /** Whether a kind of visualization takes colours from the page's memory, and so a turn */
 export const takesTurn = (type: string) => type in DRAWN;
 
-function AggVisualization({ vis, input, tick, uiState, onUiState, onFilter, onTimeChange, onData, turn }: VisualizationProps) {
+function AggVisualization({ vis: saved, input, tick, uiState, onUiState, onFilter, onTimeChange, onData, turn, onError }: VisualizationProps) {
+  // Params a drawing sets on an aggregation (a map's bounds and precision), until the aggregations change
+  const [aggPatch, setAggPatch] = useState<{ aggs: string; params: Record<string, Record<string, unknown>> }>();
+  const savedAggs = JSON.stringify(saved.aggs);
+  const patch = aggPatch?.aggs === savedAggs ? aggPatch.params : undefined;
+  const vis = patch ? { ...saved, aggs: saved.aggs.map((agg) => (patch[agg.id] ? { ...agg, params: { ...agg.params, ...patch[agg.id] } } : agg)) } : saved;
+  const onAggParams = (aggId: string, params: Record<string, unknown>) =>
+    setAggPatch((current) => {
+      const base = current?.aggs === savedAggs ? current.params : {};
+      return { aggs: savedAggs, params: { ...base, [aggId]: { ...base[aggId], ...params } } };
+    });
   const [data, setData] = useState<VisData>();
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(true);
   const report = useRef(onData);
   report.current = onData;
+  const reportError = useRef(onError);
+  reportError.current = onError;
 
   const key = JSON.stringify([vis.type, vis.aggs, vis.source, vis.savedSearchId, vis.params.showMetricsAtAllLevels, vis.params.showPartialRows, input]);
   useEffect(() => {
@@ -89,12 +122,15 @@ function AggVisualization({ vis, input, tick, uiState, onUiState, onFilter, onTi
         setData(answer);
         setError(undefined);
         setLoading(false);
+        reportError.current?.(undefined);
         report.current?.({ requests: answer.requests, table: answer.table });
       })
       .catch((failure) => {
         if ((failure as Error).name === 'AbortError') return;
-        setError(errorMessage(failure));
         setLoading(false);
+        // Told around the drawing, which keeps what it drew, as the original's esaggs
+        if (reportError.current) reportError.current(visFailure('opensearchaggs', failure));
+        else setError(errorMessage(failure));
       })
       .finally(() => turn?.done());
     return () => controller.abort();
@@ -116,7 +152,7 @@ function AggVisualization({ vis, input, tick, uiState, onUiState, onFilter, onTi
     const parts = vis.type === 'table' || vis.type in DRAWN ? splitTables(data.table) : [{ table: data.table }];
     const split = vis.aggs.find((agg) => agg.schema === 'split' && agg.enabled !== false);
     const asRows = split?.params?.row !== false;
-    const props = { vis, uiState: uiState ?? vis.uiState, onUiState, onFilter, onTimeChange };
+    const props = { vis, uiState: uiState ?? vis.uiState, onUiState, onFilter, onTimeChange, onAggParams };
     body =
       parts.length === 1 && parts[0].label === undefined ? (
         draw({ ...props, data })
@@ -153,7 +189,30 @@ export function Visualization(props: VisualizationProps) {
   else if (vis.type === 'input_control_vis') {
     body = <ControlsVis vis={vis} input={props.input} onFiltersChange={props.onFiltersChange} tick={props.tick} />;
   } else if (vis.type === 'metrics') {
-    body = <TsvbVis vis={vis} input={props.input} tick={props.tick} onTimeChange={props.onTimeChange} onData={props.onData} />;
+    body = (
+      <TsvbVis
+        vis={vis}
+        input={props.input}
+        tick={props.tick}
+        uiState={props.uiState}
+        onUiState={props.onUiState}
+        onTimeChange={props.onTimeChange}
+        onData={props.onData}
+      />
+    );
+  } else if (vis.type === 'vega') {
+    body = (
+      <VegaVis
+        vis={vis}
+        input={props.input}
+        tick={props.tick}
+        onFilter={props.onFilter}
+        onFiltersChange={props.onFiltersChange}
+        onTimeChange={props.onTimeChange}
+        onData={props.onData}
+        onError={props.onError}
+      />
+    );
   } else if (vis.type === 'timelion') {
     body = <TimelineVis vis={vis} input={props.input} tick={props.tick} onTimeChange={props.onTimeChange} onData={props.onData} />;
   } else if (vis.type in DRAWN) body = <AggVisualization {...props} />;

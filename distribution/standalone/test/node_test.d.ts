@@ -19,3 +19,11 @@ declare module 'node:assert/strict' {
   };
   export default assert;
 }
+
+// What the Vega tests use to run the browser builds of Vega and Vega-Lite the product ships
+declare module 'node:fs' {
+  export function readFileSync(path: string, encoding: 'utf8'): string;
+}
+declare module 'node:vm' {
+  export function runInThisContext(code: string, options?: { filename?: string }): unknown;
+}

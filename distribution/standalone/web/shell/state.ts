@@ -75,6 +75,17 @@ export function currentGlobalParam(): string | undefined {
   return getLocation().hashParams._g ?? readSession();
 }
 
+/**
+ * The `_g` with a change made to it, for a page that writes it in the same step as its own state:
+ * loading a saved query changes the query, the filters and the time range at once.
+ */
+export function globalParamWith(patch: Partial<GlobalState>): string {
+  const latest = readGlobal(getLocation().hashParams._g ?? readSession());
+  const encoded = encodeState({ ...latest, ...patch });
+  writeSession(encoded);
+  return encoded;
+}
+
 export function useGlobalState(): [GlobalState, (patch: Partial<GlobalState>) => void] {
   const location = useLocation();
   const raw = location.hashParams._g ?? readSession();
@@ -90,11 +101,8 @@ export function useGlobalState(): [GlobalState, (patch: Partial<GlobalState>) =>
   }, [location.hashParams._g, location.pathname, location.hashPath, raw]);
 
   const setState = useCallback((patch: Partial<GlobalState>) => {
-    const latest = readGlobal(getLocation().hashParams._g ?? readSession());
-    const encoded = encodeState({ ...latest, ...patch });
-    writeSession(encoded);
     // A new time range is a step the back button returns from; a refresh interval is not
-    setHashParams({ _g: encoded }, { replace: patch.time === undefined });
+    setHashParams({ _g: globalParamWith(patch) }, { replace: patch.time === undefined });
   }, []);
 
   return [state, setState];

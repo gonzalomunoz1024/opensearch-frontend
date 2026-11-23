@@ -1,15 +1,27 @@
 InfraDashboard
 
 This product is a re-creation of OpenSearch Dashboards (https://opensearch.org/), written to be
-built from two npm packages. It contains no code of the OpenSearch Dashboards packages, but it
-follows that product closely so that what was saved with it keeps working, and parts of it are
-derived from it under the Apache License, Version 2.0:
+built from five npm packages: React, React DOM, Vega, Vega-Lite and Leaflet. It uses no package
+of OpenSearch Dashboards, but it follows that product closely so that what was saved with it
+keeps working, and parts of it are derived from it under the Apache License, Version 2.0:
 
   - the mappings of the saved objects index (server/saved_objects_mappings.json),
   - the names, defaults and descriptions of the advanced settings (web/lib/settings_catalogue.json),
   - the rules by which a saved visualization is drawn: its axes, ticks, ranges, measures and the
     order in which the colours of the palette are given out,
-  - the palette of chart colours, which is that of the OpenSearch UI framework.
+  - the reading of a Vega spec (web/vis/vega): its settings, the requests it makes to OpenSearch,
+    its warnings and its error texts,
+  - the palette of chart colours, which is that of the OpenSearch UI framework,
+  - the sample data sets (server/sample_data/data_sets): their documents (the *.json.gz files,
+    copied as they are from src/plugins/home/server/services/sample_data/data_sets of
+    OpenSearch Dashboards 3.9.0), the field mappings of their indices, and their saved objects
+    in the form OpenSearch Dashboards 3.9.0 writes them when it installs a set; and their
+    preview pictures (web/static/plugins/home/assets/sample_data_resources, copied as they are
+    from src/plugins/home/public/assets/sample_data_resources),
+  - the pictures of the welcome screen of a new instance: its illustration
+    (web/static/plugins/home/assets/common, copied as it is from
+    src/plugins/home/public/assets/common) and the shapes behind it (web/static/core_app/images,
+    copied as they are from src/core/public/core_app/images).
 
 OpenSearch Dashboards
 Copyright OpenSearch Contributors
@@ -19,8 +31,37 @@ Elasticsearch (http://www.elastic.co).
 Copyright 2009-2021 Elasticsearch B.V.
 
 The browser script bundles React, React DOM and Scheduler, under the MIT License,
-Copyright (c) Facebook, Inc. and its affiliates. Their licence texts are in dist/licenses of a
-build.
+Copyright (c) Facebook, Inc. and its affiliates, and Leaflet, under the BSD 2-Clause License,
+Copyright (c) 2010-2023, Volodymyr Agafonkin, Copyright (c) 2010-2011, CloudMade. Vega and
+Vega-Lite are served as their own browser builds, with the packages those builds hold, under the
+BSD 3-Clause License, Copyright (c) 2015-2023 and Copyright (c) 2015, University of Washington
+Interactive Data Lab. Their licence texts are in dist/licenses of a build.
+
+Parts of the Vega visualization are written after the code of the packages OpenSearch Dashboards
+uses for it, so that a spec is read, coloured and drawn as it is there, and are derived from that
+code under its licence:
+
+  - HJSON, read and written (web/lib/hjson.ts): hjson 3.2.1, MIT License,
+    Copyright (c) 2014-2017 Christian Zangl
+  - JSON written compactly (web/lib/compact_json.ts): json-stringify-pretty-compact 1.2.0,
+    MIT License, Copyright (c) 2014, 2016, 2017 Simon Lydell, Copyright (c) 2017 Randall Randall
+  - the colours of the spec editor (web/lib/hjson_tokens.ts): the HJSON mode of the Ace editor as
+    brace 0.11.1 holds it, BSD 3-Clause License, Copyright (c) 2010, Ajax.org B.V.
+  - expressions evaluated without compiling them (web/vis/vega/interpreter.ts):
+    vega-interpreter 1.2.1, BSD 3-Clause License, Copyright (c) 2015-2023, University of
+    Washington Interactive Data Lab
+  - tooltips (web/vis/vega/view.ts): vega-tooltip 0.30.0, BSD 3-Clause License,
+    Copyright 2016 Interactive Data Lab and contributors
+  - the version a spec names (web/vis/vega/parser.ts): vega-schema-url-parser 2.2.0,
+    BSD 3-Clause License, Copyright (c) 2017, Vega, and compare-versions 3.5.1, MIT License,
+    Copyright (c) 2015-2017 Ole Michelsen
+  - a Vega view over a map (web/vis/vega/map_layer.ts and map_spec.ts): leaflet-vega 0.9.0,
+    BSD 2-Clause License, Copyright (c) 2017, Yuri Astrakhan, and vega-spec-injector 0.0.2,
+    MIT License, Copyright (c) 2017 Yuri Astrakhan
+  - the parameters of a data address (web/vis/vega/data_parsers.ts): the param function of
+    jQuery 3.6.0, MIT License, Copyright OpenJS Foundation and other contributors
+
+Their licence texts are in licenses/, and in dist/licenses/followed of a build.
 
 The drawing of Timeline charts (web/vis/timeline/plot.ts) is derived from Flot 0.8.3 and its
 time, stack, symbol, crosshair, selection, canvas and axis-label plug-ins, under the MIT License,

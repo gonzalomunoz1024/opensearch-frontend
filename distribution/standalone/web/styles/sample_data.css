@@ -1,0 +1,228 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/*
+ * The sample data page, measured on the original in the Atlas theme: a column of 1200 px, three
+ * cards a row 24 px apart, each with its picture across the top, the badge of an installed set
+ * astride its upper edge and the buttons at its foot.
+ */
+
+.homSampleData {
+  display: flex;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-4);
+}
+
+.homSampleData__body {
+  display: flex;
+  flex: 1 1 100%;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Under the title, the original's two spacers and, between them, its row of tabs, which is empty */
+.homSampleData__title {
+  margin-bottom: calc(var(--space-4) + var(--space-6));
+}
+
+.homSampleDataSetCards {
+  display: flex;
+  flex-wrap: wrap;
+  margin: calc(-1 * var(--space-3));
+}
+
+/* A third of the row less the gutters, as the original's grid counts it (33.3%) */
+.homSampleDataSetCards__item {
+  display: flex;
+  flex: 0 1 calc(33.3% - var(--space-6));
+  flex-direction: column;
+  min-width: 1px;
+  margin: var(--space-3);
+}
+
+.homSampleDataSetCard {
+  --hom-card-padding: var(--space-4);
+
+  position: relative;
+  display: flex;
+  flex-grow: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  min-height: 1px;
+  padding: var(--hom-card-padding);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+  color: var(--color-text-primary);
+  text-align: left;
+}
+
+/* A card with a badge has more room around it, as the original's */
+.homSampleDataSetCard--installed {
+  --hom-card-padding: var(--space-6);
+}
+
+.homSampleDataSetCard__top {
+  position: relative;
+  flex-grow: 0;
+  width: 100%;
+  min-height: 1px;
+  font-size: 0;
+}
+
+/* The picture reaches the card's edges; its corners are the theme's, a radius less one */
+.homSampleDataSetCard__image {
+  position: relative;
+  top: calc(-1 * var(--hom-card-padding));
+  left: calc(-1 * var(--hom-card-padding));
+  width: calc(100% + 2 * var(--hom-card-padding));
+  margin-bottom: calc(-1 * var(--hom-card-padding));
+  overflow: hidden;
+  border-radius: calc(var(--radius-sm) - 1px) calc(var(--radius-sm) - 1px) 0 0;
+}
+
+.homSampleDataSetCard__image img {
+  display: block;
+  width: 100%;
+}
+
+.homSampleDataSetCard__content {
+  flex-grow: 1;
+  width: 100%;
+  margin-top: var(--space-4);
+}
+
+.homSampleDataSetCard__title {
+  display: block;
+}
+
+.homSampleDataSetCard__description {
+  margin-top: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  line-height: 1.5;
+}
+
+.homSampleDataSetCard__badgeWrapper {
+  position: absolute;
+  top: calc(-1 * var(--space-3));
+  left: 50%;
+  z-index: 3;
+  min-width: 30%;
+  max-width: calc(100% - var(--space-8));
+  transform: translateX(-50%);
+}
+
+.homSampleDataSetCard__badge {
+  display: block;
+  width: 100%;
+  height: 24px;
+  padding: 0 var(--space-4);
+  overflow: hidden;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px var(--color-border-light);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 24px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.homSampleDataSetCard__footer {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+  margin-top: var(--space-4);
+}
+
+.homSampleDataSetCard__footer--spread {
+  justify-content: space-between;
+}
+
+/* The buttons keep their icon or spinner 8 px from their words, as the theme's */
+.homSampleDataSetCard__footer .atlButton {
+  gap: var(--space-2);
+}
+
+/* The original's smallest button, with its border that shows no colour */
+.homSampleDataSetCard__button {
+  min-width: 112px;
+  border: 1px solid transparent;
+}
+
+/* A busy button's spinner, as the theme draws it in a button: a thin ring in the button's colour */
+.homSampleDataSetCard__footer .atlSpinner {
+  border-width: 1px;
+  border-color: var(--color-accent) currentcolor currentcolor;
+}
+
+/* "Remove": a button of text in the theme's red for text, flush with the card's content */
+.homSampleDataSetCard__remove.atlButton--empty {
+  margin-right: var(--space-2);
+  padding: 0;
+  border: 1px solid transparent;
+}
+
+.homSampleDataSetCard__remove.atlButton--empty:not(:disabled) {
+  color: #d5352d;
+}
+
+.homSampleDataSetCard__remove.atlButton--empty:hover:not(:disabled) {
+  background: var(--color-critical-tint);
+}
+
+:root.themeDark .homSampleDataSetCard__remove.atlButton--empty:not(:disabled) {
+  color: var(--color-critical);
+}
+
+/* The menu of "View data", as the original's: 256 px wide and 8 px under its button, a row of
+   37 px for each link */
+.homSampleDataLinks.atlPopover {
+  width: 256px;
+  margin-top: var(--space-1);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  backdrop-filter: none;
+}
+
+.homSampleDataLinks__menu.atlMenu {
+  padding: 0;
+}
+
+.homSampleDataLinks__menu .atlMenu__item {
+  min-height: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: 0;
+  line-height: 1.5;
+}
+
+.homSampleDataLinks__menu .atlMenu__item:hover,
+.homSampleDataLinks__menu .atlMenu__item:focus {
+  background: var(--color-surface-secondary);
+}
+
+/* The theme's tooltip is 256 px wide at most, and breaks a word longer than that */
+.homSampleDataTip.atlTooltip {
+  max-width: 256px;
+  overflow-wrap: break-word;
+}
+
+/* On a narrow screen the cards are one a row */
+@media (max-width: 767px) {
+  .homSampleDataSetCards {
+    margin-right: 0;
+    margin-left: 0;
+  }
+
+  .homSampleDataSetCards__item {
+    flex-basis: 100%;
+    margin-right: 0;
+    margin-left: 0;
+  }
+}

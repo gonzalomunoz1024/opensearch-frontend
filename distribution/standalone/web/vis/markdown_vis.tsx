@@ -11,11 +11,12 @@ interface MarkdownParams {
   openLinksInNewTab?: boolean;
 }
 
+/** As the original draws it: a panel 8px in, in the base size the visualization sets in points */
 export function MarkdownVis({ vis }: { vis: Vis }) {
   const params = vis.params as MarkdownParams;
   return (
-    <div className="visMarkdown" style={{ fontSize: `${params.fontSize ?? 12}pt` }} data-test-subj="markdownBody">
-      <Markdown text={params.markdown ?? ''} openLinksInNewTab={params.openLinksInNewTab} />
+    <div className="visMarkdownVis" style={{ fontSize: `${params.fontSize ?? 12}pt` }} data-test-subj="markdownBody">
+      <Markdown className="visMarkdownBody" text={params.markdown ?? ''} openLinksInNewTab={params.openLinksInNewTab} />
     </div>
   );
 }

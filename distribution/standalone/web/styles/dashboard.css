@@ -14,6 +14,12 @@
   padding: var(--space-2);
 }
 
+/* The bar of the query, the time and the filters spans the page under the header, as in the
+   original: its own 8px are the page's margin */
+.dshPage > .shlSearchBar {
+  margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) 0;
+}
+
 .dshGrid {
   position: relative;
   width: 100%;
@@ -73,13 +79,13 @@ body.dshDragging {
   outline-offset: -2px;
 }
 
+/* The original's header: a line 24 pixels high, the title in it and the options button at its end */
 .dshPanel__header {
   display: flex;
   flex: none;
-  gap: var(--space-1);
   align-items: center;
-  min-height: 28px;
-  padding: var(--space-1) var(--space-1) 0 var(--space-2);
+  min-height: 24px;
+  padding: 0;
 }
 
 .dshPanel__header--floating {
@@ -88,7 +94,6 @@ body.dshDragging {
   right: 0;
   z-index: 1;
   min-height: 0;
-  padding: var(--space-1);
 }
 
 .dshPanel--editing .dshPanel__header {
@@ -98,15 +103,19 @@ body.dshDragging {
 .dshPanel__title {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: var(--font-size-xs);
+  padding: 0 var(--space-2);
+  /* the original's panel titles are 13 pixels, between the theme's two small sizes */
+  font-size: 13px;
   font-weight: var(--font-weight-semibold);
-  line-height: 20px;
+  line-height: 24px;
 }
 
-.dshPanel__menu {
+.dshPanel__menu.atlButton {
   flex: none;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0;
   opacity: 0;
 }
 
@@ -116,6 +125,25 @@ body.dshDragging {
   opacity: 1;
 }
 
+/* The original's red "Error" badge: over the top of what the panel drew last, under its title */
+.dshPanel__label {
+  position: relative;
+  z-index: 2;
+  height: 0;
+}
+
+.dshPanel__label > .atlTooltipAnchor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding-left: var(--space-2);
+}
+
+/* What failed is not clicked on, as in the original */
+.dshPanel__body[data-error] {
+  pointer-events: none;
+}
+
 .dshPanel__body {
   position: relative;
   display: flex;
@@ -123,7 +151,7 @@ body.dshDragging {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  padding: var(--space-1) var(--space-2) var(--space-2);
+  padding: var(--space-2);
 }
 
 .dshPanel__resize {
