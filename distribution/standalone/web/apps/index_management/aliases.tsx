@@ -139,8 +139,11 @@ function IndexSelect({
     );
     setLoading(false);
   };
+  // Asked half a second after the last key, as the plugin's RemoteSelect
+  const timer = useRef<number | undefined>(undefined);
   useEffect(() => {
     void search('');
+    return () => window.clearTimeout(timer.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return (
@@ -152,7 +155,10 @@ function IndexSelect({
       options={[...new Set([...options, ...value])].map((name) => ({ value: name, label: name }))}
       selected={value}
       onChange={onChange}
-      onSearch={(text) => void search(text)}
+      onSearch={(text) => {
+        window.clearTimeout(timer.current);
+        timer.current = window.setTimeout(() => void search(text), 500);
+      }}
       loading={loading}
       invalid={invalid}
     />
