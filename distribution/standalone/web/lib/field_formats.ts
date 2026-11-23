@@ -337,8 +337,10 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
         // The ends of an open range, as the original's numeral formats write them
         if (value === Infinity) return text('+∞');
         if (value === -Infinity) return text('-∞');
-        const number = toNumber(value);
-        return text(number === undefined ? stringify(value) : formatNumber(number, pattern));
+        // Anything else is read as parseFloat reads it, and what is then no number is written as
+        // nothing, as the original's numeral formats do: "3.14abc" is 3.14, "n/a", true and NaN ""
+        const number = typeof value === 'number' ? value : parseFloat(String(value));
+        return text(Number.isNaN(number) ? '' : formatNumber(number, pattern));
       };
     }
     case 'date': {
@@ -502,9 +504,10 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
 
 /** The formatter of a format. A list of values is written value by value, joined by commas. */
 export function createFormatter(spec: FieldFormatSpec | undefined, settings = DEFAULT_FORMAT_SETTINGS): Formatter {
-  const one = single(spec ?? { id: 'string' }, settings);
+  const format = single(spec ?? { id: 'string' }, settings);
+  // No value, alone or in a list, is a dash whatever the format, as the original's lists write it
+  const one = (value: unknown): Formatted => (isMissing(value) ? { text: MISSING } : format(value));
   return (value) => {
-    if (isMissing(value)) return { text: MISSING };
     if (Array.isArray(value)) {
       if (value.length === 1) return one(value[0]);
       const parts = value.map((item) => one(item));

@@ -244,6 +244,18 @@ describe('numbers', () => {
     assert.equal(createFormatter({ id: 'static_lookup' })('png').text, 'png');
   });
 
+  it('reads a value under a number format as parseFloat does, and writes nothing for what is no number', () => {
+    const number = createFormatter({ id: 'number' });
+    assert.deepEqual(
+      [Number.NaN, 'NaN', 'n/a', '3.14abc', '0x10', '1e3', true, { a: 1 }, ' '].map((value) => number(value).text),
+      ['', '', '', '3.14', '0', '1,000', '', '', '']
+    );
+    assert.equal(createFormatter({ id: 'bytes' })('2048').text, '2KB');
+    assert.equal(createFormatter({ id: 'percent' })(Number.NaN).text, '');
+    // and no value in a list is a dash still, as under every format
+    assert.deepEqual([number([null]).text, number([1, null, 'x']).text], ['-', '1, -, ']);
+  });
+
   it('writes an empty text with its format, as the original does, and no value at all as a dash', () => {
     // An empty term is a bucket of its own: its cell, its label and the pill of its filter
     const others = createFormatter({ id: 'static_lookup', params: { lookupEntries: [{ key: 'css', value: 'Style sheet' }], unknownKeyValue: 'other' } });
