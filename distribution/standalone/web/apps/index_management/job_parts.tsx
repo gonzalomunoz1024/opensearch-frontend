@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button, Panel, cx } from '../../components/basic';
+import { CodeEditor } from '../../components/code_editor';
 import { SearchField, TextArea, TextField } from '../../components/form';
 import { Icon } from '../../components/icon';
 import { Modal } from '../../components/overlay';
@@ -14,6 +15,7 @@ import { Pagination } from '../../components/table';
 import { LocalTable, ism, toasts, type Answer, type TableColumn } from './common';
 import { useSpaced } from './index_select';
 import { leadingDebounce } from './jobs';
+import { aceJsonTokens } from './policy_model';
 import { wildcardOption, type FieldItem } from './rollup_model';
 
 // --- The panels and spaces of the plugin's pages ------------------------------------------------------
@@ -84,27 +86,105 @@ export function JobsPanel({ title, actions, children }: { title: ReactNode; acti
   );
 }
 
-/** A panel of a form or of a page of details: the title at 17 px over a line, and what it holds */
+/**
+ * A panel of a form or of a page of details: the title at 17 px, "– optional" after it when the
+ * panel may be left empty, a line of what it is for, a line, and what it holds.
+ */
 export function TitledPanel({
   title,
+  optional,
+  description,
   actions,
   children,
   testId,
 }: {
   title: ReactNode;
+  optional?: boolean;
+  description?: ReactNode;
   actions?: ReactNode;
   children?: ReactNode;
   testId?: string;
 }) {
   return (
     <section className="atlPanel ismTp" data-test-subj={testId}>
-      <div className="ismTp__header">
+      <div className={cx('ismTp__header', optional && 'ismTp__header--optional')}>
         <h2 className="atlTitleS ismTp__title">{title}</h2>
+        {optional && <i className="ismTp__optional">– optional</i>}
         {actions && <div className="ismTp__actions">{actions}</div>}
       </div>
+      {description && <p className="ismTp__description">{description}</p>}
       <Rule />
       {children}
     </section>
+  );
+}
+
+/**
+ * The name of a field at 17 px over what it is for, as the plugin's own form labels are drawn,
+ * each 5 px over what follows it.
+ */
+export function CustomLabel({
+  title,
+  help,
+  optional,
+  invalid,
+}: {
+  title: ReactNode;
+  help?: ReactNode;
+  optional?: boolean;
+  invalid?: boolean;
+}) {
+  return (
+    <div className="ismLabel">
+      <h3 className={cx('ismLabel__title', invalid && 'ismLabel__title--invalid')}>
+        {title}
+        {optional && (
+          <span className="ismLabel__optional">
+            <em>– optional</em>
+          </span>
+        )}
+      </h3>
+      {help ? (
+        <p className="ismLabel__help">
+          <span>{help}</span>
+        </p>
+      ) : (
+        <p className="ismLabel__help" />
+      )}
+    </div>
+  );
+}
+
+/** The buttons under a form, at its right: the one that leaves it and the one that saves it */
+export function FormButtons({ children }: { children: ReactNode }) {
+  return <div className="ismFormButtons">{children}</div>;
+}
+
+/**
+ * JSON in an editor drawn as the plugin's code editor: the light theme of Ace the plugin picks,
+ * with its grey gutter, or its dark one in the dark theme.
+ */
+export function AceJsonEditor({
+  value,
+  onChange,
+  height,
+  testId,
+}: {
+  value: string;
+  onChange?: (value: string) => void;
+  height: number;
+  testId?: string;
+}) {
+  return (
+    <CodeEditor
+      value={value}
+      onChange={onChange}
+      height={height}
+      tokenize={aceJsonTokens}
+      ariaLabel="Code Editor"
+      testId={testId}
+      className="ismAce"
+    />
   );
 }
 

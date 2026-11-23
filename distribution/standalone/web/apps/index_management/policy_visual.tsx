@@ -9,22 +9,11 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Accordion, Button, CallOut, IconButton, cx } from '../../components/basic';
 import { ComboBox } from '../../components/combo_box';
 import { Icon } from '../../components/icon';
-import { NumberField, RadioGroup, Select, Switch, TextArea, TextField } from '../../components/form';
+import { FormRow, NumberField, RadioGroup, Select, Switch, TextArea, TextField } from '../../components/form';
 import { Flyout } from '../../components/overlay';
 import { useLocation } from '../../router';
 import { useBreadcrumbs } from '../../shell/state';
-import {
-  BottomBar,
-  ConfirmationModal,
-  ExternalLink,
-  JsonEditor,
-  Labeled,
-  PageTitle,
-  Section,
-  go,
-  ism,
-  toasts,
-} from './common';
+import { ConfirmationModal, ExternalLink, JsonEditor, Labeled, go, ism, toasts } from './common';
 import {
   ACTION_DEFAULTS,
   ACTION_OPTIONS,
@@ -56,7 +45,7 @@ import {
   type Transition,
 } from './policy_model';
 import { CRUMBS, ROUTES } from './routes';
-import { DocsLink, Rule, Spacer } from './job_parts';
+import { AceJsonEditor, CustomLabel, DocsLink, FormButtons, Rule, Spacer, TitledPanel } from './job_parts';
 
 const DOCS = 'https://opensearch.org/docs/im-plugin/ism/index/';
 const POLICY_DOCS = 'https://opensearch.org/docs/im-plugin/ism/policies/';
@@ -301,33 +290,46 @@ function ChannelNotification({
   const { channels, loading, load } = useChannels();
   return (
     <>
-      <Labeled title="Channel ID">
-        <div className="atlRow">
-          <div className="atlGrow">
-            <Select
-              compact
-              placeholder="Select channel ID"
-              value={channelId}
-              onChange={onChannel}
-              options={channels.map((channel) => ({ value: channel.config_id, label: channel.name }))}
-              testId={inAction ? 'create-policy-notification-action-channel-id' : 'create-policy-notification-channel-id'}
+      <CustomLabel title="Channel ID" />
+      <div className="ismChannel">
+        <div className="ismChannel__select">
+          <Select
+            id={inAction ? 'action-channel-id' : 'channel-id'}
+            compact
+            placeholder=""
+            value={channelId}
+            onChange={onChannel}
+            options={channels.map((channel) => ({ value: channel.config_id, label: channel.name }))}
+            testId={inAction ? 'create-policy-notification-action-channel-id' : 'create-policy-notification-channel-id'}
+          />
+        </div>
+        <Button
+          icon="refresh"
+          className="ismRefreshButton"
+          aria-label="Refresh"
+          onClick={load}
+          disabled={loading}
+          testId="channel-notification-refresh"
+        />
+        <Button icon="external" iconSide="right" disabled title="Notifications are not part of this product">
+          Manage channels
+        </Button>
+      </div>
+      {channelId && (
+        <>
+          <Spacer size="m" />
+          <CustomLabel title="Notification message" help="Embed variables in your message using Mustache template." />
+          <div className="ismField400">
+            <TextArea
+              className="ismTextArea"
+              value={message}
+              onChange={onMessage}
+              placeholder="The index {{ctx.index}} failed during policy execution."
+              testId={inAction ? 'create-policy-notification-action-message' : 'create-policy-notification-message'}
             />
           </div>
-          <IconButton icon="refresh" label="Refresh" onClick={load} disabled={loading} testId="channel-notification-refresh" />
-          <Button size="s" icon="external" iconSide="right" disabled title="Notifications are not part of this product">
-            Manage channels
-          </Button>
-        </div>
-      </Labeled>
-      <Labeled title="Notification message" help="Embed variables in your message using Mustache template.">
-        <TextArea
-          value={message}
-          onChange={onMessage}
-          placeholder="The index {{ctx.index}} failed during policy execution."
-          style={{ minHeight: 100 }}
-          testId={inAction ? 'create-policy-notification-action-message' : 'create-policy-notification-message'}
-        />
-      </Labeled>
+        </>
+      )}
     </>
   );
 }
@@ -346,17 +348,17 @@ function LegacyNotification({
   return (
     <>
       <CallOut tone="accent" size="s" icon="info" title="Update your notifications to use Channel ID">
-        <p>
+        <p className="ismCallOutText">
           Using Channel ID will give you more control to manage notifications across OpenSearch dashboards. If you do
           decide to switch, you will lose your current error notification settings.
         </p>
-        <Button size="s" onClick={onSwitch}>
-          Switch to using Channel ID
-        </Button>
+        <Button onClick={onSwitch}>Switch to using Channel ID</Button>
       </CallOut>
-      <JsonEditor
+      <Spacer size="m" />
+      <AceJsonEditor
         value={json}
         onChange={onChange}
+        height={300}
         testId={inAction ? 'create-policy-action-legacy-notification' : 'create-policy-legacy-notification'}
       />
     </>
@@ -1258,59 +1260,58 @@ function IsmTemplates({ policy, onChange }: { policy: Policy; onChange: (policy:
   const templates = templatesOf(policy.ism_template);
   const write = (next: IsmTemplate[]) => onChange({ ...policy, ism_template: next });
   const add = (
-    <Button
-      size="s"
-      onClick={() => write([...templates, { index_patterns: [], priority: 1 }])}
-      testId="ism-templates-add-template-button"
-    >
+    <Button onClick={() => write([...templates, { index_patterns: [], priority: 1 }])} testId="ism-templates-add-template-button">
       Add template
     </Button>
   );
   return (
-    <Section
-      title={
-        <>
-          ISM templates<i className="atlSubdued"> – optional</i>
-        </>
-      }
+    <TitledPanel
+      title="ISM templates"
+      optional
       description={
         <>
-          Specify ISM template patterns that match the index to apply the policy. <ExternalLink href={DOCS} />
+          Specify ISM template patterns that match the index to apply the policy. <DocsLink href={DOCS} />
         </>
       }
     >
-      {templates.length === 0 ? (
-        <div className="ismEmpty">
-          <h3 className="atlTitleXs">No ISM templates</h3>
-          <p>
-            Your policy currently has no ISM templates defined. Add ISM templates to automatically apply the policy to
-            indices created in the future.
-          </p>
-          {add}
-        </div>
-      ) : (
-        <>
-          <div className="ismTemplates">
-            <h5>Index patterns</h5>
+      <div className="ismTemplates">
+        {templates.length > 0 && (
+          <div className="ismTemplates__row">
+            <h5 className="ismTemplates__patterns">Index patterns</h5>
             <h5>Priority</h5>
-            <span />
-            {templates.map((template, index) => {
-              const change = (changes: Partial<IsmTemplate>) =>
-                write(templates.map((other, position) => (position === index ? { ...other, ...changes } : other)));
-              return (
-                <IsmTemplateRow
-                  key={index}
-                  template={template}
-                  onChange={change}
-                  onRemove={() => write(templates.filter((_, position) => position !== index))}
-                />
-              );
-            })}
           </div>
-          <div>{add}</div>
-        </>
-      )}
-    </Section>
+        )}
+        {templates.map((template, index) => {
+          const change = (changes: Partial<IsmTemplate>) =>
+            write(templates.map((other, position) => (position === index ? { ...other, ...changes } : other)));
+          return (
+            <IsmTemplateRow
+              key={index}
+              template={template}
+              onChange={change}
+              onRemove={() => write(templates.filter((_, position) => position !== index))}
+            />
+          );
+        })}
+        {templates.length === 0 ? (
+          <div className="ismStates__empty ismTemplates__empty">
+            <h3>No ISM templates</h3>
+            <Spacer size="m" />
+            <p>
+              Your policy currently has no ISM templates defined. Add ISM templates to automatically apply the policy to
+              indices created in the future.
+            </p>
+            <Spacer />
+            {add}
+          </div>
+        ) : (
+          <>
+            <Spacer />
+            {add}
+          </>
+        )}
+      </div>
+    </TitledPanel>
   );
 }
 
@@ -1324,27 +1325,31 @@ function IsmTemplateRow({
   onRemove: () => void;
 }) {
   return (
-    <>
-      <ComboBox
-        fullWidth
-        allowCustom
-        clearable={false}
-        placeholder="Add index patterns"
-        options={[]}
-        selected={template.index_patterns}
-        onChange={(patterns) => onChange({ index_patterns: patterns.filter((pattern) => pattern.trim() && !pattern.includes(' ')) })}
-        testId="ism-template-index-pattern-input"
-      />
-      <NumberField
-        compact
-        value={template.priority}
-        onChange={(priority) => onChange({ priority })}
-        testId="ism-template-priority-input"
-      />
-      <Button size="s" variant="danger" onClick={onRemove} testId="ism-template-remove-button">
+    <div className="ismTemplates__row">
+      <div className="ismTemplates__patterns">
+        <ComboBox
+          fullWidth
+          allowCustom
+          clearable={false}
+          placeholder="Add index patterns"
+          options={[]}
+          selected={template.index_patterns}
+          onChange={(patterns) => onChange({ index_patterns: patterns.filter((pattern) => pattern.trim() && !pattern.includes(' ')) })}
+          testId="ism-template-index-pattern-input"
+        />
+      </div>
+      <div className="ismTemplates__priority">
+        <NumberField
+          compact
+          value={template.priority}
+          onChange={(priority) => onChange({ priority })}
+          testId="ism-template-priority-input"
+        />
+      </div>
+      <Button variant="danger" onClick={onRemove} testId="ism-template-remove-button">
         Remove
       </Button>
-    </>
+    </div>
   );
 }
 
@@ -1428,16 +1433,16 @@ export function VisualCreatePolicy({ isEdit }: { isEdit: boolean }) {
   };
 
   return (
-    <div className="ismPage">
-      <PageTitle title={`${isEdit ? 'Edit' : 'Create'} policy`}>
-        Policies let you automatically perform administrative operations on indices. <ExternalLink href={POLICY_DOCS} />
-      </PageTitle>
-      <Section title="Policy info">
-        <Labeled
-          title="Policy ID"
-          help="Specify a unique and descriptive ID that is easy to recognize and remember."
-          error={policyIdError || undefined}
-        >
+    <div className="ismPolicyEditor">
+      <h1 className="atlTitleL">{`${isEdit ? 'Edit' : 'Create'} policy`}</h1>
+      <Spacer size="s" />
+      <p className="ismPolicyEditor__intro">
+        Policies let you automatically perform administrative operations on indices. <DocsLink href={POLICY_DOCS} />
+      </p>
+      <Spacer size="m" />
+      <TitledPanel title="Policy info">
+        <CustomLabel title="Policy ID" help="Specify a unique and descriptive ID that is easy to recognize and remember." />
+        <FormRow error={policyIdError || undefined}>
           <TextField
             compact
             disabled={isEdit}
@@ -1449,32 +1454,31 @@ export function VisualCreatePolicy({ isEdit }: { isEdit: boolean }) {
               if (submitted) setPolicyIdError(next ? '' : 'Required');
             }}
             testId="create-policy-policy-id"
-            style={{ maxWidth: 400 }}
           />
-        </Labeled>
-        <Labeled title="Description" help="Describe the policy.">
+        </FormRow>
+        <Spacer size="m" />
+        <CustomLabel title="Description" help="Describe the policy." />
+        <div className="ismField400">
           <TextArea
+            className="ismTextArea"
             value={policy.description ?? ''}
             onChange={(description) => setPolicy((before) => ({ ...before, description }))}
-            style={{ minHeight: 150, maxWidth: 400 }}
             testId="create-policy-description"
           />
-        </Labeled>
-      </Section>
-      <Section
-        title={
-          <>
-            Error notification<i className="atlSubdued"> – optional</i>
-          </>
-        }
+        </div>
+      </TitledPanel>
+      <Spacer size="m" />
+      <TitledPanel
+        title="Error notification"
+        optional
         description={
           <>
             You can set up an error notification for when a policy execution fails.{' '}
-            <ExternalLink href={`${POLICY_DOCS}#error-notifications`} />
+            <DocsLink href={`${POLICY_DOCS}#error-notifications`} />
           </>
         }
       >
-        <div style={{ maxWidth: 600 }}>
+        <div>
           {legacyNotification ? (
             <LegacyNotification
               json={legacyNotification}
@@ -1497,8 +1501,10 @@ export function VisualCreatePolicy({ isEdit }: { isEdit: boolean }) {
             />
           )}
         </div>
-      </Section>
+      </TitledPanel>
+      <Spacer size="m" />
       <IsmTemplates policy={policy} onChange={setPolicy} />
+      <Spacer size="m" />
       <StatesPanel
         policy={policy}
         onAdd={() => setFlyout({})}
@@ -1506,6 +1512,7 @@ export function VisualCreatePolicy({ isEdit }: { isEdit: boolean }) {
         onDelete={(index) => setPolicy((before) => withoutState(before, index))}
         onDefault={(name) => setPolicy((before) => ({ ...before, default_state: name }))}
       />
+      <Spacer size="m" />
       {flyout && (
         <StateFlyout
           state={flyout.state}
@@ -1517,18 +1524,14 @@ export function VisualCreatePolicy({ isEdit }: { isEdit: boolean }) {
           }}
         />
       )}
-      <BottomBar>
-        <Button
-          variant="empty"
-          size="s"
-          onClick={() => (isEdit ? window.history.back() : go(ROUTES.INDEX_POLICIES))}
-        >
+      <FormButtons>
+        <Button variant="empty" onClick={() => (isEdit ? window.history.back() : go(ROUTES.INDEX_POLICIES))}>
           Cancel
         </Button>
-        <Button variant="primary" size="s" loading={submitting} onClick={submit}>
+        <Button variant="primary" loading={submitting} onClick={submit}>
           {isEdit ? 'Update' : 'Create'}
         </Button>
-      </BottomBar>
+      </FormButtons>
     </div>
   );
 }

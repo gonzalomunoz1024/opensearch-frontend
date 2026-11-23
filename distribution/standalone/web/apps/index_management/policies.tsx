@@ -7,22 +7,16 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { Button, CallOut, Spinner } from '../../components/basic';
-import { FormRow, TextField } from '../../components/form';
+import { TextField } from '../../components/form';
 import { Modal, copyText } from '../../components/overlay';
 import { useLocation } from '../../router';
 import { useBreadcrumbs } from '../../shell/state';
 import {
-  BottomBar,
   ConfirmationModal,
   DeleteModal,
-  ExternalLink,
   JSONModal,
-  JsonEditor,
   LocalTable,
-  PageTitle,
   PanelButton,
-  Section,
-  SubmitError,
   Table,
   go,
   ism,
@@ -32,7 +26,18 @@ import {
   useListQuery,
   type TableColumn,
 } from './common';
-import { ListEmptyPrompt, ListPanel, ListSearch, Rule, Spacer, TitledPanel, useListLoad } from './job_parts';
+import {
+  AceJsonEditor,
+  DocsLink,
+  FormButtons,
+  ListEmptyPrompt,
+  ListPanel,
+  ListSearch,
+  Rule,
+  Spacer,
+  TitledPanel,
+  useListLoad,
+} from './job_parts';
 import { DEFAULT_POLICY_JSON, templatesOf, type IsmTemplate, type PolicyDocument } from './policy_model';
 import { StatesPanel, VisualCreatePolicy } from './policy_visual';
 import { CRUMBS, ROUTES } from './routes';
@@ -367,28 +372,34 @@ function JsonCreatePolicy({ isEdit }: { isEdit: boolean }) {
   };
 
   return (
-    <div className="ismPage">
-      <PageTitle title={`${isEdit ? 'Edit' : 'Create'} policy`} />
+    <div className="ismPolicyEditor">
+      <h1 className="atlTitleL">{`${isEdit ? 'Edit' : 'Create'} policy`}</h1>
+      <Spacer />
       {isEdit && (
-        <CallOut
-          tone="accent"
-          icon="help"
-          title="Edits to the policy are not automatically applied to indices that are already being managed by this policy."
-        >
-          <p>
-            This ensures that any update to a policy doesn't harm indices that are running under an older version of
-            the policy. To carry over your edits to these indices, please use the "Change Policy" under "Managed
-            Indices" to reapply the policy after submitting your edits. <ExternalLink href={DOCS} />
-          </p>
-        </CallOut>
+        <>
+          <CallOut
+            tone="accent"
+            icon="help"
+            title="Edits to the policy are not automatically applied to indices that are already being managed by this policy."
+          >
+            <p>
+              This ensures that any update to a policy doesn't harm indices that are running under an older version of
+              the policy. To carry over your edits to these indices, please use the "Change Policy" under "Managed
+              Indices" to reapply the policy after submitting your edits. <DocsLink href={DOCS} />
+            </p>
+          </CallOut>
+          <Spacer />
+        </>
       )}
-      <Section title="Name policy" description="Policies let you automatically perform administrative operations on indices.">
-        <FormRow
-          label="Policy ID"
-          help="Specify a unique ID that is easy to recognize and remember."
-          error={policyIdError || undefined}
-        >
+      <TitledPanel title="Name policy">
+        <p className="ismSmallText">Policies let you automatically perform administrative operations on indices.</p>
+        <Spacer size="s" />
+        <div className="ismFormRow">
+          <label className="ismFormRow__label" htmlFor="ismPolicyId">
+            Policy ID
+          </label>
           <TextField
+            id="ismPolicyId"
             compact
             invalid={Boolean(policyIdError)}
             placeholder="example_policy"
@@ -399,23 +410,19 @@ function JsonCreatePolicy({ isEdit }: { isEdit: boolean }) {
               if (submitted) setPolicyIdError(next ? '' : 'Required');
             }}
           />
-        </FormRow>
-      </Section>
-      <Section
+          {policyIdError && <span className="ismFormRow__error">{policyIdError}</span>}
+          <span className="ismFormRow__help">Specify a unique ID that is easy to recognize and remember.</span>
+        </div>
+      </TitledPanel>
+      <Spacer />
+      <TitledPanel
         title="Define policy"
-        description={
-          <>
-            You can think of policies as state machines. "Actions" are the operations ISM performs when an index is in
-            a certain state. "Transitions" define when to move from one state to another. <ExternalLink href={DOCS} />
-          </>
-        }
         actions={
           <>
-            <Button size="s" icon="copyClipboard" onClick={() => copyText(json)}>
+            <Button icon="copyClipboard" onClick={() => copyText(json)}>
               Copy
             </Button>
             <Button
-              size="s"
               icon="editorAlignLeft"
               disabled={jsonError}
               onClick={() => setJson(JSON.stringify(JSON.parse(json), null, 4))}
@@ -425,22 +432,32 @@ function JsonCreatePolicy({ isEdit }: { isEdit: boolean }) {
           </>
         }
       >
-        <JsonEditor value={json} onChange={setJson} height={500} />
-      </Section>
-      <SubmitError error={submitError} />
-      <BottomBar>
+        <p className="ismSmallText">
+          You can think of policies as state machines. "Actions" are the operations ISM performs when an index is in a
+          certain state. "Transitions" define when to move from one state to another. <DocsLink href={DOCS} />
+        </p>
+        <Spacer size="m" />
+        <AceJsonEditor value={json} onChange={setJson} height={500} />
+      </TitledPanel>
+      <Spacer />
+      {submitError && (
+        <CallOut tone="critical" icon="alert" title="Sorry, there was an error">
+          <p>{submitError}</p>
+        </CallOut>
+      )}
+      <Spacer />
+      <FormButtons>
         <Button
           variant="empty"
-          size="s"
           onClick={() => (isEdit ? window.history.back() : go(ROUTES.INDEX_POLICIES))}
           testId="createPolicyCancelButton"
         >
           Cancel
         </Button>
-        <Button variant="primary" size="s" loading={submitting} onClick={submit} testId="createPolicyCreateButton">
+        <Button variant="primary" loading={submitting} onClick={submit} testId="createPolicyCreateButton">
           {isEdit ? 'Update' : 'Create'}
         </Button>
-      </BottomBar>
+      </FormButtons>
     </div>
   );
 }

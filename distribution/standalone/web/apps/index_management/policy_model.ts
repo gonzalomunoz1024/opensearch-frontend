@@ -6,6 +6,9 @@
  * goes when it is added before or after another.
  */
 
+import type { CodeToken } from '../../components/code_editor';
+import { tokenizeJson } from '../../lib/json_text';
+
 export interface Transition {
   state_name: string;
   conditions?: {
@@ -459,4 +462,22 @@ export function withDrafts(action: Action, drafts: Drafts): Action {
     return { ...action, convert_index_to_remote: settings };
   }
   return action;
+}
+
+// --- JSON as the plugin's code editor colours it ---------------------------------------------------------
+
+/**
+ * The runs of a JSON text with each brace and bracket a run of its own, of the kind `Paren`, as
+ * Ace's JSON mode makes them (its themes draw them bold); the other runs are left as they are.
+ */
+export function aceJsonTokens(text: string): CodeToken[][] {
+  return tokenizeJson(text).map((line) =>
+    line.flatMap((token) => {
+      if (token.kind || !/[{}[\]]/.test(token.text)) return [token];
+      return token.text
+        .split(/([{}[\]])/)
+        .filter((piece) => piece !== '')
+        .map((piece) => (/^[{}[\]]$/.test(piece) ? { text: piece, kind: 'Paren' } : { text: piece }));
+    })
+  );
 }

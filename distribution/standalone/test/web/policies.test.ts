@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { leadingDebounce } from '../../web/apps/index_management/jobs';
+import { aceJsonTokens } from '../../web/apps/index_management/policy_model';
 
 /** A clock whose time goes on only when told, with the timers set on it */
 function fakeClock() {
@@ -81,5 +82,47 @@ describe('asking for the rows of a list as the plugin does', () => {
     assert.deepEqual(calls, ['a']);
     debounced.call('c');
     assert.deepEqual(calls, ['a', 'c']);
+  });
+});
+
+describe('colouring a policy as the JSON editor of the plugin does', () => {
+  const text = '{\n  "policy": {\n    "states": [],\n    "n": 1, "ok": true,\n    "a": "[x]"\n  }\n}';
+
+  it('keeps every character of the text, line by line', () => {
+    const lines = aceJsonTokens(text);
+    assert.equal(lines.length, 7);
+    assert.equal(lines.map((line) => line.map((token) => token.text).join('')).join('\n'), text);
+  });
+
+  it('marks braces and brackets as parentheses of their own', () => {
+    const lines = aceJsonTokens(text);
+    assert.deepEqual(lines[0], [{ text: '{', kind: 'Paren' }]);
+    assert.deepEqual(lines[1], [{ text: '  ' }, { text: '"policy"', kind: 'Key' }, { text: ': ' }, { text: '{', kind: 'Paren' }]);
+    assert.deepEqual(lines[2], [
+      { text: '    ' },
+      { text: '"states"', kind: 'Key' },
+      { text: ': ' },
+      { text: '[', kind: 'Paren' },
+      { text: ']', kind: 'Paren' },
+      { text: ',' },
+    ]);
+    assert.deepEqual(lines[5], [{ text: '  ' }, { text: '}', kind: 'Paren' }]);
+  });
+
+  it('leaves keys, numbers, keywords and strings as they are, brackets in a string too', () => {
+    const lines = aceJsonTokens(text);
+    assert.deepEqual(
+      lines[3].filter((token) => token.kind),
+      [
+        { text: '"n"', kind: 'Key' },
+        { text: '1', kind: 'Number' },
+        { text: '"ok"', kind: 'Key' },
+        { text: 'true', kind: 'Keyword' },
+      ]
+    );
+    assert.deepEqual(lines[4].filter((token) => token.kind), [
+      { text: '"a"', kind: 'Key' },
+      { text: '"[x]"', kind: 'String' },
+    ]);
   });
 });
