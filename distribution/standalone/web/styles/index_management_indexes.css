@@ -111,6 +111,19 @@
   text-overflow: ellipsis;
 }
 
+/* A tick box stands in its cell as a block, as the theme's: on the line of the words it made the
+   header row 3 px higher */
+.ismTable--fixed .atlTable__check .atlCheckbox {
+  display: flex;
+}
+
+/* The pages of a list as the plugin's tables have them: a row of 60 px straight under the table,
+   "Rows per page" and the page numbers at its two ends */
+.ismTable--fixed > .atlPagination {
+  margin-top: 0;
+  padding: var(--space-4) 0 var(--space-3);
+}
+
 /* A column of numbers has its header at the right too, as the theme's right-aligned columns */
 .ismTable--fixed th.ismTable__right .atlTable__sort {
   justify-content: flex-end;
@@ -488,7 +501,7 @@ tr:hover .ismRowActions > *,
   width: 22px;
   height: 24px;
   justify-content: flex-start;
-  padding: 0 1px;
+  padding: 0;
   vertical-align: middle;
 }
 

@@ -60,7 +60,7 @@ function NameField({
       anchorClassName="ismNameField"
       button={
         <div
-          className={cx('atlField', 'atlCombo', 'atlCombo--s', invalid && 'atlField--invalid')}
+          className={cx('atlField', 'atlCombo', 'atlCombo--s', 'atlCombo--single', 'atlCombo--clearable', invalid && 'atlField--invalid')}
           onMouseDown={(event) => {
             if (event.target !== input.current) {
               event.preventDefault();
@@ -105,7 +105,9 @@ function NameField({
               <Icon name="cross" />
             </button>
           )}
-          <Icon name="chevronDown" className="atlCombo__caret" />
+          <span className="atlCombo__caret" data-test-subj="comboBoxToggleListButton">
+            <Icon name="chevronDown" />
+          </span>
         </div>
       }
     >

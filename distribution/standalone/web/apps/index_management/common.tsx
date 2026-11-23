@@ -156,7 +156,12 @@ export function useListQuery<Extra extends Record<string, string>>(
   const setQuery = useCallback(
     (changes: Partial<ListQuery & Extra>) => {
       const next = { ...latest.current, ...changes };
-      const params = Object.fromEntries(Object.entries(next).map(([name, value]) => [name, String(value)]));
+      // in the order of their names, as the plugin writes them
+      const params = Object.fromEntries(
+        Object.entries(next)
+          .map(([name, value]): [string, string] => [name, String(value)])
+          .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      );
       navigateHash(hashPath, params, { replace: true });
     },
     [hashPath]

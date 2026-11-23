@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, CallOut, Health, IconButton } from '../../components/basic';
+import { Button, CallOut, Health } from '../../components/basic';
 import { ComboBox } from '../../components/combo_box';
 import { Switch, TextField } from '../../components/form';
 import { Modal, copyText, type MenuItem } from '../../components/overlay';
@@ -61,7 +61,7 @@ export function IndexName({ index }: { index: string }) {
   return (
     <>
       <span className="ismIndexName__copy">
-        <IconButton icon="copyClipboard" iconSize="s" label="Copy" size="s" onClick={() => copyText(index)} />
+        <Button variant="ghost" size="xs" icon="copyClipboard" iconSize="s" aria-label="Copy" onClick={() => copyText(index)} />
       </span>
       <a
         href={`#/index-detail/${index}`}
@@ -630,6 +630,7 @@ export function Indices() {
           </div>
         )}
         <Switch
+          compressed
           label="Show data stream indexes"
           checked={showDataStreams}
           onChange={(checked) => setQuery({ showDataStreams: String(checked) })}

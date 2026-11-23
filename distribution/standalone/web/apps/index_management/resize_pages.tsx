@@ -519,7 +519,7 @@ export function ShrinkIndex() {
   if (!index) {
     return (
       <div className="ismPage ismPage--loading">
-        <Spinner size="l" />
+        <Spinner size="xl" />
       </div>
     );
   }

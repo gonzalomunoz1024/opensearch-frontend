@@ -651,6 +651,7 @@ export function IndexDetail({ index }: { index: string }) {
       </Panel>
       <div className="ismSpacer ismSpacer--l" />
       <Tabs
+        size="s"
         tabs={TABS.map((item) => ({ id: item.id, label: item.label }))}
         selected={tab}
         onSelect={(id) => {

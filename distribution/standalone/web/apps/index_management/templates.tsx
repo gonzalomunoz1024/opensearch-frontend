@@ -576,7 +576,7 @@ export function DeleteComponentModal({
   };
   let body;
   if (loading) {
-    body = <Spinner size="l" />;
+    body = <Spinner size="xl" />;
   } else if (linked) {
     body = (
       <>

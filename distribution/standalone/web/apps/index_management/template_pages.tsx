@@ -778,7 +778,7 @@ export function TemplateDetail({ name }: { name: string }) {
             <OverviewItems item={item} />
           </TitledPanel>
           <div className="ismSpacer ismSpacer--l" />
-          <Tabs tabs={TEMPLATE_TABS} selected={tab} onSelect={setTab} />
+          <Tabs size="s" tabs={TEMPLATE_TABS} selected={tab} onSelect={setTab} />
           <div className="ismSpacer ismSpacer--m" />
         </>
       )}
