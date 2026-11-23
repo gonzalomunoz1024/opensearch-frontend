@@ -249,7 +249,10 @@ function blockNode(block: Block, key: number): ReactNode {
     case 'fence': {
       // The first word of the line that opens the fence, read as remark reads it
       const language = /^[^ \t]+/.exec(commonMarkParser().utils.unescapeAll(token.info).trim())?.[0];
-      const code = element('code', language ? { className: `language-${language}` } : null, token.content ? [token.content] : [], 0);
+      // remark keeps the lines without their last line end, and mdast-util-to-hast ends any code
+      // that is not empty with one: a fence never closed gains it, one holding a blank line is empty
+      const lines = token.content.endsWith('\n') ? token.content.slice(0, -1) : token.content;
+      const code = element('code', language ? { className: `language-${language}` } : null, lines ? [`${lines}\n`] : [], 0);
       return element('pre', null, [code], key);
     }
     case 'hr':

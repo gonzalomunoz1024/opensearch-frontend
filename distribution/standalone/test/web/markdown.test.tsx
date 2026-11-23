@@ -79,6 +79,24 @@ describe('Markdown, as the Markdown visualization and TSVB draw it', () => {
     );
   });
 
+  // Two things the hand-written renderer did that markdown-it does not
+  it('draws the text of a tight item that holds a list without a <p>, and keeps the last line end of code', () => {
+    assert.equal(html('- a\n  - b\n- c'), '<ul>\n<li>a\n<ul>\n<li>b</li>\n</ul>\n</li>\n<li>c</li>\n</ul>\n');
+    assert.equal(
+      html('1. **a** text\n   1. b\n   2. c\n2. d\n   - e\n     - f'),
+      '<ol>\n<li><strong>a</strong> text\n<ol>\n<li>b</li>\n<li>c</li>\n</ol>\n</li>\n<li>d\n<ul>\n<li>e\n<ul>\n<li>f</li>\n</ul>\n</li>\n</ul>\n</li>\n</ol>\n'
+    );
+    assert.equal(html('- a\n  - b\n  c'), '<ul>\n<li>a\n<ul>\n<li>b\nc</li>\n</ul>\n</li>\n</ul>\n');
+    assert.equal(html('- a\n  - b\n\n  c\n- d'), '<ul>\n<li>\n<p>a</p>\n<ul>\n<li>b</li>\n</ul>\n<p>c</p>\n</li>\n<li>\n<p>d</p>\n</li>\n</ul>\n');
+    assert.equal(html('```\nline one\nline two\n```'), '<pre><code>line one\nline two\n</code></pre>\n');
+    assert.equal(html('```\ncode\n\n\n```'), '<pre><code>code\n\n\n</code></pre>\n');
+    // A fence never closed ends where the text does, with no line end of its own
+    assert.equal(html('```\nopen fence\nto the end'), '<pre><code>open fence\nto the end</code></pre>\n');
+    assert.equal(html('- item\n  ```\n  in list\n  ```\n- next'), '<ul>\n<li>item<pre><code>in list\n</code></pre>\n</li>\n<li>next</li>\n</ul>\n');
+    assert.equal(html('> ```\n> in quote\n> ```'), '<blockquote>\n<pre><code>in quote\n</code></pre>\n</blockquote>\n');
+    assert.equal(html('    a\n    b\n\n\nafter'), '<pre><code>a\nb\n</code></pre>\n<p>after</p>\n');
+  });
+
   it('draws links with their titles, autolinks, and the addresses linkify finds', () => {
     assert.equal(
       html('[t](https://example.org/a "Title & <more>") [t2](/rel \'single\') [t3](<a b> (paren)) [t4](https://example.org/q?a=1&b=2#h)'),
@@ -215,6 +233,19 @@ describe('the custom banner, as react-markdown 6 draws it', () => {
     assert.equal(banner("```js\nconst a = '<b>';\n```"), '<pre><code class="language-js">const a = &#x27;&lt;b&gt;&#x27;;\n</code></pre>');
     assert.equal(banner('line  \nbreak'), 'line<br/>\nbreak');
     assert.equal(banner(''), '');
+  });
+
+  it('ends code that is not empty with one line end, and draws the text of a tight item that holds a list on its line', () => {
+    assert.equal(banner('```\nline one\nline two\n```'), '<pre><code>line one\nline two\n</code></pre>');
+    assert.equal(banner('```\ncode\n\n\n```'), '<pre><code>code\n\n\n</code></pre>');
+    // remark keeps a fence's lines without their last line end, and mdast-util-to-hast adds one
+    assert.equal(banner('```\nopen fence\nto the end'), '<pre><code>open fence\nto the end\n</code></pre>');
+    assert.equal(banner('```\n\n```'), '<pre><code></code></pre>');
+    assert.equal(banner('```\n\n\n```'), '<pre><code>\n\n</code></pre>');
+    assert.equal(banner('> ```\n>\n\nafter'), '<blockquote>\n<pre><code></code></pre>\n</blockquote>\nafter');
+    assert.equal(banner('    a\n    b\n\n\nafter'), '<pre><code>a\nb\n</code></pre>\nafter');
+    assert.equal(banner('- a\n  - b\n- c'), '<ul>\n<li>a\n<ul>\n<li>b</li>\n</ul>\n</li>\n<li>c</li>\n</ul>');
+    assert.equal(banner('- item\n  ```\n  in list\n  ```\n- next'), '<ul>\n<li>item\n<pre><code>in list\n</code></pre>\n</li>\n<li>next</li>\n</ul>');
   });
 
   it('reads CommonMark only: no tables, struck text or links found in the text, and HTML as text', () => {
