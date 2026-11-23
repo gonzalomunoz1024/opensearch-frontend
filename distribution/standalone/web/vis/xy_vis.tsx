@@ -1,253 +1,178 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
-/* Area, line, vertical bar and horizontal bar: a table of buckets and measures as series on axes. */
+/*
+ * Area, line, vertical bar and horizontal bar: a table of buckets and measures as series on axes,
+ * drawn as the classic charts of OpenSearch Dashboards draw them (vislib, in ./vislib).
+ */
 
-import { useMemo } from 'react';
-import { valueAxisLabels } from '../charts/axis_labels';
-import { ChartMessage, assignColors, type LegendPosition, type ScaleKind } from '../charts/core';
-import { XYChart, type XYAxis, type XYCategoryAxis, type XYPoint, type XYSeries } from '../charts/xy';
-import { bucketFilter, type TableColumn } from '../lib/aggs';
+import { useCallback, useMemo, useState } from 'react';
+import { ChartMessage } from '../charts/core';
+import { bucketFilter, dateInterval } from '../lib/aggs';
+import { DEFAULT_FORMAT_SETTINGS, createFormatter } from '../lib/field_formats';
 import { rangeFilter } from '../lib/query';
 import type { Filter } from '../lib/types';
-import { bucketColumns, keyText, metricColumns, numberOf, pointsAlong, type VisRenderProps } from './types';
+import { services } from '../services';
+import { bucketColumns, type VisRenderProps } from './types';
+import { seriesColors } from './vislib/colors';
+import type { LegendPosition } from './vislib/legend';
+import { PointSeriesChart } from './vislib/point_series_chart';
+import { buildPointSeriesModel, type PointSeriesParams } from './vislib/point_series_model';
+import type { VislibPoint } from './vislib/point_series_data';
+import { dimmingOpacity, zoneOffset } from './vislib/settings';
+import '../styles/vislib.css';
 
-interface SeriesParam {
-  show?: boolean | string;
-  type?: string;
-  mode?: string;
-  data?: { id?: string; label?: string };
-  valueAxis?: string;
-  interpolate?: string;
-  showCircles?: boolean;
-  drawLinesBetweenPoints?: boolean;
-  lineWidth?: number;
-}
+const POSITIONS: LegendPosition[] = ['top', 'bottom', 'left', 'right'];
 
-interface AxisParam {
-  id?: string;
-  position?: string;
-  show?: boolean;
-  scale?: { type?: string; mode?: string; min?: number; max?: number; setYExtents?: boolean; defaultYExtents?: boolean };
-  labels?: { show?: boolean; rotate?: number; truncate?: number; filter?: boolean };
-  title?: { text?: string };
-}
-
-interface XYParams {
-  type?: string;
-  seriesParams?: SeriesParam[];
-  valueAxes?: AxisParam[];
-  categoryAxes?: AxisParam[];
-  grid?: { categoryLines?: boolean; valueAxis?: string };
-  addLegend?: boolean;
-  addTooltip?: boolean;
-  addTimeMarker?: boolean;
-  legendPosition?: string;
-  thresholdLine?: { show?: boolean; value?: number; width?: number; style?: string; color?: string };
-  radiusRatio?: number;
-}
-
-const ALL = '_all';
-
-const chartKind = (type: string | undefined, fallback: string): XYSeries['type'] =>
-  type === 'line' || type === 'area' || type === 'histogram' ? type : fallback === 'line' || fallback === 'area' ? fallback : 'histogram';
-
-export function XYVis({ vis, data, uiState, onFilter, onTimeChange }: VisRenderProps) {
-  const params = vis.params as XYParams;
+export function XYVis({ vis, data, uiState, onUiState, onFilter, onTimeChange }: VisRenderProps) {
+  const params = vis.params as PointSeriesParams;
   const { table, context } = data;
+  const settings = context.formatSettings ?? DEFAULT_FORMAT_SETTINGS;
 
-  const model = useMemo(() => {
-    const xColumn: TableColumn | undefined = bucketColumns(table, 'segment')[0];
-    const groups = bucketColumns(table, 'group');
-    const metrics = metricColumns(table);
-    const radius = table.columns.find((column) => column.schema === 'radius');
-    const numbered = Boolean(xColumn && !xColumn.isDate && xColumn.agg.type === 'histogram');
-    const continuous = xColumn && (xColumn.isDate || numbered);
-    const xOf = (key: unknown): number | string =>
-      !xColumn ? ALL : continuous && typeof key === 'number' ? key : xColumn.format(key);
-
-    const xValues: Array<number | string> = [];
-    const xRaw = new Map<number | string, unknown>();
-    const made = new Map<string, XYSeries & { groupKeys: unknown[] }>();
-    const overrides = uiState.vis?.colors;
-    const fallbackType = vis.type === 'horizontal_bar' ? 'histogram' : vis.type;
-
-    for (const row of table.rows) {
-      const rawX = xColumn ? row[xColumn.id] : ALL;
-      const x = xOf(rawX);
-      if (!xRaw.has(x)) {
-        xRaw.set(x, rawX);
-        xValues.push(x);
-      }
-      const groupKeys = groups.map((column) => row[column.id]);
-      const groupLabel = groups.map((column, index) => column.format(groupKeys[index])).join(' - ');
-      metrics.forEach((metric) => {
-        const param =
-          params.seriesParams?.find((candidate) => candidate.data?.id === metric.agg.id) ?? params.seriesParams?.[0] ?? {};
-        if (param.show === false || param.show === 'false') return;
-        const id = `${groupKeys.map(keyText).join('|')}|${metric.id}`;
-        let series = made.get(id);
-        if (!series) {
-          const label = groups.length === 0 ? metric.name : metrics.length > 1 ? `${groupLabel}: ${metric.name}` : groupLabel;
-          series = {
-            id,
-            label,
-            color: '',
-            type: chartKind(param.type, fallbackType),
-            mode: param.mode === 'stacked' ? 'stacked' : 'normal',
-            axisId: param.valueAxis ?? params.valueAxes?.[0]?.id ?? 'ValueAxis-1',
-            interpolate: param.interpolate === 'cardinal' || param.interpolate === 'step-after' ? param.interpolate : 'linear',
-            showCircles: param.showCircles !== false,
-            drawLines: param.drawLinesBetweenPoints !== false,
-            lineWidth: param.lineWidth ?? 2,
-            points: [],
-            groupKeys,
-          };
-          made.set(id, series);
-        }
-        const point: XYPoint = { x, y: numberOf(row, metric) };
-        if (radius) point.z = numberOf(row, radius) ?? undefined;
-        series.points.push(point);
-      });
-    }
-    if (continuous) xValues.sort((a, b) => (a as number) - (b as number));
-    // A stacked series with no bucket at a place on the axis counts as zero there, so that the
-    // stack keeps its shape; a series that is not stacked joins the places it has. This is what
-    // OpenSearch Dashboards does: it stacks a series in the stacked mode or on an axis whose
-    // scale piles its series up (percentage, wiggle, silhouette)
-    if (xColumn) {
-      const piled = new Set(
-        (params.valueAxes ?? [])
-          .filter((axis) => !['normal', 'grouped', undefined].includes(axis.scale?.mode))
-          .map((axis) => axis.id)
-      );
-      for (const series of made.values()) {
-        const stacked = series.mode === 'stacked' || piled.has(series.axisId);
-        series.points = pointsAlong(series.points, xValues, stacked);
-        series.joinMissing = !stacked;
-      }
-    }
-
-    const series = [...made.values()];
-    const colors = assignColors(series.map((item) => item.label), overrides);
-    for (const item of series) item.color = colors.get(item.label) ?? item.color;
-    const category = params.categoryAxes?.[0] ?? {};
-    const horizontal = category.position === 'left' || category.position === 'right';
-    const axes: XYAxis[] = (params.valueAxes?.length ? params.valueAxes : [{ id: 'ValueAxis-1', position: 'left' }]).map((axis) => {
-      const id = axis.id ?? 'ValueAxis-1';
-      const first = series.find((item) => item.axisId === id);
-      const metric = metrics.find((column) => first?.id.endsWith(`|${column.id}`)) ?? metrics[0];
-      const position = axis.position;
-      const scale = (axis.scale?.type === 'log' || axis.scale?.type === 'square root' ? axis.scale.type : 'linear') as ScaleKind;
-      return {
-        id,
-        position: position === 'right' || position === 'top' || position === 'bottom' ? position : 'left',
-        title: axis.title?.text || metric?.name,
-        show: axis.show !== false,
-        showLabels: axis.labels?.show !== false,
-        scale,
-        mode: (axis.scale?.mode as XYAxis['mode']) ?? 'normal',
-        min: axis.scale?.setYExtents ? axis.scale.min : undefined,
-        max: axis.scale?.setYExtents ? axis.scale.max : undefined,
-        fitToData: Boolean(axis.scale?.defaultYExtents),
-        ...valueAxisLabels(axis.labels, horizontal, scale === 'log'),
-        format: (value: number) => (metric ? metric.format(value) : String(value)),
-      };
-    });
-
-    const timeRange = context.timeRange;
+  const prepared = useMemo(() => {
+    const xColumn = bucketColumns(table, 'segment')[0];
     const isTimeField = Boolean(xColumn?.isDate && xColumn.fieldName === context.indexPattern?.timeFieldName);
-    // A date histogram spans the picked time range when it is on the time field, or when its
-    // interval is chosen by itself, whatever date it counts by
-    const bounded = isTimeField || Boolean(xColumn?.isDate && (xColumn.agg.params?.interval ?? 'auto') === 'auto');
-    // Only time runs along a scale; the bars of anything else, a number histogram too, stand side
-    // by side with a label each, turned on its side under an upright chart unless the
-    // visualization says otherwise
-    const x: XYCategoryAxis = {
-      type: xColumn?.isDate ? 'time' : 'category',
-      values: xValues,
-      interval: xColumn?.interval,
-      domain: bounded && timeRange ? [timeRange.from.getTime(), timeRange.to.getTime()] : undefined,
-      format: (value) => (!xColumn ? String(value) : typeof value === 'number' ? xColumn.format(value) : value),
-      // Without a bucket on the axis the bars stand for all the documents, as the original names them
-      title: category.title?.text || (xColumn ? xColumn.name : 'All docs'),
-      show: category.show !== false,
-      showLabels: category.labels?.show !== false,
-      rotate: xColumn?.isDate || horizontal ? 0 : (category.labels?.rotate ?? 90),
-      truncate: category.labels?.truncate ?? 100,
-      filter: category.labels?.filter,
-    };
-    return { series, axes, x, xColumn, groups, xRaw, horizontal, isTimeField };
-  }, [table, context, params, uiState.vis?.colors, vis.type]);
-
-  if (table.rows.length === 0 || model.series.length === 0) return <ChartMessage>No results found</ChartMessage>;
-
-  const legendPosition = (['top', 'bottom', 'left', 'right'].includes(params.legendPosition ?? '') ? params.legendPosition : 'right') as LegendPosition;
-  const showLegend = params.addLegend !== false && uiState.vis?.legendOpen !== false;
-
-  const pointFilters = (series: XYSeries, point: XYPoint): Filter[] => {
-    const filters: Filter[] = [];
-    if (model.xColumn) {
-      const filter = bucketFilter(model.xColumn, model.xRaw.get(point.x), context);
-      if (filter) filters.push(filter);
+    // A date histogram is bounded by the time range when it counts by the time field, or when it
+    // chooses its interval itself, whatever date it counts by
+    const bounded = Boolean(xColumn?.isDate && (isTimeField || (xColumn.agg.params?.interval ?? 'auto') === 'auto'));
+    const range = context.timeRange;
+    const bounds = bounded && range ? { min: range.from.getTime(), max: range.to.getTime() } : undefined;
+    // Months and years are counted by the calendar
+    let addInterval: ((value: number, times: number) => number) | undefined;
+    if (xColumn?.isDate) {
+      const interval = dateInterval(xColumn.agg, context);
+      const unit = /^\d+(?:\.\d+)?(M|y)$/.exec(interval.expression)?.[1];
+      const amount = Number(/^(\d+(?:\.\d+)?)/.exec(interval.expression)?.[1] ?? 1);
+      if (unit) {
+        addInterval = (value, times) => {
+          const date = new Date(value);
+          if (unit === 'M') date.setUTCMonth(date.getUTCMonth() + amount * times);
+          else date.setUTCFullYear(date.getUTCFullYear() + amount * times);
+          return date.getTime();
+        };
+      }
     }
-    const keys = (series as XYSeries & { groupKeys?: unknown[] }).groupKeys ?? [];
-    model.groups.forEach((column, index) => {
-      const filter = bucketFilter(column, keys[index], context);
-      if (filter) filters.push(filter);
+    const percent = createFormatter({ id: 'percent' }, settings);
+    const model = buildPointSeriesModel({
+      params,
+      table,
+      percentFormat: (value) => percent(value).text,
+      bounds,
+      addInterval,
     });
-    return filters;
+    return { model, xColumn, isTimeField };
+  }, [table, context, params, settings]);
+
+  const { model, xColumn, isTimeField } = prepared;
+  const colors = useMemo(
+    () =>
+      seriesColors(
+        model.labels,
+        uiState.vis?.colors,
+        services.uiSettings?.get<Record<string, string>>('visualization:colorMapping', {})
+      ),
+    [model, uiState.vis?.colors]
+  );
+  const colorOf = useCallback((label: string) => colors.get(label) ?? '#54B399', [colors]);
+  const offsetAt = useMemo(() => zoneOffset(settings.timeZone), [settings.timeZone]);
+  const dimming = dimmingOpacity(services.uiSettings?.get('visualization:dimmingOpacity', 0.5));
+
+  const savedOpen = uiState.vis?.legendOpen;
+  const [localOpen, setLocalOpen] = useState(true);
+  const legendOpen = savedOpen ?? (onUiState ? true : localOpen);
+
+  if (table.rows.length === 0) return <ChartMessage>No results found</ChartMessage>;
+
+  const position: LegendPosition = POSITIONS.includes(params.legendPosition as LegendPosition) ? (params.legendPosition as LegendPosition) : 'right';
+
+  // The bucket a series stands for: its first group's value, as the original's legend filters on it
+  const groupFilter = (label: string): Filter | undefined => {
+    const series = model.data.series.find((item) => item.label === label);
+    const column = model.data.groupColumns[0];
+    if (!series || !column) return undefined;
+    return bucketFilter(column, series.groupKeys[0], context);
   };
 
-  const brushable = model.xColumn && (model.xColumn.isDate || model.xColumn.agg.type === 'histogram');
-  const onBrush = (from: number, to: number) => {
-    const column = model.xColumn;
-    if (!column?.fieldName) return;
-    if (column.isDate && model.isTimeField && onTimeChange) {
-      onTimeChange({ from: new Date(from).toISOString(), to: new Date(to).toISOString() });
-    } else if (column.isDate) {
-      onFilter?.([
-        rangeFilter(
-          { name: column.fieldName },
-          { gte: new Date(from).toISOString(), lt: new Date(to).toISOString(), format: 'strict_date_optional_time' },
-          context.indexPattern?.id
-        ),
-      ]);
-    } else {
-      onFilter?.([rangeFilter({ name: column.fieldName }, { gte: from, lt: to }, context.indexPattern?.id)]);
-    }
-  };
-
-  const threshold = params.thresholdLine?.show
+  const legend = params.addLegend
     ? {
-        value: params.thresholdLine.value ?? 0,
-        width: params.thresholdLine.width,
-        style: params.thresholdLine.style,
-        color: params.thresholdLine.color,
+        position,
+        open: legendOpen,
+        onToggle: () => {
+          if (onUiState) onUiState({ ...uiState, vis: { ...uiState.vis, legendOpen: !legendOpen } });
+          else setLocalOpen(!legendOpen);
+        },
+        canFilter: onFilter ? (label: string) => Boolean(groupFilter(label)) : undefined,
+        onFilter: onFilter
+          ? (label: string, negate: boolean) => {
+              const filter = groupFilter(label);
+              if (filter) onFilter([{ ...filter, meta: { ...filter.meta, negate: negate ? !filter.meta.negate : filter.meta.negate } }]);
+            }
+          : undefined,
+        onColor: onUiState
+          ? (label: string, color: string) => {
+              const picked = { ...(uiState.vis?.colors ?? {}) };
+              if (picked[label] === color) delete picked[label];
+              else picked[label] = color;
+              onUiState({ ...uiState, vis: { ...uiState.vis, colors: picked } });
+            }
+          : undefined,
       }
     : undefined;
 
-  return (
-    <XYChart
-      series={model.series}
-      axes={model.axes}
-      x={model.x}
-      horizontal={model.horizontal}
-      legend={showLegend ? legendPosition : false}
-      grid={{ category: Boolean(params.grid?.categoryLines), value: Boolean(params.grid?.valueAxis) }}
-      threshold={threshold}
-      nowMarker={Boolean(params.addTimeMarker) && model.x.type === 'time'}
-      tooltip={params.addTooltip !== false}
-      onPointClick={
-        onFilter
-          ? (series, point) => {
-              const filters = pointFilters(series, point);
-              if (filters.length) onFilter(filters);
-            }
-          : undefined
+  // A click on a mark filters on its bucket along the axis and on its series' first group
+  const onPointClick = onFilter
+    ? (point: VislibPoint) => {
+        const filters: Filter[] = [];
+        const raw = point.row;
+        if (xColumn && raw) {
+          const filter = bucketFilter(xColumn, raw[xColumn.id], context);
+          if (filter) filters.push(filter);
+        }
+        const group = model.data.groupColumns[0];
+        if (group && raw) {
+          const filter = bucketFilter(group, raw[group.id], context);
+          if (filter) filters.push(filter);
+        }
+        if (filters.length) onFilter(filters);
       }
-      onBrush={brushable && (onFilter || onTimeChange) ? onBrush : undefined}
-      classic={{ radiusRatio: params.radiusRatio }}
-      testId="visChart"
+    : undefined;
+
+  const onBrush =
+    xColumn?.fieldName && (onFilter || onTimeChange)
+      ? (range: { from: number; to: number } | { values: Array<number | string> }) => {
+          const field = { name: xColumn.fieldName ?? '' };
+          if ('from' in range) {
+            if (isTimeField && onTimeChange) {
+              onTimeChange({ from: new Date(range.from).toISOString(), to: new Date(range.to).toISOString() });
+            } else {
+              onFilter?.([
+                rangeFilter(
+                  field,
+                  { gte: new Date(range.from).toISOString(), lt: new Date(range.to).toISOString(), format: 'strict_date_optional_time' },
+                  context.indexPattern?.id
+                ),
+              ]);
+            }
+            return;
+          }
+          // The buckets taken: from the first, up to the last, which the filter leaves out
+          const values = range.values;
+          if (values.length <= 1) return;
+          const min = values[0];
+          const max = values[values.length - 1];
+          if (min === max) return;
+          onFilter?.([rangeFilter(field, { gte: Number(min), lt: Number(max) }, context.indexPattern?.id)]);
+        }
+      : undefined;
+
+  return (
+    <PointSeriesChart
+      model={model}
+      colorOf={colorOf}
+      offsetAt={offsetAt}
+      dimming={dimming}
+      legend={legend}
+      onPointClick={onPointClick}
+      onBrush={onBrush}
     />
   );
 }

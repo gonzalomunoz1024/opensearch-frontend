@@ -81,8 +81,9 @@ const DRAWN: Record<string, (props: VisRenderProps) => ReactNode> = {
   tile_map: (props) => <TileMapVis {...props} />,
 };
 
-// The kinds whose legend can be opened and closed from the corner of the chart
-const LEGEND_KINDS = new Set(['area', 'line', 'histogram', 'horizontal_bar', 'pie', 'heatmap']);
+// The kinds whose legend can be opened and closed from the corner of the chart, by a button
+// drawn here; the line, area and bar charts draw their own, as vislib does
+const LEGEND_KINDS = new Set(['pie', 'heatmap']);
 
 /** Whether this product draws a kind of visualization */
 export const canDraw = (type: string) =>

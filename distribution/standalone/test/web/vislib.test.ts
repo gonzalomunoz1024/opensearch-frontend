@@ -1,0 +1,408 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+import type { AggConfig, TableColumn } from '../../web/lib/aggs';
+import { axisConfig, keptTicks, placeTick, truncateLabel, type AxisScaleInfo } from '../../web/vis/vislib/axis';
+import { seriesColors, standardizeColor } from '../../web/vis/vislib/colors';
+import { groupedCount, groupedNum, isColorDark } from '../../web/vis/vislib/point_series_chart';
+import {
+  buildPointSeries,
+  injectZeros,
+  orderXValues,
+  stackSeries,
+  type VislibSeries,
+} from '../../web/vis/vislib/point_series_data';
+import { layoutPointSeries } from '../../web/vis/vislib/point_series_layout';
+import {
+  VislibError,
+  scaleValueAxis,
+  seriesConfigOf,
+  valueDomain,
+  valueExtents,
+  type SeriesConfig,
+} from '../../web/vis/vislib/point_series_model';
+import { bandScale, linearNice, linearTicks, tickCount, utcTicks, zonedTimeTicks } from '../../web/vis/vislib/scales';
+import { dimmingOpacity, zoneOffset } from '../../web/vis/vislib/settings';
+import { placeTooltip } from '../../web/vis/vislib/tooltip';
+
+const HOUR = 3600000;
+const DAY = 24 * HOUR;
+const iso = (time: number) => new Date(time).toISOString();
+const close = (actual: number, expected: number) => assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} is not ${expected}`);
+
+describe('the scales of the classic charts', () => {
+  it('ask an axis for as many ticks as its length allows', () => {
+    // 0 at 20 pixels, 3 at 40 and 11 at 1000, rounded up in between
+    assert.equal(tickCount(10), 0);
+    assert.equal(tickCount(20), 0);
+    assert.equal(tickCount(40), 3);
+    assert.equal(tickCount(164), 5);
+    assert.equal(tickCount(400), 6);
+    assert.equal(tickCount(1000), 11);
+    assert.equal(tickCount(3000), 11);
+  });
+
+  it('step by 1, 2 or 5 times a power of ten', () => {
+    assert.deepEqual(linearTicks([0, 1200], 6), [0, 200, 400, 600, 800, 1000, 1200]);
+    assert.deepEqual(linearTicks([0, 82], 5), [0, 20, 40, 60, 80]);
+    assert.deepEqual(linearTicks([0, 1], 4), [0, 0.2, 0.4, 0.6, 0.8, 1]);
+  });
+
+  it('widen a value axis to round ends', () => {
+    assert.deepEqual(linearNice([0, 9876]), [0, 10000]);
+    assert.deepEqual(linearNice([-3.2, 7.9]), [-4, 8]);
+  });
+
+  it('count the ticks of a week by halves of a day, in UTC', () => {
+    const ticks = utcTicks([Date.parse('2026-11-15T23:00:00Z'), Date.parse('2026-11-22T23:00:00Z')], 10);
+    assert.equal(ticks.length, 14);
+    assert.equal(iso(ticks[0]), '2026-11-16T00:00:00.000Z');
+    assert.equal(iso(ticks[1]), '2026-11-16T12:00:00.000Z');
+    assert.equal(iso(ticks[13]), '2026-11-22T12:00:00.000Z');
+  });
+
+  it('put the ticks of a time axis on round moments of the zone the dates are shown in', () => {
+    const paris = () => 60;
+    const ticks = zonedTimeTicks([Date.parse('2026-11-15T23:00:00Z'), Date.parse('2026-11-22T23:00:00Z')], 10, paris);
+    // Midnight and noon in a zone an hour east of UTC
+    assert.equal(iso(ticks[0]), '2026-11-15T23:00:00.000Z');
+    assert.equal(iso(ticks[1]), '2026-11-16T11:00:00.000Z');
+    assert.equal(iso(ticks[ticks.length - 1]), '2026-11-22T23:00:00.000Z');
+  });
+
+  it('band names with a tenth of each band left between them', () => {
+    const scale = bandScale(['a', 'b', 'c', 'b'], [0, 100], 0.1, 0);
+    assert.deepEqual(scale.domain, ['a', 'b', 'c']);
+    const step = 100 / 2.9;
+    assert.equal(scale('a'), 0);
+    close(scale('c'), step * 2);
+    close(scale.band, step * 0.9);
+    assert.ok(Number.isNaN(scale('d')));
+  });
+});
+
+describe('the axes of the classic charts', () => {
+  it('take the defaults of vislib for what a visualization does not say', () => {
+    const value = axisConfig({}, 'value', { ordinal: false, title: 'Count' });
+    assert.equal(value.position, 'left');
+    assert.deepEqual(value.labels, { show: true, rotate: 0, filter: false, truncate: 100 });
+    assert.equal(value.title, 'Count');
+    const log = axisConfig({ scale: { type: 'log' } }, 'value', { ordinal: false, title: '' });
+    assert.equal(log.labels.filter, true);
+    const time = axisConfig({}, 'category', { ordinal: false, title: '' });
+    assert.equal(time.position, 'bottom');
+    assert.deepEqual(time.labels, { show: true, rotate: 0, filter: true, truncate: 0 });
+    // Names under a chart are turned on their side and cut at 100 characters
+    const names = axisConfig({}, 'category', { ordinal: true, title: '' });
+    assert.deepEqual(names.labels, { show: true, rotate: 90, filter: false, truncate: 100 });
+    // A stack round a moving baseline hides its axis but keeps its title
+    const wiggle = axisConfig({ scale: { mode: 'wiggle' } }, 'value', { ordinal: false, title: 'Count' });
+    assert.equal(wiggle.show, false);
+    assert.equal(wiggle.titleShow, true);
+  });
+
+  it('cut a label to a number of characters', () => {
+    assert.equal(truncateLabel("Women's Accessories", 5), 'Women…');
+    assert.equal(truncateLabel("Women's Accessories", 0), "Women's Accessories");
+    assert.equal(truncateLabel('Shoes', 5), 'Shoes');
+  });
+
+  it('place a label under its tick, and turn it about its end', () => {
+    const size = { width: 20, left: 0, advance: 20, ascent: 8, descent: 2 };
+    const labels = { show: true, rotate: 0, filter: true, truncate: 0 };
+    const flat = placeTick('bottom', labels, 'label', size, 10);
+    assert.equal(flat.y, 9);
+    assert.equal(flat.dy, '.71em');
+    assert.equal(flat.anchor, 'middle');
+    assert.equal(flat.box.x, -10);
+    assert.equal(flat.box.width, 20);
+    assert.equal(Math.round(flat.box.height * 10) / 10, 18.1);
+    const turned = placeTick('bottom', { ...labels, rotate: 90 }, 'label', size, 10);
+    assert.equal(turned.anchor, 'end');
+    assert.equal(turned.dy, '0.3em');
+    assert.equal(turned.transform, 'rotate(-90, 0, 9)');
+    const left = placeTick('left', labels, 'label', size, 10);
+    assert.equal(left.anchor, 'end');
+    assert.equal(left.x, -9);
+    assert.equal(left.dy, '.32em');
+  });
+
+  it('leave out labels past either end and those running into the last one kept', () => {
+    const scale: Pick<AxisScaleInfo, 'raw' | 'range'> = { raw: (value) => Number(value), range: [0, 100] };
+    const ticks = [0, 20, 40, 60, 80, 100].map((value) => ({ value, box: { x: -15, y: 0, width: 30, height: 10 } }));
+    assert.deepEqual(keptTicks(ticks, scale, true, 100), [false, true, false, true, false, false]);
+  });
+
+  it('lay out a chart with its value axis on the left and its categories under it', () => {
+    const axis = (config: ReturnType<typeof axisConfig>) => ({
+      config,
+      format: String,
+      scaleFor: (length: number): AxisScaleInfo => ({
+        values: [],
+        at: () => 0,
+        raw: () => 0,
+        range: [0, length],
+        extent: [0, length],
+      }),
+    });
+    const value = axisConfig({ labels: { show: false } }, 'value', { ordinal: false, title: '' });
+    const category = axisConfig({ labels: { show: false } }, 'category', { ordinal: false, title: '' });
+    const layout = layoutPointSeries(500, 300, [axis(value)], [axis(category)]);
+    // An axis with no labels is its ticks and five pixels; an empty column is a pixel wide
+    assert.deepEqual(layout.chart, { x: 11, y: 10, width: 488, height: 269 });
+    const [left, bottom] = layout.axes;
+    assert.deepEqual(left.rect, { x: 0, y: 10, width: 11, height: 269 });
+    assert.equal(left.transform, 'translate(11,0)');
+    assert.deepEqual(bottom.rect, { x: 11, y: 279, width: 488, height: 11 });
+  });
+});
+
+const aggOf = (id: string, type: string, schema: string): AggConfig => ({ id, type, schema, params: {} });
+const columnOf = (id: string, name: string, agg: AggConfig, extra: Partial<TableColumn> = {}): TableColumn => ({
+  id,
+  name,
+  kind: agg.schema === 'metric' ? 'metric' : 'bucket',
+  agg,
+  schema: agg.schema,
+  format: (value) => (value === '' ? '-' : String(value)),
+  ...extra,
+});
+
+describe('the series of a chart', () => {
+  const x = columnOf('col-0-2', 'timestamp per day', aggOf('2', 'date_histogram', 'segment'), { isDate: true, interval: DAY });
+  const group = columnOf('col-1-3', 'extension', aggOf('3', 'terms', 'group'));
+  const count = columnOf('col-2-1', 'Count', aggOf('1', 'count', 'metric'));
+
+  it('are named after their group, and an empty name stays empty', () => {
+    const data = buildPointSeries(
+      [x, group, count],
+      [
+        { 'col-0-2': 0, 'col-1-3': 'css', 'col-2-1': 3 },
+        { 'col-0-2': 0, 'col-1-3': '', 'col-2-1': 1 },
+        { 'col-0-2': 3 * DAY, 'col-1-3': 'css', 'col-2-1': 2 },
+      ]
+    );
+    assert.deepEqual(
+      data.series.map((series) => [series.rawId, series.label]),
+      [
+        ['css-col-2-1', 'css'],
+        ['-col-2-1', ''],
+      ]
+    );
+    assert.equal(data.xLabel, 'timestamp per day');
+    assert.equal(data.yLabel, 'Count');
+  });
+
+  it('name each measure apart when there are several', () => {
+    const average = columnOf('col-3-4', 'Average bytes', aggOf('4', 'avg', 'metric'));
+    const data = buildPointSeries([x, group, count, average], [{ 'col-0-2': 0, 'col-1-3': 'css', 'col-2-1': 3, 'col-3-4': 5 }]);
+    assert.deepEqual(
+      data.series.map((series) => series.label),
+      ['css: Count', 'css: Average bytes']
+    );
+    assert.equal(data.yLabel, '');
+  });
+
+  it('put back the buckets a histogram skips, a step apart', () => {
+    const data = buildPointSeries(
+      [x, count],
+      [
+        { 'col-0-2': 0, 'col-2-1': 3 },
+        { 'col-0-2': 3 * DAY, 'col-2-1': 2 },
+      ]
+    );
+    assert.deepEqual(orderXValues(data), [0, DAY, 2 * DAY, 3 * DAY]);
+  });
+
+  const series = (label: string, values: Array<[number, number]>): VislibSeries => ({
+    rawId: label,
+    aggId: '1',
+    label,
+    values: values.map(([at, y]) => ({ x: at, y, series: label, seriesId: label })),
+    metric: count,
+    format: String,
+    groupKeys: [label],
+  });
+
+  it('stack with a zero where a series has no bucket, negative values apart', () => {
+    const items = [
+      series('a', [
+        [0, 2],
+        [1, -1],
+      ]),
+      series('b', [[0, 3]]),
+      series('c', [
+        [0, 1],
+        [1, -2],
+      ]),
+    ];
+    injectZeros(items, [0, 1]);
+    // The zero put in belongs to no series
+    assert.equal(items[1].values[1].seriesId, undefined);
+    stackSeries(items, 'normal');
+    assert.deepEqual(
+      items.map((item) => item.values.map((value) => value.y0)),
+      [
+        [0, 0],
+        [2, 0],
+        [5, -1],
+      ]
+    );
+  });
+
+  it('stack as shares of each bucket in the percentage mode', () => {
+    const items = [series('a', [[0, 1]]), series('b', [[0, 3]])];
+    stackSeries(items, 'percentage');
+    assert.deepEqual(
+      items.map((item) => [item.values[0].y0, item.values[0].y]),
+      [
+        [0, 0.25],
+        [0.25, 0.75],
+      ]
+    );
+  });
+
+  it('take the settings of their measure, matched without what a percentile adds to its id', () => {
+    const percentile = { ...series('p', []), aggId: '1.95' };
+    const config = seriesConfigOf(
+      { seriesParams: [{ data: { id: '1', label: 'Count' }, show: 'false', type: 'histogram', mode: 'stacked', valueAxis: 'ValueAxis-1' }] },
+      percentile
+    );
+    // vislib shows a series whose show is any value, the text "false" included
+    assert.equal(config.show, true);
+    assert.equal(config.type, 'histogram');
+    assert.equal(config.mode, 'stacked');
+    const fallback = seriesConfigOf({ type: 'area', mode: 'stacked' }, series('q', []));
+    assert.equal(fallback.type, 'area');
+    assert.equal(fallback.mode, 'stacked');
+  });
+});
+
+describe('the value axis of a chart', () => {
+  const config = (scale: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
+    axisConfig({ scale, ...extra }, 'value', { ordinal: false, title: '' });
+
+  it('reaches zero and the values on either side of it', () => {
+    assert.deepEqual(valueExtents(config({}), [3, 9]), [0, 9]);
+    assert.deepEqual(valueExtents(config({}), [-4, -1]), [-4, 0]);
+  });
+
+  it('takes the bounds it is set to, as shares in the percentage mode', () => {
+    assert.deepEqual(valueExtents(config({ setYExtents: true, min: 10, max: 50 }), [3, 9]), [10, 50]);
+    assert.deepEqual(valueExtents(config({ setYExtents: true, min: 10, max: 50, mode: 'percentage' }), [3, 9]), [0.1, 0.5]);
+    // A bound given without setting the extents still counts, as vislib reads it
+    assert.deepEqual(valueExtents(config({ max: 50 }), [3, 9]), [0, 50]);
+  });
+
+  it('fits the data with a margin when it is asked to', () => {
+    assert.deepEqual(valueExtents(config({ defaultYExtents: true, boundsMargin: 2 }), [3, 9]), [1, 9]);
+  });
+
+  it('refuses what a logarithm cannot show', () => {
+    assert.throws(() => valueExtents(config({ type: 'log' }), [-3, 9]), VislibError);
+    assert.deepEqual(valueExtents(config({ type: 'log' }), [3, 900]), [1, 900]);
+    assert.throws(() => scaleValueAxis(config({ type: 'log', mode: 'percentage' }), [3, 9], 200), /Can't mix percentage mode with log scale/);
+  });
+
+  it('makes room for the values written on the marks', () => {
+    const padded = axisConfig({}, 'value', { ordinal: false, title: '', valuesOnChart: true });
+    const [low, high] = valueDomain(padded, [0, 100], 150);
+    assert.equal(low, 0);
+    close(high, 110);
+  });
+
+  it('is made round at its ends, with as many ticks as its length allows', () => {
+    const { scale, info } = scaleValueAxis(config({}), [0, 9876], 164);
+    assert.deepEqual(scale.domain, [0, 10000]);
+    assert.deepEqual(info.values, [0, 2000, 4000, 6000, 8000, 10000]);
+    assert.equal(scale(5000), 82);
+  });
+});
+
+describe('the bars of a bucket', () => {
+  const config = (rawId: string, type: SeriesConfig['type'], mode: SeriesConfig['mode'], valueAxis?: string) =>
+    ({ type, mode, valueAxis, data: { rawId } }) as SeriesConfig;
+
+  it('stand side by side, a stack taking one place', () => {
+    const series = [
+      config('a', 'histogram', 'stacked'),
+      config('b', 'histogram', 'stacked'),
+      config('c', 'histogram', 'normal'),
+      config('d', 'line', 'normal'),
+    ];
+    assert.equal(groupedCount(series, 'ValueAxis-1'), 2);
+    assert.equal(groupedNum(series, 'ValueAxis-1', 'a'), 0);
+    assert.equal(groupedNum(series, 'ValueAxis-1', 'b'), 0);
+    assert.equal(groupedNum(series, 'ValueAxis-1', 'c'), 1);
+    // vislib counts the lines too
+    assert.equal(groupedNum(series, 'ValueAxis-1', 'd'), 2);
+  });
+
+  it('carry their values in white on a dark colour', () => {
+    assert.equal(isColorDark(0, 0, 0), true);
+    assert.equal(isColorDark(255, 255, 255), false);
+    assert.equal(isColorDark(0x54, 0xb3, 0x99), false);
+    assert.equal(isColorDark(0x2a, 0x5a, 0x4d), true);
+  });
+});
+
+describe('the tooltip of a chart', () => {
+  const chart = { top: 0, left: 0, width: 600, height: 400 };
+  const page = { top: 0, left: 0, width: 1400, height: 900 };
+
+  it('sits right of and below the pointer', () => {
+    assert.deepEqual(placeTooltip({ width: 200, height: 60 }, { x: 100, y: 100 }, [chart, page]), {
+      top: 110,
+      left: 110,
+      _top: 'south',
+      _left: 'east',
+    });
+  });
+
+  it('turns to the other side where it would leave the chart, and keeps to it', () => {
+    const placement = placeTooltip({ width: 200, height: 60 }, { x: 500, y: 380 }, [chart, page]);
+    assert.deepEqual(placement, { top: 310, left: 290, _top: 'north', _left: 'west' });
+    // Back where both sides fit, it stays where it went last
+    assert.deepEqual(placeTooltip({ width: 200, height: 60 }, { x: 300, y: 200 }, [chart, page], placement), {
+      top: 130,
+      left: 90,
+      _top: 'north',
+      _left: 'west',
+    });
+  });
+});
+
+describe('the colours of a classic chart', () => {
+  it('write a colour of the setting as lower-case hex, as the original standardizes it', () => {
+    assert.equal(standardizeColor('#54B399'), '#54b399');
+    assert.equal(standardizeColor('#ABC'), '#aabbcc');
+    assert.equal(standardizeColor('#54B39980'), '#54b399');
+    assert.equal(standardizeColor('rgba(84, 179, 153, 0.5)'), '#54b399');
+    assert.equal(standardizeColor('red', () => '#ff0000'), '#ff0000');
+  });
+
+  it('take the picked colour first, then the setting, then the palette', () => {
+    const colors = seriesColors(['vislibPicked', 'vislibSet', 'vislibOther'], { vislibPicked: '#3F6833' }, { vislibSet: '#D36086' });
+    assert.equal(colors.get('vislibPicked'), '#3F6833');
+    assert.equal(colors.get('vislibSet'), '#d36086');
+    assert.match(colors.get('vislibOther') ?? '', /^#[0-9A-F]{6}$/i);
+  });
+});
+
+describe('the settings the classic charts read', () => {
+  it('dim the other series by a share, a half when the setting is no share', () => {
+    assert.equal(dimmingOpacity('0.3'), 0.3);
+    assert.equal(dimmingOpacity(0), 0);
+    assert.equal(dimmingOpacity('2'), 0.5);
+    assert.equal(dimmingOpacity(undefined), 0.5);
+  });
+
+  it('know how far east of UTC a zone is at a moment', () => {
+    assert.equal(zoneOffset('UTC')(Date.parse('2026-11-16T00:00:00Z')), 0);
+    const paris = zoneOffset('Europe/Paris');
+    assert.equal(paris(Date.parse('2026-11-16T00:00:00Z')), 60);
+    assert.equal(paris(Date.parse('2026-07-01T00:00:00Z')), 120);
+    assert.equal(zoneOffset('America/New_York')(Date.parse('2026-11-16T00:00:00Z')), -300);
+  });
+});
