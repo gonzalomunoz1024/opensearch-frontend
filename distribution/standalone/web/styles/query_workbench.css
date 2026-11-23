@@ -11,6 +11,9 @@
 .qwbPage {
   --qwb-tree-hover: #e8e8e9;
   --qwb-focus-from: rgb(0 122 255 / 0%);
+  /* EuiLink's primary colour under the pointer and its fill with the focus */
+  --qwb-link-hover: #0062cc;
+  --qwb-link-focus: #e6f2ff;
 
   display: flex;
   flex: none;
@@ -21,6 +24,13 @@
 .themeDark .qwbPage {
   --qwb-tree-hover: #69696b;
   --qwb-focus-from: rgb(10 132 255 / 0%);
+  --qwb-link-hover: #006bd6;
+  --qwb-link-focus: #16416d;
+}
+
+/* The theme's ring stands 2 px off what has the keyboard's focus */
+.qwbPage :focus-visible {
+  outline-offset: 2px;
 }
 
 .qwbPage__body {
@@ -192,8 +202,8 @@
   background: var(--qwb-tree-hover);
 }
 
+/* The ring grows in on focus; reached by the keys, the outline every focused element has too */
 .qwbTree__button:focus {
-  outline: none;
   animation: qwbFocusRing 0.4s var(--ease-out-quint) forwards;
 }
 
@@ -228,13 +238,15 @@
 }
 
 /* Loading, no index, or failed: centred in a column with 4 px gutters */
+/* Its words in lines as tall as the type, as the page's own text is in the original; only the
+   reason, in EuiText, has lines of 21 px */
 .qwbTreeState {
   display: flex;
   flex-direction: column;
   align-items: center;
   margin: calc(-1 * var(--space-1));
   font-size: var(--font-size-s);
-  line-height: 21px;
+  line-height: 1;
 }
 
 .qwbTreeState__item {
@@ -250,6 +262,7 @@
 
 .qwbTreeState__message {
   padding: 10px;
+  line-height: 21px;
 }
 
 .qwbTreeState__text {
@@ -322,9 +335,13 @@
   color: var(--color-text-primary);
 }
 
+.qwbSwitch__button:hover {
+  color: var(--color-text-primary);
+}
+
+/* With the focus, by the keys or a click, its word is underlined, and no ring is drawn */
 .qwbSwitch__button:focus-within {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: -2px;
+  text-decoration: underline;
 }
 
 /* As wide as its word in bold, so choosing it does not move the other */
@@ -561,6 +578,11 @@
   color: var(--color-text-primary);
 }
 
+/* EuiTab's ring is inside it */
+.qwbTab:focus-visible {
+  outline-offset: -3px;
+}
+
 .qwbTab__content {
   display: block;
   overflow: hidden;
@@ -635,8 +657,10 @@
   padding: 0 var(--space-3) 0 11px;
 }
 
+/* Its text 12 px after the icon, as EuiFieldSearch's 40 px padding puts it: the input's own 2 px
+   padding is part of it */
 .qwbTableTop__search .atlFieldGroup {
-  gap: var(--space-3);
+  gap: calc(var(--space-3) - 2px);
 }
 
 /* The Download menu: the component library's context menu, 256 px wide */
@@ -664,6 +688,8 @@
   border-collapse: collapse;
   font-size: var(--font-size-s);
   line-height: 1.5;
+  /* EuiTable's figures, all of one width */
+  font-feature-settings: 'calt' 1, 'kern' 1, 'liga' 1, 'tnum' 1;
 }
 
 .qwbTable__head {
@@ -727,8 +753,14 @@
   padding: 0;
 }
 
-/* The component library's small round icon button: 32 px, squeezed by a narrow cell with its
-   icon then at its start */
+/* EuiTableCellContent's text, around the expander: as wide as the button less its margin */
+.qwbTable__text {
+  display: block;
+  min-width: 0;
+}
+
+/* The component library's small round icon button, "empty" (no shadow ever): 32 px, squeezed
+   by a narrow cell with its icon then at its start */
 .qwbExpander {
   display: inline-flex;
   flex: 0 1 auto;
@@ -744,17 +776,13 @@
   border-radius: 50%;
   background: transparent;
   color: var(--color-accent-button-text);
+  vertical-align: middle;
   cursor: pointer;
 }
 
 .qwbExpander:hover,
 .qwbExpander:focus {
   background-color: var(--color-accent-tint);
-  box-shadow: var(--shadow-md);
-}
-
-.qwbExpander:active {
-  box-shadow: none;
 }
 
 .qwbLink {
@@ -763,13 +791,23 @@
   background: none;
   color: var(--color-accent);
   font: inherit;
+  /* A button's own figures, as the browser gives them: the table's are not passed on */
+  font-feature-settings: normal;
   line-height: normal;
   text-align: left;
   cursor: pointer;
+  user-select: text;
 }
 
-.qwbLink:hover {
+.qwbLink:hover,
+.qwbLink:focus {
+  color: var(--qwb-link-hover);
   text-decoration: underline;
+}
+
+.qwbLink:focus {
+  background-color: var(--qwb-link-focus);
+  animation: qwbFocusRing 0.4s var(--ease-out-quint) forwards;
 }
 
 /* An open row's names, as the component library's side navigation lists them */
@@ -792,6 +830,8 @@
   color: var(--color-text-secondary);
   font: inherit;
   font-size: var(--font-size-s);
+  /* A button in the original: the table's figures are not passed on to it */
+  font-feature-settings: normal;
   line-height: 1.5;
   text-align: left;
   cursor: pointer;

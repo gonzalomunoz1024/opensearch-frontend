@@ -169,7 +169,11 @@ function Rows({
         {expander && (
           <td className="qwbTable__cell qwbTable__cell--expander" id={`qwbRow-${path}`}>
             <div className="qwbTable__content">
-              {names.length > 0 && <Expander isOpen={isOpen} onClick={() => opening.toggle(path)} />}
+              {/* As EuiTableCellContent's text: as wide as the button, which it squashes in a
+                  narrower column */}
+              <span className="qwbTable__text">
+                {names.length > 0 && <Expander isOpen={isOpen} onClick={() => opening.toggle(path)} />}
+              </span>
             </div>
           </td>
         )}
@@ -246,7 +250,9 @@ function Nested({ value, path, opening }: { value: unknown; path: string; openin
             {columns.map((column) => (
               <th key={column} className="qwbTable__head">
                 <div className="qwbTable__content">
-                  <span className="qwbTable__headText">{column}</span>
+                  <span className="qwbTable__headText" title={column}>
+                    {column}
+                  </span>
                 </div>
               </th>
             ))}
@@ -401,7 +407,9 @@ function TableView({
                 {table.fields.map((field, index) => (
                   <th key={`${field}/${index}`} className="qwbTable__head">
                     <div className="qwbTable__content">
-                      <span className="qwbTable__headText">{field}</span>
+                      <span className="qwbTable__headText" title={field}>
+                        {field}
+                      </span>
                     </div>
                   </th>
                 ))}
