@@ -656,6 +656,18 @@ export interface ResolveResponse {
   data_streams?: Array<{ name: string; timestamp_field?: string }>;
 }
 
+/**
+ * The indices, aliases and data streams a request for them answers; none when it fails, as the
+ * original swallows such a failure: typing `.` or `<` into the wizard warns of nothing
+ */
+export async function resolvedOrNone(request: Promise<ResolveResponse | undefined>): Promise<MatchedItem[]> {
+  try {
+    return resolvedItems(await request);
+  } catch {
+    return [];
+  }
+}
+
 /** The indices, aliases and data streams of a resolve, by name */
 export function resolvedItems(response: ResolveResponse | undefined): MatchedItem[] {
   if (!response) return [];
@@ -726,6 +738,18 @@ export function timeFieldOptions(fields: Array<{ name: string; type: string }>):
     { isDisabled: true, display: '───', fieldName: '' },
     { display: "I don't want to use the time filter", fieldName: undefined },
   ];
+}
+
+/**
+ * The value of an option of the time field select, as the original's select gives it: the name of
+ * its field, or its text when it has none, as "I don't want to use the time filter" has
+ */
+export const timeFieldOptionValue = (option: TimeFieldOption) => option.fieldName ?? option.display;
+
+/** What a value of the select means: its field, and whether it is a choice at all (the empty value is none) */
+export function timeFieldChoice(options: TimeFieldOption[], value: string) {
+  const field = options.find((candidate) => candidate.fieldName === value);
+  return { fieldName: field ? field.fieldName : undefined, chosen: value !== '' };
 }
 
 /** The time field chosen beforehand: when every match is a data stream with the same one */

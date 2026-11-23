@@ -26,7 +26,7 @@ import {
   type RetryObject,
   type UnmatchedReference,
 } from './saved_objects_lib';
-import { Callout, InMemoryTable, TypeIcon, type Column } from './saved_objects_parts';
+import { Callout, IMPORT_ICON, InMemoryTable, TypeIcon, type Column } from './saved_objects_parts';
 
 interface ImportMode {
   createNewCopies: boolean;
@@ -378,7 +378,7 @@ function FilePicker({ file, onChange }: { file?: File; onChange: (file?: File) =
         onChange={(event) => onChange(event.target.files?.[0])}
       />
       <div className="sobFilePicker__prompt">
-        <Icon name="download" size="l" />
+        <Icon name={IMPORT_ICON} size="l" />
         <div className="sobFilePicker__text">{file ? <strong>{file.name}</strong> : 'Import'}</div>
         {file && (
           <button

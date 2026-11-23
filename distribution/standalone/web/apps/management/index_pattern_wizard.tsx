@@ -21,8 +21,10 @@ import {
   ILLEGAL_CHARACTERS_VISIBLE,
   matchedIndicesOf,
   preselectedTimeField,
-  resolvedItems,
+  resolvedOrNone,
+  timeFieldChoice,
   timeFieldOptions,
+  timeFieldOptionValue,
   type MatchedItem,
   type ResolveResponse,
   type TimeFieldOption,
@@ -39,10 +41,11 @@ async function getIndices(rawPattern: string, showAll: boolean): Promise<Matched
   const pattern = rawPattern.trim();
   if (pattern === '' || pattern === '*:' || pattern.startsWith(',')) return [];
   const path = encodeURIComponent(pattern).replace(/%2C/gi, ',').replace(/%3A/gi, ':');
-  const response = await services.http.get<ResolveResponse>(`/internal/index-pattern-management/resolve_index/${path}`, {
-    query: { expand_wildcards: showAll ? 'all' : undefined },
-  });
-  return resolvedItems(response);
+  return resolvedOrNone(
+    services.http.get<ResolveResponse>(`/internal/index-pattern-management/resolve_index/${path}`, {
+      query: { expand_wildcards: showAll ? 'all' : undefined },
+    })
+  );
 }
 
 /** What failed to load is told in a warning, and the list is then empty */
@@ -567,8 +570,10 @@ function StepTimeField({
 
   const options =
     timeFields.length > 0
-      ? [{ text: '', value: '', disabled: false }, ...timeFields.map((field) => ({ text: field.display, value: field.fieldName ?? '', disabled: !!field.isDisabled }))]
+      ? [{ text: '', value: '', disabled: false }, ...timeFields.map((field) => ({ text: field.display, value: timeFieldOptionValue(field), disabled: !!field.isDisabled }))]
       : [];
+  // The choice of no time field has no field name: the select shows it by the value of its option
+  const none = timeFields.find((field) => field.fieldName === undefined);
   const showTimeField = timeFields.length > 1;
   const submittable = !showTimeField || timeFieldSet;
 
@@ -600,11 +605,11 @@ function StepTimeField({
             loading={fetching}
             onRefresh={fetchTimeFields}
             options={options}
-            value={selected}
+            value={selected ?? (timeFieldSet && none ? timeFieldOptionValue(none) : undefined)}
             onChange={(value) => {
-              const field = timeFields.find((candidate) => candidate.fieldName === value);
-              setSelected(field ? field.fieldName : undefined);
-              setTimeFieldSet(value !== '');
+              const choice = timeFieldChoice(timeFields, value);
+              setSelected(choice.fieldName);
+              setTimeFieldSet(choice.chosen);
             }}
           />
         </div>

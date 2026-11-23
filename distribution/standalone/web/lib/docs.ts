@@ -114,8 +114,10 @@ export function csvCell(value: unknown, separator: string, quote: boolean): stri
   if (value === null || value === undefined) text = '';
   else if (typeof value === 'object') text = JSON.stringify(value);
   else text = String(value);
-  // A cell that a spreadsheet would run as a formula is made plain text
-  if (/^[=+\-@\t\r]/.test(text) && typeof value === 'string') text = `'${text}`;
+  // A cell that a spreadsheet would run as a formula is made plain text. A number below zero and
+  // the "-" of a missing value start with a sign too, and stay the values they are
+  const signedNumber = /^[-+]\p{Sc}?([\d.,\s]*\d[\d.,\s]*[%\p{L}\p{Sc}°]*)?$/u.test(text);
+  if (/^[=+\-@\t\r]/.test(text) && !signedNumber && typeof value === 'string') text = `'${text}`;
   const needsQuote = quote || text.includes(separator) || /["\n\r]/.test(text);
   return needsQuote ? `"${text.replace(/"/g, '""')}"` : text;
 }
