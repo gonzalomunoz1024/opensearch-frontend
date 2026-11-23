@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { leadingDebounce } from '../../web/apps/index_management/jobs';
-import { aceJsonTokens } from '../../web/apps/index_management/policy_model';
+import { aceActiveLine, aceJsonTokens } from '../../web/apps/index_management/policy_model';
 
 /** A clock whose time goes on only when told, with the timers set on it */
 function fakeClock() {
@@ -124,5 +124,46 @@ describe('colouring a policy as the JSON editor of the plugin does', () => {
       { text: '"a"', kind: 'Key' },
       { text: '"[x]"', kind: 'String' },
     ]);
+  });
+});
+
+describe('the guides of indentation in the JSON editor, as Ace draws them', () => {
+  const text = '{\n    "a": {\n        "b": {\n            "c": 1\n        }\n    }\n}';
+  const indent = { text: '    ', kind: 'Indent' };
+
+  it('cuts every step of the indentation but the last into a run with a guide', () => {
+    const lines = aceJsonTokens(text);
+    assert.deepEqual(lines[1][0], { text: '    ' });
+    assert.deepEqual(lines[2], [indent, { text: '    ' }, { text: '"b"', kind: 'Key' }, { text: ': ' }, { text: '{', kind: 'Paren' }]);
+    assert.deepEqual(lines[3].slice(0, 4), [indent, indent, { text: '    ' }, { text: '"c"', kind: 'Key' }]);
+    assert.deepEqual(lines[4], [indent, { text: '    ' }, { text: '}', kind: 'Paren' }]);
+    assert.equal(lines.map((line) => line.map((token) => token.text).join('')).join('\n'), text);
+  });
+
+  it('draws no guide in an indentation of one step or less, and one in a step and a half', () => {
+    assert.deepEqual(aceJsonTokens('{\n  "a": 1\n}')[1][0], { text: '  ' });
+    assert.deepEqual(aceJsonTokens('{\n    "a": 1\n}')[1][0], { text: '    ' });
+    assert.deepEqual(aceJsonTokens('{\n      "a": 1\n}')[1].slice(0, 2), [indent, { text: '  ' }]);
+  });
+});
+
+describe('the line the JSON editor draws on a band, as Ace does', () => {
+  const text = '{\n  "a": 1,\n  "b": 2\n}';
+
+  it('is the line of the cursor', () => {
+    assert.equal(aceActiveLine(text, 0, 0), 0);
+    assert.equal(aceActiveLine(text, 1, 1), 0);
+    assert.equal(aceActiveLine(text, 2, 2), 1);
+    assert.equal(aceActiveLine(text, text.length, text.length), 3);
+  });
+
+  it('is the line of a selection within one line, and none for a selection over lines', () => {
+    assert.equal(aceActiveLine(text, 4, 7), 1);
+    assert.equal(aceActiveLine(text, 4, 14), undefined);
+  });
+
+  it('stays in the text when the text has become shorter than the cursor', () => {
+    assert.equal(aceActiveLine('{}', 40, 40), 0);
+    assert.equal(aceActiveLine('', 0, 0), 0);
   });
 });

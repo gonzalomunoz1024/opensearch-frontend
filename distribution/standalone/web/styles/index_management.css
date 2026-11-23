@@ -1077,35 +1077,61 @@
   gap: var(--space-2);
 }
 
-/* JSON as the plugin's code editor shows it: Ace's light theme, 14 px type on 16 px lines, the
-   numbers of the lines in a grey gutter 50 px wide, and a line at the 80th column */
+/* JSON as the plugin's code editor shows it. Light: Ace's "github" theme in Ace's own fonts, the
+   numbers of the lines in a grey gutter 50 px wide, bold brackets and keywords, a line at the 80th
+   column. Dark: Ace's dark theme as the Atlas theme colours it, in the Atlas code font, with a line
+   at the left of the gutter. Lines are as tall as the font makes them, which is what Ace measures,
+   and the line of the cursor lies on a band. */
 .ismAce.atlCodeEditor {
-  --code-gutter: 54px;
+  --ace-edge: 0px;
+  --code-gutter: calc(54px + var(--ace-edge));
+  --ace-edge-color: transparent;
   --ace-gutter: #e8e8e8;
   --ace-gutter-text: #aaaaaa;
+  --ace-gutter-active: color-mix(in srgb, #000000 7%, var(--ace-gutter));
   --ace-background: #ffffff;
+  --ace-active: #f5f5f5;
   --ace-text: #000000;
+  --ace-key: #000000;
   --ace-string: #dd1144;
   --ace-number: #009999;
+  --ace-constant: #000000;
+  --ace-strong: 700;
   --ace-margin: #e8e8e8;
+  --ace-cursor: #000000;
+  --ace-selection: rgb(0 110 255 / 29%);
+  --ace-guide: linear-gradient(#ffffff 50%, #d3d3d3 50%) right top / 1px 2px repeat-y;
   border: 0;
   border-radius: 0;
   background:
-    linear-gradient(var(--ace-gutter), var(--ace-gutter)) 0 0 / 50px 100% no-repeat,
+    linear-gradient(var(--ace-edge-color), var(--ace-edge-color)) 0 0 / var(--ace-edge) 100% no-repeat,
+    linear-gradient(var(--ace-gutter), var(--ace-gutter)) 0 0 / calc(50px + var(--ace-edge)) 100% no-repeat,
     var(--ace-background);
   color: var(--ace-text);
+  font-family: Monaco, Menlo, 'Ubuntu Mono', Consolas, source-code-pro, monospace;
   font-size: var(--font-size-s);
-  line-height: 16px;
+  line-height: normal;
 }
 
 :root.themeDark .ismAce.atlCodeEditor {
-  --ace-gutter: #2c2c2e;
-  --ace-gutter-text: #8e8e93;
-  --ace-background: #1c1c1e;
-  --ace-text: #f5f5f7;
-  --ace-string: #ff9f0a;
-  --ace-number: #64d2ff;
-  --ace-margin: #38383a;
+  --ace-edge: 1px;
+  --ace-edge-color: var(--color-border);
+  --ace-gutter: var(--color-surface);
+  --ace-gutter-text: var(--color-text-secondary);
+  --ace-gutter-active: color-mix(in srgb, var(--color-border) 70%, var(--ace-gutter));
+  --ace-background: var(--color-surface-secondary);
+  --ace-active: color-mix(in srgb, var(--color-border) 70%, var(--ace-background));
+  --ace-text: var(--color-text-primary);
+  --ace-key: rgb(94 171 198);
+  --ace-string: rgb(77 184 103);
+  --ace-number: var(--ace-key);
+  --ace-constant: rgb(150 152 249);
+  --ace-strong: 400;
+  --ace-margin: var(--color-border);
+  --ace-cursor: #ffffff;
+  --ace-selection: rgb(10 132 255 / 30%);
+  --ace-guide: linear-gradient(to left, var(--color-text-tertiary) 1px, transparent 1px);
+  font-family: var(--font-family-code);
 }
 
 .ismAce.atlCodeEditor:focus-within {
@@ -1119,6 +1145,14 @@
   padding-bottom: 0;
 }
 
+.ismAce .atlCodeEditor__input {
+  caret-color: var(--ace-cursor);
+}
+
+.ismAce .atlCodeEditor__input::selection {
+  background: var(--ace-selection);
+}
+
 .ismAce .atlCodeEditor__body {
   background: linear-gradient(var(--ace-margin), var(--ace-margin)) calc(var(--code-gutter) + 80ch) 0 / 1px 100% no-repeat;
 }
@@ -1129,16 +1163,24 @@
 }
 
 .ismAce .atlCodeEditor__line::before {
-  width: 37px;
+  width: calc(37px + var(--ace-edge));
   margin-right: 17px;
-  background: var(--ace-gutter);
+  background: linear-gradient(90deg, var(--ace-edge-color) var(--ace-edge), var(--ace-gutter) var(--ace-edge));
   box-shadow: 13px 0 0 var(--ace-gutter);
   color: var(--ace-gutter-text);
 }
 
-.ismAce .tokKey,
-.ismAce .tokKeyword {
-  color: var(--ace-text);
+.ismAce .atlCodeEditor__line--marked {
+  background: var(--ace-active);
+}
+
+.ismAce .atlCodeEditor__line--marked::before {
+  background: linear-gradient(90deg, var(--ace-edge-color) var(--ace-edge), var(--ace-gutter-active) var(--ace-edge));
+  box-shadow: 13px 0 0 var(--ace-gutter-active);
+}
+
+.ismAce .tokKey {
+  color: var(--ace-key);
 }
 
 .ismAce .tokString {
@@ -1149,8 +1191,17 @@
   color: var(--ace-number);
 }
 
+.ismAce .tokKeyword {
+  color: var(--ace-constant);
+  font-weight: var(--ace-strong);
+}
+
 .ismAce .tokParen {
-  font-weight: 700;
+  font-weight: var(--ace-strong);
+}
+
+.ismAce .tokIndent {
+  background: var(--ace-guide);
 }
 
 /* --- A form that describes an index ------------------------------------------------------------- */

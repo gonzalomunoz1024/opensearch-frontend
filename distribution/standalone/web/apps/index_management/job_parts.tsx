@@ -15,7 +15,7 @@ import { Pagination } from '../../components/table';
 import { LocalTable, ism, toasts, type Answer, type TableColumn } from './common';
 import { useSpaced } from './index_select';
 import { leadingDebounce } from './jobs';
-import { aceJsonTokens } from './policy_model';
+import { aceActiveLine, aceJsonTokens } from './policy_model';
 import { wildcardOption, type FieldItem } from './rollup_model';
 
 // --- The panels and spaces of the plugin's pages ------------------------------------------------------
@@ -162,7 +162,7 @@ export function FormButtons({ children }: { children: ReactNode }) {
 
 /**
  * JSON in an editor drawn as the plugin's code editor: the light theme of Ace the plugin picks,
- * with its grey gutter, or its dark one in the dark theme.
+ * with its grey gutter, or its dark one in the dark theme, and the line of the cursor on a band.
  */
 export function AceJsonEditor({
   value,
@@ -175,6 +175,8 @@ export function AceJsonEditor({
   height: number;
   testId?: string;
 }) {
+  const [cursor, setCursor] = useState<[number, number]>([0, 0]);
+  const active = aceActiveLine(value, cursor[0], cursor[1]);
   return (
     <CodeEditor
       value={value}
@@ -184,6 +186,8 @@ export function AceJsonEditor({
       ariaLabel="Code Editor"
       testId={testId}
       className="ismAce"
+      markedLines={active === undefined ? undefined : [active, active]}
+      onCursor={(start, end) => setCursor([start, end])}
     />
   );
 }
