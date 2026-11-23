@@ -73,23 +73,24 @@ export class UiSettings {
 
   /** A value for the server's own use, from a copy at most a few seconds old */
   async peek<T>(key: string, fallback: T): Promise<T> {
-    if (key in this.config.overrides) return this.config.overrides[key] as T;
+    // Own keys only, as the original's `hasOwnProperty`: `toString` is a key like any other
+    if (Object.hasOwn(this.config.overrides, key)) return this.config.overrides[key] as T;
     try {
       const values =
         this.cached && Date.now() - this.cached.at < 5000
           ? this.cached.values
           : await this.getUserProvided();
-      if (key in values) return values[key] as T;
+      if (Object.hasOwn(values, key)) return values[key] as T;
     } catch {
       // without OpenSearch the page still has to come up, in the default look
     }
-    return key in this.config.defaults ? (this.config.defaults[key] as T) : fallback;
+    return Object.hasOwn(this.config.defaults, key) ? (this.config.defaults[key] as T) : fallback;
   }
 
   /** `null` takes a setting back to its default */
   async setMany(changes: Record<string, unknown>) {
     for (const key of Object.keys(changes)) {
-      if (key in this.config.overrides) {
+      if (Object.hasOwn(this.config.overrides, key)) {
         throw badRequest(`Unable to update "${key}" because it is overridden`);
       }
     }

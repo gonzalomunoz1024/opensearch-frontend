@@ -10,7 +10,16 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { getLocation, lastAddressOf, locationState, navigate, setLeaveGuard, startRouter, type LeaveTarget } from '../../web/router';
+import {
+  enteredAnotherApplication,
+  getLocation,
+  lastAddressOf,
+  locationState,
+  navigate,
+  setLeaveGuard,
+  startRouter,
+  type LeaveTarget,
+} from '../../web/router';
 
 interface Entry {
   url: string;
@@ -64,13 +73,36 @@ function fakeBrowser(start: string) {
   return { entries, location, history, listeners, unload };
 }
 
-async function withBrowser(start: string, base: string, run: (browser: ReturnType<typeof fakeBrowser>) => Promise<void> | void) {
+/** What a page keeps for the session, as far as the router uses it */
+interface Storage {
+  getItem: (key: string) => string | null;
+  setItem: (key: string, value: string) => void;
+}
+
+function fakeStorage(): Storage & { items: Record<string, string> } {
+  const items: Record<string, string> = {};
+  return {
+    items,
+    getItem: (key) => (key in items ? items[key] : null),
+    setItem: (key, value) => {
+      items[key] = value;
+    },
+  };
+}
+
+async function withBrowser(
+  start: string,
+  base: string,
+  run: (browser: ReturnType<typeof fakeBrowser>) => Promise<void> | void,
+  sessionStorage?: Storage
+) {
   const browser = fakeBrowser(start);
   const globals = globalThis as { window?: unknown; document?: unknown };
   const { location, history, listeners } = browser;
   globals.window = {
     location,
     history,
+    sessionStorage,
     addEventListener: (type: string, listener: (event: UnloadEvent) => void) => {
       listeners[type] = listener;
     },
@@ -183,16 +215,127 @@ describe('the question asked before a page is left', () => {
 });
 
 describe('where each application was last', () => {
-  it('is the last address the application had, what was replaced in it too', () =>
-    withBrowser('/base/app/dashboards#/view/d1?_a=(viewMode:view)', '/base', () => {
-      assert.equal(lastAddressOf('dashboards'), '/app/dashboards#/view/d1?_a=(viewMode:view)', 'without the base path');
-      navigate('/app/dashboards#/view/d1?_a=(panels:!(),viewMode:edit)', { replace: true });
-      navigate('/app/visualize#/edit/v1', { state: { originatingApp: 'dashboards' } });
-      assert.equal(lastAddressOf('dashboards'), '/app/dashboards#/view/d1?_a=(panels:!(),viewMode:edit)');
-      assert.equal(lastAddressOf('visualize'), '/app/visualize#/edit/v1');
-      navigate('/app/visualize#/edit/v1?_a=(linked:!f)', { replace: true });
-      assert.equal(lastAddressOf('visualize'), '/app/visualize#/edit/v1?_a=(linked:!f)');
-      assert.equal(lastAddressOf('dashboards'), '/app/dashboards#/view/d1?_a=(panels:!(),viewMode:edit)', 'the dashboards stay where they were');
-      assert.equal(lastAddressOf('discover-never-opened'), undefined);
+  const G7 = '(time:(from:now-7d,to:now))';
+  const G1 = '(time:(from:now-1d,to:now))';
+
+  it("is kept for the session under the original's keys, as the fragment the application was at", () => {
+    const storage = fakeStorage();
+    return withBrowser(
+      `/base/app/dashboards#/view/d1?_g=${G7}&_a=(viewMode:view)`,
+      '/base',
+      () => {
+        assert.equal(storage.items['lastUrl:/base:dashboard'], `#/view/d1?_g=${G7}&_a=(viewMode:view)`);
+        assert.equal(lastAddressOf('dashboards'), `/app/dashboards#/view/d1?_g=${G7}&_a=(viewMode:view)`, 'without the base path');
+        // What is replaced in the application is where it is
+        navigate(`/app/dashboards#/view/d1?_g=${G7}&_a=(panels:!(),viewMode:edit)`, { replace: true });
+        assert.equal(storage.items['lastUrl:/base:dashboard'], `#/view/d1?_g=${G7}&_a=(panels:!(),viewMode:edit)`);
+        // Another application opens: the dashboards stay where they were
+        navigate(`/app/visualize#/edit/v1?_g=${G7}`, { state: { originatingApp: 'dashboards' } });
+        navigate(`/app/visualize#/edit/v1?_g=${G7}&_a=(linked:!f)`, { replace: true });
+        assert.equal(storage.items['lastUrl:/base:visualize'], `#/edit/v1?_g=${G7}&_a=(linked:!f)`);
+        assert.equal(lastAddressOf('dashboards'), `/app/dashboards#/view/d1?_g=${G7}&_a=(panels:!(),viewMode:edit)`);
+      },
+      storage
+    );
+  });
+
+  it('follows the time range of now while the application is not open, and nothing else changes in it', () => {
+    const storage = fakeStorage();
+    return withBrowser(
+      `/app/dashboards#/view/d1?_g=${G7}&_a=(query:(language:kuery,query:'bytes > 100'),viewMode:edit)`,
+      '',
+      () => {
+        // The applications that are not open take the `_g` of the address, from their start
+        assert.equal(storage.items['lastUrl::visualize'], `#/?_g=${G7}`);
+        assert.equal(storage.items['lastUrl::vis-builder'], `#/?_g=${G7}`);
+        assert.equal(storage.items['lastUrl::data-explorer'], `#/?_g=${G7}`);
+        navigate(`/app/visualize#/edit/v1?_g=${G7}`);
+        assert.equal(storage.items['lastUrl::dashboard'], `#/view/d1?_g=${G7}&_a=(query:(language:kuery,query:'bytes%20%3E%20100'),viewMode:edit)`);
+        // The time range changes in the editor: the dashboards will open with it
+        navigate(`/app/visualize#/edit/v1?_g=${G1}`, { replace: true });
+        assert.equal(
+          lastAddressOf('dashboards'),
+          `/app/dashboards#/view/d1?_g=${G1}&_a=(query:(language:kuery,query:'bytes%20%3E%20100'),viewMode:edit)`
+        );
+        assert.equal(storage.items['lastUrl::visualize'], `#/edit/v1?_g=${G1}`, 'the application that is open is where it is');
+        assert.equal(storage.items['lastUrl::data-explorer'], `#/?_g=${G1}`);
+      },
+      storage
+    );
+  });
+
+  it('is still known when the page was loaded again, as the storage of the session keeps it', async () => {
+    const storage = fakeStorage();
+    await withBrowser(`/app/dashboards#/view/d1?_g=${G7}&_a=(viewMode:edit)`, '', () => navigate(`/app/visualize#/edit/v1?_g=${G7}`), storage);
+    // The page loads again in the editor
+    await withBrowser(
+      `/app/visualize#/edit/v1?_g=${G7}`,
+      '',
+      () => assert.equal(lastAddressOf('dashboards'), `/app/dashboards#/view/d1?_g=${G7}&_a=(viewMode:edit)`),
+      storage
+    );
+  });
+
+  it('starts at the place the original opens an application at, and at the root of one it does not track', () =>
+    withBrowser('/app/home', '', () => {
+      assert.equal(lastAddressOf('dashboards'), '/app/dashboards#/list');
+      assert.equal(lastAddressOf('visualize'), '/app/visualize#/');
+      assert.equal(lastAddressOf('canvas'), '/app/canvas');
+      // An address without a fragment is no place to come back to
+      navigate('/app/dashboards');
+      assert.equal(lastAddressOf('dashboards'), '/app/dashboards#/list');
     }));
+
+  it('lasts as long as the page in a browser that keeps nothing', () =>
+    withBrowser(
+      `/app/dashboards#/view/d1?_g=${G7}&_a=(viewMode:edit)`,
+      '',
+      () => {
+        navigate(`/app/visualize#/edit/v1?_g=${G1}`);
+        assert.equal(lastAddressOf('dashboards'), `/app/dashboards#/view/d1?_g=${G1}&_a=(viewMode:edit)`);
+      },
+      {
+        getItem: () => {
+          throw new Error('storage is off');
+        },
+        setItem: () => {
+          throw new Error('storage is off');
+        },
+      }
+    ));
+
+  it('knows the first address of an application, where the original sets the title back to the name', () =>
+    withBrowser('/app/visualize#/', '', (browser) => {
+      assert.equal(enteredAnotherApplication(), true, 'as the page loads');
+      navigate('/app/visualize#/create?type=markdown');
+      assert.equal(enteredAnotherApplication(), false, 'a page of the same application');
+      navigate('/app/visualize#/create?type=markdown&_a=(vis:(title:x))', { replace: true });
+      assert.equal(enteredAnotherApplication(), false);
+      navigate('/app/dashboards#/view/d1');
+      assert.equal(enteredAnotherApplication(), true, 'another application');
+      // Its second name is the same application
+      navigate('/app/dashboard#/view/d1?_a=(viewMode:edit)');
+      assert.equal(enteredAnotherApplication(), false);
+      navigate('/app/visualize#/edit/v1');
+      assert.equal(enteredAnotherApplication(), true);
+      navigate('/app/visualize#/edit/v1?_a=(uiState:())', { replace: true });
+      assert.equal(enteredAnotherApplication(), false);
+      // The page loaded again at the same address: its first one
+      browser.history.replaceState(null, '', '/app/visualize#/edit/v1?_a=(uiState:())');
+      startRouter('');
+      assert.equal(enteredAnotherApplication(), true, 'a page loaded again');
+    }));
+
+  it('takes the second address this product opens the dashboards at for the dashboards', () => {
+    const storage = fakeStorage();
+    return withBrowser(
+      `/app/dashboard#/view/d1?_g=${G7}&_a=(viewMode:edit)`,
+      '',
+      () => {
+        assert.equal(storage.items['lastUrl::dashboard'], `#/view/d1?_g=${G7}&_a=(viewMode:edit)`);
+        assert.equal(lastAddressOf('dashboards'), `/app/dashboards#/view/d1?_g=${G7}&_a=(viewMode:edit)`);
+      },
+      storage
+    );
+  });
 });
