@@ -60,11 +60,15 @@
   flex-direction: column;
   min-height: 300px;
   background: var(--color-surface);
+  line-height: normal;
 }
 
-.tvbEditorVisualization > .visRoot {
+/* The chart takes the line-height of the area it is drawn in, not the page's */
+.tvbEditorVisualization > .visRoot,
+.tvbEditorVisualization > .visRoot[data-vis-type="metrics"] {
   flex: 1 1 auto;
   min-height: 0;
+  line-height: inherit;
 }
 
 /* The chart keeps no padding of its own here, so a panel takes the visualization's 8 px as a

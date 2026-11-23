@@ -437,13 +437,15 @@ function TopN({ params, data }: { params: TsvbParams; data: TsvbData }) {
   );
 }
 
-// The ring of a gauge as the product draws it: its circle, the drawing, the box the drawing sits
-// in (as tall as its line, a little taller than the drawing) and the size the product reads it at
+// The ring of a gauge as the product draws it: its circle, the size of the drawing and the share
+// of the circle it sweeps. The drawing stands in a line of text, so the box around it is as tall
+// as that line makes it (a little taller than the drawing, by how much depends on the line-height
+// it inherits), and the ring is scaled from the size that box measures, as the product's is.
 const GAUGE_CIRCUMFERENCE = 2 * Math.PI * 50;
 const GAUGE_TRACK = 'rgba(105,112,125,0.2)';
 const GAUGE_RING = {
-  half: { svg: [120.72, 78.72], box: [120.72, 81.72], read: { width: 121, height: 82 }, sweep: 0.6 },
-  circle: { svg: [120.72, 120.72], box: [120.72, 123.72], read: { width: 121, height: 124 }, sweep: 1 },
+  half: { svg: [120.72, 78.72], sweep: 0.6 },
+  circle: { svg: [120.72, 120.72], sweep: 1 },
 } as const;
 
 /**
@@ -453,6 +455,7 @@ const GAUGE_RING = {
  */
 function Gauge({ params, data, extra }: { params: TsvbParams; data: TsvbData; extra?: string }) {
   const [panelRef, panel] = useClientSize<HTMLDivElement>();
+  const [ringRef, ringBox] = useClientSize<HTMLDivElement>();
   const series = data.series[0];
   const half = params.gauge_style !== 'circle';
   const ring = GAUGE_RING[half ? 'half' : 'circle'];
@@ -479,7 +482,7 @@ function Gauge({ params, data, extra }: { params: TsvbParams; data: TsvbData; ex
         {extra && <div className="visTsvbGauge__additional">{extra}</div>}
       </div>
       <div className="visTsvbGauge__rings">
-        <div className="visTsvbGauge__ring" style={{ width: ring.box[0], height: ring.box[1], ...placed(placeBox(panel, ring.read)) }}>
+        <div ref={ringRef} className="visTsvbGauge__ring" style={placed(placeBox(panel, ringBox))}>
           <svg width={ring.svg[0]} height={ring.svg[1]} aria-hidden="true">
             <circle
               r={50}
@@ -685,7 +688,10 @@ function TsvbTable({
 function NoData() {
   return (
     <div className="visError visTsvbNoData" data-test-subj="noTSVBDataMessage">
-      <Icon name="visualize" />
+      {/* The icon stands in a line of the text, a little taller than itself, as the product's does */}
+      <div>
+        <Icon name="visualize" />
+      </div>
       <p>No data to display for the selected metrics</p>
     </div>
   );

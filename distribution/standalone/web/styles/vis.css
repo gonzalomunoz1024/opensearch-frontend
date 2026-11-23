@@ -40,9 +40,11 @@
   overflow-wrap: anywhere;
 }
 
+/* Its text as the product's extra small text: 12 px on a line of 1.5 */
 .visTsvbNoData {
   gap: var(--space-2);
   color: var(--color-text-secondary);
+  line-height: 1.5;
 }
 
 .visTsvbNoData p {
@@ -83,6 +85,15 @@
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
+}
+
+/*
+ * A TSVB panel is drawn on the line-height of the product's page, 1, which those of its parts
+ * that set none inherit (a Top N's rows, a gauge's ring in its line); in the TSVB editor its chart
+ * sets `normal` instead, as the product's does
+ */
+.visRoot[data-vis-type="metrics"] {
+  line-height: 1;
 }
 
 /*
@@ -385,15 +396,15 @@
 /* TSVB */
 
 /*
- * A TSVB metric or gauge writes its label and values in the product's colours: the theme's text
- * at 40% for a label and 70% for a value, or, over a panel colour that reads as the other theme,
- * the theme's surface at 60% and 80%; and at the product's sizes from its base of 14px, before
- * they are scaled to the panel
+ * A TSVB metric or gauge writes its label and values in the product's colours: the theme's full
+ * shade (black, white in dark) at 40% for a label and 70% for a value, or, over a panel colour
+ * that reads as the other theme, the theme's surface at 60% and 80%; and at the product's sizes
+ * from its base of 14px, before they are scaled to the panel
  */
 .visTsvbMetric,
 .visTsvbGauge {
-  --vis-tsvb-text: color-mix(in srgb, var(--color-text-primary) 40%, transparent);
-  --vis-tsvb-value: color-mix(in srgb, var(--color-text-primary) 70%, transparent);
+  --vis-tsvb-text: color-mix(in srgb, var(--color-full-shade) 40%, transparent);
+  --vis-tsvb-value: color-mix(in srgb, var(--color-full-shade) 70%, transparent);
 
   position: relative;
   display: flex;
@@ -470,16 +481,15 @@
 
 /* A TSVB Top N as the product draws it, in its colours and at its base size */
 .visTsvbTopN {
-  --vis-tsvb-text: color-mix(in srgb, var(--color-text-primary) 40%, transparent);
-  --vis-tsvb-value: color-mix(in srgb, var(--color-text-primary) 70%, transparent);
-  --vis-tsvb-hover: color-mix(in srgb, var(--color-text-primary) 10%, transparent);
+  --vis-tsvb-text: color-mix(in srgb, var(--color-full-shade) 40%, transparent);
+  --vis-tsvb-value: color-mix(in srgb, var(--color-full-shade) 70%, transparent);
+  --vis-tsvb-hover: color-mix(in srgb, var(--color-full-shade) 10%, transparent);
 
   position: relative;
   display: flex;
   flex-direction: column;
   overflow: auto;
   font-size: var(--font-size-s);
-  line-height: normal;
 }
 
 .visTsvbTopN--reversed {
@@ -497,12 +507,14 @@
   background-color: var(--vis-tsvb-hover);
 }
 
+/* On the baseline of its row, as the product's reset leaves every cell that sets nothing else */
 .visTsvbTopN__label {
   padding: var(--space-1) 0;
   overflow: hidden;
   color: var(--vis-tsvb-text);
   text-overflow: ellipsis;
   white-space: nowrap;
+  vertical-align: baseline;
 }
 
 .visTsvbTopN__bar {
@@ -582,12 +594,10 @@
   overflow: hidden;
 }
 
+/* The ring stands in a line of text, as tall as the line makes it, and is scaled from the size it
+   measures */
 .visTsvbGauge__ring {
   position: absolute;
-}
-
-.visTsvbGauge__ring svg {
-  display: block;
 }
 
 /*
