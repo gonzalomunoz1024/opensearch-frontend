@@ -98,9 +98,20 @@ const PATHS = {
   sql: 'M3 4.500C3 3.400 5.200 2.500 8 2.500s5 .900 5 2-2.200 2-5 2-5-.900-5-2zM3 4.500v7c0 1.100 2.200 2 5 2s5-.900 5-2v-7',
 } as const;
 
-export type IconName = keyof typeof PATHS;
+// Shapes drawn solid as the original's own icons, where their outline is what tells them apart:
+// the plus in a filled circle of "Add", the two lines one drags an aggregation by
+const SOLID_PATHS = {
+  plusInCircleFilled:
+    'M8 7V3.5a.5.5 0 0 0-1 0V7H3.5a.5.5 0 0 0 0 1H7v3.5a.5.5 0 1 0 1 0V8h3.5a.5.5 0 1 0 0-1H8Zm-.5 8a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z',
+  grabLines:
+    'M13.5 6c.276 0 .5.232.5.5 0 .276-.229.5-.5.5h-11a.505.505 0 0 1-.5-.5c0-.276.229-.5.5-.5h11Zm0 3c.276 0 .5.232.5.5 0 .276-.229.5-.5.5h-11a.505.505 0 0 1-.5-.5c0-.276.229-.5.5-.5h11Z',
+} as const;
 
-export const ICON_NAMES = Object.keys(PATHS) as IconName[];
+export type IconName = keyof typeof PATHS | keyof typeof SOLID_PATHS;
+
+export const ICON_NAMES = [...Object.keys(PATHS), ...Object.keys(SOLID_PATHS)] as IconName[];
+
+const isSolid = (name: IconName): name is keyof typeof SOLID_PATHS => name in SOLID_PATHS;
 
 export interface IconProps {
   name: IconName;
@@ -123,9 +134,9 @@ export function Icon({ name, size = 'm', className, title }: IconProps) {
       role={title ? 'img' : undefined}
       aria-hidden={title ? undefined : true}
       aria-label={title}
-      style={FILLED.has(name) ? { fill: 'currentcolor' } : undefined}
+      style={isSolid(name) ? { fill: 'currentcolor', stroke: 'none' } : FILLED.has(name) ? { fill: 'currentcolor' } : undefined}
     >
-      <path d={PATHS[name]} />
+      {isSolid(name) ? <path d={SOLID_PATHS[name]} fillRule="evenodd" /> : <path d={PATHS[name]} />}
     </svg>
   );
 }

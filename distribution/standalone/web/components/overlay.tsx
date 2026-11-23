@@ -28,8 +28,10 @@ export interface PopoverProps {
   open: boolean;
   onClose: () => void;
   children: ReactNode;
-  align?: 'left' | 'right';
+  align?: 'left' | 'right' | 'center';
   padded?: boolean;
+  /** The room between the button and the panel, 4px unless said */
+  offset?: number;
   /** As wide as its button at least: a list under a field */
   matchWidth?: boolean;
   width?: number;
@@ -51,6 +53,7 @@ export function Popover({
   className,
   anchorStyle,
   anchorClassName,
+  offset = 4,
 }: PopoverProps) {
   const anchor = useRef<HTMLSpanElement>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -62,21 +65,22 @@ export function Popover({
     if (!anchorBox || !panelBox) return;
     const margin = 8;
     const panelWidth = Math.max(panelBox.width, matchWidth ? anchorBox.width : 0);
-    let left = align === 'right' ? anchorBox.right - panelWidth : anchorBox.left;
+    let left =
+      align === 'right' ? anchorBox.right - panelWidth : align === 'center' ? anchorBox.left + anchorBox.width / 2 - panelWidth / 2 : anchorBox.left;
     left = Math.max(margin, Math.min(left, window.innerWidth - panelWidth - margin));
     const below = window.innerHeight - anchorBox.bottom - margin;
     const above = anchorBox.top - margin;
-    const fitsBelow = panelBox.height + 4 <= below || below >= above;
+    const fitsBelow = panelBox.height + offset <= below || below >= above;
     const next: CSSProperties = {
       left,
       minWidth: matchWidth ? anchorBox.width : undefined,
       width,
-      maxHeight: Math.max(120, (fitsBelow ? below : above) - 4),
+      maxHeight: Math.max(120, (fitsBelow ? below : above) - offset),
     };
-    if (fitsBelow) next.top = anchorBox.bottom + 4;
-    else next.bottom = window.innerHeight - anchorBox.top + 4;
+    if (fitsBelow) next.top = anchorBox.bottom + offset;
+    else next.bottom = window.innerHeight - anchorBox.top + offset;
     setStyle(next);
-  }, [align, matchWidth, width]);
+  }, [align, matchWidth, width, offset]);
 
   useLayoutEffect(() => {
     if (!open) {
@@ -513,12 +517,15 @@ export function Tooltip({
   children,
   testId,
   block,
+  position = 'top',
 }: {
   content: ReactNode;
   children: ReactNode;
   testId?: string;
   /** The anchor a block as wide as its line, as the original's `eui-displayBlock` anchors */
   block?: boolean;
+  /** Where it is drawn, as the original's `position`: above unless there is no room, below, or on the right */
+  position?: 'top' | 'bottom' | 'right';
 }) {
   const anchor = useRef<HTMLSpanElement>(null);
   const [place, setPlace] = useState<{ left: number; top: number }>();
@@ -528,11 +535,20 @@ export function Tooltip({
     if (!shown || !anchor.current || !box.current) return;
     const target = anchor.current.getBoundingClientRect();
     const own = box.current.getBoundingClientRect();
+    if (position === 'right' && target.right + 16 + own.width <= window.innerWidth - 8) {
+      setPlace({ left: target.right + 16, top: Math.max(8, target.top + target.height / 2 - own.height / 2) });
+      return;
+    }
     const left = Math.max(8, Math.min(target.left + target.width / 2 - own.width / 2, window.innerWidth - own.width - 8));
-    // Above, as the original's, 16 px from its anchor, unless there is no room
-    const top = target.top - own.height - 16 >= 8 ? target.top - own.height - 16 : target.bottom + 16;
+    const above = target.top - own.height - 16;
+    const below = target.bottom + 16;
+    // 16 px from its anchor, as the original's, on the side asked for unless there is no room there
+    const top =
+      position === 'bottom'
+        ? below + own.height <= window.innerHeight - 8 ? below : above
+        : above >= 8 ? above : below;
     setPlace({ left, top });
-  }, [shown, content]);
+  }, [shown, content, position]);
   return (
     <span
       ref={anchor}
