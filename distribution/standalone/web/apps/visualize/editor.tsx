@@ -31,7 +31,7 @@ import { SaveModal, ShareModal, type SaveResult } from '../../shell/saved_object
 import { pageFiltersOf, savedQueryGlobalParam, type SavedQueryChange } from '../../shell/saved_query';
 import { SearchBar } from '../../shell/search_bar';
 import { showSearchError } from '../../shell/search_error';
-import { addRecentlyAccessed, currentGlobalParam, useAutoRefresh, useBreadcrumbs, useGlobalState } from '../../shell/state';
+import { addRecentlyAccessed, useAutoRefresh, useBreadcrumbs, useGlobalState } from '../../shell/state';
 import { resolveVisSource, visContext, type VisInput } from '../../vis/request';
 import type { TsvbData, TsvbTableData } from '../../vis/tsvb/data';
 import { specIndexPatterns } from '../../vis/vega/index_patterns';
@@ -43,12 +43,12 @@ import { newVis, syncParams, visProblems, withoutDisabledBuckets } from './defau
 import { canAutoApply, dragWidths, editorHeading, initialWidths, keyWidths, searchBarParts, type SplitWidths } from './editor_layout';
 import { LeaveConfirmModal } from './leave_confirm';
 import { optionTabs } from './options';
-import { setupRegionMap } from '../../vis/region_map/region_map_type';
 import { SidebarControls, SidebarTitle } from './sidebar';
-import { incomingEditorState, originatingAppUrl, visualizationPackage } from './state_transfer';
+import { incomingEditorState, visualizationPackage } from './state_transfer';
 import { LEAVE_TEXT, confirmsLeave, returnSwitch, visualizeTopNav, type TopNavAction } from './top_nav';
 import { TsvbEditor } from './tsvb/editor';
 import { withTsvbDefaults } from './tsvb/model';
+import { setupVis } from './type_setup';
 
 export const VISUALIZE = '/app/visualize';
 
@@ -94,8 +94,8 @@ async function load(savedId: string | undefined, create: { type?: string; indexP
     if (!create.type || !visType(create.type)) throw new Error('The address names no kind of visualization to create');
     vis = newVis(create.type, { indexPatternId: create.indexPattern, savedSearchId: create.savedSearchId });
   }
-  // The setup of a region map: the vector map, join field and base map it has not chosen yet
-  if (vis.type === 'region_map') vis = { ...vis, params: (await setupRegionMap(vis.params)).params };
+  // The setup of a map: the base map, and a region map's vector map and join field, not chosen yet
+  vis = await setupVis(vis);
   let searchTitle: string | undefined;
   const searchId = vis.savedSearchId;
   if (searchId) {
@@ -416,11 +416,9 @@ export function VisEditor({ savedId }: { savedId?: string }) {
     services.toasts.success(`Unlinked from saved search '${loaded.searchTitle ?? ''}'`);
   };
 
-  // Where the editor goes back to: the dashboard it came from, where it was
-  const returnUrl = () =>
-    originatingApp
-      ? originatingAppUrl(originatingApp, { lastAddress: lastAddressOf(originatingApp), containerInfo, globalParam: currentGlobalParam() })
-      : appUrl(VISUALIZE, '/');
+  // Where the editor goes back to, the original's `navigateToApp(originatingApp)`: the dashboard it
+  // came from, where it was, with what was changed there and not saved yet
+  const returnUrl = () => (originatingApp ? lastAddressOf(originatingApp) : appUrl(VISUALIZE, '/'));
 
   // The original's `doSave`: the title into the address first, then the whole visualization
   // (`create` with `overwrite`); then back to the application that opened the editor when asked,

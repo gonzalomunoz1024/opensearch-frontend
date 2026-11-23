@@ -22,10 +22,10 @@ import {
   editorStateFor,
   incomingEditorState,
   isEmbeddableEditorState,
-  originatingAppUrl,
   visualizationPackage,
 } from '../../web/apps/visualize/state_transfer';
 import { LEAVE_TEXT, LEAVE_TITLE, confirmsLeave, returnSwitch, visualizeTopNav } from '../../web/apps/visualize/top_nav';
+import { withBaseMap } from '../../web/apps/visualize/type_setup';
 import type { Filter } from '../../web/lib/types';
 import { encodeState } from '../../web/lib/url';
 import { visFromSavedObject } from '../../web/lib/vis';
@@ -248,6 +248,33 @@ describe('leaving the editor', () => {
   });
 });
 
+describe('what a coordinate map is given as the editor loads it', () => {
+  const roadMap = { origin: 'elastic_maps_service', id: 'road_map', minZoom: 0, maxZoom: 10 };
+  const darkMap = { origin: 'elastic_maps_service', id: 'dark_map', minZoom: 0, maxZoom: 10 };
+
+  it('is the first base map of the maps service, when it has chosen none', () => {
+    const params = { mapType: 'Scaled Circle Markers', wms: { enabled: false, options: { format: 'image/png' } } };
+    assert.deepEqual(withBaseMap(params, [roadMap, darkMap]), {
+      mapType: 'Scaled Circle Markers',
+      wms: { enabled: false, options: { format: 'image/png' }, selectedTmsLayer: roadMap },
+    });
+    // what was loaded is not written to
+    assert.deepEqual(params.wms, { enabled: false, options: { format: 'image/png' } });
+  });
+
+  it('keeps the base map it has chosen', () => {
+    const params = { wms: { enabled: false, selectedTmsLayer: darkMap } };
+    assert.equal(withBaseMap(params, [roadMap, darkMap]), params);
+  });
+
+  it('is left as it is when the maps service has no base map, or it has no map settings', () => {
+    const params = { wms: { enabled: false } };
+    assert.equal(withBaseMap(params, []), params);
+    const none = { mapType: 'Heatmap' };
+    assert.equal(withBaseMap(none, [roadMap]), none);
+  });
+});
+
 describe('what the editor and a dashboard hand each other', () => {
   const container = { containerId: 'd1', containerName: '[Logs] Web Traffic' };
 
@@ -277,37 +304,5 @@ describe('what the editor and a dashboard hand each other', () => {
   it('sends a new visualization back as a panel to add, with the container it came from', () => {
     assert.deepEqual(visualizationPackage('v2', container), { type: 'visualization', input: { savedObjectId: 'v2' }, containerInfo: container });
     assert.deepEqual(visualizationPackage('v2'), { type: 'visualization', input: { savedObjectId: 'v2' } });
-  });
-
-  it('goes back to where the dashboard was, with the time of now', () => {
-    const last = "/app/dashboards#/view/d1?_g=(time:(from:now-15m,to:now))&_a=(description:'',panels:!(),viewMode:edit)";
-    const now = '(time:(from:now-7d,to:now))';
-    // Where the dashboards were last, what was not saved too, the time of now in its place
-    assert.equal(
-      originatingAppUrl('dashboards', { lastAddress: last, containerInfo: container, globalParam: now }),
-      "/app/dashboards#/view/d1?_g=(time:(from:now-7d,to:now))&_a=(description:'',panels:!(),viewMode:edit)"
-    );
-    assert.equal(
-      originatingAppUrl('dashboards', { lastAddress: last }),
-      "/app/dashboards#/view/d1?_g=(time:(from:now-15m,to:now))&_a=(description:'',panels:!(),viewMode:edit)"
-    );
-    // An address without `_g` takes the time of now after what it has
-    assert.equal(
-      originatingAppUrl('dashboards', { lastAddress: '/app/dashboards#/create?_a=(viewMode:edit)', globalParam: now }),
-      '/app/dashboards#/create?_a=(viewMode:edit)&_g=(time:(from:now-7d,to:now))'
-    );
-    assert.equal(originatingAppUrl('dashboards', { lastAddress: '/app/dashboards', globalParam: now }), '/app/dashboards');
-    // Not where the dashboards were (the page was loaded again since): the container, to be edited
-    for (const lastAddress of [undefined, '/app/dashboardsx#/view/d9', '/app/visualize#/edit/v1']) {
-      assert.equal(
-        originatingAppUrl('dashboards', { lastAddress, containerInfo: container, globalParam: now }),
-        '/app/dashboards#/view/d1?_g=(time:(from:now-7d,to:now))&_a=(viewMode:edit)'
-      );
-    }
-    assert.equal(originatingAppUrl('dashboards', { containerInfo: { containerId: '' }, globalParam: now }), '/app/dashboards#/create?_g=(time:(from:now-7d,to:now))');
-    assert.equal(originatingAppUrl('dashboards', { globalParam: now }), '/app/dashboards#/?_g=(time:(from:now-7d,to:now))');
-    assert.equal(originatingAppUrl('dashboards', { containerInfo: container }), '/app/dashboards#/view/d1?_a=(viewMode:edit)');
-    // An application without a URL tracker opens at its start
-    assert.equal(originatingAppUrl('canvas', { lastAddress: '/app/canvas#/workpad/w1' }), '/app/canvas');
   });
 });
