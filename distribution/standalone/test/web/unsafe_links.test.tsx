@@ -64,8 +64,10 @@ describe('a link or a picture in Markdown', () => {
       assert.ok(!/href|src/.test(html(`![text](${address})`)), JSON.stringify(address));
     }
     assert.ok(!/href/.test(html('[text](java&#x09;script:alert(1)) <javascript:alert(1)>')));
-    // Nothing is set as HTML, so what HTML would read as a colon is the text it is: a page beside this one
-    assert.match(html('[text](javascript&colon;alert)'), /<a href="javascript&amp;colon;alert">text<\/a>/);
+    // A character reference is read as the character it stands for before the address is judged, as markdown-it reads it
+    for (const address of ['javascript&colon;alert(1)', '&#106;avascript:alert(1)', 'java&Tab;script:alert(1)', '&#x6A;avascript&#58;alert(1)']) {
+      assert.ok(!/href|src/.test(html(`[text](${address}) ![text](${address})`)), address);
+    }
     assert.ok(!html('![x](data:image/svg+xml;base64,PHN2Zz4=)').includes('<img'));
     assert.ok(html('![x](data:image/png;base64,iVBORw0KGgo=)').includes('<img'));
   });
