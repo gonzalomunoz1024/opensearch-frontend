@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button, CallOut, CodeBlock, Health, Spinner, cx, type Tone } from '../../components/basic';
 import { CodeEditor } from '../../components/code_editor';
-import { Checkbox, FormRow, SearchField, TextField } from '../../components/form';
+import { Checkbox, FormRow, TextField } from '../../components/form';
 import { Icon } from '../../components/icon';
 import { MenuButton, Modal, copyText, type MenuItem } from '../../components/overlay';
 import { Pagination } from '../../components/table';
@@ -308,6 +308,8 @@ export interface TableProps<Row> {
   selectable?: (row: Row) => boolean;
   loading?: boolean;
   empty?: ReactNode;
+  /** What the table says when it has no rows shows while they load as well, as the theme's table */
+  emptyWhileLoading?: boolean;
   testId?: string;
   pageSizes?: number[];
   /** Whether the rows come in pages; a table that shows them all has no pager */
@@ -328,6 +330,7 @@ export function Table<Row>({
   selectable,
   loading,
   empty,
+  emptyWhileLoading,
   testId,
   pageSizes = PAGE_SIZES,
   paged = true,
@@ -424,7 +427,7 @@ export function Table<Row>({
             {rows.length === 0 && (
               <tr>
                 <td colSpan={columns.length + (onSelect ? 1 : 0)}>
-                  <div className="ismTable__empty">{loading ? <Spinner /> : empty}</div>
+                  <div className="ismTable__empty">{loading && !emptyWhileLoading ? <Spinner /> : empty}</div>
                 </td>
               </tr>
             )}
@@ -529,6 +532,7 @@ export function SearchRow({
   children,
   className,
   autoFocus,
+  clearable,
 }: {
   search: string;
   onSearch: (text: string) => void;
@@ -538,10 +542,13 @@ export function SearchRow({
   className?: string;
   /** The box has the focus when the list opens */
   autoFocus?: boolean;
+  /** The theme's small round button at the end of a box that holds text, which empties it */
+  clearable?: boolean;
 }) {
   // What is typed is shown at once and searched for a moment later
   const [text, setText] = useState(search);
   const sent = useRef(search);
+  const field = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (search !== sent.current) {
       sent.current = search;
@@ -560,13 +567,33 @@ export function SearchRow({
   return (
     <div className={className ?? 'ismSearchRow'}>
       <div className="atlGrow">
-        <SearchField
+        {/* The theme's search field, with a hold on its box to give it the focus back */}
+        <TextField
+          ref={field}
+          icon="search"
+          type="search"
           compact
+          className={clearable ? 'ismSearchField' : undefined}
           value={text}
           onChange={setText}
           placeholder={placeholder}
           aria-label={placeholder}
           autoFocus={autoFocus}
+          append={
+            clearable && text !== '' ? (
+              <button
+                type="button"
+                className="ismSearchField__clear"
+                aria-label="Clear input"
+                onClick={() => {
+                  setText('');
+                  field.current?.focus();
+                }}
+              >
+                <Icon name="cross" />
+              </button>
+            ) : undefined
+          }
         />
       </div>
       {children}

@@ -178,6 +178,10 @@
   text-align: center;
 }
 
+.ismListEmpty--wide {
+  max-width: 45em;
+}
+
 .ismListEmpty__text {
   color: var(--color-text-secondary);
   font-size: var(--font-size-s);
@@ -300,8 +304,12 @@ tr:hover .ismRowActions > *,
   cursor: pointer;
 }
 
+/* The theme's empty button under the pointer; a filter whose popover is open is selected */
 .ismFilterBox__button:hover,
-.ismFilterBox__button:focus-visible,
+.ismFilterBox__button:focus-visible {
+  background: color-mix(in srgb, var(--color-text-secondary) var(--tint-opacity), transparent);
+}
+
 .ismFilterBox__button[aria-expanded="true"] {
   background: var(--color-border-light);
 }
@@ -311,6 +319,11 @@ tr:hover .ismRowActions > *,
   min-width: 48px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* With no count, the theme's 8 px between the text of a button and its icon */
+.ismFilterBox__name--alone {
+  margin-right: var(--space-2);
 }
 
 .ismFilterBox__name::after {
@@ -347,6 +360,26 @@ tr:hover .ismRowActions > *,
    a cross before the others */
 .atlPopover.ismFilterSelect {
   min-width: 112px;
+}
+
+.atlPopover.ismFilterSelect--wide {
+  min-width: 300px;
+}
+
+/* A value that is not ticked, in the search bar's filter: room for the mark it does not have */
+.ismFilterSelect__blank {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.ismFilterSelect__empty {
+  margin: 0;
+  padding: var(--space-4);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+  text-align: center;
 }
 
 .ismFilterSelect__item {
@@ -403,6 +436,51 @@ tr:hover .ismRowActions > *,
   min-width: 0;
 }
 
+/* The theme's clear button at the end of a search box that holds text, in the place of the
+   browser's own: a round mark 12 px wide in the colour of the placeholder (of the secondary text in
+   the dark), its cross 6 px wide in the colour of the page, 32 px of the box at its right */
+.ismSearchField > input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.ismSearchField__clear {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  /* 8 px from the edge of the box, its border included */
+  margin: 0 -1px 0 var(--space-2);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-text-tertiary);
+  color: var(--color-surface);
+  cursor: pointer;
+}
+
+:root.themeDark .ismSearchField__clear {
+  background: var(--color-text-secondary);
+}
+
+.ismSearchField__clear:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
+}
+
+.ismSearchField__clear .atlIcon {
+  width: 6px;
+  height: 6px;
+  stroke: currentcolor;
+  stroke-width: 4px;
+}
+
+/* The search bar's filter stands 8 px from its box, in the bar's small gutter */
+.ismIndexControls > .ismIndexControls__filter {
+  margin-left: calc(var(--space-2) - var(--space-6));
+}
+
 /* The name of an index after the button that copies it: the name moves under the button when
    both do not fit on a line, as in the plugin */
 .ismIndexName__copy {
@@ -410,12 +488,14 @@ tr:hover .ismRowActions > *,
   padding-left: var(--space-2);
 }
 
-/* The theme's smallest empty button: 22 px by 24, its icon at its left */
+/* The theme's smallest empty button: 22 px by 24, its icon at its left, its middle on the middle of
+   the line, so that the line is a little higher than the button and the name 2 px under its top */
 .ismIndexName__copy .atlButton {
   width: 22px;
   height: 24px;
   justify-content: flex-start;
   padding: 0 1px;
+  vertical-align: middle;
 }
 
 .ismIndexName__link {

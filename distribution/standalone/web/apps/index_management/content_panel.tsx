@@ -134,11 +134,11 @@ export function TitleHelp({ children, half }: { children: ReactNode; half?: bool
 
 /**
  * What a list says when it has nothing to show: the theme's empty prompt as the plugin fills it,
- * a small text and, under it, what to do next.
+ * a small text and, under it, what to do next. `wide` is the Indexes list's, 45 em at most.
  */
-export function ListEmpty({ text, children }: { text: string; children?: ReactNode }) {
+export function ListEmpty({ text, children, wide }: { text: string; children?: ReactNode; wide?: boolean }) {
   return (
-    <div className="ismListEmpty">
+    <div className={cx('ismListEmpty', wide && 'ismListEmpty--wide')}>
       <div className="ismListEmpty__text">
         <p>{text}</p>
       </div>

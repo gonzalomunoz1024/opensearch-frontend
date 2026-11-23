@@ -5,11 +5,10 @@
  * components it is composed of, and the dialogs that unlink and delete them.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Button, IconButton, Spinner, cx } from '../../components/basic';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Button, IconButton, Spinner } from '../../components/basic';
 import { Checkbox } from '../../components/form';
-import { Icon } from '../../components/icon';
-import { Flyout, Popover, Tooltip, type MenuItem } from '../../components/overlay';
+import { Flyout, Tooltip, type MenuItem } from '../../components/overlay';
 import { useBreadcrumbs } from '../../shell/state';
 import { FewNames } from './aliases';
 import {
@@ -27,6 +26,7 @@ import {
   type TableColumn,
 } from './common';
 import { ContentPanel, ContentPanelActions, ListEmpty, TitleHelp } from './content_panel';
+import { FilterBox } from './filter_box';
 import { componentUsers, pluginOrder } from './index_model';
 import { pageChanges, pageQuery } from './model';
 import { DeleteModal, ModalButtons, ModalNames, PluginModal, SimpleModal } from './plugin_modal';
@@ -388,6 +388,7 @@ export function Templates() {
     >
       <SearchRow
         className="ismIndexControls"
+        clearable
         search={query.search}
         onSearch={(search) => setQuery({ search, from: 0 })}
         placeholder="Search..."
@@ -463,61 +464,6 @@ function TypeBadges({ template }: { template?: Record<string, unknown> }) {
           {type}
         </span>
       ))}
-    </div>
-  );
-}
-
-/**
- * The plugin's group of one filter: its name with how many values it has (how many are ticked, once
- * some are), and the values in a popover that stays open while they are ticked
- */
-function TypesFilter({ selected, onChange }: { selected: string[]; onChange: (selected: string[]) => void }) {
-  const [open, setOpen] = useState(false);
-  const close = useCallback(() => setOpen(false), []);
-  const active = selected.length > 0;
-  return (
-    <div className="ismFilterBox">
-      <Popover
-        open={open}
-        onClose={close}
-        align="center"
-        offset={8}
-        className="ismFilterSelect"
-        button={
-          <button
-            type="button"
-            className={cx('ismFilterBox__button', active && 'ismFilterBox__button--active')}
-            aria-expanded={open}
-            onClick={() => setOpen((was) => !was)}
-          >
-            {/* As wide as its bold self, so that ticking a value does not move what follows */}
-            <span className="ismFilterBox__name" data-text="Types">
-              Types
-            </span>
-            <span className={cx('ismFilterBox__count', active && 'ismFilterBox__count--active')}>
-              {active ? selected.length : TYPE_FILTERS.length}
-            </span>
-            <Icon name="chevronDown" />
-          </button>
-        }
-      >
-        {TYPE_FILTERS.map((type) => {
-          const on = selected.includes(type);
-          return (
-            <button
-              key={type}
-              type="button"
-              className="ismFilterSelect__item"
-              aria-pressed={on}
-              data-test-subj={`FilterGroupSelectItem-${type}`}
-              onClick={() => onChange(on ? selected.filter((item) => item !== type) : [...selected, type])}
-            >
-              <Icon name={on ? 'check' : 'cross'} />
-              <span className="ismFilterSelect__text">{type}</span>
-            </button>
-          );
-        })}
-      </Popover>
     </div>
   );
 }
@@ -841,11 +787,15 @@ export function ComposableTemplates() {
       <SearchRow
         className="ismIndexControls ismIndexControls--s"
         autoFocus
+        clearable
         search={query.search}
         onSearch={(search) => setQuery({ search, from: 0 })}
         placeholder="Search..."
       >
-        <TypesFilter
+        <FilterBox
+          name="Types"
+          own
+          options={TYPE_FILTERS}
           selected={types}
           onChange={(next) => {
             setTypes(next);

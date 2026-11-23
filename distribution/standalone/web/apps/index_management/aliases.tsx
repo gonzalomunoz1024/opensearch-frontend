@@ -476,6 +476,7 @@ export function Aliases() {
     >
       <SearchRow
         className="ismIndexControls"
+        clearable
         search={query.search}
         onSearch={(search) => setQuery({ search, from: 0 })}
         placeholder="Search..."
