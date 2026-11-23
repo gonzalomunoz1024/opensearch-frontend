@@ -344,6 +344,11 @@
   line-height: 1.5;
 }
 
+/* The label of a row with an error, as the theme's invalid form label; a title keeps its colour */
+.ismCustomRow__label--invalid {
+  color: var(--color-critical-button-text);
+}
+
 /* The plugin's title of a field: the theme's heading of a small text, 17 px on 22 */
 .ismCustomRow__title,
 .ismDescribed__title {
@@ -681,6 +686,11 @@ button.ismTreeView__inner {
   max-width: 768px;
 }
 
+/* The box a test finds the title by: the whole line, as the theme's title box */
+.ismModal__title {
+  display: block;
+}
+
 .ismModal__body {
   line-height: 1.5;
 }
@@ -704,6 +714,23 @@ button.ismTreeView__inner {
   padding: 0;
   list-style: disc inside;
   overflow-wrap: break-word;
+}
+
+/* In a small call-out: 18 px in, the theme's list in an extra small text */
+.ismModalNames--callOut {
+  margin-left: 18px;
+}
+
+/* The plugin's small text inside a small call-out, whose own text is extra small */
+.ismModal__small {
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+/* The names under a call-out's title follow an empty paragraph of the plugin's, 18 px under the
+   title where the call-out's own text would be 8 */
+.ismModalNames--underTitle {
+  margin-top: 18px;
 }
 
 .ismModal__body .atlField {

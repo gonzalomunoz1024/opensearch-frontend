@@ -30,7 +30,11 @@ export function PluginModal({
 }) {
   return (
     <Modal
-      title={<span data-test-subj={titleTestId}>{title}</span>}
+      title={
+        <span className="ismModal__title" data-test-subj={titleTestId}>
+          {title}
+        </span>
+      }
       titleSize="l"
       onClose={onClose}
       testId={testId}
@@ -72,10 +76,29 @@ export function ModalButtons({
   );
 }
 
-/** Names one under another, each after a bullet inside the line */
-export function ModalNames({ names, testId }: { names: string[]; testId?: (name: string) => string }) {
+/**
+ * Names one under another, each after a bullet inside the line. `within` says where they stand: in
+ * a small call-out they are 18 px in, as the theme's list in its extra small text; `callOutSmall`
+ * sets them in the small text again, and `callOutTitled` puts them 18 px under the call-out's title.
+ */
+export function ModalNames({
+  names,
+  testId,
+  within,
+}: {
+  names: string[];
+  testId?: (name: string) => string;
+  within?: 'callOutSmall' | 'callOutTitled';
+}) {
   return (
-    <ul className="ismModalNames">
+    <ul
+      className={cx(
+        'ismModalNames',
+        within && 'ismModalNames--callOut',
+        within === 'callOutSmall' && 'ismModal__small',
+        within === 'callOutTitled' && 'ismModalNames--underTitle'
+      )}
+    >
       {names.map((name) => (
         <li key={name} data-test-subj={testId?.(name)}>
           {name}

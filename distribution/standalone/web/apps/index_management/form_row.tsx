@@ -68,14 +68,14 @@ export function FormRow({
   return (
     <div className={cx('ismCustomRow', fullWidth && 'ismCustomRow--full', className)} data-test-subj={testId}>
       {title ? (
-        <div className="ismCustomRow__label">
+        <div className={cx('ismCustomRow__label', Boolean(error) && 'ismCustomRow__label--invalid')}>
           <h3 className="ismCustomRow__title">
             {title}
             <Optional optional={optional} />
           </h3>
         </div>
       ) : label ? (
-        <div className="ismCustomRow__label">
+        <div className={cx('ismCustomRow__label', Boolean(error) && 'ismCustomRow__label--invalid')}>
           {label}
           <Optional optional={optional} />
         </div>
