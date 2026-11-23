@@ -2,17 +2,21 @@
 
 /*
  * The page that copies the documents of indexes, data streams or aliases into another index: all
- * of them or the ones a query finds, as they are or through an ingest pipeline.
+ * of them or the ones a query finds, as they are or through an ingest pipeline. As the plugin
+ * draws it: a panel for the source, one for the destination, and the advanced settings in a panel
+ * that opens.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Button, IconButton, Panel } from '../../components/basic';
+import { Button, Panel } from '../../components/basic';
 import { ComboBox } from '../../components/combo_box';
-import { Checkbox, RadioGroup, TextField } from '../../components/form';
+import { Checkbox, TextField } from '../../components/form';
 import { Flyout } from '../../components/overlay';
 import { useLocation } from '../../router';
 import { useBreadcrumbs } from '../../shell/state';
-import { ExternalLink, JsonEditor, Labeled, go, ism, toasts } from './common';
+import { ExternalLink, JsonEditor, go, ism, toasts } from './common';
+import { FoldTitle, TitledPanel } from './content_panel';
+import { FormRow, Radios } from './form_row';
 import { type IndexOption } from './index_options';
 import { IndexForm, createIndex, type IndexFormHandle } from './index_pages';
 import { IndexSelect, loadIndexOptions } from './index_select';
@@ -87,6 +91,15 @@ function CreateIndexFlyout({
         <IndexForm ref={form} sourceIndices={sourceIndices} />
       </div>
     </Flyout>
+  );
+}
+
+/** The plugin's help of a field that ends with a link to the documentation */
+function WithLink({ text, href }: { text: string; href: string }) {
+  return (
+    <>
+      {text} <ExternalLink href={href} />
+    </>
   );
 }
 
@@ -248,214 +261,221 @@ export function Reindex() {
   };
 
   return (
-    <div className="ismPage ismPage--form">
-      <div className="ismPageHeader ismPageHeader--center">
-        <div>
-          <h1 className="ismPageTitle">Reindex</h1>
-          <div className="ismLabeled__help">
-            Use reindex to make extensive changes to your index. Reindex will copy data of the source index into
-            another index. <ExternalLink href={DOCS} />
-          </div>
-        </div>
-      </div>
-      <Panel>
-        <h2 className="ismPanel__heading">Configure source index</h2>
-        <hr className="ismRule" />
-        <div className="ismForm ismForm--wideHelp">
-          <Labeled
-            title={<h3 className="ismLabeled__heading">Specify source indexes or data streams</h3>}
-            help="Specify one or more indexes or data streams you want to reindex from."
-            error={sourceWrong.length > 0 ? sourceWrong.map((text) => <div key={text}>{text}</div>) : undefined}
-          >
-            <div className="ismField">
-              <IndexSelect
-                testId="sourceSelector"
-                placeholder="Select indexes or data streams"
-                value={sources.map((item) => item.label)}
-                invalid={sourceWrong.length > 0}
-                exclude={destination}
-                onChange={(names, given) => {
-                  const chosen = kept(names, given, sources);
-                  setSources(chosen);
-                  setSourceWrong([]);
-                  void judgeSources(chosen);
-                }}
-              />
-            </div>
-          </Labeled>
-          <div data-test-subj="subsetOption">
-            <h3 className="ismLabeled__heading ismReindex__legend">Specify a reindex option</h3>
-            <RadioGroup
-              options={[
-                { id: 'all', label: 'Reindex all documents' },
-                { id: 'subset', label: 'Reindex a subset of documents (Advanced)' },
-              ]}
-              value={subset ? 'subset' : 'all'}
-              onChange={(id) => setSubset(id === 'subset')}
+    <div className="ismFormPage ismPage--form">
+      <h1 className="ismTextTitle">Reindex</h1>
+      <FormRow
+        fullWidth
+        help={
+          <div>
+            <WithLink
+              text="Use reindex to make extensive changes to your index. Reindex will copy data of the source index into another index."
+              href={DOCS}
             />
           </div>
-          {subset && (
-            <div className="ismReindex__query">
-              <div className="ismReindex__queryHead">
-                <span className="ismSmallLabel">Query expression</span>
-                <ExternalLink href={QUERY_DOCS}>Learn more about query DSL</ExternalLink>
-              </div>
-              <JsonEditor
-                value={query}
-                height={200}
-                testId="queryJsonEditor"
-                onChange={(text) => {
-                  setQuery(text);
-                  setQueryWrong(undefined);
-                  void judgeQuery(text, sources);
-                }}
-              />
-              {queryWrong && <div className="ismLabeled__error">{queryWrong}</div>}
-            </div>
-          )}
-        </div>
-      </Panel>
-      <Panel>
-        <h2 className="ismPanel__heading">Configure destination index</h2>
-        <hr className="ismRule" />
-        <div className="ismReindex__destination">
-          <Labeled
-            title={<h3 className="ismLabeled__heading">Specify a destination index or data stream</h3>}
-            error={destinationWrong}
+        }
+      />
+      <div className="ismSpacer ismSpacer--l" />
+      <TitledPanel title="Configure source index">
+        <div className="ismSpacer ismSpacer--s" />
+        <FormRow
+          title="Specify source indexes or data streams"
+          fullWidth
+          narrow
+          help="Specify one or more indexes or data streams you want to reindex from."
+          error={sourceWrong.length > 0 ? sourceWrong.map((text) => <div key={text}>{text}</div>) : undefined}
+        >
+          <IndexSelect
+            testId="sourceSelector"
+            placeholder="Select indexes or data streams"
+            value={sources.map((item) => item.label)}
+            exclude={destination}
+            onChange={(names, given) => {
+              const chosen = kept(names, given, sources);
+              setSources(chosen);
+              setSourceWrong([]);
+              void judgeSources(chosen);
+            }}
+          />
+        </FormRow>
+        <div className="ismSpacer ismSpacer--l" />
+        <FormRow>
+          <Radios
+            legend="Specify a reindex option"
+            name="subsetOption"
+            testId="subsetOption"
+            options={[
+              { id: 'all', label: 'Reindex all documents' },
+              { id: 'subset', label: 'Reindex a subset of documents (Advanced)' },
+            ]}
+            value={subset ? 'subset' : 'all'}
+            onChange={(id) => setSubset(id === 'subset')}
+          />
+        </FormRow>
+        <div className="ismSpacer ismSpacer--s" />
+        {subset && (
+          <FormRow
+            fullWidth
+            label="Query expression"
+            labelAppend={<ExternalLink href={QUERY_DOCS}>Learn more about query DSL</ExternalLink>}
+            error={queryWrong}
           >
-            <IndexSelect
-              single
-              testId="destinationSelector"
-              placeholder="Select an index or data stream"
-              value={destination.map((item) => item.label)}
-              invalid={Boolean(destinationWrong)}
-              exclude={sources}
-              excludeSystem
-              load={loadDestinations}
-              onChange={(names, given) => {
-                const chosen = kept(names, given, destination);
-                setDestination(chosen);
-                judgeDestination(chosen);
+            <JsonEditor
+              value={query}
+              height={200}
+              testId="queryJsonEditor"
+              onChange={(text) => {
+                setQuery(text);
+                setQueryWrong(undefined);
+                void judgeQuery(text, sources);
               }}
             />
-          </Labeled>
-          <Button size="s" testId="createIndexButton" onClick={() => setCreating(true)}>
+          </FormRow>
+        )}
+      </TitledPanel>
+      <div className="ismSpacer ismSpacer--l" />
+      <TitledPanel title="Configure destination index">
+        <div className="ismSpacer ismSpacer--s" />
+        <div className="ismDestination">
+          <div className="ismDestination__field">
+            <FormRow title="Specify a destination index or data stream" error={destinationWrong}>
+              <IndexSelect
+                single
+                testId="destinationSelector"
+                placeholder="Select an index or data stream"
+                value={destination.map((item) => item.label)}
+                exclude={sources}
+                excludeSystem
+                load={loadDestinations}
+                onChange={(names, given) => {
+                  const chosen = kept(names, given, destination);
+                  setDestination(chosen);
+                  judgeDestination(chosen);
+                }}
+              />
+            </FormRow>
+          </div>
+          <Button testId="createIndexButton" onClick={() => setCreating(true)}>
             Create index
           </Button>
         </div>
-      </Panel>
-      <section className="ismPanel ismFold">
-        <header className="ismFold__header">
-          <IconButton
-            icon={advanced ? 'chevronDown' : 'chevronRight'}
-            label="drop down icon"
-            size="s"
-            testId="advanceOptionToggle"
-            onClick={() => setAdvanced(!advanced)}
-          />
-          <h2 className="ismPanel__heading">Advanced settings</h2>
-        </header>
+      </TitledPanel>
+      <div className="ismSpacer ismSpacer--l" />
+      <Panel>
+        <FoldTitle open={advanced} onToggle={() => setAdvanced(!advanced)}>
+          Advanced settings
+        </FoldTitle>
         {advanced && (
-          <div className="ismFold__body ismForm">
-            <Labeled
-              title={<h3 className="ismLabeled__heading">Reindex only unique documents</h3>}
-              help={
-                <>
-                  You can choose to copy only the documents that do not exist in the destination index. By default,
-                  OpenSearch will copy all documents from the source index. <ExternalLink href={UNIQUE_DOCS} />
-                </>
-              }
-            >
-              <Checkbox checked={uniqueOnly} onChange={setUniqueOnly} label="Reindex only unique documents" />
-            </Labeled>
-            <Labeled
-              title={<h3 className="ismLabeled__heading">Version conflicts</h3>}
-              help={
-                <>
-                  Instead of failing the reindexing operation, ignore any version conflicts during reindexing.{' '}
-                  <ExternalLink href={UNIQUE_DOCS} />
-                </>
-              }
-            >
-              <Checkbox
-                checked={ignoreConflicts}
-                onChange={setIgnoreConflicts}
-                label="Ignore conflicts during reindexing"
-              />
-            </Labeled>
-            <Labeled
-              title={<h3 className="ismLabeled__heading">Slice reindexing operation</h3>}
-              help="Divide this reindexing operation into smaller subtasks to run in parallel."
-            >
-              <Checkbox
-                checked={slices !== undefined}
-                onChange={(sliced) => changeSlices(sliced ? 'auto' : undefined)}
-                label="Slice this reindexing operation"
-                testId="sliceEnabled"
-              />
-              {slices !== undefined && (
-                <div className="ismReindex__slices" data-test-subj="sliceOption">
-                  <RadioGroup
-                    options={[
-                      { id: 'auto', label: 'Automatic' },
-                      { id: 'manual', label: 'Manually slice into subtasks' },
-                    ]}
-                    value={slices === 'auto' ? 'auto' : 'manual'}
-                    onChange={(id) => changeSlices(id === 'auto' ? 'auto' : '')}
+          <>
+            <hr className="ismRule" />
+            <div className="ismSpacer ismSpacer--s" />
+            <div>
+              <FormRow
+                title="Reindex only unique documents"
+                help={
+                  <WithLink
+                    text="You can choose to copy only the documents that do not exist in the destination index. By default, OpenSearch will copy all documents from the source index."
+                    href={UNIQUE_DOCS}
                   />
-                </div>
-              )}
-            </Labeled>
-            {slices !== undefined && slices !== 'auto' && (
-              <Labeled
-                title={<h3 className="ismLabeled__heading">Number of subtasks</h3>}
-                help="Specify the number of subtasks to divide this operation into."
-                error={slicesWrong}
+                }
               >
-                <TextField
-                  compact
-                  type="number"
-                  min={2}
-                  placeholder="Specify a number"
-                  value={slices}
-                  onChange={changeSlices}
-                  invalid={Boolean(slicesWrong)}
-                  testId="slices"
+                <Checkbox checked={uniqueOnly} onChange={setUniqueOnly} label="Reindex only unique documents" />
+              </FormRow>
+              <div className="ismSpacer ismSpacer--l" />
+              <FormRow
+                title="Version conflicts"
+                help={
+                  <WithLink
+                    text="Instead of failing the reindexing operation, ignore any version conflicts during reindexing."
+                    href={UNIQUE_DOCS}
+                  />
+                }
+              >
+                <Checkbox
+                  checked={ignoreConflicts}
+                  onChange={setIgnoreConflicts}
+                  label="Ignore conflicts during reindexing"
                 />
-              </Labeled>
-            )}
-            <Labeled
-              title={
-                <h3 className="ismLabeled__heading">
-                  Transform with ingest pipeline<i> – optional</i>
-                </h3>
-              }
-              help={
+              </FormRow>
+              <div className="ismSpacer ismSpacer--l" />
+              <FormRow
+                title="Slice reindexing operation"
+                help="Divide this reindexing operation into smaller subtasks to run in parallel."
+              >
+                <Checkbox
+                  checked={slices !== undefined}
+                  onChange={(sliced) => changeSlices(sliced ? 'auto' : undefined)}
+                  label="Slice this reindexing operation"
+                  testId="sliceEnabled"
+                />
+                {slices !== undefined && (
+                  <>
+                    <div className="ismSpacer ismSpacer--l" />
+                    <Radios
+                      name="sliceOption"
+                      testId="sliceOption"
+                      options={[
+                        { id: 'auto', label: 'Automatic' },
+                        { id: 'manual', label: 'Manually slice into subtasks' },
+                      ]}
+                      value={slices === 'auto' ? 'auto' : 'manual'}
+                      onChange={(id) => changeSlices(id === 'auto' ? 'auto' : '')}
+                    />
+                  </>
+                )}
+              </FormRow>
+              {slices !== undefined && slices !== 'auto' && (
                 <>
-                  Select an ingest pipeline to transform documents before writing data to the destination.{' '}
-                  <ExternalLink href={TRANSFORM_DOCS} />
+                  <div className="ismSpacer ismSpacer--l" />
+                  <FormRow
+                    title="Number of subtasks"
+                    help="Specify the number of subtasks to divide this operation into."
+                    error={slicesWrong}
+                  >
+                    <TextField
+                      compact
+                      type="number"
+                      min={2}
+                      placeholder="Specify a number"
+                      value={slices}
+                      onChange={changeSlices}
+                      testId="slices"
+                    />
+                  </FormRow>
                 </>
-              }
-            >
-              <ComboBox
-                compact
-                single
-                placeholder="Select an ingest pipeline"
-                testId="pipelineCombobox"
-                options={pipelines.map((name) => ({ value: name, label: name }))}
-                selected={pipeline ? [pipeline] : []}
-                onChange={(chosen) => setPipeline(chosen[0])}
-              />
-            </Labeled>
+              )}
+              <div className="ismSpacer ismSpacer--l" />
+              <FormRow
+                title="Transform with ingest pipeline "
+                optional
+                help={
+                  <WithLink
+                    text="Select an ingest pipeline to transform documents before writing data to the destination."
+                    href={TRANSFORM_DOCS}
+                  />
+                }
+              >
+                <ComboBox
+                  compact
+                  single
+                  placeholder="Select an ingest pipeline"
+                  testId="pipelineCombobox"
+                  options={pipelines.map((name) => ({ value: name, label: name }))}
+                  selected={pipeline ? [pipeline] : []}
+                  onChange={(chosen) => setPipeline(chosen[0])}
+                />
+              </FormRow>
+            </div>
             <NotificationConfig ref={notifications} actionType="REINDEX" />
-          </div>
+            <div className="ismSpacer ismSpacer--s" />
+          </>
         )}
-      </section>
-      <div className="ismButtons">
-        <Button variant="empty" size="s" onClick={() => go(ROUTES.INDICES)} testId="reindexCancelButton">
+      </Panel>
+      <div className="ismSpacer ismSpacer--l" />
+      <div className="ismEndButtons">
+        <Button variant="empty" onClick={() => go(ROUTES.INDICES)} testId="reindexCancelButton">
           Cancel
         </Button>
-        <Button variant="primary" size="s" loading={busy} onClick={submit} testId="reindexConfirmButton">
+        <Button variant="primary" loading={busy} onClick={submit} testId="reindexConfirmButton">
           Reindex
         </Button>
       </div>

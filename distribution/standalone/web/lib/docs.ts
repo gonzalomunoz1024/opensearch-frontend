@@ -118,6 +118,14 @@ export function isFormula(text: string): boolean {
   return /^[=+\-@\t\r]/.test(text) && !signedNumber;
 }
 
+/**
+ * A text of a CSV cell that a spreadsheet would run as a formula, made plain text. A number below
+ * zero and the "-" of a missing value start with a sign too, and stay the values they are
+ */
+export function formulaSafe(text: string): string {
+  return isFormula(text) ? `'${text}` : text;
+}
+
 /** A value as one cell of a CSV file */
 export function csvCell(value: unknown, separator: string, quote: boolean): string {
   let text: string;
@@ -125,7 +133,7 @@ export function csvCell(value: unknown, separator: string, quote: boolean): stri
   else if (typeof value === 'object') text = JSON.stringify(value);
   else text = String(value);
   // A cell that a spreadsheet would run as a formula is made plain text
-  if (typeof value === 'string' && isFormula(text)) text = `'${text}`;
+  if (typeof value === 'string') text = formulaSafe(text);
   const needsQuote = quote || text.includes(separator) || /["\n\r]/.test(text);
   return needsQuote ? `"${text.replace(/"/g, '""')}"` : text;
 }

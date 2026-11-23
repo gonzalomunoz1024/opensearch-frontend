@@ -814,6 +814,7 @@ function TestScript({ pattern, name, script }: { pattern: ManagedPattern; name?:
       </FormRow>
       <div className="inpTestScript__searchBar">
         <QueryBar
+          appName="indexPatternManagement"
           value={query}
           language={language}
           onChange={setQuery}

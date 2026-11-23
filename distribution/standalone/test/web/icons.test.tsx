@@ -36,6 +36,9 @@ describe('Icon', () => {
     // OUI's own `help`, the ring buoy, under a name that does not collide
     assert.equal(iconDrawing('lifebuoy')?.drawn, 'help');
     assert.equal(iconDrawing('plusInCircleFilled')?.drawn, 'plusInCircleFilled');
+    // The share menu's "Embed code" is OUI's prompt; `console` is the Dev Tools application
+    assert.equal(iconDrawing('embed')?.drawn, 'console');
+    assert.equal(iconDrawing('console')?.drawn, 'consoleApp');
   });
 
   it('knows nothing of a name it does not have', () => {

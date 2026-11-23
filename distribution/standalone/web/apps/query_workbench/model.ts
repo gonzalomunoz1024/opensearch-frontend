@@ -7,7 +7,7 @@
  */
 
 import type { CodeToken } from '../../components/code_editor';
-import { holds, parseSearch, type Clause } from '../../lib/search_syntax';
+import { searchItems } from '../../lib/search_syntax';
 
 export type Language = 'SQL' | 'PPL';
 
@@ -363,13 +363,16 @@ export function nestedTable(value: unknown): { columns: string[]; rows: unknown[
 
 // --- The search box -----------------------------------------------------------------------------
 
-export { parseSearch, type Clause };
-
-/** The rows a search keeps; every row when the text is empty or is not a search */
+/**
+ * The rows a search keeps, as the plugin's `Query.execute` over what the rows hold; every row
+ * when the text is empty or is not a search
+ */
 export function searchRows(rows: Row[], text: string): Row[] {
-  const clauses = text.trim() === '' ? [] : parseSearch(text);
-  if (!clauses || clauses.length === 0) return rows;
-  return rows.filter((row) => clauses.every((clause) => holds(row.data, clause)));
+  const data = rows.map((row) => row.data);
+  const kept = searchItems(data, text);
+  if (kept === data) return rows;
+  const keptSet = new Set<object>(kept);
+  return rows.filter((row) => keptSet.has(row.data));
 }
 
 // --- What OpenSearch can do ---------------------------------------------------------------------

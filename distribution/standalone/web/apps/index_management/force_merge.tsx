@@ -1,12 +1,17 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
-/* The page that merges the segments of indexes, or of the indexes behind data streams. */
+/*
+ * The page that merges the segments of indexes, or of the indexes behind data streams, as the
+ * plugin draws it: the source in a panel of its own, the advanced settings in a panel that opens.
+ */
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, CallOut, IconButton, Panel } from '../../components/basic';
-import { Checkbox, RadioGroup, TextField } from '../../components/form';
+import { Button, CallOut } from '../../components/basic';
+import { Checkbox, TextField } from '../../components/form';
 import { useBreadcrumbs } from '../../shell/state';
-import { Labeled, go, ism, toasts } from './common';
+import { go, ism, toasts } from './common';
+import { ContentPanel, FoldTitle, TitledPanel } from './content_panel';
+import { FormRow, Radios } from './form_row';
 import { notReadOnly } from './index_options';
 import { IndexSelect } from './index_select';
 import { addJob, clusterInfo, startedToast } from './job_handlers';
@@ -20,40 +25,40 @@ const SOURCE_REQUIRED = 'Index or data stream is required.';
 function Segments({
   value,
   onChange,
-  invalid,
 }: {
   value: number | string | undefined;
   onChange: (value: number | string | undefined) => void;
-  invalid: boolean;
 }) {
   const [manual, setManual] = useState(Number(value) > 0);
   return (
     <>
-      <RadioGroup
+      <Radios
         options={[
-          { id: 'auto', label: 'Automatic' },
-          { id: 'manual', label: 'Manually set number of segments' },
+          { id: '0', label: 'Automatic' },
+          { id: '1', label: 'Manually set number of segments' },
         ]}
-        value={manual ? 'manual' : 'auto'}
+        value={manual ? '1' : '0'}
         onChange={(next) => {
-          setManual(next === 'manual');
-          onChange(next === 'manual' ? 1 : undefined);
+          setManual(next === '1');
+          onChange(next === '1' ? 1 : undefined);
         }}
       />
       {manual && (
-        <Labeled
-          title="Number of segments"
-          help="Specify the number of segments to merge to. To fully merge indexes, set the number of segments to 1."
-        >
-          <TextField
-            compact
-            type="number"
-            placeholder="Specify a number"
-            invalid={invalid}
-            value={value === undefined ? '' : String(value)}
-            onChange={onChange}
-          />
-        </Labeled>
+        <>
+          <div className="ismSpacer ismSpacer--s" />
+          <FormRow
+            label="Number of segments"
+            help="Specify the number of segments to merge to. To fully merge indexes, set the number of segments to 1."
+          >
+            <TextField
+              compact
+              type="number"
+              placeholder="Specify a number"
+              value={value === undefined ? '' : String(value)}
+              onChange={onChange}
+            />
+          </FormRow>
+        </>
       )}
     </>
   );
@@ -131,99 +136,85 @@ export function ForceMerge({ indexes: preset }: { indexes: string }) {
   };
 
   return (
-    <div className="ismPage ismPage--form">
-      <div className="ismPageHeader ismPageHeader--center">
-        <div>
-          <h1 className="ismPageTitle">Force merge</h1>
-          <div className="ismLabeled__help">
-            Manually merge shards of indexes or backing indexes of data streams. You can also use force merge to
-            clear up deleted documents within indexes.
-          </div>
-        </div>
-      </div>
-      <Panel>
-        <h2 className="ismPanel__heading">Configure source index</h2>
-        <hr className="ismRule" />
-        <div className="ismForm ismForm--wideHelp">
-          <Labeled
-            title={<h3 className="ismLabeled__heading">Select source indexes or data streams</h3>}
-            help="Select one or more indexes or data streams you want to force merge."
-            error={errors.indexes}
-          >
-            <div className="ismField">
-              <IndexSelect
-                testId="sourceSelector"
-                placeholder="Select indexes or data streams"
-                value={indexes}
-                invalid={Boolean(errors.indexes)}
-                onChange={(next) => {
-                  setIndexes(next);
-                  setErrors((had) => ({ ...had, indexes: next.length === 0 ? SOURCE_REQUIRED : undefined }));
-                }}
-              />
-            </div>
-          </Labeled>
-          {writable.length > 0 && (
+    <div className="ismFormPage ismPage--form">
+      <h1 className="ismTextTitle">Force merge</h1>
+      <FormRow
+        fullWidth
+        help="Manually merge shards of indexes or backing indexes of data streams. You can also use force merge to clear up deleted documents within indexes."
+      />
+      <div className="ismSpacer ismSpacer--l" />
+      <TitledPanel title="Configure source index" grouped>
+        <FormRow
+          title="Select source indexes or data streams"
+          fullWidth
+          narrow
+          help="Select one or more indexes or data streams you want to force merge."
+          error={errors.indexes}
+        >
+          <IndexSelect
+            testId="sourceSelector"
+            placeholder="Select indexes or data streams"
+            value={indexes}
+            onChange={(next) => {
+              setIndexes(next);
+              setErrors((had) => ({ ...had, indexes: next.length === 0 ? SOURCE_REQUIRED : undefined }));
+            }}
+          />
+        </FormRow>
+        {writable.length > 0 && (
+          <>
+            <div className="ismSpacer ismSpacer--l" />
             <CallOut tone="warning" title="We recommend force merge with read-only indexes">
               {writable.join(', ')} is not a read-only index. We recommend only performing force merge with
               read-only indexes to pervent large segments being produced.
             </CallOut>
-          )}
-        </div>
-      </Panel>
-      <section className="ismPanel ismFold">
-        <header className="ismFold__header">
-          <IconButton
-            icon={advanced ? 'chevronDown' : 'chevronRight'}
-            label="drop down icon"
-            size="s"
-            testId="advanceOptionToggle"
-            onClick={() => setAdvanced(!advanced)}
-          />
-          <h2 className="ismPanel__heading">Advanced settings</h2>
-        </header>
-        {advanced && (
-          <div className="ismFold__body ismForm ismForm--wideHelp">
-            <Labeled
-              title={<h3 className="ismLabeled__heading">Index segments</h3>}
-              help="Define how many segments to merge to."
-              error={errors.segments}
-            >
-              <Segments
-                value={options.max_num_segments}
-                onChange={(value) => set({ max_num_segments: value })}
-                invalid={Boolean(errors.segments)}
-              />
-            </Labeled>
-            <Labeled
-              title={<h3 className="ismLabeled__heading">Flush indexes</h3>}
-              help="Opensearch will perform a flush on the indexes after the force merge."
-            >
-              <Checkbox
-                checked={options.flush ?? false}
-                onChange={(flush) => set({ flush })}
-                label="Flush indexes"
-              />
-            </Labeled>
-            <Labeled
-              title={<h3 className="ismLabeled__heading">Remove deleted documents</h3>}
-              help="Expunge all segments containing more than 10% of deleted documents. The percentage is configurable in the index.merge.policy.expunge_deletes_allowed setting."
-            >
-              <Checkbox
-                checked={options.only_expunge_deletes ?? false}
-                onChange={(value) => set({ only_expunge_deletes: value })}
-                label="Completely remove deleted documents"
-              />
-            </Labeled>
-            <NotificationConfig ref={notifications} actionType="FORCEMERGE" />
-          </div>
+          </>
         )}
-      </section>
-      <div className="ismButtons">
-        <Button variant="empty" size="s" onClick={() => go(ROUTES.INDICES)} testId="reindexCancelButton">
+      </TitledPanel>
+      <div className="ismSpacer ismSpacer--l" />
+      <ContentPanel
+        noExtraPadding
+        title={
+          <FoldTitle open={advanced} onToggle={() => setAdvanced(!advanced)}>
+            Advanced settings
+          </FoldTitle>
+        }
+      >
+        {advanced && (
+          <>
+            <div className="ismSpacer ismSpacer--s" />
+            <div>
+              <FormRow title="Index segments" help="Define how many segments to merge to." error={errors.segments}>
+                <Segments value={options.max_num_segments} onChange={(value) => set({ max_num_segments: value })} />
+              </FormRow>
+              <div className="ismSpacer ismSpacer--l" />
+              <FormRow title="Flush indexes" help="Opensearch will perform a flush on the indexes after the force merge.">
+                <Checkbox checked={options.flush ?? false} onChange={(flush) => set({ flush })} label="Flush indexes" />
+              </FormRow>
+              <div className="ismSpacer ismSpacer--l" />
+              <FormRow
+                title="Remove deleted documents"
+                fullWidth
+                help="Expunge all segments containing more than 10% of deleted documents. The percentage is configurable in the index.merge.policy.expunge_deletes_allowed setting."
+              >
+                <Checkbox
+                  checked={options.only_expunge_deletes ?? false}
+                  onChange={(value) => set({ only_expunge_deletes: value })}
+                  label="Completely remove deleted documents"
+                />
+              </FormRow>
+            </div>
+            <NotificationConfig ref={notifications} actionType="FORCEMERGE" />
+            <div className="ismSpacer ismSpacer--s" />
+          </>
+        )}
+      </ContentPanel>
+      <div className="ismSpacer ismSpacer--l" />
+      <div className="ismEndButtons">
+        <Button variant="empty" onClick={() => go(ROUTES.INDICES)} testId="reindexCancelButton">
           Cancel
         </Button>
-        <Button variant="primary" size="s" loading={busy} onClick={submit} testId="forceMergeConfirmButton">
+        <Button variant="primary" loading={busy} onClick={submit} testId="forceMergeConfirmButton">
           Force merge
         </Button>
       </div>

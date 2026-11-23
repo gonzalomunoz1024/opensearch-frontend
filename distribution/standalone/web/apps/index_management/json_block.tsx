@@ -6,7 +6,9 @@
  */
 
 import type { ReactNode } from 'react';
+import { IconButton, cx } from '../../components/basic';
 import type { CodeToken } from '../../components/code_editor';
+import { copyText } from '../../components/overlay';
 import { tokenizeJson } from '../../lib/json_text';
 
 /** The prism class a JSON token has in the theme's code block */
@@ -47,9 +49,20 @@ function Plain({ text }: { text: string }) {
   return <>{parts}</>;
 }
 
-export function JsonBlock({ text, height, testId }: { text: string; height?: number; testId?: string }) {
+export function JsonBlock({
+  text,
+  height,
+  testId,
+  copyable,
+}: {
+  text: string;
+  height?: number;
+  testId?: string;
+  /** With the code block's copy button in its top right corner, 24 px in */
+  copyable?: boolean;
+}) {
   return (
-    <div className="ismCodeBlock">
+    <div className={cx('ismCodeBlock', copyable && 'ismCodeBlock--controls')}>
       <pre className="ismCodeBlock__pre">
         <code className="ismCodeBlock__code" style={height ? { height } : undefined} data-test-subj={testId}>
           {tokenizeJson(text).map((tokens, line) => (
@@ -69,6 +82,11 @@ export function JsonBlock({ text, height, testId }: { text: string; height?: num
           ))}
         </code>
       </pre>
+      {copyable && (
+        <div className="ismCodeBlock__controls">
+          <IconButton icon="copy" label="Copy" size="s" className="ismCodeBlock__copy" onClick={() => copyText(text)} />
+        </div>
+      )}
     </div>
   );
 }
