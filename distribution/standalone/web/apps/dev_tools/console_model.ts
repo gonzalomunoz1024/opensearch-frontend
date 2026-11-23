@@ -910,6 +910,15 @@ function bodyKeys(path: string[], url: string, names: ClusterNames): string[] {
 }
 
 /**
+ * Whether something is typed before the cursor on its line. A line just begun, or its indentation,
+ * opens no list of suggestions by itself, as in the original: the next Enter would accept a
+ * suggestion nobody asked for. Ctrl+Space opens the list there.
+ */
+export function typedOnLine(text: string, offset: number): boolean {
+  return /\S/.test(text.slice(text.lastIndexOf('\n', offset - 1) + 1, offset));
+}
+
+/**
  * What could be typed at a place of the editor: a method at the start of a line, a path after
  * it, and in the body of a search the names OpenSearch knows there.
  */

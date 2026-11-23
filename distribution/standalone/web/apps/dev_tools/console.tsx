@@ -36,6 +36,7 @@ import {
   requestsBetween,
   suggest,
   toCurl,
+  typedOnLine,
   type ActionsPlace,
   type Answer,
   type ClusterNames,
@@ -1032,8 +1033,8 @@ export function Console() {
             highlighted={doc.highlighted}
             onChange={(next) => {
               const [start, end] = editor.current?.selection() ?? [0, 0];
-              // Suggestions follow what is typed, and go when text is taken away
-              if (start === end && next.length > text.length) openMenu(next, start);
+              // Suggestions follow what is typed, and go when text is taken away or a line is begun
+              if (start === end && next.length > text.length && typedOnLine(next, start)) openMenu(next, start);
               else setMenu(undefined);
               setText(next);
             }}

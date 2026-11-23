@@ -28,11 +28,12 @@ import {
   rowMode,
   suggest,
   toCurl,
+  typedOnLine,
   type Answer,
   type ClusterNames,
 } from '../../web/apps/dev_tools/console_model';
 import { highlight, indentGuides, tokenClasses, type AceToken } from '../../web/apps/dev_tools/console_highlight';
-import { matchingBracket } from '../../web/apps/dev_tools/console_editor';
+import { matchingBracket, selectionOf } from '../../web/apps/dev_tools/console_editor';
 import { MAX_HISTORY, autocompleteRequests, consoleStorage, type KeyValueStore } from '../../web/apps/dev_tools/console_storage';
 import { failureReason, grokSimulation, grokValue, readSimulation } from '../../web/apps/dev_tools/grok_request';
 import { collapseLiteralStrings, expandLiteralStrings, reindentJson, tokenizeJson } from '../../web/lib/json_text';
@@ -480,6 +481,34 @@ describe('what could be typed next', () => {
       expectsKey: true,
     });
     assert.equal(keyPath('{ "size": ').expectsKey, false);
+  });
+
+  it('replaces the two quotes of a name just begun', () => {
+    // A quote typed is closed by the editor, which then puts the cursor between the two. While
+    // the change is heard the browser still has the cursor after both: asked for from there,
+    // the suggestion would be written after the first quote (""query": {})
+    const text = 'GET _search\n{\n  ""\n}';
+    const between = text.indexOf('""') + 1;
+    const [cursor] = selectionOf([between, between], { selectionStart: between + 1, selectionEnd: between + 1 });
+    const menu = suggest(text, cursor, names);
+    assert.deepEqual([menu?.from, menu?.to], [between - 1, between + 1]);
+    assert.equal(`${text.slice(0, menu?.from)}${menu?.items[0].insert}${text.slice(menu?.to)}`, 'GET _search\n{\n  "query": {}\n}');
+    // Without a replacement under way, the text area's own selection
+    assert.deepEqual(selectionOf(undefined, { selectionStart: 3, selectionEnd: 5 }), [3, 5]);
+    assert.deepEqual(selectionOf(undefined, null), [0, 0]);
+  });
+
+  it('is not offered by itself on a line just begun', () => {
+    // Enter after an opening brace leaves the cursor on an indented, empty line: a list opened
+    // there would have the next Enter accept its first name
+    const begun = 'GET _search\n{\n  "query": {\n    ';
+    assert.equal(typedOnLine(begun, begun.length), false);
+    assert.equal(typedOnLine('GET _search\n', 12), false);
+    assert.equal(typedOnLine('', 0), false);
+    assert.equal(typedOnLine(`${begun}"`, begun.length + 1), true);
+    assert.equal(typedOnLine('GET _c', 6), true);
+    // Asked for with Ctrl+Space, the names are there
+    assert.ok(labels(begun).includes('match'));
   });
 });
 
