@@ -45,6 +45,7 @@ import { registerIndexManagement } from './index_management';
 import { registerIndexPatternManagement } from './index_pattern_management';
 import { registerGeospatial } from './geospatial';
 import { fieldsForWildcard } from './index_pattern_fields';
+import { fieldsForTimePattern } from './index_pattern_time';
 import type { Logger } from './logger';
 import {
   OpenSearchAnswerRefusedError,
@@ -62,6 +63,7 @@ import {
   boolean,
   literal,
   maybe,
+  number,
   object,
   oneOf,
   queryObject,
@@ -370,6 +372,35 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
     // The original turns to the data source named; there are none here (data_source.enabled)
     if (dataSource) throw badRequest('[request query.data_source]: there are no data sources: data_source.enabled is off');
     return { body: { fields: await fieldsForWildcard(client, pattern, metaFieldsOf(given)) } };
+  });
+
+  // The fields of an index pattern written as a time pattern (the interval patterns of old
+  // saved index patterns)
+  const timePatternQuery = object({
+    pattern: string(),
+    interval: maybe(string()),
+    look_back: number({ min: 1 }),
+    meta_fields: oneOf<string | string[]>([string(), arrayOf(string())], { defaultValue: [] }),
+    data_source: maybe(string()),
+  });
+  router.get('/api/index_patterns/_fields_for_time_pattern', async ({ query }) => {
+    const { pattern, look_back: lookBack, meta_fields: given, data_source: dataSource } = validateRequestPart(
+      timePatternQuery,
+      queryObject(query),
+      'query'
+    );
+    if (dataSource) throw badRequest('[request query.data_source]: there are no data sources: data_source.enabled is off');
+    let metaFields: unknown = given;
+    if (typeof given === 'string') {
+      try {
+        metaFields = JSON.parse(given);
+      } catch {
+        // as the original's route: one parameter is a list written as JSON
+        throw badRequest('Bad Request');
+      }
+    }
+    const names = (Array.isArray(metaFields) ? metaFields : [metaFields]).filter((name) => typeof name === 'string');
+    return { body: { fields: await fieldsForTimePattern(client, pattern, lookBack, names) } };
   });
 
   // --- OpenSearch itself -----------------------------------------------------------------------

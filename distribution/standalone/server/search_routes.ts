@@ -2,21 +2,25 @@
 
 /*
  * The search route of the original's data plugin, `/internal/search/{strategy}/{id?}`
- * (src/plugins/data/server/search/routes/search.ts), with its two strategies of OpenSearch:
- * `opensearch` and `opensearch-with-long-numerals` (opensearch_search_strategy.ts). The pages of
- * this server search through /internal/opensearch; this is for what was written against the
- * original's API.
+ * (src/plugins/data/server/search/routes/search.ts), with its two strategies of OpenSearch,
+ * `opensearch` and `opensearch-with-long-numerals` (opensearch_search_strategy.ts), and `pplraw`,
+ * the plain PPL query of the original's query_enhancements plugin (ppl_raw_search_strategy.ts).
+ * The pages of this server search through /internal/opensearch; this is for what was written
+ * against the original's API. The original's other strategies (`ppl`, `sql`, `pplasync`,
+ * `sqlasync`, which answer data frames) are not here.
  */
 
-import { HttpError, badRequest, type Router } from './http';
+import { HttpError, badRequest, errorBody, type Router } from './http';
+import { legacyClientMessage } from './index_pattern_fields';
 import { parseLongNumerals } from './json_numbers';
 import { OpenSearchAnswerRefusedError, OpenSearchUnavailableError, type OpenSearchClient } from './opensearch';
 import { object, validateRequestPart } from './route_validation';
 import type { UiSettings } from './ui_settings';
 
-const STRATEGIES: Record<string, { longNumerals: boolean }> = {
+const STRATEGIES: Record<string, { longNumerals: boolean; ppl?: boolean }> = {
   opensearch: { longNumerals: false },
   'opensearch-with-long-numerals': { longNumerals: true },
+  pplraw: { longNumerals: false, ppl: true },
 };
 
 const BODY = object({}, { unknowns: 'allow' });
@@ -42,6 +46,73 @@ function responseErrorMessage(body: unknown): string {
 const searchFailure = (status: number | undefined, message: string, error: unknown) =>
   new HttpError(status ?? 500, message, { error });
 
+/** What the client threw (no connection, no answer in time, an answer too large): 500 with its words */
+function clientFailure(error: unknown): unknown {
+  if (!(error instanceof OpenSearchUnavailableError) && !(error instanceof OpenSearchAnswerRefusedError)) return error;
+  const message = error instanceof OpenSearchUnavailableError && error.cause instanceof Error ? error.cause.message : error.message;
+  return searchFailure(500, message, message);
+}
+
+/** The rows of a PPL answer as objects by column name (the original's shimSchemaRow) */
+export function pplJsonData(response: { schema: Array<{ name: string }>; datarows: unknown[][] }): Array<Record<string, unknown>> {
+  return response.datarows.map((row) => {
+    const record: Record<string, unknown> = {};
+    row.forEach((item, index) => {
+      if (index >= response.schema.length) return;
+      record[response.schema[index].name] =
+        typeof item === 'object' ? JSON.stringify(item) : typeof item === 'boolean' ? item.toString() : item;
+    });
+    return record;
+  });
+}
+
+/**
+ * The `pplraw` strategy: the body of the request's params is the PPL plugin's request, and the
+ * plugin's answer comes back with its rows also as objects (`jsonData`). A failure is worded
+ * as the original's legacy client words it: what OpenSearch said when it answered JSON, else
+ * the name of the status (the PPL plugin types its own failures as text).
+ */
+async function pplRaw(client: OpenSearchClient, request: Record<string, unknown>): Promise<unknown> {
+  const params = request.params as { body?: unknown } | null | undefined;
+  if (params === undefined || params === null) {
+    const message = `Cannot read properties of ${String(params)} (reading 'body')`;
+    throw searchFailure(500, message, message);
+  }
+  const { body } = params;
+  const response = await client
+    .raw({
+      method: 'POST',
+      path: '/_plugins/_ppl',
+      body: body === undefined || body === null ? undefined : typeof body === 'string' ? body : JSON.stringify(body),
+      headers: { 'content-type': 'application/json' },
+    })
+    .catch((error: unknown) => {
+      throw clientFailure(error);
+    });
+  const text = response.body.toString('utf8');
+  let parsed: unknown = text;
+  if (/^application\/(vnd\.[^+;]+\+)?json/i.test(String(response.headers['content-type'] ?? ''))) {
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      // as it is
+    }
+  }
+  if (response.status >= 400) {
+    const said = parsed !== null && typeof parsed === 'object' ? (parsed as { error?: unknown }).error : undefined;
+    const message = said ? legacyClientMessage(parsed, response.status) : String(errorBody(response.status, '').error);
+    throw searchFailure(response.status, message, said || message);
+  }
+  const answer = parsed as { schema?: unknown; datarows?: unknown };
+  if (!Array.isArray(answer?.schema) || !Array.isArray(answer.datarows)) {
+    const message = 'the PPL plugin answered without a schema and rows';
+    throw searchFailure(500, message, message);
+  }
+  const rows = answer as { schema: Array<{ name: string }>; datarows: unknown[][] };
+  // (`hits: {}` is what the route's shimHitsTotal leaves in an answer that has no hits)
+  return { rawResponse: { ...rows, jsonData: pplJsonData(rows), hits: {} } };
+}
+
 export function registerSearch(
   router: Router,
   client: OpenSearchClient,
@@ -51,6 +122,10 @@ export function registerSearch(
     const request = validateRequestPart(BODY, body ?? null, 'body') as Record<string, unknown>;
     const strategy = Object.prototype.hasOwnProperty.call(STRATEGIES, strategyName) ? STRATEGIES[strategyName] : undefined;
     if (!strategy) throw searchFailure(500, `Search strategy ${strategyName} not found`, `Search strategy ${strategyName} not found`);
+    if (strategy.ppl) {
+      if (request.dataSourceId) throw badRequest('[request body.dataSourceId]: there are no data sources: data_source.enabled is off');
+      return pplRaw(client, request);
+    }
     if (request.indexType) {
       const message = `Unsupported index pattern type ${String(request.indexType)}`;
       throw searchFailure(500, message, message);
@@ -86,11 +161,7 @@ export function registerSearch(
         body: hasBody ? (typeof searchBody === 'string' ? searchBody : JSON.stringify(searchBody)) : undefined,
       });
     } catch (error) {
-      if (!(error instanceof OpenSearchUnavailableError) && !(error instanceof OpenSearchAnswerRefusedError)) throw error;
-      // What the client threw (no connection, no answer in time, an answer too large): 500
-      const message =
-        error instanceof OpenSearchUnavailableError && error.cause instanceof Error ? error.cause.message : error.message;
-      throw searchFailure(500, message, message);
+      throw clientFailure(error);
     }
     const text = response.body.toString('utf8');
     let parsed: unknown;
