@@ -345,8 +345,8 @@ describe('numbers', () => {
     );
     assert.equal(createFormatter({ id: 'bytes' })('2048').text, '2KB');
     assert.equal(createFormatter({ id: 'percent' })(Number.NaN).text, '');
-    // and no value in a list is a dash still, as under every format
-    assert.deepEqual([number([null]).text, number([1, null, 'x']).text], ['-', '1, -, ']);
+    // and no value in a list is a dash still, as under every format: with a space each side there
+    assert.deepEqual([number([null]).text, number([1, null, 'x']).text], [' - ', '1,  - , ']);
   });
 
   it('writes a list in a list value by value, as the original does', () => {
