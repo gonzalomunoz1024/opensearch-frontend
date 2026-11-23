@@ -18,6 +18,8 @@ export interface FieldDescriptor {
   aggregatable: boolean;
   readFromDocValues: boolean;
   subType?: { multi?: { parent: string }; nested?: { path: string } };
+  /** Of a field of several kinds: the indices that hold it as each type */
+  conflictDescriptions?: Record<string, string[] | undefined>;
 }
 
 const KINDS: Record<string, string[]> = {
@@ -89,6 +91,7 @@ export function readFieldCaps(fields: FieldCaps, metaFields: string[]): FieldDes
         searchable: caps.some((cap) => cap.searchable),
         aggregatable: caps.some((cap) => cap.aggregatable),
         readFromDocValues: false,
+        conflictDescriptions: Object.fromEntries(esTypes.map((type) => [type, byType[type].indices])),
       });
       continue;
     }

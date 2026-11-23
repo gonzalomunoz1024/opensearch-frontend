@@ -96,4 +96,22 @@ describe('the routes of the index pattern pages', () => {
     );
     assert.deepEqual(fields.map((field) => field.name), ['_id', '_index', '_score', '_source', '_type', 'bytes']);
   });
+
+  it('says of a field of several kinds which indices hold which, as the original', () => {
+    // What OpenSearch answers for `url`, a text in the web logs and an object in another index
+    const [url] = readFieldCaps(
+      {
+        url: {
+          text: { type: 'text', searchable: true, aggregatable: false, indices: ['logs'] },
+          object: { type: 'object', searchable: false, aggregatable: false, indices: ['.other_1'] },
+        },
+      },
+      []
+    );
+    assert.equal(
+      JSON.stringify(url),
+      '{"name":"url","type":"conflict","esTypes":["text","object"],"searchable":true,"aggregatable":false,"readFromDocValues":false,' +
+        '"conflictDescriptions":{"text":["logs"],"object":[".other_1"]}}'
+    );
+  });
 });
