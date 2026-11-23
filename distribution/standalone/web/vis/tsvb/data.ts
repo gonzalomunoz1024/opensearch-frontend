@@ -28,7 +28,8 @@ export interface TsvbMetric {
   unit?: string;
   window?: number | string;
   lag?: number | string;
-  percentiles?: Array<{ id?: string; value?: number | string; mode?: string }>;
+  /** A percentile's: its value, drawn as a line or as a band down to another, filled so solid */
+  percentiles?: Array<{ id?: string; value?: number | string; mode?: string; percentile?: number | string; shade?: number | string }>;
   values?: Array<number | string>;
   value?: number | string;
   numerator?: Query | string;
@@ -161,13 +162,24 @@ export interface TsvbParams {
   isModelInvalid?: boolean;
 }
 
+/** [time in milliseconds, value], and for a band the value of its lower edge */
+export type TsvbPoint = [number, number | null, (number | null)?];
+
+/** How a series that is a band is drawn: filled this solid, its edges named so after its label */
+export interface TsvbBand {
+  fill: number;
+  upper: string;
+  lower: string;
+}
+
 export interface TsvbSeriesData {
   id: string;
   seriesId: string;
   label: string;
   color: string;
-  /** [time in milliseconds, value] */
-  data: Array<[number, number | null]>;
+  data: TsvbPoint[];
+  /** A band from each point's lower value up to its value, instead of a line */
+  band?: TsvbBand;
   /** The value the panels that show one number show: the last bucket's, or 0 when it has none */
   last: number | null;
   series: TsvbSeries;
@@ -428,26 +440,29 @@ function sortBy(metric: TsvbMetric): { key: string; path: string; agg: Dsl } | u
   return undefined;
 }
 
-function metricAggs(metrics: TsvbMetric[], indexPattern: IndexPattern | undefined): Dsl {
+/** The aggregations a series' metrics ask of each of its buckets, as the product asks them */
+export function metricAggs(metrics: TsvbMetric[], indexPattern: IndexPattern | undefined): Dsl {
   const aggs: Dsl = {};
-  const config = services.queryConfig();
   for (const metric of metrics) {
     if (BASIC[metric.type] && metric.field) aggs[metric.id] = { [BASIC[metric.type]]: { field: metric.field } };
     else if (EXTENDED[metric.type] && metric.field) aggs[metric.id] = extendedStats(metric);
-    else if (metric.type === 'percentile' && metric.field) {
-      const percents = (metric.percentiles ?? []).map((item) => toNumber(item.value, NaN)).filter((value) => !Number.isNaN(value));
-      aggs[metric.id] = { percentiles: { field: metric.field, percents: percents.length ? percents : [50] } };
-    } else if (metric.type === 'percentile_rank' && metric.field) {
-      const values = (metric.values ?? (metric.value !== undefined ? [metric.value] : [])).map((value) => toNumber(value, 0));
-      aggs[metric.id] = { percentile_ranks: { field: metric.field, values: values.length ? values : [0] } };
+    else if (metric.type === 'percentile' && metric.field && Array.isArray(metric.percentiles)) {
+      // Each percentile, one with no value as 0, and when one is a band the percentiles the bands
+      // fill down to, as the product asks for them
+      const entries = metric.percentiles;
+      let percents: unknown[] = entries.map((item) => (item.value ? Number(item.value) : 0));
+      if (entries.some((item) => item.mode === 'band')) percents = percents.concat(entries.filter((item) => item.percentile).map((item) => item.percentile));
+      aggs[metric.id] = { percentiles: { field: metric.field, percents } };
+    } else if (metric.type === 'percentile_rank' && metric.field && Array.isArray(metric.values)) {
+      aggs[metric.id] = { percentile_ranks: { field: metric.field, values: metric.values.map((value) => (value === '' || value === null || value === undefined ? 0 : value)) } };
     } else if (metric.type === 'filter_ratio') {
       const inner = metric.metric_agg && metric.metric_agg !== 'count' && metric.field ? { metric: { [metric.metric_agg]: { field: metric.field } } } : undefined;
       aggs[`${metric.id}-numerator`] = {
-        filter: buildQuery(indexPattern, asQuery(metric.numerator) ?? { query: '*', language: 'lucene' }, [], config),
+        filter: buildQuery(indexPattern, asQuery(metric.numerator) ?? { query: '*', language: 'lucene' }, [], services.queryConfig()),
         ...(inner ? { aggs: inner } : {}),
       };
       aggs[`${metric.id}-denominator`] = {
-        filter: buildQuery(indexPattern, asQuery(metric.denominator) ?? { query: '*', language: 'lucene' }, [], config),
+        filter: buildQuery(indexPattern, asQuery(metric.denominator) ?? { query: '*', language: 'lucene' }, [], services.queryConfig()),
         ...(inner ? { aggs: inner } : {}),
       };
     } else if (metric.type === 'positive_rate' && metric.field) {
@@ -465,10 +480,66 @@ function metricAggs(metrics: TsvbMetric[], indexPattern: IndexPattern | undefine
   return aggs;
 }
 
-interface TimeBucket {
+export interface TimeBucket {
   key: number;
   doc_count: number;
   [agg: string]: unknown;
+}
+
+/** The key OpenSearch gives a percentile or a percentile rank, as the product writes it: "50.0" for 50 */
+const toPercentileNumber = (value: unknown): string => (/\d+\.\d+/.test(String(value)) ? String(value) : `${String(value)}.0`);
+
+/**
+ * A percentile's or a percentile rank's value in a bucket: the one under the key, or, as OpenSearch
+ * finds the one another aggregation names, the one whose key is the same number
+ */
+function percentileAt(bucket: TimeBucket, id: string, key: string, byNumber = false): number | null {
+  const values = (bucket[id] as { values?: Record<string, unknown> } | undefined)?.values ?? {};
+  let found = values[key];
+  if (found === undefined && byNumber) {
+    const name = Object.keys(values).find((candidate) => Number(candidate) === Number(key));
+    found = name === undefined ? undefined : values[name];
+  }
+  return typeof found === 'number' && Number.isFinite(found) ? found : null;
+}
+
+/** How many standard deviations a bound is from the mean: the metric's sigma, or OpenSearch's 2 */
+function sigmaOf(metric: TsvbMetric): number {
+  const sigma = parseInt(String(metric.sigma ?? ''), 10);
+  return metric.sigma && !Number.isNaN(sigma) ? sigma : 2;
+}
+
+/** The statistics of a series' values that the overall aggregations give, as OpenSearch's extended stats bucket does */
+function overall(metric: TsvbMetric, source: Array<number | null>) {
+  const values = source.filter((value): value is number => value !== null);
+  if (values.length === 0) return undefined;
+  const total = values.reduce((sum, value) => sum + value, 0);
+  const mean = total / values.length;
+  const variance = values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length;
+  const deviation = Math.sqrt(variance);
+  const sigma = sigmaOf(metric);
+  return {
+    values,
+    total,
+    mean,
+    variance,
+    deviation,
+    upper: mean + sigma * deviation,
+    lower: mean - sigma * deviation,
+  };
+}
+
+/**
+ * The values of the metric another one is worked out from: one of the percentiles of a percentile
+ * or a percentile rank when it names it in brackets, as in "<id>[50.0]", or else the metric's own
+ */
+function namedValues(id: string | undefined, buckets: TimeBucket[], computed: Map<string, Array<number | null>>): Array<number | null> {
+  if (!id) return [];
+  const keyed = /^(.*)\[([^\]]*)\]$/.exec(id);
+  if (keyed && buckets.some((bucket) => typeof (bucket[keyed[1]] as { values?: unknown } | undefined)?.values === 'object')) {
+    return buckets.map((bucket) => percentileAt(bucket, keyed[1], keyed[2], true));
+  }
+  return computed.get(id.split('[')[0]) ?? [];
 }
 
 // One measure's values over the buckets: read from the answer, or worked out from other measures
@@ -479,7 +550,7 @@ function metricValues(
   intervalMs: number,
   all: Record<string, MathValue>
 ): Array<number | null> {
-  const from = (id: string | undefined): Array<number | null> => (id ? (computed.get(id.split('[')[0]) ?? []) : []);
+  const from = (id: string | undefined) => namedValues(id, buckets, computed);
   const numeric = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null);
   switch (metric.type) {
     case 'count':
@@ -502,11 +573,11 @@ function metricValues(
       });
     }
     case 'percentile':
-    case 'percentile_rank':
-      return buckets.map((bucket) => {
-        const values = (bucket[metric.id] as { values?: Record<string, number> } | undefined)?.values ?? {};
-        return numeric(Object.values(values)[0]);
-      });
+    case 'percentile_rank': {
+      // Named alone by another metric, a percentile is its first one, and a rank its first value
+      const first = metric.type === 'percentile' ? metric.percentiles?.[0]?.value : metric.values?.[0];
+      return buckets.map((bucket) => percentileAt(bucket, metric.id, toPercentileNumber(first), true));
+    }
     case 'filter_ratio':
       return buckets.map((bucket) => {
         const read = (part: string) => {
@@ -575,20 +646,19 @@ function metricValues(
     case 'std_deviation_bucket':
     case 'variance_bucket':
     case 'sum_of_squares_bucket': {
-      // One value for the whole series, which every bucket then carries
-      const values = from(metric.field).filter((value): value is number => value !== null);
+      // One value for the whole series, which every bucket then carries; a standard deviation
+      // set to one of its bounds gives that bound
+      const stats = overall(metric, from(metric.field));
       let result: number | null = null;
-      if (values.length) {
-        const total = values.reduce((sum, value) => sum + value, 0);
-        const mean = total / values.length;
-        const variance = values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length;
-        if (metric.type === 'avg_bucket') result = mean;
-        else if (metric.type === 'max_bucket') result = Math.max(...values);
-        else if (metric.type === 'min_bucket') result = Math.min(...values);
-        else if (metric.type === 'sum_bucket') result = total;
-        else if (metric.type === 'variance_bucket') result = variance;
-        else if (metric.type === 'std_deviation_bucket') result = Math.sqrt(variance);
-        else result = values.reduce((sum, value) => sum + value ** 2, 0);
+      if (stats) {
+        if (metric.type === 'avg_bucket') result = stats.mean;
+        else if (metric.type === 'max_bucket') result = Math.max(...stats.values);
+        else if (metric.type === 'min_bucket') result = Math.min(...stats.values);
+        else if (metric.type === 'sum_bucket') result = stats.total;
+        else if (metric.type === 'variance_bucket') result = stats.variance;
+        else if (metric.type === 'std_deviation_bucket') {
+          result = metric.mode === 'upper' ? stats.upper : metric.mode === 'lower' ? stats.lower : stats.deviation;
+        } else result = stats.values.reduce((sum, value) => sum + value ** 2, 0);
       }
       return buckets.map(() => result);
     }
@@ -615,7 +685,24 @@ function metricValues(
   }
 }
 
-function seriesValues(series: TsvbSeries, buckets: TimeBucket[], intervalMs: number): Array<[number, number | null]> {
+/** What a split of a series draws: a line, or one of the lines or the band its last metric makes */
+export interface SeriesLine {
+  /** What tells it from the split's other lines, after the split's id */
+  key?: string;
+  /** What it adds to the split's label */
+  suffix: string;
+  points: TsvbPoint[];
+  band?: TsvbBand;
+}
+
+/**
+ * The lines a split of a series draws, as the product's processors make them from its last
+ * metric: one for each percentile, each named by its value, or a band down to the percentile it
+ * fills to; one for each percentile rank; a band between the bounds of a standard deviation set to
+ * draw them; otherwise one line. A table shows one number per series: the last percentile or rank,
+ * and no band.
+ */
+export function seriesLines(series: TsvbSeries, buckets: TimeBucket[], intervalMs: number, table = false): SeriesLine[] {
   const metrics = series.metrics ?? [];
   const computed = new Map<string, Array<number | null>>();
   const all: Record<string, MathValue> = {};
@@ -625,8 +712,51 @@ function seriesValues(series: TsvbSeries, buckets: TimeBucket[], intervalMs: num
     all[metric.id] = { values: values.map((value) => value ?? NaN), timestamps: buckets.map((bucket) => bucket.key) };
   }
   const last = metrics[metrics.length - 1];
+  const at = (key: string): TsvbPoint[] => buckets.map((bucket) => [bucket.key, last ? percentileAt(bucket, last.id, key) : null]);
+  if (last?.type === 'percentile') {
+    const entries = Array.isArray(last.percentiles) ? last.percentiles : [];
+    if (table) {
+      const entry = entries[entries.length - 1];
+      return entry ? [{ suffix: '', points: at(toPercentileNumber(entry.value)) }] : [];
+    }
+    return entries.map((entry) => {
+      const value = entry.value ? entry.value : 0;
+      const key = String(entry.id);
+      if (entry.mode !== 'band') return { key, suffix: ` (${value})`, points: at(toPercentileNumber(value)) };
+      const lower = toPercentileNumber(entry.percentile);
+      const fill = Number(entry.shade);
+      return {
+        key,
+        suffix: '',
+        points: buckets.map((bucket) => [bucket.key, percentileAt(bucket, last.id, toPercentileNumber(value)), percentileAt(bucket, last.id, lower)]),
+        band: { fill: Number.isFinite(fill) ? fill : 0, upper: ` (${value})`, lower: ` (${String(entry.percentile)})` },
+      };
+    });
+  }
+  if (last?.type === 'percentile_rank') {
+    const ranks = Array.isArray(last.values) ? last.values : [];
+    // The product writes a rank's key twice over, so that a rank left empty has none
+    if (table) return [{ suffix: '', points: at(toPercentileNumber(toPercentileNumber(ranks[ranks.length - 1]))) }];
+    return ranks.map((rank) => ({ key: String(rank), suffix: ` (${rank || 0})`, points: at(toPercentileNumber(toPercentileNumber(rank))) }));
+  }
+  if (last?.mode === 'band' && (last.type === 'std_deviation' || last.type === 'std_deviation_bucket')) {
+    if (table) return [];
+    const numeric = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+    const sibling = last.type === 'std_deviation_bucket' ? overall(last, namedValues(last.field, buckets, computed)) : undefined;
+    return [
+      {
+        suffix: '',
+        points: buckets.map((bucket) => {
+          if (last.type === 'std_deviation_bucket') return [bucket.key, sibling?.upper ?? null, sibling?.lower ?? null];
+          const bounds = (bucket[last.id] as { std_deviation_bounds?: Record<string, unknown> } | undefined)?.std_deviation_bounds;
+          return [bucket.key, numeric(bounds?.upper), numeric(bounds?.lower)];
+        }),
+        band: { fill: 0.5, upper: ' - upper', lower: ' - lower' },
+      },
+    ];
+  }
   const values = last ? (computed.get(last.id) ?? []) : [];
-  return buckets.map((bucket, index) => [bucket.key, values[index] ?? null]);
+  return [{ suffix: '', points: buckets.map((bucket, index) => [bucket.key, values[index] ?? null]) }];
 }
 
 interface Plan {
@@ -724,14 +854,14 @@ async function planFor(params: TsvbParams, series: TsvbSeries | undefined, input
   };
 }
 
-function finish(points: Array<[number, number | null]>, plan: Plan, shift: number): Array<[number, number | null]> {
-  let data = points.map(([time, value]) => [time + shift, value] as [number, number | null]);
+function finish(points: TsvbPoint[], plan: Plan, shift: number): TsvbPoint[] {
+  let data = points.map(([time, ...values]): TsvbPoint => [time + shift, ...values]);
   if (plan.dropLast && data.length > 1) data = data.slice(0, -1);
   return data;
 }
 
-/** The value of the last bucket, or 0 when it has none: a 0 counts as none, as in the product */
-export function getLastValue(data: Array<[number, number | null]>): number {
+/** The value of the last bucket (a band's upper one), or 0 when it has none: a 0 counts as none, as in the product */
+export function getLastValue(data: TsvbPoint[]): number {
   const last = data[data.length - 1];
   return (last && last[1]) || 0;
 }
@@ -796,14 +926,26 @@ async function fetchSeries(
   const build = (container: Record<string, unknown>): TsvbSeriesData[] => {
     const found = container[series.id] as { buckets?: unknown; timeseries?: { buckets: TimeBucket[] } } | undefined;
     if (!found) return [];
-    const make = (id: string, label: string, color: string, node: { timeseries?: { buckets: TimeBucket[] } }): TsvbSeriesData => {
-      const data = finish(seriesValues(series, node.timeseries?.buckets ?? [], plan.intervalMs), plan, shift);
-      return { id, seriesId: series.id, label, color, data, last: getLastValue(data), series, format };
-    };
+    // A split draws one line, or a line for each percentile or rank of the metric, or a band
+    const make = (id: string, label: string, color: string, node: { timeseries?: { buckets: TimeBucket[] } }): TsvbSeriesData[] =>
+      seriesLines(series, node.timeseries?.buckets ?? [], plan.intervalMs, Boolean(pivot)).map((line) => {
+        const data = finish(line.points, plan, shift);
+        return {
+          id: line.key === undefined ? id : `${id}:${line.key}`,
+          seriesId: series.id,
+          label: `${label}${line.suffix}`,
+          color,
+          data,
+          ...(line.band ? { band: line.band } : {}),
+          last: getLastValue(data),
+          series,
+          format,
+        };
+      });
     if (mode === 'terms' && Array.isArray(found.buckets)) {
       const list = found.buckets as Array<{ key: string | number; key_as_string?: string; timeseries?: { buckets: TimeBucket[] } }>;
       const tones = splitColors(base, list.length, series.split_color_mode);
-      return list.map((bucket, index) => {
+      return list.flatMap((bucket, index) => {
         const term = bucket.key_as_string ?? String(bucket.key);
         // A term goes by its own name, and by a colour of its own among its neighbours
         return make(`${series.id}:${term}`, term, tones[index % tones.length], bucket);
@@ -814,10 +956,10 @@ async function fetchSeries(
       return (series.split_filters ?? []).flatMap((item) => {
         const bucket = byId[item.id];
         const text = typeof item.filter === 'string' ? item.filter : typeof item.filter?.query === 'string' ? item.filter.query : '';
-        return bucket ? [make(`${series.id}:${item.id}`, item.label || text || item.id, item.color || base, bucket)] : [];
+        return bucket ? make(`${series.id}:${item.id}`, item.label || text || item.id, item.color || base, bucket) : [];
       });
     }
-    return [make(series.id, series.label || metricLabel(series), base, found)];
+    return make(series.id, series.label || metricLabel(series), base, found);
   };
 
   const aggregations = (response.aggregations ?? {}) as Record<string, unknown>;

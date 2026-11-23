@@ -175,7 +175,8 @@ function Percentiles({ model, panel, onChange }: { model: Doc; panel: Panel; onC
     );
     // A table shows one number per column: only the last percentile, with no way to draw it
     if (panel.type === 'table') return <Row gap="s" key={item.id}>{percentile}</Row>;
-    const band = item.mode === 'band';
+    // What a band fills to and how solid it is, hidden only for a line, as the product hides them
+    const band = item.mode !== 'line';
     return (
       <Row gap="s" center key={item.id}>
         {percentile}

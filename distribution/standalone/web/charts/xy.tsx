@@ -44,6 +44,8 @@ export interface XYPoint {
   y: number | null;
   /** A third measure, drawn as the size of the point */
   z?: number;
+  /** Where the area or the bar of a band starts, below y, instead of at zero */
+  y0?: number | null;
 }
 
 export interface XYSeries {
@@ -58,12 +60,14 @@ export interface XYSeries {
   showCircles?: boolean;
   drawLines?: boolean;
   lineWidth?: number;
-  /** How solid the fill of an area is, from 0 to 1 */
+  /** How solid the fill of an area or of a bar is, from 0 to 1 */
   fillOpacity?: number;
   /** The radius of the points, when they are all the same size */
   pointSize?: number;
   /** Draw the line or area on through a place the series has no point at, instead of breaking */
   joinMissing?: boolean;
+  /** A band from each point's y0 up to its y: its two edges named in the legend and the tooltip, after its label */
+  band?: { upper: string; lower: string };
 }
 
 export interface XYAxis {
@@ -100,6 +104,8 @@ export interface XYCategoryAxis {
   /** The whole stretch the axis covers when it is wider than the data: the time range */
   domain?: [number, number];
   format: (value: number | string) => string;
+  /** How the tooltip names a place, instead of by the axis's title and its label */
+  tooltipFormat?: (value: number | string) => string;
   title?: string;
   show?: boolean;
   showLabels?: boolean;
@@ -118,8 +124,8 @@ export interface XYChartProps {
   /** Bars lie on their side: the category axis is the vertical one */
   horizontal?: boolean;
   legend?: LegendPosition | false;
-  /** Show the legend for a single series too, and a figure beside each name */
-  legendValues?: Record<string, string>;
+  /** Show the legend for a single series too, and a figure beside each name: a band's two, for its upper and its lower edge */
+  legendValues?: Record<string, string | [string, string]>;
   grid?: { category?: boolean; value?: boolean };
   threshold?: { value: number; width?: number; style?: string; color?: string };
   /** A line at the present moment on a time axis */
@@ -131,6 +137,8 @@ export interface XYChartProps {
   onPointClick?: (series: XYSeries, point: XYPoint) => void;
   /** Called with the stretch of the category axis that was dragged over */
   onBrush?: (from: number, to: number) => void;
+  /** Bars take the whole of their bucket, with no room between buckets */
+  fillBuckets?: boolean;
   /**
    * Drawn as the classic charts of OpenSearch Dashboards draw: their ticks and ranges, square
    * bars that touch in a stack, a label under every bar, points sized by a third measure
@@ -143,7 +151,7 @@ export interface XYChartProps {
 interface Placed {
   series: XYSeries;
   /** Per place on the category axis: where the value starts and ends, in the axis's unit */
-  spans: Array<{ from: number; to: number; y: number | null; z?: number } | undefined>;
+  spans: Array<{ from: number; to: number; y: number | null; z?: number; y0?: number | null } | undefined>;
 }
 
 const FONT = 11;
@@ -202,6 +210,7 @@ export function XYChart({
   tooltip = true,
   onPointClick,
   onBrush,
+  fillBuckets,
   classic,
   testId,
 }: XYChartProps) {
@@ -253,7 +262,7 @@ export function XYChart({
           value = total === 0 ? 0 : value / total;
         }
         if (value === null || !stack) {
-          spans[at] = { from: 0, to: value ?? 0, y: point.y, z: point.z };
+          spans[at] = { from: point.y0 ?? 0, to: value ?? 0, y: point.y, z: point.z, y0: point.y0 };
         } else {
           const pile = value >= 0 ? stack.positive : stack.negative;
           spans[at] = { from: pile[at], to: pile[at] + value, y: point.y, z: point.z };
@@ -437,6 +446,9 @@ export function XYChart({
       if (classic) {
         barStart = 0;
         barSpan = band * 0.85;
+      } else if (fillBuckets) {
+        barStart = 0;
+        barSpan = band;
       }
     }
     // On its side the first category is at the top, as a list reads
@@ -450,7 +462,7 @@ export function XYChart({
       );
     }
     return { length, band, categoryAt, scales, domain, barStart, barSpan };
-  }, [layout, horizontal, x, axes, model.domains, Boolean(classic)]);
+  }, [layout, horizontal, x, axes, model.domains, Boolean(classic), fillBuckets]);
 
   if (series.length === 0 || x.values.length === 0) {
     return (
@@ -460,13 +472,18 @@ export function XYChart({
     );
   }
 
-  const legendItems = series.map((item) => ({
-    id: item.id,
-    label: item.label,
-    color: item.color,
-    hidden: hidden.includes(item.id),
-    value: legendValues?.[item.id],
-  }));
+  // A band is named twice, by each of its edges; either hides or brings back the whole band
+  const lowerEdges = new Map(series.filter((item) => item.band).map((item) => [`${item.id}::lower`, item.id]));
+  const seriesOf = (id: string) => lowerEdges.get(id) ?? id;
+  const legendItems = series.flatMap((item) => {
+    const value = legendValues?.[item.id];
+    const entry = { id: item.id, label: item.label, color: item.color, hidden: hidden.includes(item.id), value: Array.isArray(value) ? value[0] : value };
+    if (!item.band) return [entry];
+    return [
+      { ...entry, label: `${item.label}${item.band.upper}` },
+      { ...entry, id: `${item.id}::lower`, label: `${item.label}${item.band.lower}`, value: Array.isArray(value) ? value[1] : undefined },
+    ];
+  });
   // The classic charts name a single series too
   const showLegend = legend !== false && (series.length > 1 || legendValues !== undefined || classic !== undefined);
 
@@ -514,7 +531,7 @@ export function XYChart({
           const gap = !classic && item.mode === 'stacked' && Math.abs(a - b) > 3 ? 1 : 0;
           const low = Math.min(a, b);
           const size = Math.max(Math.abs(a - b) - gap, span.to === span.from ? 0 : 1);
-          const across = classic ? slotWidth : slotWidth - (slotWidth > 6 ? 1 : 0);
+          const across = classic || fillBuckets ? slotWidth : slotWidth - (slotWidth > 6 ? 1 : 0);
           marks.push(
             <rect
               key={`${item.id}-${at}`}
@@ -524,13 +541,15 @@ export function XYChart({
               width={horizontal ? size : across}
               height={horizontal ? across : size}
               fill={item.color}
+              fillOpacity={classic ? undefined : item.fillOpacity}
               rx={classic ? 0 : Math.min(2, slotWidth / 4)}
             />
           );
         });
         continue;
       }
-      const centre = (at: number) => (x.type === 'category' ? middle(at) : categoryAt(at));
+      // Beside bars that fill their buckets, lines and areas go through the middle of each
+      const centre = (at: number) => (x.type === 'category' || (fillBuckets && barSlots.length > 0) ? middle(at) : categoryAt(at));
       const tops = spans.map((span, at) =>
         span && span.y !== null ? point(centre(at), scale(span.to)) : undefined
       );
@@ -868,17 +887,18 @@ export function XYChart({
       setHover(at);
       if (!tooltip) return;
       tip.show({
-        title: `${x.title ? `${x.title}: ` : ''}${x.format(x.values[at])}`,
+        title: x.tooltipFormat ? x.tooltipFormat(x.values[at]) : `${x.title ? `${x.title}: ` : ''}${x.format(x.values[at])}`,
         rows: model.placed
           .filter(({ spans }) => spans[at] && spans[at]!.y !== null)
-          .map(({ series: item, spans }) => {
+          .flatMap(({ series: item, spans }) => {
             const axis = axes.find((candidate) => candidate.id === item.axisId) ?? axes[0];
-            return {
-              label: item.label,
-              value: axis.format(spans[at]!.y as number),
-              color: item.color,
-              active: emphasized === item.id,
-            };
+            const span = spans[at]!;
+            const row = { label: item.label, value: axis.format(span.y as number), color: item.color, active: emphasized === item.id };
+            if (!item.band) return [row];
+            return [
+              { ...row, label: `${item.label}${item.band.upper}` },
+              { ...row, label: `${item.label}${item.band.lower}`, value: axis.format(span.y0 ?? 0) },
+            ];
           }),
         x: event.clientX,
         y: event.clientY,
@@ -1067,10 +1087,10 @@ export function XYChart({
             items={legendItems}
             position={legend || 'right'}
             classic={classic !== undefined}
-            onHover={setEmphasized}
+            onHover={(id) => setEmphasized(id === undefined ? undefined : seriesOf(id))}
             onToggle={(id) =>
               setHidden((current) =>
-                current.includes(id) ? current.filter((other) => other !== id) : [...current, id]
+                current.includes(seriesOf(id)) ? current.filter((other) => other !== seriesOf(id)) : [...current, seriesOf(id)]
               )
             }
           />

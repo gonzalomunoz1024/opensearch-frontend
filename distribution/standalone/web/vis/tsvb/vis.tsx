@@ -23,6 +23,7 @@ import {
   splitParts,
   type TsvbData,
   type TsvbParams,
+  type TsvbPoint,
   type TsvbSeries,
   type TsvbSeriesData,
   type TsvbTableData,
@@ -70,8 +71,14 @@ function lastText(item: TsvbSeriesData, all: TsvbSeriesData[]): string {
   return seriesFormatter('percent', item.series.value_template)(total === 0 ? 0 : value / total);
 }
 
+/** The lower value of the last bucket of a band as its legend shows it, nothing when it has none */
+function lowerText(item: TsvbSeriesData): string {
+  const value = item.data[item.data.length - 1]?.[2];
+  return value === null || value === undefined ? '' : item.format(value);
+}
+
 /** Whether the values of a series rise or fall over its time: the slope of the line that fits them best */
-function slopeOf(data: Array<[number, number | null]>): number {
+function slopeOf(data: TsvbPoint[]): number {
   const points = data.filter((point): point is [number, number] => point[1] !== null && Number.isFinite(point[1]));
   if (points.length < 2) return 0;
   const meanX = points.reduce((sum, [x]) => sum + x, 0) / points.length;
@@ -127,6 +134,25 @@ function TimeSeries({ params, data, onTimeChange }: { params: TsvbParams; data: 
       });
     }
     const bar = item.series.chart_type === 'bar';
+    const { band } = item;
+    if (band) {
+      // A band is an area, or bars, from its lower values up to its values, with no line and no
+      // points, never stacked; it is not drawn where either value is missing
+      return {
+        id: item.id,
+        label: item.label,
+        color: item.color,
+        type: bar ? 'histogram' : 'area',
+        mode: 'normal',
+        axisId: own,
+        interpolate: 'linear',
+        showCircles: false,
+        drawLines: false,
+        fillOpacity: Math.min(1, Math.max(0, band.fill)),
+        band: { upper: band.upper, lower: band.lower },
+        points: item.data.map(([time, value, lower]) => ({ x: time, y: lower === null || lower === undefined ? null : value, y0: lower ?? null })),
+      };
+    }
     const stacked = item.series.stacked && item.series.stacked !== 'none';
     return {
       id: item.id,
@@ -155,10 +181,16 @@ function TimeSeries({ params, data, onTimeChange }: { params: TsvbParams; data: 
         interval: data.interval.ms,
         domain: [data.range.from.getTime(), data.range.to.getTime()],
         format: (value) => formatDate(new Date(value as number), pattern, zone),
+        // The product's tooltip names the time alone
+        tooltipFormat: (value) => formatDate(new Date(value as number), pattern, zone),
         title: perInterval(data.interval.ms),
       }}
+      // The product's bars take the whole of their bucket
+      fillBuckets
       legend={params.show_legend === 0 ? false : position}
-      legendValues={Object.fromEntries(data.series.map((item) => [item.id, lastText(item, data.series)]))}
+      legendValues={Object.fromEntries(
+        data.series.map((item): [string, string | [string, string]] => [item.id, item.band ? [lastText(item, data.series), lowerText(item)] : lastText(item, data.series)])
+      )}
       grid={{ value: params.show_grid !== 0, category: false }}
       annotations={data.annotations.flatMap(({ annotation, marks }) =>
         marks.map((mark) => ({
