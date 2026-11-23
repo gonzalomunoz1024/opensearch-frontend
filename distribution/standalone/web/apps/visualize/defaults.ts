@@ -8,7 +8,7 @@
  * saved here opens there and the other way round.
  */
 
-import { METRIC_TYPES, BUCKET_TYPES, aggLabel, type AggConfig, type AggContext } from '../../lib/aggs';
+import { AGG_TITLES, METRIC_TYPES, BUCKET_TYPES, aggLabel, type AggConfig, type AggContext } from '../../lib/aggs';
 import type { Field, IndexPattern } from '../../lib/types';
 import { visType, type Vis, type VisType } from '../../lib/vis';
 import { tileMapDefaults } from '../../vis/tile_map/defaults';
@@ -273,6 +273,21 @@ export function aggGroup(type: string): string | undefined {
   if (SIBLING_PIPELINES.includes(type)) return 'Sibling pipeline aggregations';
   if (PARENT_PIPELINES.includes(type)) return 'Parent Pipeline Aggregations';
   return (METRIC_TYPES as readonly string[]).includes(type) ? 'Metric Aggregations' : undefined;
+}
+
+const byLabel = (a = '', b = '') => a.toLowerCase().localeCompare(b.toLowerCase());
+
+/**
+ * The aggregations the editor's select offers, as OpenSearch Dashboards lists them: by title,
+ * under headings in the same order, and with no heading when all would be under one. A nested
+ * aggregation's are listed without headings.
+ */
+export function aggTypeOptions(types: readonly string[], nested?: boolean): Array<{ value: string; label: string; group?: string }> {
+  const options = types.map((type) => ({ value: type, label: AGG_TITLES[type] ?? type, group: nested ? undefined : aggGroup(type) }));
+  const headed = new Set(options.map((option) => option.group)).size > 1;
+  return options
+    .map((option) => (headed ? option : { ...option, group: undefined }))
+    .sort((a, b) => byLabel(a.group, b.group) || byLabel(a.label, b.label));
 }
 
 // --- Which fields an aggregation accepts ----------------------------------------------------------

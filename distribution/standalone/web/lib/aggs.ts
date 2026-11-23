@@ -24,7 +24,16 @@ import {
   formatSpecOf,
   type FormatSettings,
 } from './field_formats';
-import { buildQuery, existsFilter, phraseFilter, rangeFilter, customFilter } from './query';
+import {
+  buildQuery,
+  cidrRange,
+  customFilter,
+  existsFilter,
+  phraseFilter,
+  rangeFilter,
+  type FilterField,
+  type RangeParams,
+} from './query';
 import type { Field, FieldFormatSpec, Filter, IndexPattern, Query } from './types';
 
 type Dsl = Record<string, unknown>;
@@ -142,11 +151,7 @@ const fieldOf = (agg: AggConfig, context: AggContext): Field | undefined => {
 /** How an aggregation names a field in a request: by name, or by its script */
 function fieldClause(agg: AggConfig, context: AggContext): Dsl {
   const field = fieldOf(agg, context);
-  if (field?.scripted && field.script) {
-    // Without the type the values of a script come back as text, and sort as text
-    const valueType = field.type === 'number' ? 'float' : field.type === 'date' ? 'date' : field.type === 'boolean' ? 'boolean' : undefined;
-    return { script: { source: field.script, lang: field.lang ?? 'painless' }, ...(valueType ? { value_type: valueType } : {}) };
-  }
+  if (field?.scripted && field.script) return { script: { source: field.script, lang: field.lang ?? 'painless' } };
   return { field: fieldNameOf(agg) };
 }
 
@@ -503,6 +508,10 @@ function bucketClause(agg: AggConfig, context: AggContext): Dsl {
         size: param(agg, 'size', 5),
         order: { _count: param(agg, 'order', 'desc') },
       };
+      // Terms only, as the original's: without its type a script's values come back as text, and
+      // a filter made from one would not match
+      const scripted = fieldOf(agg, context);
+      if (field.script && scripted) clause.value_type = scripted.type === 'number' ? 'float' : scripted.type;
       if (agg.params?.missingBucket) clause.missing = MISSING_KEY;
       const include = agg.params?.include;
       const exclude = agg.params?.exclude;
@@ -828,7 +837,7 @@ function bucketColumn(agg: AggConfig, context: AggContext, id: string): TableCol
   switch (agg.type) {
     case 'date_histogram': {
       const interval = dateInterval(agg, context);
-      const pattern = scaledDateFormat(interval.ms);
+      const pattern = scaledDateFormat(interval.ms, settings.scaledDateRules, settings.dateFormat);
       return {
         ...base,
         interval: interval.ms,
@@ -987,12 +996,29 @@ export function tabify(
   return { columns, rows };
 }
 
-/** The filter that narrows a search to one bucket: what clicking a bar or a slice adds */
+/**
+ * The field of the index pattern a column's aggregation is on, as a filter on it needs it: a
+ * scripted field is asked by its script, a boolean one takes 1 and 0 as true and false. A field
+ * the index pattern does not list is asked by its name.
+ */
+export function filterFieldOf(column: TableColumn, context: AggContext): FilterField | undefined {
+  const name = column.fieldName;
+  if (!name) return undefined;
+  return context.indexPattern?.fields.find((field) => field.name === name) ?? { name };
+}
+
+/**
+ * The filter that narrows a search to one bucket: what clicking a bar or a slice adds, as the
+ * original's createFilter of each aggregation (buckets/create_filter). A range's filter says what
+ * its bucket is called, "≥ 0 and < 1,000", an open end being infinite; a histogram's, its key as
+ * the field writes it.
+ */
 export function bucketFilter(column: TableColumn, key: unknown, context: AggContext): Filter | undefined {
   const { agg } = column;
   const indexId = context.indexPattern?.id;
-  const name = column.fieldName;
-  const field = name ? { name } : undefined;
+  const field = filterFieldOf(column, context);
+  // The field's format: it writes the ends into a scripted field's range, and the names above
+  const format = formatterFor(agg, context);
   switch (agg.type) {
     case 'terms':
     case 'significant_terms':
@@ -1013,29 +1039,38 @@ export function bucketFilter(column: TableColumn, key: unknown, context: AggCont
           lt: new Date(key + (column.interval ?? UNIT_MS.d)).toISOString(),
           format: 'strict_date_optional_time',
         },
-        indexId
+        indexId,
+        format
       );
     case 'histogram':
       if (!field || typeof key !== 'number') return undefined;
-      return rangeFilter(field, { gte: key, lt: key + (column.interval ?? 1) }, indexId);
-    case 'range':
+      return rangeFilter(field, { gte: key, lt: key + (column.interval ?? 1) }, indexId, format, format(key));
+    case 'range': {
+      if (!field) return undefined;
+      const range = key as RangeKey;
+      // An end the range leaves open is infinite, as the original's RangeKey has it
+      const gte = range.gte ?? -Infinity;
+      const lt = range.lt ?? Infinity;
+      return rangeFilter(field, { gte, lt }, indexId, format, `≥ ${format(gte)} and < ${format(lt)}`);
+    }
     case 'ip_range': {
       if (!field) return undefined;
       const range = key as RangeKey;
-      return rangeFilter(field, { gte: range.gte, lt: range.lt }, indexId);
+      // A mask is all its addresses, the last one included; the ends of a range as they are
+      if (param<string>(agg, 'ipRangeType', 'fromTo') === 'mask') {
+        const mask = cidrRange(String(range.label ?? ''));
+        return mask ? rangeFilter(field, { gte: mask.from, lte: mask.to }, indexId, format) : undefined;
+      }
+      return rangeFilter(field, { gte: range.gte || -Infinity, lte: range.lt || Infinity }, indexId, format);
     }
     case 'date_range': {
       if (!field) return undefined;
       const range = key as RangeKey;
-      return rangeFilter(
-        field,
-        {
-          gte: range.gte === undefined ? undefined : new Date(range.gte).toISOString(),
-          lt: range.lt === undefined ? undefined : new Date(range.lt).toISOString(),
-          format: 'strict_date_optional_time',
-        },
-        indexId
-      );
+      const params: RangeParams = {};
+      if (range.gte) params.gte = new Date(range.gte).toISOString();
+      if (range.lt) params.lt = new Date(range.lt).toISOString();
+      if (range.gte && range.lt) params.format = 'strict_date_optional_time';
+      return rangeFilter(field, params, indexId, format);
     }
     case 'filters': {
       const query = column.filterQueries?.[String(key)];
@@ -1047,6 +1082,21 @@ export function bucketFilter(column: TableColumn, key: unknown, context: AggCont
     default:
       return undefined;
   }
+}
+
+/**
+ * The filter a brushed stretch of a histogram's axis adds, as the original's range selection
+ * (createFiltersFromRangeSelectAction): from its start to its end, as dates when the field is
+ * one; nothing when the stretch has no width.
+ */
+export function brushFilter(column: TableColumn, from: number, to: number, context: AggContext): Filter | undefined {
+  const field = filterFieldOf(column, context);
+  if (!field || from === to) return undefined;
+  const isDate = field.type ? field.type === 'date' : Boolean(column.isDate);
+  const range: RangeParams = isDate
+    ? { gte: new Date(from).toISOString(), lt: new Date(to).toISOString(), format: 'strict_date_optional_time' }
+    : { gte: from, lt: to };
+  return rangeFilter(field, range, context.indexPattern?.id, formatterFor(column.agg, context));
 }
 
 // --- The bucket of everything else ----------------------------------------------------------------
@@ -1068,9 +1118,10 @@ export function planOtherBucket(
   const level = buckets.findIndex((agg) => agg.type === 'terms' && Boolean(agg.params?.otherBucket));
   if (level === -1) return undefined;
   const other = buckets[level];
-  const field = fieldOf(other, context);
   const fieldName = fieldNameOf(other);
-  if (!fieldName || field?.scripted) return undefined;
+  if (!fieldName) return undefined;
+  // The field of the index pattern: a scripted one is asked by its script, as in the original
+  const field: FilterField = fieldOf(other, context) ?? { name: fieldName };
 
   // What is asked under each term is asked under the rest too
   let node: Dsl | undefined = dsl;
@@ -1098,10 +1149,10 @@ export function planOtherBucket(
     }
     const all = [...above];
     // Documents without the field are the "missing" bucket's, when it is shown, and not the rest's
-    if (!other.params?.missingBucket || list.some(({ key }) => key === MISSING_KEY)) all.push(existsFilter({ name: fieldName }, indexId));
+    if (!other.params?.missingBucket || list.some(({ key }) => key === MISSING_KEY)) all.push(existsFilter(field, indexId));
     for (const { key } of list) {
       if (key === MISSING_KEY) continue;
-      const shown = phraseFilter({ name: fieldName }, key, indexId);
+      const shown = phraseFilter(field, key, indexId);
       shown.meta.negate = true;
       all.push(shown);
     }

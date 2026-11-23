@@ -68,7 +68,7 @@
 }
 
 .mgtPage {
-  padding: var(--space-4) var(--space-4) var(--space-8) 0;
+  padding: var(--space-4) var(--space-4) var(--space-8);
 }
 
 .mgtPage > .atlPanel {
@@ -306,92 +306,704 @@
 
 /* --- Advanced settings -------------------------------------------------------------------------- */
 
-.mgtSettings {
+/* The page as the original's: a title and the search bar in two halves, the call-out, then a panel
+   for each category whose rows have a description at the left and the control at the right. */
+
+.mgtSettings.mgtPage {
+  padding-bottom: var(--space-4);
+}
+
+.mgtSettings__header {
+  display: flex;
+  align-items: flex-start;
+}
+
+.mgtSettings__titleItem,
+.mgtSettings__searchItem {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* The search bar: a box that searches as it is typed in, and the Category filter */
+.mgtSettingsSearch__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.mgtSettingsSearch__box {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.mgtSettingsSearch__input {
+  display: block;
+  width: 100%;
+  height: var(--control-height);
+  padding: 0 28px 0 32px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  box-shadow: inset 0 0 0 1px var(--color-border-light);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  appearance: none;
+  transition: box-shadow var(--duration-fast) var(--ease-out-quint);
+}
+
+.mgtSettingsSearch__input::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.mgtSettingsSearch__input::-webkit-search-cancel-button,
+.mgtSettingsSearch__input::-webkit-search-decoration {
+  appearance: none;
+}
+
+.mgtSettingsSearch__input:focus {
+  box-shadow:
+    inset 0 0 0 1px var(--color-accent),
+    0 0 0 2px var(--color-focus-ring);
+  outline: none;
+}
+
+.mgtSettingsSearch__icon.atlIcon {
+  position: absolute;
+  top: 8px;
+  left: 5px;
+  color: var(--color-text-primary);
+  stroke-width: 1.2;
+  pointer-events: none;
+}
+
+/* The clear button: a cross in a small grey disc, as the theme's */
+.mgtSettingsSearch__clear {
+  position: absolute;
+  top: 10px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-text-tertiary);
+  cursor: pointer;
+}
+
+.mgtSettingsSearch__clear svg {
+  width: 8px;
+  height: 8px;
+  fill: none;
+  stroke: var(--color-surface);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+.mgtSettingsSearch__error {
+  padding-top: var(--space-1);
+  color: var(--color-critical);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+.mgtCategoryFilter {
+  display: flex;
+  flex: none;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  overflow: hidden;
+}
+
+.mgtCategoryFilter__button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--control-height);
+  padding: 0 var(--space-2);
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 21px;
+  cursor: pointer;
+}
+
+.mgtCategoryFilter__button:hover .mgtCategoryFilter__text {
+  text-decoration: underline;
+}
+
+.mgtCategoryFilter__button--open {
+  background: color-mix(in srgb, var(--color-text-secondary) 10%, transparent);
+}
+
+.mgtCategoryFilter__arrow.atlIcon {
+  stroke-width: 1.2;
+}
+
+.mgtCategoryFilter__count {
+  min-width: 24px;
+  height: 20px;
+  padding: 0 var(--space-1);
+  border-radius: 999px;
+  background: var(--color-accent);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+  text-align: center;
+}
+
+/*
+ * The theme's popover is opaque, and fades in without growing: a panel measured while it grows
+ * would be placed a little to the right of the button it belongs to.
+ */
+.mgtCategoryFilter__panel.atlPopover {
+  min-width: 0;
+  margin-top: var(--space-1);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  animation-name: atlFade;
+}
+
+.mgtCategoryFilter__list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  width: max-content;
 }
 
-.mgtSettings__head {
+.mgtCategoryFilter__item {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 0;
+  border-bottom: 1px solid var(--color-border-light);
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+  text-align: left;
+  cursor: pointer;
 }
 
-.mgtSettings__search {
-  flex: 0 1 480px;
+/* The choice the keyboard is on is in the accent; a click leaves none marked, as in the theme */
+.mgtCategoryFilter__item:hover,
+.mgtCategoryFilter__item:focus-visible,
+.mgtCategoryFilter__item--active {
+  background: var(--color-surface-secondary);
+  outline: none;
 }
 
-.mgtSettings__category > .atlTitleM {
-  margin-bottom: var(--space-4);
+.mgtCategoryFilter__item:focus-visible,
+.mgtCategoryFilter__item--active {
+  color: var(--color-accent);
 }
 
-.mgtSetting {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: var(--space-6);
-  padding: var(--space-4) 0 var(--space-4) var(--space-3);
-  border-left: 2px solid transparent;
+.mgtCategoryFilter__mark {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
 }
 
-.mgtSetting + .mgtSetting {
-  border-top: 1px solid var(--color-border-light);
+/* The call-out that says to take care */
+.mgtSettingsCallOut {
+  margin: var(--space-4) 0;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-warning-tint);
 }
 
-.mgtSetting--changed {
-  border-left-color: var(--color-warning);
-}
-
-.mgtSetting__name {
+.mgtSettingsCallOut__title {
   display: flex;
+  padding-top: 1px;
   align-items: center;
   gap: var(--space-2);
-  margin-bottom: var(--space-1);
+  color: var(--color-warning-text);
   font-size: var(--font-size-m);
   font-weight: var(--font-weight-semibold);
+  line-height: 20px;
 }
 
-.mgtSetting__about p + p {
+.mgtSettingsCallOut__icon.atlIcon {
+  stroke-width: 1;
+}
+
+.mgtSettingsCallOut__text {
   margin-top: var(--space-2);
+  line-height: 21px;
 }
 
-.mgtSetting__field {
+.mgtSettings__loading {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 6px;
+  justify-content: center;
+  padding-top: 40px;
 }
 
-.mgtSetting__key {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
+.mgtSettings__loadErrorIcon.atlIcon {
+  color: var(--color-critical);
 }
 
-.mgtSetting__reset {
-  align-self: flex-start;
+.mgtSettings__clearLink {
   padding: 0;
   border: 0;
   background: none;
   color: var(--color-accent);
   font: inherit;
-  font-size: var(--font-size-xs);
   cursor: pointer;
 }
 
-.mgtSetting__reset:hover {
+.mgtSettings__clearLink:hover {
   text-decoration: underline;
 }
 
-.mgtSaveBar {
+/* A category: its name, what the search hides, and its rows */
+.mgtSettingsSection.atlPanel {
+  margin-bottom: var(--space-6);
+  padding: var(--space-6);
+}
+
+.mgtSettingsSection--empty {
+  line-height: normal;
+}
+
+.mgtSettingsSection__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-6);
+  margin-bottom: var(--space-4);
+}
+
+.mgtSettingsSection__head h2 {
+  margin-bottom: 7px;
+}
+
+.mgtSettingsSection__hiding {
+  line-height: 21px;
+}
+
+/* The rows reach 12 px past the panel's padding at their ends, as the original's */
+.mgtSettingsSection__rows {
+  margin-bottom: calc(var(--space-3) * -1);
+}
+
+.mgtField {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: var(--space-6);
+  padding: var(--space-3) 0;
+}
+
+.mgtField + .mgtField {
+  margin-top: var(--space-1);
+}
+
+.mgtField__heading {
+  font-size: var(--font-size-m);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+/* A change not saved yet: a bar at the left of the name, in the warning's colour or the critical one */
+.mgtField__title {
+  margin-left: calc(var(--space-2) * -1);
+  padding-left: var(--space-2);
+}
+
+.mgtField--unsaved .mgtField__title {
+  box-shadow: calc(var(--space-1) * -1) 0 var(--color-warning);
+}
+
+.mgtField--invalid .mgtField__title {
+  box-shadow: calc(var(--space-1) * -1) 0 var(--color-critical);
+}
+
+.mgtField__iconTip {
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+.mgtField__iconTipAnchor {
+  display: inline-flex;
+}
+
+.mgtField__custom {
+  color: var(--color-accent);
+}
+
+.mgtField__unsavedIcon {
+  margin-left: var(--space-2);
+  color: var(--color-warning);
+}
+
+.mgtField__unsavedIcon--invalid {
+  color: var(--color-critical);
+}
+
+.mgtField__dot.atlIcon {
+  fill: currentcolor;
+  stroke: none;
+}
+
+/* The description is written in HTML; its paragraphs and lists keep their space below them */
+.mgtField__description {
+  display: flow-root;
+  padding-top: var(--space-2);
+  color: var(--color-text-secondary);
+  line-height: 21px;
+}
+
+.mgtField__text p,
+.mgtField__text ul,
+.mgtField__text ol {
+  margin: 0 0 21px;
+}
+
+.mgtField__text ul,
+.mgtField__text ol {
+  margin-left: 21px;
+  padding: 0;
+}
+
+.mgtField__text ul {
+  list-style: disc;
+}
+
+.mgtField__text strong {
+  font-weight: var(--font-weight-semibold);
+}
+
+.mgtField__text code {
+  font-family: var(--font-family-code);
+  font-size: 0.9em;
+  line-height: 1.5;
+}
+
+.mgtField__spacer {
+  height: var(--space-2);
+}
+
+.mgtField__default {
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+.mgtField__defaultCode {
+  display: inline-block;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-code);
+  font-size: 90%;
+  white-space: pre;
+  overflow: hidden;
+}
+
+.mgtField__defaultBlock {
+  margin: 0;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-code);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  white-space: pre;
+  overflow: auto;
+}
+
+.mgtField__defaultBlock--tall {
+  max-height: 300px;
+}
+
+.mgtField__defaultLine {
+  display: block;
+}
+
+.mgtField__defaultBlock .tokKey {
+  color: inherit;
+}
+
+.mgtField__defaultBlock .tokPunctuation {
+  opacity: 0.7;
+}
+
+/* The key, the control, and what is said under it */
+.mgtField__fields {
+  min-width: 0;
+  padding-top: 11px;
+}
+
+.mgtField__labelWrap {
+  display: flex;
+  margin-bottom: var(--space-1);
+}
+
+.mgtField__label {
+  display: inline-block;
+  vertical-align: top;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+/* The theme's danger text for the key, its danger colour for the error under the control */
+.mgtField__label--invalid {
+  color: var(--color-critical-text);
+}
+
+.mgtField__control {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.mgtField__control > .atlField,
+.mgtField__codeWrap {
+  align-self: stretch;
+}
+
+/* The fields as the theme's compressed ones: the text 8 px from the edge */
+.mgtField__input.atlField,
+.mgtField__select.atlField {
+  padding: 0 7px;
+}
+
+.mgtField__selectWrap {
+  position: relative;
+  display: block;
+  align-self: stretch;
+}
+
+.mgtField__select.atlField {
+  padding-right: 31px;
+  background-image: none;
+}
+
+.mgtField__selectArrow.atlIcon {
+  position: absolute;
+  top: 10px;
+  right: 8px;
+  width: 12px;
+  height: 12px;
+  color: var(--color-text-primary);
+  stroke-width: 1.4;
+  pointer-events: none;
+}
+
+.mgtField__select:disabled + .mgtField__selectArrow {
+  color: var(--color-text-tertiary);
+}
+
+.mgtField__switch {
+  font-size: var(--font-size-s);
+  line-height: 16px;
+}
+
+.mgtField__switch .atlSwitch__track {
+  width: 28px;
+  height: 16px;
+  border-radius: 8px;
+}
+
+.mgtField__switch .atlSwitch__track::after {
+  top: 1px;
+  left: 1px;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--color-border);
+}
+
+.mgtField__switch .atlSwitch__track[aria-checked="true"] {
+  background: var(--color-accent);
+}
+
+.mgtField__switch .atlSwitch__track[aria-checked="true"]::after {
+  border-color: var(--color-accent);
+  transform: translateX(12px);
+}
+
+/* The theme rings a switch that has the focus, from a click too */
+.mgtField__switch .atlSwitch__track:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
+}
+
+.mgtField__switch--disabled {
+  cursor: not-allowed;
+}
+
+.mgtField__error,
+.mgtField__help {
+  padding-top: var(--space-1);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+.mgtField__error {
+  color: var(--color-critical);
+}
+
+.mgtField__help {
+  margin-bottom: calc(var(--space-1) * -1);
+  padding-bottom: var(--space-1);
+  color: var(--color-text-tertiary);
+}
+
+.mgtField__reset {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent);
+  font: inherit;
+  line-height: normal;
+  cursor: pointer;
+}
+
+.mgtField__reset:hover {
+  text-decoration: underline;
+}
+
+/* The code editors as the original's: no border, lines of 15 px, the line of the cursor shaded,
+   and the colours of its editor's theme as the Atlas theme sets them */
+.mgtField__code.atlCodeEditor {
+  --code-gutter: var(--space-1);
+  --mgt-code-key: #037098;
+  --mgt-code-string: #087824;
+  --mgt-code-constant: #5256e1;
+  border: 0;
+  border-radius: 0;
+  line-height: 15px;
+}
+
+.themeDark .mgtField__code.atlCodeEditor {
+  --mgt-code-key: hsl(196deg 47.83% 57.37%);
+  --mgt-code-string: rgb(76.9 183.8 103.5);
+  --mgt-code-constant: rgb(149.7 152.3 249.3);
+}
+
+.mgtField__code.atlCodeEditor:focus-within {
+  box-shadow: none;
+}
+
+.mgtField__code .atlCodeEditor__paint {
+  padding: 0;
+}
+
+.mgtField__code .atlCodeEditor__line,
+.mgtField__code .atlCodeEditor__input {
+  padding: 0 var(--space-1);
+}
+
+.mgtField__code .atlCodeEditor__line--marked {
+  background: color-mix(in srgb, var(--color-border) 70%, var(--color-surface-secondary));
+}
+
+.mgtField__code .tokKey,
+.mgtField__code .tokNumber {
+  color: var(--mgt-code-key);
+}
+
+.mgtField__code .tokString {
+  color: var(--mgt-code-string);
+}
+
+.mgtField__code .tokKeyword {
+  color: var(--mgt-code-constant);
+}
+
+/* The bar of the changes not saved yet, dark as the theme's bottom bars */
+.mgtBottomBar {
   position: sticky;
-  bottom: var(--space-4);
+  bottom: 0;
+  z-index: 1000;
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-lg);
+  padding: var(--space-4);
+  border-top: 1px solid rgb(255 255 255 / 6%);
+  background: #1c1c1e;
+  color: #ffffff;
+}
+
+.mgtBottomBar__count {
+  margin-right: auto;
+}
+
+.mgtBottomBar__countText {
+  padding-left: var(--space-2);
+  box-shadow: calc(var(--space-1) * -1) 0 var(--color-warning);
+}
+
+/* The theme's buttons have a transparent border of 1 px, which makes them 2 px wider */
+.mgtBottomBar .atlButton {
+  gap: var(--space-2);
+  border: 1px solid transparent;
+}
+
+.mgtBottomBar__cancel.atlButton--ghost {
+  color: #ffffff;
+}
+
+.mgtBottomBar__cancel.atlButton--ghost:hover {
+  background: transparent;
+  text-decoration: underline;
+}
+
+/* The theme's secondary fill: its green, with the dark text it puts on it */
+.mgtBottomBar__save.atlButton {
+  background: var(--color-healthy);
+  box-shadow: var(--shadow-sm);
+  color: #1d1d1f;
+}
+
+.mgtBottomBar__save.atlButton:hover {
+  background: color-mix(in srgb, var(--color-healthy) 88%, #000000);
+}
+
+.mgtBottomBar__save.atlButton:disabled {
+  background: var(--color-border);
+  box-shadow: none;
+  color: var(--color-text-tertiary);
+}
+
+.mgtReloadToast {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-2);
+}
+
+@media (max-width: 767px) {
+  .mgtSettings__header {
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .mgtSettings__titleItem,
+  .mgtSettings__searchItem {
+    flex-basis: auto;
+    width: 100%;
+  }
+
+  .mgtField {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 575px) {
+  .mgtBottomBar__count {
+    visibility: hidden;
+  }
 }
 
 @media (max-width: 900px) {
@@ -407,10 +1019,5 @@
 
   .mgtPage {
     padding-left: var(--space-4);
-  }
-
-  .mgtSetting {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-3);
   }
 }

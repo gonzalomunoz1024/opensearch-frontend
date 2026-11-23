@@ -13,6 +13,7 @@ import { Modal } from '../../components/overlay';
 import { appUrl } from '../../lib/url';
 import { VIS_TYPES, visIcon, visType, type VisType } from '../../lib/vis';
 import { navigate, navigateHash, useLocation } from '../../router';
+import { services } from '../../services';
 import { Listing, ListingEmpty, type Listed, type ListingColumn } from '../../shell/listing';
 import { SavedObjectFinder } from '../../shell/saved_objects_ui';
 import { currentGlobalParam, useBreadcrumbs } from '../../shell/state';
@@ -53,6 +54,12 @@ const editUrl = (object: Listed) =>
   object.type === VIS_BUILDER_TYPE ? visBuilderEditUrl(object.id) : appUrl(VISUALIZE, `/edit/${encodeURIComponent(object.id)}`);
 
 const typeTitle = (type: string) => (type === VIS_BUILDER_TYPE ? VIS_BUILDER_TITLE : (visType(type)?.title ?? type));
+
+/** visualize:enableLabs: whether the kinds still being tried out (the input controls) are offered and listed */
+const labsEnabled = () => services.uiSettings.get<boolean>('visualize:enableLabs', true) !== false;
+
+/** Without the labs, the list leaves out what was made of an experimental kind, as the original's */
+const isNotLab = (object: Listed) => visType(typeOf(object))?.stage !== 'experimental';
 
 export function Visualize() {
   const { hashPath, hashParams } = useLocation();
@@ -98,6 +105,7 @@ function VisualizeList({ creating }: { creating: boolean }) {
             <p>You can create different visualizations based on your data.</p>
           </ListingEmpty>
         }
+        keep={labsEnabled() ? undefined : isNotLab}
       />
       {dialog && (
         <NewVisModal
@@ -137,7 +145,10 @@ export function NewVisModal({ onClose }: { onClose: () => void }) {
   const shown = useMemo(() => {
     const text = filter.trim().toLowerCase();
     // In the order of the letters' codes, as OpenSearch Dashboards lists them: TSVB before Tag Cloud
-    const list = [...VIS_TYPES, ...ALIASES].sort((a, b) => (a.title < b.title ? -1 : a.title > b.title ? 1 : 0));
+    const labs = labsEnabled();
+    const list = [...VIS_TYPES, ...ALIASES]
+      .filter((type) => labs || type.stage !== 'experimental')
+      .sort((a, b) => (a.title < b.title ? -1 : a.title > b.title ? 1 : 0));
     return text ? list.filter((type) => type.title.toLowerCase().includes(text) || type.name.includes(text)) : list;
   }, [filter]);
 

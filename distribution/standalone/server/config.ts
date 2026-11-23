@@ -46,6 +46,8 @@ export interface Config {
   csp: { allowedConnectSources: string[]; allowedFrameAncestorSources: string[]; allowedImgSources: string[] };
   /** vis_type_vega.enableExternalUrls: whether a Vega spec may load data from other addresses */
   visTypeVega: { enableExternalUrls: boolean };
+  /** home.disableWelcomeScreen: whether the first page leaves out the welcome screen */
+  home: { disableWelcomeScreen: boolean };
 }
 
 type Reader = (value: unknown, key: string) => unknown;
@@ -146,6 +148,7 @@ const SETTINGS: Record<string, Reader> = {
   'csp.allowedFrameAncestorSources': list,
   'csp.allowedImgSources': list,
   'vis_type_vega.enableExternalUrls': boolean,
+  'home.disableWelcomeScreen': boolean,
   'map.includeOpenSearchMapsService': boolean,
   'map.proxyOpenSearchMapsServiceInMaps': boolean,
   'map.showRegionDeniedWarning': boolean,
@@ -274,6 +277,7 @@ export function loadConfig(
       allowedImgSources: read('csp.allowedImgSources', [] as string[]),
     },
     visTypeVega: { enableExternalUrls: read('vis_type_vega.enableExternalUrls', false) },
+    home: { disableWelcomeScreen: read('home.disableWelcomeScreen', false) },
   };
   return { config, ignored };
 }

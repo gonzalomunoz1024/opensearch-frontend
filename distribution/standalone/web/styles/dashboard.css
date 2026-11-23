@@ -194,6 +194,8 @@ body.dshDragging {
   padding: var(--space-2);
 }
 
+/* A saved search's table spans the panel from side to side, as the original's, and so does the
+   prompt in place of an experimental visualization */
 .dshPanel__body--flush {
   padding: 0;
 }

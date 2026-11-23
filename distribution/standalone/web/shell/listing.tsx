@@ -65,6 +65,8 @@ export interface ListingProps {
    * first that failed), 'each' as its visualizations do (one for each)
    */
   deleteErrors: { title: string; per: 'first' | 'each' };
+  /** Which of the objects found are listed: all of them unless it says otherwise */
+  keep?: (object: Listed) => boolean;
 }
 
 interface Sort {
@@ -91,6 +93,7 @@ export function Listing({
   padding = 'm',
   initialFilter = '',
   deleteErrors,
+  keep,
 }: ListingProps) {
   const [filter, setFilter] = useState(initialFilter);
   const [found, setFound] = useState<{ total: number; objects: Listed[] }>();
@@ -130,9 +133,10 @@ export function Listing({
           })
           .then((answer) => {
             if (!live) return;
+            const kept = keep ? answer.saved_objects.filter((object) => keep(object)) : answer.saved_objects;
             const objects = filter
-              ? answer.saved_objects
-              : [...answer.saved_objects].sort((a, b) =>
+              ? kept
+              : [...kept].sort((a, b) =>
                   compareAsOriginal(a.attributes.title ?? '', b.attributes.title ?? '')
                 );
             setFound({ total: answer.total, objects });
@@ -153,7 +157,7 @@ export function Listing({
       live = false;
       window.clearTimeout(timer);
     };
-  }, [typeKey, fieldKey, searchFieldKey, filter, limit, tick]);
+  }, [typeKey, fieldKey, searchFieldKey, filter, limit, tick, keep]);
 
   const columns: ListingColumn[] = useMemo(
     () => [

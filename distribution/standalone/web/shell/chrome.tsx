@@ -25,6 +25,7 @@ import {
   useRecentlyAccessed,
   writeStored,
 } from './state';
+import { UserBannerList } from './user_banner';
 import '../styles/shell.css';
 
 interface NavLink {
@@ -342,6 +343,7 @@ export function Chrome({ children }: { children: ReactNode }) {
           </>
         )}
         <main className="shlMain" id="app-wrapper">
+          <UserBannerList />
           {children}
         </main>
       </div>
