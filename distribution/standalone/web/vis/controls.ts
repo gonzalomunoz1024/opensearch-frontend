@@ -7,7 +7,7 @@
  * of the page, what "Apply changes" leaves there, and the checks of a range typed by hand.
  */
 
-import { buildQuery, mergeFilters, phraseFilter, phrasesFilter, rangeFilter } from '../lib/query';
+import { buildQuery, mergeFilters, phraseFilter, phrasesFilter, rangeFilter, type FilterField } from '../lib/query';
 import type { Field, Filter, IndexPattern } from '../lib/types';
 
 type Dsl = Record<string, unknown>;
@@ -190,10 +190,17 @@ export function valuesFromFilters(controls: ControlParam[], filters: Filter[]): 
   return values;
 }
 
-/** The filter a control's value becomes, marked with the control's id */
-export function filterOf(control: ControlParam, value: ControlValue): Filter | undefined {
+/** Which field of its index pattern a control filters on, when the pattern is known */
+export type ControlFieldOf = (control: ControlParam) => FilterField | undefined;
+
+/**
+ * The filter a control's value becomes, marked with the control's id. `known` is the control's
+ * field as its index pattern has it, so that a scripted one is asked by its script, as the
+ * original's filter managers ask it; without it the filter is on the field of that name.
+ */
+export function filterOf(control: ControlParam, value: ControlValue, known?: FilterField): Filter | undefined {
   if (!hasValue(control, value) || !control.fieldName) return undefined;
-  const field = { name: control.fieldName };
+  const field = known?.name === control.fieldName ? known : { name: control.fieldName };
   let filter: Filter;
   if (control.type === 'range') {
     const range = value as RangeValue;
@@ -210,13 +217,15 @@ export function filterOf(control: ControlParam, value: ControlValue): Filter | u
 /**
  * The filters of the page once "Apply changes" is pressed, as the original's submitFilters: the
  * controls whose value changed replace their filters, a control whose parent has no value loses
- * its filter, and the new filters are added last, pinned when the panel says so.
+ * its filter, and the new filters are added last, pinned when the panel says so. `fieldOf` gives
+ * each control's field as its index pattern has it.
  */
 export function submitFilters(
   controls: ControlParam[],
   staged: ControlValues,
   filters: Filter[],
-  pinned: boolean
+  pinned: boolean,
+  fieldOf?: ControlFieldOf
 ): Filter[] {
   const ancestry = ancestorsOf(controls);
   const changed = controls.filter((control) => !sameValue(control, staged[control.id], valueFromFilters(control, filters)));
@@ -227,7 +236,7 @@ export function submitFilters(
   }
   const kept = filters.filter((filter) => !(filter.meta?.controlledBy && removed.has(filter.meta.controlledBy)));
   const added = changed
-    .map((control) => filterOf(control, staged[control.id]))
+    .map((control) => filterOf(control, staged[control.id], fieldOf?.(control)))
     .filter((filter): filter is Filter => filter !== undefined)
     .map((filter) => ({ ...filter, $state: { store: pinned ? ('globalState' as const) : ('appState' as const) } }));
   return mergeFilters(kept, added);

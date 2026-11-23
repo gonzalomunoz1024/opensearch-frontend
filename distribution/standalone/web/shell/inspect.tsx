@@ -3,9 +3,9 @@
 /* Inspect: the data behind what is on screen as a table, and the requests that fetched it. */
 
 import { useMemo, useState } from 'react';
-import { Button, CodeBlock, EmptyPrompt, Tabs } from '../components/basic';
+import { Button, CodeBlock, EmptyPrompt, IconButton, Tabs } from '../components/basic';
 import { Select } from '../components/form';
-import { Flyout, copyText, downloadFile } from '../components/overlay';
+import { Flyout, MenuButton, copyText, downloadFile } from '../components/overlay';
 import { DataTable } from '../components/table';
 import type { Table } from '../lib/aggs';
 import { toCsv } from '../lib/docs';
@@ -43,22 +43,31 @@ export function tableToCsv(table: Table, formatted: boolean): string {
 function DataView({ table, title }: { table: Table; title: string }) {
   return (
     <div className="atlStack">
+      {/* As the original's: one button with its arrow, and the two ways to download in its menu */}
       <div className="atlRow" style={{ justifyContent: 'flex-end' }}>
-        <Button
-          size="s"
-          icon="download"
-          onClick={() => downloadFile(`${title || 'unsaved'}.csv`, tableToCsv(table, true), 'text/csv')}
-          testId="inspectorDownloadFormattedCsv"
-        >
-          Formatted CSV
-        </Button>
-        <Button
-          size="s"
-          icon="download"
-          onClick={() => downloadFile(`${title || 'unsaved'}.csv`, tableToCsv(table, false), 'text/csv')}
-        >
-          Raw CSV
-        </Button>
+        <MenuButton
+          align="right"
+          items={[
+            {
+              id: 'csv',
+              label: 'Formatted CSV',
+              title: 'Download the data in table format',
+              onClick: () => downloadFile(`${title || 'unsaved'}.csv`, tableToCsv(table, true), 'text/csv'),
+              testId: 'inspectorDownloadFormattedCsv',
+            },
+            {
+              id: 'rawCsv',
+              label: 'Raw CSV',
+              title: 'Download the data as provided, for example, dates as timestamps',
+              onClick: () => downloadFile(`${title || 'unsaved'}.csv`, tableToCsv(table, false), 'text/csv'),
+            },
+          ]}
+          button={(toggle) => (
+            <Button size="s" icon="chevronDown" iconSide="right" onClick={toggle} testId="inspectorDownloadData">
+              Download CSV
+            </Button>
+          )}
+        />
       </div>
       <DataTable
         compact
@@ -140,14 +149,11 @@ function RequestsView({ requests }: { requests: RequestRecord[] }) {
           <dd>{new Date(request.startedAt).toISOString()}</dd>
         </dl>
       ) : (
-        <>
-          <div className="atlRow" style={{ justifyContent: 'flex-end' }}>
-            <Button size="s" icon="copy" onClick={() => copyText(text)}>
-              Copy to clipboard
-            </Button>
-          </div>
+        // As the original's copyable code: the button that copies all of it in the corner
+        <div className="atlCodeCopy">
           <CodeBlock>{text.length > 400000 ? `${text.slice(0, 400000)}\n… cut short` : text}</CodeBlock>
-        </>
+          <IconButton icon="copy" label="Copy" size="s" onClick={() => copyText(text)} />
+        </div>
       )}
     </div>
   );

@@ -86,7 +86,7 @@ export interface VisBuilderType {
   name: string;
   title: string;
   /** The icon of the kind in the picker */
-  icon: 'visualize' | 'line' | 'area' | 'number' | 'table';
+  icon: 'visBarVertical' | 'visLine' | 'visArea' | 'visMetric' | 'visTable';
   description: string;
   schemas: VisBuilderSchema[];
   style: () => StyleState;
@@ -127,13 +127,13 @@ const xyStyle = (type: string) => () => ({ addTooltip: true, addLegend: true, le
 
 /** The kinds VisBuilder offers, in the order it registers them: the first is a new one's */
 export const VIS_BUILDER_TYPES: VisBuilderType[] = [
-  { name: 'histogram', title: 'Bar', icon: 'visualize', description: 'Display histogram visualizations', schemas: xySchemas(false), style: xyStyle('histogram') },
-  { name: 'line', title: 'Line', icon: 'line', description: 'Display line chart', schemas: xySchemas(true), style: xyStyle('line') },
-  { name: 'area', title: 'Area', icon: 'area', description: 'Display area chart', schemas: xySchemas(false), style: xyStyle('area') },
+  { name: 'histogram', title: 'Bar', icon: 'visBarVertical', description: 'Display histogram visualizations', schemas: xySchemas(false), style: xyStyle('histogram') },
+  { name: 'line', title: 'Line', icon: 'visLine', description: 'Display line chart', schemas: xySchemas(true), style: xyStyle('line') },
+  { name: 'area', title: 'Area', icon: 'visArea', description: 'Display area chart', schemas: xySchemas(false), style: xyStyle('area') },
   {
     name: 'metric',
     title: 'Metric',
-    icon: 'number',
+    icon: 'visMetric',
     description: 'Display metric visualizations',
     schemas: [
       {
@@ -166,7 +166,7 @@ export const VIS_BUILDER_TYPES: VisBuilderType[] = [
   {
     name: 'table',
     title: 'Table',
-    icon: 'table',
+    icon: 'visTable',
     description: 'Display table visualizations',
     schemas: [
       { group: 'metrics', name: 'metric', title: 'Metric', min: 1, aggFilter: ['!geo_centroid', '!geo_bounds'], defaults: ['avg', 'cardinality'], allowStrings: true },

@@ -43,6 +43,15 @@ export function setColorMapping(mapping: Record<string, string>) {
   configured = mapping ?? {};
 }
 
+/**
+ * The opacity of the other series while one is hovered, the setting visualization:dimmingOpacity:
+ * a number from 0 to 1, else 0.5, as the original's charts read it
+ */
+export function dimmingOpacity(value: unknown): number {
+  const opacity = typeof value === 'number' ? value : Number.parseFloat(String(value));
+  return opacity >= 0 && opacity <= 1 ? opacity : 0.5;
+}
+
 const mix = (from: string, to: string, share: number): string => {
   const a = parseColor(from);
   const b = parseColor(to);

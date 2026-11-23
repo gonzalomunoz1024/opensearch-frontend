@@ -337,6 +337,7 @@ function JsonCreatePolicy({ isEdit }: { isEdit: boolean }) {
       {isEdit && (
         <CallOut
           tone="accent"
+          icon="help"
           title="Edits to the policy are not automatically applied to indices that are already being managed by this policy."
         >
           <p>
@@ -375,12 +376,12 @@ function JsonCreatePolicy({ isEdit }: { isEdit: boolean }) {
         }
         actions={
           <>
-            <Button size="s" icon="copy" onClick={() => copyText(json)}>
+            <Button size="s" icon="copyClipboard" onClick={() => copyText(json)}>
               Copy
             </Button>
             <Button
               size="s"
-              icon="list"
+              icon="editorAlignLeft"
               disabled={jsonError}
               onClick={() => setJson(JSON.stringify(JSON.parse(json), null, 4))}
             >

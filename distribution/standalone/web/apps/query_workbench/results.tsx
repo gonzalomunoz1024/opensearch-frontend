@@ -394,7 +394,7 @@ export function Results(props: ResultsProps) {
           (fullScreen ? (
             <IconButton icon="cross" label="Exit full screen" id="exit-fullscreen-button" onClick={() => onFullScreen(false)} />
           ) : (
-            <Button size="s" icon="expand" onClick={() => onFullScreen(true)} testId="fullScreenView">
+            <Button size="s" icon="fullScreen" onClick={() => onFullScreen(true)} testId="fullScreenView">
               Full screen view
             </Button>
           ))}

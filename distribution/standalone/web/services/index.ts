@@ -3,14 +3,15 @@
 /* What every page uses: made once when the page loads, from what the server put in it. */
 
 import type { MapConfig } from '../../common/map_config';
-import { DEFAULT_FORMAT_SETTINGS, type FormatSettings } from '../lib/field_formats';
+import { scaledDateRules } from '../lib/dates';
+import { DEFAULT_DATE_NANOS_FORMAT, DEFAULT_FORMAT_SETTINGS, type FormatSettings } from '../lib/field_formats';
 import type { QueryConfig } from '../lib/query';
 import type { FieldFormatSpec } from '../lib/types';
 import { Http } from './http';
 import { IndexPatterns } from './index_patterns';
 import { SavedObjectsClient } from './saved_objects';
 import { SavedQueryService } from './saved_queries';
-import { SearchService } from './search';
+import { requestPreference, SearchService } from './search';
 import { Toasts } from './toasts';
 import { UiSettingsClient } from './ui_settings';
 
@@ -24,6 +25,8 @@ export interface BootData {
   map: MapConfig;
   /** vis_type_vega.enableExternalUrls of the server's settings */
   visTypeVega?: { enableExternalUrls: boolean };
+  /** home.disableWelcomeScreen of the server's settings */
+  home?: { disableWelcomeScreen: boolean };
   /** Where the browser builds of Vega and Vega-Lite are, loaded when a Vega visualization is drawn */
   libraries: { vega: string; vegaLite: string };
 }
@@ -50,6 +53,9 @@ export let services: Services;
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+// The id of this visit of the page, which searches name as their preference when it is "sessionId"
+const SESSION_ID = String(Date.now());
+
 export function createServices(boot: BootData): Services {
   const http = new Http(boot.basePath);
   const uiSettings = new UiSettingsClient(
@@ -63,6 +69,11 @@ export function createServices(boot: BootData): Services {
   const toasts = new Toasts();
   const search = new SearchService(http, () => ({
     maxConcurrentShardRequests: uiSettings.get<number>('courier:maxConcurrentShardRequests', 0),
+    preference: requestPreference(
+      uiSettings.get('courier:setRequestPreference'),
+      uiSettings.get('courier:customRequestPreference'),
+      SESSION_ID
+    ),
   }));
 
   const timeZone = () => {
@@ -88,6 +99,8 @@ export function createServices(boot: BootData): Services {
             'format:defaultTypeMap',
             DEFAULT_FORMAT_SETTINGS.defaultTypeMap
           ),
+          scaledDateRules: scaledDateRules(uiSettings.get('dateFormat:scaled')),
+          dateNanosFormat: uiSettings.get<string>('dateNanosFormat', DEFAULT_DATE_NANOS_FORMAT),
         },
       };
     }

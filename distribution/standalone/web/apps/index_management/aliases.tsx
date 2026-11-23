@@ -192,7 +192,7 @@ function CreateAlias({ alias, onClose, onSuccess }: { alias?: AliasRow; onClose:
     >
       <div className="ismDialog">
         {alias && matchesAny(alias.alias, SYSTEM_ALIAS) && (
-          <CallOut tone="warning">
+          <CallOut tone="warning" size="s">
             This alias may contain critical system data. Changing system aliases may break OpenSearch.
           </CallOut>
         )}
@@ -415,7 +415,7 @@ export function Aliases() {
           confirmTestId="deleteConfirmButton"
         >
           {names.some((name) => matchesAny(name, SYSTEM_ALIAS)) && (
-            <CallOut tone="warning">
+            <CallOut tone="warning" size="s">
               These aliases may contain critical system data. Deleting system aliases may break OpenSearch.
             </CallOut>
           )}
