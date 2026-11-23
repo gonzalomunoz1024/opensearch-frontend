@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { metricAggs, seriesLines, termLabel, topNRows, type TimeBucket, type TsvbMetric, type TsvbSeries, type TsvbSeriesData } from '../../web/vis/tsvb/data';
+import { metricAggs, seriesLines, termLabel, tooManyBuckets, topNRows, type TimeBucket, type TsvbMetric, type TsvbSeries, type TsvbSeriesData } from '../../web/vis/tsvb/data';
 import { convertSeriesToVars } from '../../web/vis/tsvb/markdown_vars';
 
 const HOUR = 3600000;
@@ -157,5 +157,21 @@ describe('the parts of a TSVB series as the panels show them', () => {
     ) as Record<string, { formatted?: string }>;
     assert.equal(variables['1'].formatted, 'true');
     assert.equal(variables['1794787200000'].formatted, '2026-11-16 00:00');
+  });
+});
+
+describe('the panels the product does not ask for, as their interval makes too many buckets', () => {
+  const week = 7 * 24 * 3600 * 1000;
+
+  it('counts the whole buckets of a panel interval against metrics:max_buckets', () => {
+    assert.equal(tooManyBuckets('1s', week, 2000), true);
+    assert.equal(tooManyBuckets('10m', week, 2000), false);
+    // A week in five minute buckets is 2016 of them
+    assert.equal(tooManyBuckets('5m', week, 2015), true);
+    assert.equal(tooManyBuckets('5m', week, 2016), false);
+  });
+
+  it('never fails an automatic interval, one of at least so much, or one it cannot read', () => {
+    for (const interval of [undefined, '', 'auto', '>=1s', 'often']) assert.equal(tooManyBuckets(interval, week, 1), false, interval);
   });
 });

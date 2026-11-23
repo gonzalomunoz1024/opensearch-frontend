@@ -13,9 +13,11 @@ import { href, navigate } from '../../router';
 import { services } from '../../services';
 import type { RequestRecord } from '../../services/search';
 import type { VisInput } from '../request';
+import { visFailure, type VisFailure } from '../types';
 import {
   fetchTsvb,
   fetchTsvbTable,
+  TooMuchDataError,
   metricLabel,
   isSortable,
   ruleFor,
@@ -696,6 +698,7 @@ export function TsvbVis({
   onUiState,
   onTimeChange,
   onData,
+  onError,
 }: {
   vis: Vis;
   input: VisInput;
@@ -706,6 +709,8 @@ export function TsvbVis({
   onUiState?: (next: UiState) => void;
   onTimeChange?: (range: TimeRange) => void;
   onData?: (data: { requests: RequestRecord[]; tsvb?: TsvbData | TsvbTableData }) => void;
+  /** Told of a request the panel did not make, as the product's request handler fails: around the panel, which keeps what it drew */
+  onError?: (failure: VisFailure | undefined) => void;
 }) {
   const params = vis.params as TsvbParams;
   const kind = params.type ?? 'timeseries';
@@ -714,6 +719,8 @@ export function TsvbVis({
   const [loading, setLoading] = useState(true);
   const report = useRef(onData);
   report.current = onData;
+  const reportError = useRef(onError);
+  reportError.current = onError;
   const state = uiState ?? vis.uiState;
   const sort = kind === 'table' ? tableSortOf(state) : undefined;
   // A click on a column of a table keeps its sort under `table.sort`, as the product does
@@ -739,14 +746,17 @@ export function TsvbVis({
         setData(answer);
         setError(undefined);
         setLoading(false);
+        reportError.current?.(undefined);
         report.current?.({ requests: answer.requests, tsvb: 'series' in answer ? answer.series : answer.table });
       })
       .catch((failure) => {
         if ((failure as Error).name === 'AbortError') return;
-        // A request that could not be made (a query in DQL that cannot be read) or that OpenSearch
-        // refused is shown in the panel, as the product shows it, and nowhere else
-        setError(panelError(failure));
         setLoading(false);
+        // A panel the product would not ask for at all fails its request, told around the panel
+        // (the editor's "Search Error"); a request that could not be made (a query in DQL that
+        // cannot be read) or that OpenSearch refused is shown in the panel, and nowhere else
+        if (failure instanceof TooMuchDataError && reportError.current) reportError.current(visFailure('tsvb', failure));
+        else setError(panelError(failure));
       });
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -843,6 +843,40 @@ function histogram(plan: Plan, shift: number, inner: Dsl): Dsl {
   };
 }
 
+/** What the product says when a panel's interval would cut the time range into too many buckets */
+export const TOO_MUCH_DATA = 'Your query attempted to fetch too much data. Reducing the time range or changing the interval used usually fixes the issue.';
+
+/**
+ * A panel the product does not ask for, as its interval would cut the time range into more
+ * buckets than the setting metrics:max_buckets allows: the failure of its request, not of a search
+ */
+export class TooMuchDataError extends Error {
+  constructor() {
+    super(TOO_MUCH_DATA);
+    this.name = 'TooMuchDataError';
+  }
+}
+
+/** The most buckets a panel's interval may cut its time range into: the setting metrics:max_buckets */
+const maxBuckets = (): number => services.uiSettings.get<number>('metrics:max_buckets', 2000);
+
+/**
+ * Whether a panel's own interval cuts a time range into more buckets than allowed, as the product
+ * checks before it asks for anything: an automatic interval, or one of at least so much, never
+ * does, and nor does one it cannot read
+ */
+export function tooManyBuckets(interval: string | undefined, durationMs: number, max: number): boolean {
+  if (!interval || interval === 'auto' || interval.startsWith('>=')) return false;
+  const parsed = parseInterval(interval);
+  return parsed !== undefined && Math.floor(durationMs / parsed.ms) > max;
+}
+
+/** Fails a panel whose interval would cut the time range into too many buckets */
+function checkBuckets(params: TsvbParams, input: VisInput) {
+  const range = resolveTimeRange(input.time, { weekStart: services.weekStart() });
+  if (range && tooManyBuckets(params.interval, range.to.getTime() - range.from.getTime(), maxBuckets())) throw new TooMuchDataError();
+}
+
 async function planFor(params: TsvbParams, series: TsvbSeries | undefined, input: VisInput): Promise<Plan> {
   const override = Boolean(series?.override_index_pattern);
   const index = (override && series?.series_index_pattern) || params.index_pattern || params.default_index_pattern || '';
@@ -1098,6 +1132,7 @@ async function fetchAnnotations(
 }
 
 export async function fetchTsvb(params: TsvbParams, input: VisInput, signal?: AbortSignal): Promise<TsvbData> {
+  checkBuckets(params, input);
   const requests: RequestRecord[] = [];
   const shown = (params.series ?? []).filter((series) => !series.hidden);
   const fetched = await Promise.all(shown.map((series) => fetchSeries(params, series, input, requests, signal)));
@@ -1150,6 +1185,7 @@ export function tableSort(params: TsvbParams, sort: TsvbTableSort | undefined): 
 export async function fetchTsvbTable(params: TsvbParams, input: VisInput, signal?: AbortSignal, sort?: TsvbTableSort): Promise<TsvbTableData> {
   // A table that groups by no field has no rows, and says it has no data, as the product's does
   // while its group-by field is still to be chosen
+  checkBuckets(params, input);
   if (!params.pivot_id) return { rows: [], requests: [] };
   const requests: RequestRecord[] = [];
   // Every series asks for the rows in the same order, so that they make the same rows

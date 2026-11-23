@@ -458,7 +458,8 @@ export function VisEditor({ savedId }: { savedId?: string }) {
           onApply={(params) => writeApp({ vis: { aggs: applied.aggs, params, title: saved.title, type: saved.type } })}
           onPending={setTsvbPending}
           chart={
-            // A TSVB panel shows its own failures in its body, with no toast
+            // A TSVB panel shows the failures of its searches in its body, with no toast; one it
+            // does not ask for at all (too many buckets) fails as the original's "Search Error"
             <Visualization
               vis={shown}
               input={input}
@@ -472,6 +473,7 @@ export function VisEditor({ savedId }: { savedId?: string }) {
                 lastData.current = data;
                 setTsvbData(data.tsvb);
               }}
+              onError={(failure) => failure && showSearchError(failure.original)}
             />
           }
           data={tsvbData}
