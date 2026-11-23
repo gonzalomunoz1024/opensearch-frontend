@@ -135,6 +135,17 @@ const formatOf = (file: string) => {
   return extension === 'ttf' ? 'truetype' : extension;
 };
 
+/**
+ * A text as the inside of a quoted CSS string, which it cannot end, nor the url() or the <style>
+ * element the string is written in: every character but a letter, a digit and _ - . / : ~ % is
+ * written as a CSS escape (a backslash, its code point in hexadecimal, and the space that ends the
+ * escape), which a browser reads back as that character. The base path is written this way; the
+ * original writes it into its fonts' rules as it is (src/core/server/rendering/views/fonts.tsx).
+ */
+export function cssString(text: string): string {
+  return text.replace(/[^\w\-./:~%]/gu, (character) => `\\${(character.codePointAt(0) ?? 0).toString(16)} `);
+}
+
 /** The @font-face rules of every family, with their files under `${uiPublicUrl}/fonts` */
 export function fontFaceRules(uiPublicUrl: string, families: readonly FontFamily[] = FONT_FAMILIES): string {
   return families
@@ -143,7 +154,7 @@ export function fontFaceRules(uiPublicUrl: string, families: readonly FontFamily
         const src = sources
           .map((source) =>
             'file' in source
-              ? `url('${uiPublicUrl}/fonts/${source.file}') format('${formatOf(source.file)}')`
+              ? `url('${cssString(`${uiPublicUrl}/fonts/${source.file}`)}') format('${formatOf(source.file)}')`
               : `local('${source.local}')`
           )
           .join(', ');

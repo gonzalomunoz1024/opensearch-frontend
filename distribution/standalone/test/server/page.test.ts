@@ -11,6 +11,7 @@ import { describe, it } from 'node:test';
 import { createApp } from '../../server/app';
 import { loadConfig } from '../../server/config';
 import { silentLogger } from '../../server/logger';
+import { cssString, fontFaceRules, fontFiles } from '../../server/fonts';
 import { cspNonce, renderPage, type PageOptions } from '../../server/static';
 import { fakeOpenSearch } from './fake_opensearch';
 
@@ -159,5 +160,91 @@ describe("the page's icons", () => {
     for (const name of names) {
       assert.ok(readFileSync(join(STATIC_FAVICONS, name)).equals(readFileSync(join(FORK_FAVICONS, name))), name);
     }
+  });
+});
+
+/*
+ * What a browser reads in a page: its elements in order, the addresses its attributes hold, those of
+ * the fonts' rules in its style element, and its boot data. Every '<' of the page starts an element
+ * when nothing a setting holds is left unescaped.
+ */
+const elementsOf = (html: string) => [...html.matchAll(/<(\/?[a-z!][a-z0-9-]*)/gi)].map((match) => match[1]);
+const DECODED: Readonly<Record<string, string>> = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#x27;': "'" };
+const addressesOf = (html: string) =>
+  [...html.matchAll(/ (?:href|src|content)="([^"]*)"/g)].map((match) =>
+    (match[1] ?? '').replace(/&(?:amp|lt|gt|quot|#x27);/g, (entity) => DECODED[entity] ?? entity)
+  );
+const writtenFontAddressesOf = (html: string) => [...html.matchAll(/url\('([^']*)'\)/g)].map((match) => match[1] ?? '');
+/** What a CSS string may hold: the usual characters of a path, and escapes that end with a space */
+const CSS_STRING = /^(?:[\w\-./:~%]|\\[0-9a-f]{1,6} )*$/;
+const fontAddressesOf = (html: string) =>
+  writtenFontAddressesOf(html).map((written) =>
+    written.replace(/\\([0-9a-f]{1,6}) ?/gi, (_, hex: string) => String.fromCodePoint(parseInt(hex, 16)))
+  );
+const bootDataOf = (html: string): unknown =>
+  JSON.parse(/<script id="boot-data" type="application\/json">([^<]*)<\/script>/.exec(html)?.[1] ?? 'null');
+
+/** Base paths that would end an attribute, a CSS string or url(), the style element or the boot data */
+const HOSTILE_BASE_PATHS = [
+  '/a"b',
+  "/a'b",
+  '/a<b',
+  '/a)b',
+  '/a>b&amp;c',
+  '/a\\b',
+  '/a\nb',
+  '/café/\u{1F600}',
+  '/x"y\'z<w)v</style></script><img src=x onerror=alert(1)>',
+];
+
+describe('the base path in the page', () => {
+  const plain = page({ basePath: '/base', bootData: { basePath: '/base' } });
+  const under = (basePath: string) => (address: string) =>
+    address.startsWith('/base/') ? `${basePath}${address.slice('/base'.length)}` : address;
+
+  it('is written as it is when it holds only the usual characters of a path', () => {
+    const html = page({ basePath: '/base/sub-path_1.2~x', bootData: {} });
+    assert.ok(html.includes('<link rel="shortcut icon" href="/base/sub-path_1.2~x/ui/favicons/favicon.ico">'));
+    assert.ok(html.includes("url('/base/sub-path_1.2~x/ui/fonts/inter_ui/Inter-UI-Thin-BETA.woff2') format('woff2')"));
+    assert.ok(html.includes('<script src="/base/sub-path_1.2~x/assets/app.js" defer></script>'));
+  });
+
+  for (const basePath of HOSTILE_BASE_PATHS) {
+    it(`cannot end an attribute, the style element, a font's address or the boot data: ${JSON.stringify(basePath)}`, () => {
+      const html = page({ basePath, bootData: { basePath } });
+      // the same elements, in the same order, as under a plain base path
+      assert.deepEqual(elementsOf(html), elementsOf(plain));
+      // and every address they hold is the one under the base path, as a browser reads it back
+      assert.deepEqual(addressesOf(html), addressesOf(plain).map(under(basePath)));
+      assert.deepEqual(fontAddressesOf(html), fontAddressesOf(plain).map(under(basePath)));
+      assert.equal(fontAddressesOf(html).length, fontFiles().length);
+      for (const written of writtenFontAddressesOf(html)) assert.match(written, CSS_STRING);
+      assert.deepEqual(bootDataOf(html), { basePath });
+    });
+  }
+
+  it('is written in the fonts\' rules as CSS escapes, which leave no quote, bracket or "<" in the string', () => {
+    assert.equal(cssString("/a'b"), '/a\\27 b');
+    assert.equal(cssString('/a"b)c<d\\e\nf'), '/a\\22 b\\29 c\\3c d\\5c e\\a f');
+    assert.equal(cssString('/café/\u{1F600}'), '/caf\\e9 /\\1f600 ');
+    assert.equal(cssString('/base/sub-path_1.2~x:%41'), '/base/sub-path_1.2~x:%41');
+    assert.equal(/x'|<\/style/.test(fontFaceRules("/x'y)z</style>")), false);
+  });
+
+  it('cannot break the page the server sends', async () => {
+    const basePath = '/x"y\'z<w)v</style></script><b>';
+    // each page has a nonce of its own
+    const nonceless = (answer?: Answer) => (answer?.body ?? '').replace(/(<meta name="csp-nonce" content=")[^"]*/, '$1');
+    const [hostileAnswer] = await served(['/app/home'], { SERVER_BASEPATH: basePath });
+    const [usualAnswer] = await served(['/app/home'], { SERVER_BASEPATH: '/base' });
+    assert.equal(hostileAnswer?.status, 200);
+    const hostile = nonceless(hostileAnswer);
+    const usual = nonceless(usualAnswer);
+    assert.deepEqual(elementsOf(hostile), elementsOf(usual));
+    assert.deepEqual(addressesOf(hostile), addressesOf(usual).map(under(basePath)));
+    assert.deepEqual(fontAddressesOf(hostile), fontAddressesOf(usual).map(under(basePath)));
+    const data = bootDataOf(hostile) as { basePath?: string; libraries?: { vega?: string } };
+    assert.equal(data.basePath, basePath);
+    assert.ok(data.libraries?.vega?.startsWith(`${basePath}/assets/vega.`));
   });
 });

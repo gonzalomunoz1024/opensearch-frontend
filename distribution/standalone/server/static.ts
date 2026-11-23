@@ -72,8 +72,9 @@ export function serveStatic(
   return { headers, body: readFileSync(file) };
 }
 
-const escapeHtml = (text: string) =>
-  text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+/** The characters of a text an element or a quoted attribute cannot hold as they are, as React writes them */
+const ENTITIES: Readonly<Record<string, string>> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#x27;' };
+const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (character) => ENTITIES[character] ?? character);
 
 export interface PageOptions {
   basePath: string;
@@ -244,13 +245,16 @@ export function contentSecurityPolicy(map?: MapConfig, settings: Partial<CspSett
 }
 
 export function renderPage({ basePath, build, title, dark, bootData, nonce }: PageOptions): string {
+  // Whatever the base path holds, it cannot end the script element of the boot data (no '<' is
+  // left in it), an attribute (escaped as React escapes one) or the style element (see cssString)
   const data = JSON.stringify(bootData).replace(/</g, '\\u003c');
+  const at = (path: string) => escapeHtml(`${basePath}${path}`);
   // Where the original writes them: the nonce after the viewport, and on its own <style> elements
   const nonceMeta = nonce === undefined ? '' : `\n<meta name="csp-nonce" content="${escapeHtml(nonce)}">`;
   const nonceAttribute = nonce === undefined ? '' : ` nonce="${escapeHtml(nonce)}"`;
   // The favicons of the fork (made from distribution/branding/brand.json), named as the original's
   // template names them (src/core/server/rendering/views/template.tsx)
-  const favicons = `${basePath}/ui/favicons`;
+  const favicons = at('/ui/favicons');
   return `<!doctype html>
 <html lang="en" class="${dark ? 'themeDark' : 'themeLight'}">
 <head>
@@ -267,12 +271,12 @@ export function renderPage({ basePath, build, title, dark, bootData, nonce }: Pa
 <style${nonceAttribute}>
 ${fontFaceRules(`${basePath}/ui`)}
 </style>
-<link rel="stylesheet" href="${basePath}/${build.assets.styles}">
+<link rel="stylesheet" href="${at(`/${build.assets.styles}`)}">
 </head>
 <body>
-<div id="root"><div class="bootScreen"><img src="${basePath}/logo.svg" alt="" width="64" height="64"><p>Loading ${escapeHtml(title)}</p></div></div>
+<div id="root"><div class="bootScreen"><img src="${at('/logo.svg')}" alt="" width="64" height="64"><p>Loading ${escapeHtml(title)}</p></div></div>
 <script id="boot-data" type="application/json">${data}</script>
-<script src="${basePath}/${build.assets.script}" defer></script>
+<script src="${at(`/${build.assets.script}`)}" defer></script>
 </body>
 </html>
 `;
