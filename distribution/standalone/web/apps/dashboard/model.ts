@@ -9,6 +9,7 @@
 import type { SavedObjectReference } from '../../../common/saved_objects';
 import { parseSearchSource, serializeSearchSource } from '../../lib/search_source';
 import type { Filter, Query, RefreshInterval } from '../../lib/types';
+import { encodeState } from '../../lib/url';
 
 export const GRID_COLUMNS = 48;
 export const ROW_HEIGHT = 20;
@@ -101,6 +102,19 @@ interface StoredPanel {
   row?: number;
   size_x?: number;
   size_y?: number;
+  // Before 6.4 a saved search's columns and sort were beside the panel's settings
+  columns?: unknown;
+  sort?: unknown;
+}
+
+/**
+ * The form of a panel saved before 6.4, told apart as the original does when it opens a dashboard
+ * (migratePanelsTo730): by its loose row, then by its version.
+ */
+function oldForm(panel: StoredPanel): 'loose' | '6.1' | '6.2' | '6.3' | undefined {
+  if (panel.row !== undefined) return 'loose';
+  const minor = /^6\.([123])\.\d+$/.exec(panel.version ?? '')?.[1];
+  return minor === '1' ? '6.1' : minor === '2' ? '6.2' : minor === '3' ? '6.3' : undefined;
 }
 
 const parse = <T>(text: string | undefined, fallback: T): T => {
@@ -145,15 +159,31 @@ export function dashboardFromSavedObject(object: {
     if (!type || !id) return;
     const panelIndex = String(panel.panelIndex ?? index + 1);
     const grid = panel.gridData;
+    const form = oldForm(panel);
+    // 6.1 and 6.2 kept their grid in 12 columns, a row five of today's: the original brings them
+    // to today's cells (the height always by 5 there: it never hands the migration the margins)
+    const [across, down] = form === '6.1' || form === '6.2' ? [4, 5] : [1, 1];
+    const cells = (value: number | undefined, fallback: number, by: number) => (value === undefined ? fallback : Number(value) * by);
     const gridData = grid
-      ? gridItem(panelIndex, Number(grid.x ?? 0), Number(grid.y ?? 0), Number(grid.w ?? DEFAULT_PANEL.w), Number(grid.h ?? DEFAULT_PANEL.h))
+      ? gridItem(panelIndex, cells(grid.x, 0, across), cells(grid.y, 0, down), cells(grid.w, DEFAULT_PANEL.w, across), cells(grid.h, DEFAULT_PANEL.h, down))
       : gridItem(panelIndex, ((panel.col ?? 1) - 1) * 4, ((panel.row ?? 1) - 1) * 5, (panel.size_x ?? 6) * 4, (panel.size_y ?? 3) * 5);
+    // Before 6.2 a panel had no settings of its own; before 6.4 a saved search's columns and sort
+    // were beside them, and the original moves them in
+    const settings = form === 'loose' || form === '6.1' ? {} : (panel.embeddableConfig ?? {});
+    const embeddableConfig =
+      form && (panel.columns || panel.sort)
+        ? {
+            ...settings,
+            ...(panel.columns !== undefined ? { columns: panel.columns } : {}),
+            ...(panel.sort !== undefined ? { sort: panel.sort } : {}),
+          }
+        : settings;
     panels.push({
       panelIndex,
       gridData,
       type,
       id,
-      embeddableConfig: panel.embeddableConfig ?? {},
+      embeddableConfig,
       ...(panel.title !== undefined ? { title: panel.title } : {}),
     });
   });
@@ -287,9 +317,13 @@ export function panelsFromUrl(value: unknown): PanelState[] | undefined {
   return panels;
 }
 
-/** Whether two lists of panels differ in what is saved of them */
+/**
+ * Whether two lists of panels differ in what is saved of them. The order of the keys of a panel's
+ * settings is not a difference: the address sorts them, so the panels read back from it while a
+ * dashboard is edited would else differ from the saved ones before anything was changed.
+ */
 export function panelsDiffer(a: PanelState[], b: PanelState[]): boolean {
-  return JSON.stringify(panelsToUrl(a)) !== JSON.stringify(panelsToUrl(b));
+  return encodeState(panelsToUrl(a)) !== encodeState(panelsToUrl(b));
 }
 
 /** The id the original gives a panel it adds: a random UUID */
