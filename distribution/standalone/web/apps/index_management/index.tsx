@@ -35,6 +35,7 @@ import { ROUTES, SNAPSHOT_MANAGEMENT_PATH } from './routes';
 import { ComposableTemplateDetail, TemplateDetail } from './template_pages';
 import { ComposableTemplates, Templates } from './templates';
 import '../../styles/index_management.css';
+import '../../styles/index_management_indexes.css';
 
 export { startJobs } from './job_handlers';
 

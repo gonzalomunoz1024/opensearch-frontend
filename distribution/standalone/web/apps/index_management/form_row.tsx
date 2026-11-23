@@ -1,0 +1,91 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/*
+ * The plugin's row of a form: a field under its label, with what the label means above the field or
+ * under it, 400 px wide at most; or, `across`, the field beside its title and what the title means,
+ * as the theme's described form group puts a setting of what is being edited.
+ */
+
+import type { ReactNode } from 'react';
+import { cx } from '../../components/basic';
+
+export interface FormRowProps {
+  /** A title, drawn as the plugin's small heading */
+  title?: ReactNode;
+  /** A label, drawn as the theme's label of a field, for a row without a title */
+  label?: ReactNode;
+  help?: ReactNode;
+  /** Where the help is: above the field (the plugin's default), or under it */
+  helpAt?: 'top' | 'bottom';
+  optional?: boolean;
+  error?: ReactNode;
+  /** The field beside its title, as an edit of what there is shows it */
+  across?: boolean;
+  fullWidth?: boolean;
+  testId?: string;
+  className?: string;
+  children?: ReactNode;
+}
+
+function Optional({ optional }: { optional?: boolean }) {
+  return optional ? <i> – optional</i> : null;
+}
+
+export function FormRow({
+  title,
+  label,
+  help,
+  helpAt = 'top',
+  optional,
+  error,
+  across,
+  fullWidth,
+  testId,
+  className,
+  children,
+}: FormRowProps) {
+  if (across) {
+    return (
+      <div className={cx('ismDescribed', className)}>
+        <div className="ismDescribed__text">
+          <h3 className="ismDescribed__title">
+            {title ?? label}
+            <Optional optional={optional} />
+          </h3>
+          {help && <div className="ismDescribed__help">{help}</div>}
+        </div>
+        <div className="ismDescribed__fields">
+          {children && (
+            <div className={cx('ismFormRow', fullWidth && 'ismFormRow--full')} data-test-subj={testId}>
+              <div className="ismFormRow__field">{children}</div>
+              {error && <div className="ismFormRow__error">{error}</div>}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className={cx('ismFormRow', fullWidth && 'ismFormRow--full', className)} data-test-subj={testId}>
+      {title ? (
+        <div className="ismFormRow__label">
+          <h3 className="ismFormRow__title">
+            {title}
+            <Optional optional={optional} />
+          </h3>
+        </div>
+      ) : label ? (
+        <div className="ismFormRow__label">
+          {label}
+          <Optional optional={optional} />
+        </div>
+      ) : null}
+      <div className="ismFormRow__field">
+        {help && helpAt === 'top' && <div className="ismFormRow__help ismFormRow__help--top">{help}</div>}
+        {children}
+      </div>
+      {error && <div className="ismFormRow__error">{error}</div>}
+      {help && helpAt === 'bottom' && <div className="ismFormRow__help">{help}</div>}
+    </div>
+  );
+}
