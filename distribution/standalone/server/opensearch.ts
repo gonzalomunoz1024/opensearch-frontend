@@ -125,7 +125,11 @@ export class OpenSearchClient {
       } catch (error) {
         lastError = error as Error;
         // What reached a host and timed out there is not sent to another: it may have been done
-        if ((error as NodeJS.ErrnoException).code === 'ETIMEDOUT') break;
+        if ((error as NodeJS.ErrnoException).code === 'ETIMEDOUT') {
+          // The next request starts with the host after it, or each would wait for this one
+          this.next = (this.next + attempt + 1) % this.hosts.length;
+          break;
+        }
       }
     }
     throw new OpenSearchUnavailableError(
