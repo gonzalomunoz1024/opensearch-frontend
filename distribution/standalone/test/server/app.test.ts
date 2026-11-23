@@ -134,6 +134,37 @@ describe('an address the server cannot read as a path of its own', () => {
   });
 });
 
+describe('an answer with a header that cannot be sent', () => {
+  it('is a failure the request is told of, not a connection that is cut', async () => {
+    // A short URL whose stored address holds characters no header may carry
+    const opensearch = await fakeOpenSearch((path) =>
+      path.startsWith('/.kibana/_doc/url%3Aodd')
+        ? {
+            found: true,
+            _id: 'url:odd',
+            _seq_no: 1,
+            _primary_term: 1,
+            _source: { type: 'url', url: { url: '/app/home/‮\u0000x', accessCount: 0 }, references: [] },
+          }
+        : undefined
+    );
+    const server = await run(opensearch.url);
+    try {
+      const answer = await ask(server.url, 'GET', '/goto/odd');
+      assert.equal(answer.status, 500);
+      assert.deepEqual(JSON.parse(answer.body), {
+        statusCode: 500,
+        error: 'Internal Server Error',
+        message: 'An internal server error occurred.',
+      });
+      assert.deepEqual(server.errors, ['An answer could not be sent']);
+    } finally {
+      await server.stop();
+      await opensearch.close();
+    }
+  });
+});
+
 describe('the page while OpenSearch does not answer', () => {
   it('comes at once: it does not wait for the time limit of a request', async () => {
     const opensearch = await fakeOpenSearch('hang');

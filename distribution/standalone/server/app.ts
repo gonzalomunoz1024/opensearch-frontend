@@ -449,7 +449,10 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
       })
       .catch((error: unknown) => {
         logger.error('An answer could not be sent', { error: String(error) });
-        res.destroy();
+        // A header that cannot be sent (an address to go to with a character no header may
+        // hold) leaves nothing sent: the request is answered as a failure, not cut off
+        if (res.headersSent) res.destroy();
+        else sendReply(req, res, { status: 500, body: errorBody(500, 'An internal server error occurred.') });
       });
   });
   // Longer than the usual 60 seconds a load balancer keeps an idle connection, so that it is the

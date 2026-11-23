@@ -12,15 +12,20 @@ export interface FakeOpenSearch {
   close(): Promise<void>;
 }
 
-/** Notes each request and answers it with an empty object, or never answers */
-export async function fakeOpenSearch(answer: 'answer' | 'hang' = 'answer'): Promise<FakeOpenSearch> {
+/**
+ * Notes each request and answers it with an empty object, or with what the function makes of
+ * its path, or never answers
+ */
+export async function fakeOpenSearch(
+  answer: 'answer' | 'hang' | ((path: string) => unknown) = 'answer'
+): Promise<FakeOpenSearch> {
   const seen: string[] = [];
   const sockets = new Set<Socket>();
   const server = http.createServer((req, res) => {
     seen.push(`${req.method} ${req.url}`);
     if (answer === 'hang') return;
     res.writeHead(200, { 'content-type': 'application/json' });
-    res.end('{}');
+    res.end(JSON.stringify((typeof answer === 'function' ? answer(req.url ?? '') : undefined) ?? {}));
   });
   server.on('connection', (socket) => {
     sockets.add(socket);
