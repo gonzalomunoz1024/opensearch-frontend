@@ -258,11 +258,12 @@
 }
 
 /* The flyouts of the console: small, under the header, with the original's spacing, over the
-   theme's scrim (a dimming, then a blur once the flyout is up) */
+   theme's scrim (a dimming, then a blur once the flyout is up). The mask stacks as the original's
+   (z-index 1000, after the page), so it covers the splitter and the request buttons too. */
 .dvtMask {
   position: fixed;
   inset: var(--header-height) 0 0;
-  z-index: 950;
+  z-index: 1000;
 }
 
 .dvtMask::before,
