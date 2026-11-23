@@ -29,6 +29,15 @@
   outline-offset: 2px;
 }
 
+/* In the dark theme a row pointed at or with the focus is a step lighter than the panel's grey,
+   as the original's */
+:root.themeDark .shlShare__menu .atlContextMenu__item:hover,
+:root.themeDark .shlShare__menu .atlContextMenu__item:focus,
+:root.themeDark .shlShare__menu .atlContextMenu__back:hover,
+:root.themeDark .shlShare__menu .atlContextMenu__back:focus {
+  background: var(--color-surface-tertiary);
+}
+
 /* A panel that makes a link: its rows 16 px apart, and 16 px round them */
 .shlShare__form {
   padding: var(--space-4);
@@ -80,12 +89,14 @@
   cursor: not-allowed;
 }
 
+/* 3 px under the top of its row, as the original's */
 .shlShare__radio,
 .shlShare__check {
   flex: none;
+  align-self: flex-start;
   width: 16px;
   height: 16px;
-  margin: 0 var(--space-2) 0 0;
+  margin: 3px var(--space-2) 0 0;
   border: 1px solid var(--color-border);
   background: var(--color-surface) 50% 50% no-repeat;
   cursor: inherit;
@@ -136,9 +147,18 @@
   display: block;
 }
 
+/* The original's question mark is the drawing itself, which takes the tint and the ring */
 .shlShare__tip:focus {
   outline: none;
+}
+
+.shlShare__tip:focus .atlIcon {
   background: var(--color-accent-callout-fill);
+}
+
+.shlShare__tip:focus-visible .atlIcon {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 /* The short URL: the compressed switch, its label and its tip in a row as high as the switch */
@@ -164,11 +184,19 @@
   border-color: var(--color-accent);
 }
 
-/* The original's small spinner before the label while the short URL is made */
+/* The original's ring of the focus, 2 px off what has it: the switch, the button and the panel */
+.shlShare .atlSwitch__track:focus-visible,
+.shlShare__copyButton:focus-visible,
+.shlShare.atlPopover:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* The original's small spinner before the label while the short URL is made: 8 px, on the line */
 .shlShare__spinner {
-  width: 12px;
-  height: 12px;
-  vertical-align: middle;
+  width: 8px;
+  height: 8px;
+  vertical-align: baseline;
 }
 
 /* The button that copies, 16 px under the rest: the theme's secondary button, its text regular */
@@ -178,6 +206,12 @@
 
 .shlShare__copyButton {
   border: 1px solid transparent;
+}
+
+/* Pointed at or with the focus, the theme's secondary button is a step darker, as there */
+.shlShare__copyButton:hover:not(:disabled),
+.shlShare__copyButton:focus-visible {
+  background-color: var(--color-border-light);
 }
 
 .shlShare__copyText {

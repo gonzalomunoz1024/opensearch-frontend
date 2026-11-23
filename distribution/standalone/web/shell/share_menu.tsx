@@ -378,10 +378,10 @@ function UrlPanel({
               className={cx('shlShare__choice', option.disabled && 'shlShare__choice--disabled')}
               data-test-subj={option.testId}
             >
+              {/* No name, as the original's: each is a stop of Tab, and the arrows do not move between them */}
               <input
                 type="radio"
                 className="shlShare__radio"
-                name={groupId}
                 checked={kind === option.id}
                 disabled={option.disabled}
                 onChange={() => setKind(option.id)}
