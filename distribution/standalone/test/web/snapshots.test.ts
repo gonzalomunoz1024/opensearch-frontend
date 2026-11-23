@@ -3,6 +3,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import {
   HALF_HOURS,
   MIN_COUNT_ERROR,
@@ -60,6 +62,7 @@ import {
   zoneOffset,
   type SMPolicy,
 } from '../../web/apps/index_management/snapshot_model';
+import { CronSchedule, IndicesRepositoryInput } from '../../web/apps/index_management/snapshot_parts';
 import { policyChannel } from '../../web/apps/index_management/snapshot_policies';
 import { createServices, services, type BootData } from '../../web/services';
 
@@ -625,5 +628,37 @@ describe('the head of a list of Snapshot Management', () => {
     assert.ok(start >= 0, '.ismListPanel__heading has a rule');
     const rule = sheet.slice(start, sheet.indexOf('}', start));
     assert.equal(/min-width:\s*0/.test(rule), false);
+  });
+});
+
+describe('the combo boxes of Snapshot Management', () => {
+  it('are as tall as the fields beside them, as the plugin\'s (32 px), not of the small size', () => {
+    const none = () => undefined;
+    const indices = renderToStaticMarkup(
+      createElement(IndicesRepositoryInput, {
+        options: [],
+        onSearch: none,
+        indices: [],
+        onIndices: none,
+        repositories: [],
+        repository: '',
+        onRepository: none,
+      })
+    );
+    const zone = renderToStaticMarkup(
+      createElement(CronSchedule, {
+        title: 'Snapshot frequency',
+        frequencyType: 'daily',
+        onFrequencyType: none,
+        expression: '0 20 * * *',
+        onExpression: none,
+        timezone: 'UTC',
+        onTimezone: none,
+      })
+    );
+    for (const markup of [indices, zone]) {
+      assert.match(markup, /atlCombo/);
+      assert.equal(/atlCombo--s\b/.test(markup), false);
+    }
   });
 });
