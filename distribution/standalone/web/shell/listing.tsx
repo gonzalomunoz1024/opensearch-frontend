@@ -6,15 +6,16 @@
  * search found, with the selected ones deleted after a confirmation.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button, CallOut, Link, cx } from '../components/basic';
 import { Icon, type IconName } from '../components/icon';
 import { ConfirmModal, ContextMenu, Popover } from '../components/overlay';
+import { Pagination } from '../components/table';
 import { formatDate } from '../lib/dates';
 import { services } from '../services';
 import { errorMessage } from '../services/http';
 import type { SavedObject } from '../services/saved_objects';
-import { compareAsOriginal, pageButtons, pageSizeOptions } from './listing_model';
+import { compareAsOriginal, pageSizeOptions } from './listing_model';
 import '../styles/listing.css';
 
 export interface ListedAttributes {
@@ -67,6 +68,11 @@ export interface ListingProps {
   deleteErrors: { title: string; per: 'first' | 'each' };
   /** Which of the objects found are listed: all of them unless it says otherwise */
   keep?: (object: Listed) => boolean;
+  /**
+   * Whose title the original draws as a button and not as a link: what another application opens.
+   * It stays a link here, and stands as the original's where it takes two lines.
+   */
+  titleAsButton?: (object: Listed) => boolean;
 }
 
 interface Sort {
@@ -94,6 +100,7 @@ export function Listing({
   initialFilter = '',
   deleteErrors,
   keep,
+  titleAsButton,
 }: ListingProps) {
   const [filter, setFilter] = useState(initialFilter);
   const [found, setFound] = useState<{ total: number; objects: Listed[] }>();
@@ -113,6 +120,7 @@ export function Listing({
   const fieldKey = fields.join(',');
   const searchFieldKey = searchFields.join(',');
   const started = useRef(false);
+  const tableId = useId();
 
   // The original waits 300ms after the last key before it searches; the first list comes at once
   useEffect(() => {
@@ -165,7 +173,11 @@ export function Listing({
         name: 'Title',
         value: (object) => object.attributes.title ?? '',
         render: (object) => (
-          <Link to={linkTo(object)} testId={titleTestId(object.attributes.title ?? '')}>
+          <Link
+            to={linkTo(object)}
+            testId={titleTestId(object.attributes.title ?? '')}
+            className={titleAsButton?.(object) ? 'shlListing__buttonTitle' : undefined}
+          >
             {object.attributes.title ?? ''}
           </Link>
         ),
@@ -180,7 +192,7 @@ export function Listing({
           object.updated_at ? formatDate(new Date(object.updated_at), dateFormat, services.timeZone()) : '',
       },
     ],
-    [linkTo, titleTestId, typeColumn, dateFormat]
+    [linkTo, titleTestId, typeColumn, dateFormat, titleAsButton]
   );
 
   const objects = useMemo(() => found?.objects ?? [], [found]);
@@ -241,7 +253,8 @@ export function Listing({
 
   const table = (
     <div className={cx('shlListing__tableWrap', fetching && 'shlListing__tableWrap--loading')}>
-      <table className="shlListing__table" data-test-subj="itemsInMemTable">
+      {/* The pages under it name it as what they turn, and hand it the focus when they do */}
+      <table id={tableId} tabIndex={-1} className="shlListing__table" data-test-subj="itemsInMemTable">
         <caption className="shlListing__caption">
           This table contains {visible.length} rows out of {sorted.length} rows; Page {page + 1} of {Math.max(1, pages)}.
         </caption>
@@ -352,6 +365,8 @@ export function Listing({
             setPageSize(size);
             changePage(0);
           }}
+          controls={tableId}
+          arrowNames="plain"
         />
       )}
     </div>
@@ -443,8 +458,10 @@ export function Listing({
   );
 }
 
-/** What a list with nothing in it says instead, as the original's empty prompt lays it out */
-/** The original's table pagination: "Rows per page" and its sizes, and up to five page buttons */
+/**
+ * The original's table pagination, "Rows per page" with its sizes and up to five page buttons: the
+ * kit's, under the name the pages that list saved objects know it by
+ */
 export function TablePagination({
   page,
   pages,
@@ -452,6 +469,8 @@ export function TablePagination({
   sizes,
   onPage,
   onPageSize,
+  controls,
+  arrowNames,
 }: {
   page: number;
   pages: number;
@@ -459,90 +478,27 @@ export function TablePagination({
   sizes: number[];
   onPage: (page: number) => void;
   onPageSize: (size: number) => void;
+  /** The id of the table the pages turn, which takes the focus when they do */
+  controls?: string;
+  /** 'plain' where the original's own translations name the arrows: the lists of saved objects */
+  arrowNames?: 'numbered' | 'plain';
 }) {
-  const [open, setOpen] = useState(false);
   return (
-    <div className="shlListing__pagination">
-      <Popover
-        open={open}
-        onClose={() => setOpen(false)}
-        position="upRight"
-        button={
-          <button
-            type="button"
-            className="shlListing__perPage"
-            data-test-subj="tablePaginationPopoverButton"
-            onClick={() => setOpen((was) => !was)}
-          >
-            <span>Rows per page: {pageSize}</span>
-            <Icon name="chevronDown" />
-          </button>
-        }
-      >
-        <ContextMenu
-          onDone={() => setOpen(false)}
-          panels={[
-            {
-              id: 'sizes',
-              items: sizes.map((size) => ({
-                label: `${size} rows`,
-                icon: size === pageSize ? 'check' : undefined,
-                testId: `tablePagination-${size}-rows`,
-                onClick: () => onPageSize(size),
-              })),
-            },
-          ]}
-        />
-      </Popover>
-      <nav className="shlListing__pages">
-        <button
-          type="button"
-          className="shlListing__arrow"
-          disabled={page === 0}
-          aria-label="Previous page"
-          data-test-subj="pagination-button-previous"
-          onClick={() => onPage(page - 1)}
-        >
-          <Icon name="chevronLeft" />
-        </button>
-        <ul className="shlListing__pageList">
-          {pageButtons(page, pages).map((shown, index) =>
-            shown === 'gap' ? (
-              <li key={`gap${index}`} className="shlListing__gap" aria-label="Skipping pages">
-                …
-              </li>
-            ) : (
-              <li key={shown}>
-                <button
-                  type="button"
-                  className={cx('shlListing__page', shown === page && 'shlListing__page--current')}
-                  aria-label={`Page ${shown + 1} of ${pages}`}
-                  aria-current={shown === page || undefined}
-                  disabled={shown === page}
-                  data-test-subj={`pagination-button-${shown}`}
-                  onClick={() => onPage(shown)}
-                >
-                  {shown + 1}
-                </button>
-              </li>
-            )
-          )}
-        </ul>
-        <button
-          type="button"
-          className="shlListing__arrow"
-          disabled={page >= pages - 1}
-          aria-label="Next page"
-          data-test-subj="pagination-button-next"
-          onClick={() => onPage(page + 1)}
-        >
-          <Icon name="chevronRight" />
-        </button>
-      </nav>
-    </div>
+    <Pagination
+      className="shlListing__pagination"
+      page={page}
+      pages={pages}
+      onPage={onPage}
+      pageSize={pageSize}
+      pageSizes={sizes}
+      onPageSize={onPageSize}
+      controls={controls}
+      arrowNames={arrowNames}
+    />
   );
 }
 
+/** What a list with nothing in it says instead, as the original's empty prompt lays it out */
 export function ListingEmpty({
   icon,
   title,

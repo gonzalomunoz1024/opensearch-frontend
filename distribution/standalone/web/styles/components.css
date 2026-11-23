@@ -961,7 +961,7 @@ select.atlField {
 
 .atlPagination__size:hover,
 .atlPagination__size:focus {
-  background: color-mix(in srgb, var(--color-text-primary) var(--tint-opacity), transparent);
+  background: color-mix(in srgb, var(--color-text-secondary) var(--tint-opacity), transparent);
 }
 
 .atlPagination__total {
@@ -973,15 +973,20 @@ select.atlField {
   align-items: center;
 }
 
+/* As the original's list: its lines as high as its letters, and each page button at the middle of
+   its line, which is what puts "…" where the original has it beside them */
 .atlPagination__list {
   display: flex;
   align-items: baseline;
   margin: 0;
   padding: 0;
   list-style: none;
+  font-size: var(--font-size-s);
+  line-height: 1;
 }
 
-/* The arrows: round icon buttons in the colour of the text, at the first and the last page too */
+/* The arrows: round icon buttons in the colour of the text. As the original's, one that leads
+   nowhere (at the first and the last page) is drawn and answers the pointer as the other */
 .atlPagination__arrow {
   display: inline-flex;
   align-items: center;
@@ -989,22 +994,19 @@ select.atlField {
   width: 24px;
   height: 24px;
   padding: 0;
-  border: 1px solid transparent;
+  border: 0;
   border-radius: 50%;
   background: transparent;
   color: var(--color-text-primary);
   cursor: pointer;
 }
 
-.atlPagination__arrow:hover:not(:disabled),
-.atlPagination__arrow:focus:not(:disabled) {
-  background: color-mix(in srgb, var(--color-text-primary) var(--tint-opacity), transparent);
+.atlPagination__arrow:hover,
+.atlPagination__arrow:focus {
+  background: color-mix(in srgb, var(--color-text-secondary) var(--tint-opacity), transparent);
 }
 
-.atlPagination__arrow:disabled {
-  cursor: not-allowed;
-}
-
+/* A page: the original's empty button in the colour "text", with its soft fill under the pointer */
 .atlPagination__page {
   height: 32px;
   padding: 0 var(--space-2);
@@ -1014,25 +1016,35 @@ select.atlField {
   color: var(--color-text-secondary);
   font-size: var(--font-size-s);
   font-weight: var(--font-weight-medium);
+  line-height: 21px;
+  vertical-align: middle;
   cursor: pointer;
 }
 
 .atlPagination__page:hover,
 .atlPagination__page:focus {
+  background: color-mix(in srgb, var(--color-text-secondary) var(--tint-opacity), transparent);
   color: var(--color-text-primary);
 }
 
+/* The page shown is a button that cannot be pressed, and the pointer says so, as the original's */
 .atlPagination__page[aria-current="true"] {
   background: var(--color-surface-secondary);
   color: var(--color-text-primary);
-  cursor: default;
+  cursor: not-allowed;
+}
+
+/* As the original's: on a narrow window the arrows alone */
+@media (max-width: 767px) {
+  .atlPagination__list {
+    display: none;
+  }
 }
 
 .atlPagination__skip {
   height: 24px;
   padding: 6px var(--space-2) 0;
   color: var(--color-text-tertiary);
-  font-size: var(--font-size-s);
 }
 
 /* --- What floats: popovers, menus, dialogs, flyouts, toasts ---------------------------------- */
@@ -1123,7 +1135,7 @@ select.atlField {
    and not cutting what is in it, as the original's: the ring of an item's focus is drawn outside
    it, and its first item, when it has the focus, fills the corners */
 .atlPopover--placed {
-  min-width: 0;
+  min-width: 112px;
   max-height: none;
   overflow: visible;
   border-radius: var(--radius-lg);
@@ -1158,7 +1170,8 @@ select.atlField {
   cursor: pointer;
 }
 
-.atlContextMenu__back:hover {
+.atlContextMenu__back:hover,
+.atlContextMenu__back:focus {
   background: var(--color-surface-secondary);
 }
 
@@ -1196,7 +1209,17 @@ select.atlField {
   outline-offset: 2px;
 }
 
-.atlContextMenu__item:disabled {
+/* In the dark the panel is black and the theme fills the row under the pointer with the tertiary
+   surface, where in the light it takes the secondary one */
+:root.themeDark .atlContextMenu__back:hover,
+:root.themeDark .atlContextMenu__back:focus,
+:root.themeDark .atlContextMenu__item:hover,
+:root.themeDark .atlContextMenu__item:focus {
+  background: var(--color-surface-tertiary);
+}
+
+.atlContextMenu__item:disabled,
+:root.themeDark .atlContextMenu__item:disabled {
   color: var(--color-text-tertiary);
   cursor: not-allowed;
   background: none;

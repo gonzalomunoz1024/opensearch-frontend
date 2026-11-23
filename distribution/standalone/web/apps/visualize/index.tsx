@@ -53,6 +53,9 @@ const typeOf = (object: Listed): string => {
 const editUrl = (object: Listed) =>
   object.type === VIS_BUILDER_TYPE ? visBuilderEditUrl(object.id) : appUrl(VISUALIZE, `/edit/${encodeURIComponent(object.id)}`);
 
+// Such a one the original lists under a button, not a link
+const opensElsewhere = (object: Listed) => object.type === VIS_BUILDER_TYPE;
+
 const typeTitle = (type: string) => (type === VIS_BUILDER_TYPE ? VIS_BUILDER_TITLE : (visType(type)?.title ?? type));
 
 /** visualize:enableLabs: whether the kinds still being tried out (the input controls) are offered and listed */
@@ -87,6 +90,7 @@ function VisualizeList({ creating }: { creating: boolean }) {
         onCreate={() => setDialog(true)}
         linkTo={editUrl}
         titleTestId={visTitleTestId}
+        titleAsButton={opensElsewhere}
         editTo={editUrl}
         typeColumn={VIS_TYPE_COLUMN}
         padding="l"
