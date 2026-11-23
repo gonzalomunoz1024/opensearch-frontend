@@ -30,8 +30,8 @@ import { SearchBar } from '../../shell/search_bar';
 import { showSearchError } from '../../shell/search_error';
 import { addRecentlyAccessed, currentGlobalParam, useAutoRefresh, useBreadcrumbs, useGlobalState, writeStored } from '../../shell/state';
 import { DocDetails } from './doc_viewer';
-import { writeDiscoverState } from './app_state';
-import { DocTable, filterColumns, toggledColumns, type SortPair } from './doc_table';
+import { appStateParam, columnToggled, openingAppState, writeDiscoverState } from './app_state';
+import { DocTable, filterColumns, type SortPair } from './doc_table';
 import { DownloadCsv } from './download_csv';
 import { DocPage, ContextPage } from './doc_pages';
 import { filtersOf, valueFilter } from './filters';
@@ -54,7 +54,7 @@ interface SavedSearchAttributes {
 }
 
 interface UrlAppState {
-  discover?: { columns?: string[]; sort?: unknown; interval?: string; isDirty?: boolean; savedQuery?: string };
+  discover?: { columns?: string[]; sort?: unknown; interval?: string; isDirty?: boolean; savedQuery?: string; savedSearch?: string };
   metadata?: { indexPattern?: string; view?: string };
   // The shape of older addresses
   columns?: string[];
@@ -212,22 +212,34 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
   // The saved query loaded into the search bar; an older address keeps it beside the columns
   const savedQueryId = urlApp.discover?.savedQuery ?? urlApp.savedQuery;
 
+  // As the original's state keeps them: whether a column was taken out since the saved search was
+  // opened or saved, and the saved search the state started from
+  const isDirty = urlApp.discover?.isDirty === true;
+  const savedSearchId = typeof urlApp.discover?.savedSearch === 'string' ? urlApp.discover.savedSearch : undefined;
+
   const appParam = useCallback(
-    (changes: { columns?: string[]; sort?: SortPair[]; interval?: string; indexPattern?: string; savedQuery?: string }) =>
-      encodeState({
-        discover: {
-          columns: changes.columns ?? columns,
-          interval: changes.interval ?? interval,
-          isDirty: Boolean(savedId),
-          savedQuery: 'savedQuery' in changes ? changes.savedQuery : savedQueryId,
-          sort: changes.sort ?? sort,
-        },
-        metadata: { indexPattern: changes.indexPattern ?? indexPatternId, view: 'discover' },
+    (changes: {
+      columns?: string[];
+      sort?: SortPair[];
+      interval?: string;
+      indexPattern?: string;
+      savedQuery?: string;
+      isDirty?: boolean;
+      savedSearch?: string;
+    }) =>
+      appStateParam({
+        columns: changes.columns ?? stateColumns,
+        interval: changes.interval ?? interval,
+        isDirty: changes.isDirty ?? isDirty,
+        savedQuery: 'savedQuery' in changes ? changes.savedQuery : savedQueryId,
+        savedSearch: changes.savedSearch ?? savedSearchId,
+        sort: changes.sort ?? sort,
+        indexPattern: changes.indexPattern ?? indexPatternId,
       }),
-    [columns, interval, sort, indexPatternId, savedId, savedQueryId]
+    [stateColumns, interval, isDirty, savedQueryId, savedSearchId, sort, indexPatternId]
   );
   const writeApp = useCallback(
-    (changes: { columns?: string[]; sort?: SortPair[]; interval?: string; indexPattern?: string }) => {
+    (changes: { columns?: string[]; sort?: SortPair[]; interval?: string; indexPattern?: string; isDirty?: boolean }) => {
       writeDiscoverState({ _a: appParam(changes) });
     },
     [appParam]
@@ -277,48 +289,73 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
     };
   }, []);
 
+  // Each opening of the page: another saved search, or "Reset search" and "Open" reading the saved
+  // search again, as the original's opens Discover anew for them
+  const [openings, setOpenings] = useState(0);
+  const openKey = `${savedId ?? ''}\n${openings}`;
+  // The opening the saved search was read for
+  const [savedKey, setSavedKey] = useState<string>();
   useEffect(() => {
-    setSaved(undefined);
     setSavedError(undefined);
-    if (!savedId) return undefined;
+    if (!savedId) {
+      setSaved(undefined);
+      return undefined;
+    }
+    // The one shown, or saved a moment ago, stays while it is read again
+    setSaved((current) => (current?.id === savedId ? current : undefined));
     let live = true;
     services.savedObjects
       .get<SavedSearchAttributes>('search', savedId)
       .then((object) => {
         if (!live) return;
         setSaved(object);
+        setSavedKey(openKey);
         addRecentlyAccessed(appUrl(basePath, `/view/${encodeURIComponent(savedId)}`), object.attributes.title, savedId);
       })
       .catch((failure) => live && setSavedError((failure as Error).message));
     return () => {
       live = false;
     };
-  }, [savedId, basePath]);
+  }, [savedId, basePath, openKey]);
 
-  // As the original's loadSavedSearch: when the page opens, and another saved search with it, the
-  // query is chosen again (one with no text is the saved search's or the default, in the language
-  // chosen last), the address is given it in place, and its language becomes the user's. Nothing
-  // is searched before.
-  const openKey = savedId ?? '';
+  // As the original's loadSavedSearch: when the page opens, the query is chosen again (one with no
+  // text is the saved search's or the default, in the language chosen last) and its language
+  // becomes the user's; an address without the state gets the saved search's or the default one,
+  // as the original's preloaded state. The address is given them in place. Nothing is searched
+  // before.
   const [openedKey, setOpenedKey] = useState<string>();
   const opened = openedKey === openKey;
   useEffect(() => {
-    if (opened || (savedId !== undefined && saved?.id !== savedId)) return;
+    if (opened || (savedId !== undefined && (savedKey !== openKey || !saved))) return;
+    // The saved search this opening is for: none for Discover itself, whatever was shown before
+    const opening = savedId === undefined ? undefined : saved;
     const params = getLocation().hashParams;
+    // The default index pattern is still being read
+    if (params._a === undefined && !opening && patterns === undefined) return;
     const app = decodeState<UrlAppState>(params._a);
     const fromQ = decodeState<UrlQueryState>(params._q);
     const hasQueryState = params._q !== undefined || app.query !== undefined || app.filters !== undefined;
-    const source = saved ? parseSearchSource(saved.attributes.kibanaSavedObjectMeta?.searchSourceJSON, saved.references) : undefined;
+    const source = opening ? parseSearchSource(opening.attributes.kibanaSavedObjectMeta?.searchSourceJSON, opening.references) : undefined;
     const { query: chosen, filters: chosenFilters } = openingQueryState(
       { query: fromQ.query ?? app.query, filters: fromQ.filters ?? app.filters, hasQueryState },
       source,
       defaultQueryLanguage()
     );
+    const changes: { _a?: string; _q?: string } = {};
+    if (params._a === undefined) {
+      const state = openingAppState(
+        opening && { id: opening.id, columns: opening.attributes.columns, sort: opening.attributes.sort, indexId: source?.indexId },
+        services.uiSettings.get<string[]>('defaultColumns', ['_source']),
+        defaultId
+      );
+      changes._a = appStateParam(state);
+    }
     const next = encodeState({ filters: chosenFilters, query: chosen });
-    if (next !== params._q) writeDiscoverState({ _q: next });
+    if (next !== params._q) changes._q = next;
+    if (changes._a !== undefined || changes._q !== undefined) writeDiscoverState(changes);
     if (typeof chosen.language === 'string') writeStored('queryLanguage', chosen.language);
     setOpenedKey(openKey);
-  }, [opened, openKey, savedId, saved]);
+  }, [opened, openKey, savedId, saved, savedKey, patterns, defaultId]);
 
   const waitingForSaved = Boolean(savedId) && !saved && !savedError;
   useEffect(() => {
@@ -409,13 +446,7 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
   useAutoRefresh(global.refreshInterval, refresh);
 
   // --- What the page does ---
-  const toggleColumn = useCallback(
-    (name: string) => {
-      const next = toggledColumns(columns, name);
-      writeApp({ columns: next, sort: sort.filter(([field]) => next.includes(field) || field === indexPattern?.timeFieldName) });
-    },
-    [columns, sort, writeApp, indexPattern]
-  );
+  const toggleColumn = useCallback((name: string) => writeApp(columnToggled(columns, sort, name)), [columns, sort, writeApp]);
   const moveColumn = useCallback(
     (name: string, by: number) => {
       const from = columns.indexOf(name);
@@ -580,14 +611,30 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
       version: 1,
       kibanaSavedObjectMeta: { searchSourceJSON: source.searchSourceJSON },
     };
-    const object =
-      saved && !asNew
-        ? await services.savedObjects.update('search', saved.id, attributes, { references: source.references })
-        : await services.savedObjects.create('search', attributes, { references: source.references });
-    services.toasts.success(`Search “${title}” was saved`);
+    let object: SavedObject<SavedSearchAttributes>;
+    try {
+      object =
+        saved && !asNew
+          ? await services.savedObjects.update('search', saved.id, attributes, { references: source.references })
+          : await services.savedObjects.create('search', attributes, { references: source.references });
+    } catch (failure) {
+      // As the original's: the dialog stays open
+      services.toasts.danger(`Search '${title}' was not saved.`, (failure as Error).message);
+      return;
+    }
+    services.toasts.success(`Search '${title}' was saved`);
     setDialog(undefined);
     setSaved({ ...object, attributes, references: source.references });
-    navigateHash(`/view/${encodeURIComponent(object.id)}`, { _g: location.hashParams._g });
+    // As the original's: the state is clean and names the saved search. A search saved anew is gone
+    // to with a new entry of the history, the address keeping the time and this state; its query
+    // and filters are the saved search's, so it is not opened again.
+    const app = appParam({ isDirty: false, savedSearch: object.id });
+    if (object.id === savedSearchId && object.id === savedId) {
+      writeDiscoverState({ _a: app });
+      return;
+    }
+    setOpenedKey(`${object.id}\n${openings}`);
+    navigateHash(`/view/${encodeURIComponent(object.id)}`, { _g: location.hashParams._g, _a: app });
   };
 
   // --- What is drawn ---
@@ -644,7 +691,16 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
     <div className="dscPage" data-test-subj="discoverApp">
       <TopNav
         items={[
-          { id: 'new', label: 'New', to: appUrl(basePath, '/', { _g: currentGlobalParam() }), testId: 'discoverNewButton' },
+          {
+            id: 'new',
+            label: 'New',
+            // As the original's: a new search keeps the query and drops the page's filters
+            onClick: () => {
+              navigate(appUrl(basePath, '/', { _g: currentGlobalParam(), _q: { filters: [], query } }));
+              setOpenings((count) => count + 1);
+            },
+            testId: 'discoverNewButton',
+          },
           { id: 'save', label: 'Save', onClick: () => setDialog('save'), testId: 'discoverSaveButton' },
           { id: 'open', label: 'Open', onClick: () => setDialog('open'), testId: 'discoverOpenButton' },
           { id: 'share', label: 'Share', onClick: () => setDialog('share'), testId: 'shareTopNavButton' },
@@ -795,7 +851,10 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
                       className="dscResults__button"
                       aria-label="Reset search"
                       data-test-subj="resetSavedSearch"
-                      onClick={() => navigate(appUrl(basePath, `/view/${encodeURIComponent(saved.id)}`, { _g: currentGlobalParam() }))}
+                      onClick={() => {
+                        navigate(appUrl(basePath, `/view/${encodeURIComponent(saved.id)}`, { _g: currentGlobalParam() }));
+                        setOpenings((count) => count + 1);
+                      }}
                     >
                       <Icon name="refresh" />
                       Reset search
@@ -847,6 +906,7 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
           onChoose={(object) => {
             setDialog(undefined);
             navigate(appUrl(basePath, `/view/${encodeURIComponent(object.id)}`, { _g: currentGlobalParam() }));
+            setOpenings((count) => count + 1);
           }}
         />
       )}
