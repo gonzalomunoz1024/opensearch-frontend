@@ -59,6 +59,8 @@ import {
   zoneOffset,
   type SMPolicy,
 } from '../../web/apps/index_management/snapshot_model';
+import { policyChannel } from '../../web/apps/index_management/snapshot_policies';
+import { createServices, services, type BootData } from '../../web/services';
 
 describe('the words of Snapshot Management', () => {
   it('cuts a text to a length with the three dots counted in it', () => {
@@ -569,5 +571,46 @@ describe('snapshot policies', () => {
       ),
       'creation, failure'
     );
+  });
+});
+
+describe('the channel on the page of a policy', () => {
+  // The routes of the server, answering every request with the answer given; the toasts' waits are not run
+  const withAnswer = async (answer: unknown, run: (asked: string[]) => Promise<void>) => {
+    const asked: string[] = [];
+    const original = globalThis.fetch;
+    const globals = globalThis as { window?: unknown };
+    globals.window = { setTimeout: () => 0 };
+    globalThis.fetch = (async (url: string) => {
+      asked.push(url);
+      return new Response(JSON.stringify(answer), { headers: { 'content-type': 'application/json' } });
+    }) as typeof fetch;
+    try {
+      createServices({ basePath: '', settings: {} } as unknown as BootData);
+      await run(asked);
+    } finally {
+      globalThis.fetch = original;
+      delete globals.window;
+    }
+  };
+
+  it('is none, with no message, when it cannot be loaded, as the original shows it', () =>
+    withAnswer(
+      { ok: false, error: 'no handler found for uri [/_plugins/_notifications/configs/a b] and method [GET]' },
+      async (asked) => {
+        assert.equal(await policyChannel('a b'), undefined);
+        assert.deepEqual(asked, ['/api/ism/_notifications/channels/a%20b']);
+        assert.deepEqual(services.toasts.get(), []);
+      }
+    ));
+
+  it('is the one channel the notifications plugin finds', async () => {
+    const found = { config_id: 'c1', config: { name: 'Ops', config_type: 'slack' } };
+    await withAnswer({ ok: true, response: { config_list: [found] } }, async () => {
+      assert.deepEqual(await policyChannel('c1'), found);
+    });
+    await withAnswer({ ok: true, response: { config_list: [found, found] } }, async () => {
+      assert.equal(await policyChannel('c1'), undefined);
+    });
   });
 });
