@@ -25,7 +25,9 @@ import {
   sampleInputsOf,
   savedBodyOf,
   tabsOf,
+  timeFieldChoice,
   timeFieldOptions,
+  timeFieldOptionValue,
   TRUNCATE_SAMPLE,
   URL_ICON_PATTERN,
   urlSampleOf,
@@ -382,6 +384,16 @@ describe('the wizard', () => {
       { isDisabled: true, display: '───', fieldName: '' },
       { display: "I don't want to use the time filter", fieldName: undefined },
     ]);
+  });
+
+  it('takes "I don\'t want to use the time filter" as a choice, as the original', () => {
+    const options = timeFieldOptions([{ name: 'ts', type: 'date' }]);
+    // The select tells its options apart by their values: the choice of none is not the empty value of no choice
+    const values = options.map(timeFieldOptionValue);
+    assert.deepEqual(values, ['ts', '', "I don't want to use the time filter"]);
+    assert.deepEqual(timeFieldChoice(options, values[0]), { fieldName: 'ts', chosen: true });
+    assert.deepEqual(timeFieldChoice(options, values[2]), { fieldName: undefined, chosen: true });
+    assert.deepEqual(timeFieldChoice(options, ''), { fieldName: '', chosen: false });
   });
 
   it('chooses the time field of data streams that share one', () => {

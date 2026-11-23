@@ -22,7 +22,9 @@ import {
   matchedIndicesOf,
   preselectedTimeField,
   resolvedItems,
+  timeFieldChoice,
   timeFieldOptions,
+  timeFieldOptionValue,
   type MatchedItem,
   type ResolveResponse,
   type TimeFieldOption,
@@ -567,8 +569,10 @@ function StepTimeField({
 
   const options =
     timeFields.length > 0
-      ? [{ text: '', value: '', disabled: false }, ...timeFields.map((field) => ({ text: field.display, value: field.fieldName ?? '', disabled: !!field.isDisabled }))]
+      ? [{ text: '', value: '', disabled: false }, ...timeFields.map((field) => ({ text: field.display, value: timeFieldOptionValue(field), disabled: !!field.isDisabled }))]
       : [];
+  // The choice of no time field has no field name: the select shows it by the value of its option
+  const none = timeFields.find((field) => field.fieldName === undefined);
   const showTimeField = timeFields.length > 1;
   const submittable = !showTimeField || timeFieldSet;
 
@@ -600,11 +604,11 @@ function StepTimeField({
             loading={fetching}
             onRefresh={fetchTimeFields}
             options={options}
-            value={selected}
+            value={selected ?? (timeFieldSet && none ? timeFieldOptionValue(none) : undefined)}
             onChange={(value) => {
-              const field = timeFields.find((candidate) => candidate.fieldName === value);
-              setSelected(field ? field.fieldName : undefined);
-              setTimeFieldSet(value !== '');
+              const choice = timeFieldChoice(timeFields, value);
+              setSelected(choice.fieldName);
+              setTimeFieldSet(choice.chosen);
             }}
           />
         </div>

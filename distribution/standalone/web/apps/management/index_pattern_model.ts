@@ -728,6 +728,18 @@ export function timeFieldOptions(fields: Array<{ name: string; type: string }>):
   ];
 }
 
+/**
+ * The value of an option of the time field select, as the original's select gives it: the name of
+ * its field, or its text when it has none, as "I don't want to use the time filter" has
+ */
+export const timeFieldOptionValue = (option: TimeFieldOption) => option.fieldName ?? option.display;
+
+/** What a value of the select means: its field, and whether it is a choice at all (the empty value is none) */
+export function timeFieldChoice(options: TimeFieldOption[], value: string) {
+  const field = options.find((candidate) => candidate.fieldName === value);
+  return { fieldName: field ? field.fieldName : undefined, chosen: value !== '' };
+}
+
 /** The time field chosen beforehand: when every match is a data stream with the same one */
 export function preselectedTimeField(items: MatchedItem[]): string | undefined {
   let canPreselect = true;
