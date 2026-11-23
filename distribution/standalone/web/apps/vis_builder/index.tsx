@@ -663,7 +663,13 @@ function DataSourceSelect({ selectedId, onChange }: { selectedId?: string; onCha
             />
           </div>
           {shown.length ? (
-            <ul className="vbdSourceList__options" id={`${listId}_listbox`} role="listbox" aria-label="Selectable options" data-test-subj="searchableDropdownList">
+            <ul
+              className={cx('vbdSourceList__options', shown.length > 7 && 'vbdSourceList__options--more')}
+              id={`${listId}_listbox`}
+              role="listbox"
+              aria-label="Selectable options"
+              data-test-subj="searchableDropdownList"
+            >
               {shown.map((pattern, index) => (
                 <li
                   key={pattern.id}

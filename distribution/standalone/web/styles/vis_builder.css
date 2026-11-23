@@ -89,6 +89,11 @@
   cursor: pointer;
 }
 
+/* In dark the original's is the light text colour at 5 %, rgb(29 29 31 / 5%), not the border's */
+.themeDark .vbdSource {
+  background: rgb(29 29 31 / 5%);
+}
+
 .vbdSource__prepend {
   display: flex;
   flex: none;
@@ -185,11 +190,16 @@
 }
 
 .vbdSourceList__options {
-  max-height: calc(7.5 * 32px);
   margin: 0;
   padding: 0;
   list-style: none;
   overflow-y: auto;
+}
+
+/* As the original's selectable list: up to 7 options all shown, more in 6.5 rows, the half row
+   telling that the list scrolls */
+.vbdSourceList__options--more {
+  height: calc(6.5 * 32px);
 }
 
 .vbdSourceList__option {
@@ -213,7 +223,10 @@
   background: var(--color-surface-tertiary);
 }
 
+/* The original's icon sits on the text's middle, 1.7 px under the row's */
 .vbdSourceList__icon {
+  position: relative;
+  top: 1.7px;
   margin-right: var(--space-3);
 }
 
@@ -285,8 +298,10 @@
   padding-left: calc(var(--space-2) - 1px);
 }
 
+/* The original writes the search in the colour of its placeholder */
 .vbdFields__search.atlFieldGroup > input {
   padding: 0;
+  color: var(--color-text-tertiary);
 }
 
 /* The original's button that clears the search, not the browser's: a 12 px disc with a cross,
@@ -474,6 +489,8 @@
   padding: var(--space-2);
   border-radius: var(--radius-lg);
   background-color: var(--color-surface);
+  /* the title's focus ring stands out of the panel, as the original's */
+  overflow: visible;
 }
 
 .vbdFieldPopover__title {
@@ -496,11 +513,12 @@
   line-height: 18px;
 }
 
+/* The original's spacer under each value, which the footer's margin adds to */
 .vbdBucket {
   display: flex;
   gap: var(--space-2);
   align-items: stretch;
-  margin-bottom: var(--space-2);
+  padding-bottom: var(--space-2);
 }
 
 .vbdBucket__value {
@@ -523,7 +541,10 @@
   flex: 1 1 auto;
 }
 
+/* 1 px above the value's text, as the original's coloured text sits */
 .vbdBucket__percent {
+  position: relative;
+  top: -1px;
   flex: none;
   color: var(--color-success-text);
 }
@@ -619,6 +640,8 @@
   overflow-x: hidden;
   overflow-y: auto;
   mask-image: linear-gradient(to bottom, rgb(0 0 0 / 10%), #000 7.5px, #000 calc(100% - 7.5px), rgb(0 0 0 / 10%));
+  /* as the original's: its text, half a pixel in, is then drawn on the same pixels */
+  contain: paint;
 }
 
 .vbdConfig__section {
@@ -657,11 +680,14 @@
     visibility 0s;
 }
 
+/* 32 px tall and 4 px of it under what follows, as the original's: its flex group's negative margin
+   goes through the title's bottom */
 .vbdConfig__title {
   display: flex;
   gap: var(--space-2);
   align-items: center;
-  padding: var(--space-2) var(--space-2) 0;
+  margin-bottom: calc(var(--space-1) * -1);
+  padding: var(--space-2) var(--space-2) var(--space-1);
 }
 
 .vbdConfig__title h2 {

@@ -372,9 +372,10 @@ function FieldWithDetails({
 const TABBABLE = 'button:not(:disabled), [href], input:not(:disabled), [tabindex]:not([tabindex="-1"])';
 
 /**
- * A popover at the right of a field, as the original opens one "rightUp": its top 4 px above the
- * field's, kept on screen. As one that owns the focus, it takes the focus when it opens (its first
- * stop is the title), keeps Tab inside it, and gives the focus back to the field on Escape.
+ * A popover at the right of a field, as the original opens one "rightUp": its top 4.5 px above a
+ * field 35 px tall, kept 16 px from the window's edges. As one that owns the focus, it takes the
+ * focus once placed (its first stop is the title), keeps Tab inside it, and gives the focus back
+ * to the field on Escape.
  */
 function SidePopover({
   anchor,
@@ -394,7 +395,12 @@ function SidePopover({
       const height = panel.current?.offsetHeight ?? 0;
       if (!box) return;
       const margin = 8;
-      const top = Math.max(margin, Math.min(box.top - 4, window.innerHeight - height - margin));
+      // As the component library places it: its top no lower than where its arrow (24 px wide, 10 px
+      // from the panel's corner) would point at the field's middle, and 16 px from the window's edges
+      const arrowReach = 10 + 24 / 2;
+      const windowBuffer = 16;
+      const wanted = Math.min(box.top, box.top + box.height / 2 - arrowReach);
+      const top = Math.max(windowBuffer, Math.min(wanted, window.innerHeight - height - windowBuffer));
       setStyle({ left: box.right + margin, top });
     };
     place();
@@ -409,9 +415,11 @@ function SidePopover({
     };
   }, [anchor]);
 
+  // once placed: hidden, nothing in it can take the focus
+  const placed = style.visibility !== 'hidden';
   useEffect(() => {
-    panel.current?.querySelector<HTMLElement>(TABBABLE)?.focus();
-  }, []);
+    if (placed) panel.current?.querySelector<HTMLElement>(TABBABLE)?.focus();
+  }, [placed]);
 
   useEffect(() => {
     const onDown = (event: MouseEvent) => {
