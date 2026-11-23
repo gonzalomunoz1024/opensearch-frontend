@@ -6,7 +6,7 @@
  * the dialogs and notices say about them.
  */
 
-import { parseSearch } from '../../lib/search_syntax';
+import { readSearch } from '../../lib/search_syntax';
 
 // --- What a search box asks for -------------------------------------------------------------------
 
@@ -17,16 +17,20 @@ export interface SearchClauses {
 }
 
 /**
- * The words of a search, and what it names with `indices:` and `data_streams:`. A text that is
- * no search asks for nothing in particular.
+ * The words of a search, and what it names with `indices:` and `data_streams:`, as the plugin
+ * takes them from its search bar's query (`getTermClauses`, `getFieldClauses`): a word counts
+ * with or without a `-`, a word inside brackets does not, and a field counts whatever its sign.
+ * A text that is no search asks for nothing in particular.
  */
 export function searchClauses(search: string): SearchClauses {
-  const clauses = (search.trim() === '' ? [] : parseSearch(search)) ?? [];
+  const clauses = readSearch(search) ?? [];
   const found: SearchClauses = { terms: [], indices: [], dataStreams: [] };
+  // What goes into the address: a number or a yes-no word as text, a date as nothing
+  const sent = (value: unknown) => (typeof value === 'object' ? '' : String(value));
   for (const clause of clauses) {
     if (clause.type === 'term') found.terms.push(clause.value);
     if (clause.type !== 'field') continue;
-    const values = Array.isArray(clause.value) ? clause.value : [clause.value];
+    const values = (Array.isArray(clause.value) ? clause.value : [clause.value]).map(sent);
     if (clause.field === 'indices') found.indices.push(...values);
     if (clause.field === 'data_streams') found.dataStreams.push(...values);
   }
