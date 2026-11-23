@@ -11,8 +11,10 @@ import { Button, cx } from '../../components/basic';
 import { Icon, type IconName } from '../../components/icon';
 import { Popover, Tooltip } from '../../components/overlay';
 import { Pagination } from '../../components/table';
+import { services } from '../../services';
 import { HttpFetchError } from '../../services/http';
-import { getSavedObjectLabel } from './saved_objects_lib';
+import { sectionCrumb } from './frame';
+import { askedOnce, getSavedObjectLabel } from './saved_objects_lib';
 import {
   QueryParseError,
   orFieldState,
@@ -24,7 +26,13 @@ import {
 } from './saved_objects_query';
 
 export const OBJECTS_ROOT = '/app/management/opensearch-dashboards/objects';
-export const MANAGEMENT_CRUMB = { text: 'Dashboards Management', to: '/app/management' };
+export { MANAGEMENT_CRUMB } from './frame';
+export const OBJECTS_CRUMB = sectionCrumb('objects');
+
+/** The types the page may show: asked when the section is first opened, by the list or by an object */
+export const allowedObjectTypes = askedOnce(() =>
+  services.http.get<{ types: string[] }>('/api/opensearch-dashboards/management/saved_objects/_allowed_types').then((answer) => answer.types)
+);
 
 /** The message of a failed request, as the original's toasts write it */
 export function errorText(error: unknown): string {
@@ -475,9 +483,12 @@ export function BasicTable<T>({
   const selectedIds = new Set(selection?.selected.map(itemId));
   const allSelected = items.length > 0 && items.every((item) => selectedIds.has(itemId(item)));
   const span = columns.length + (selection ? 1 : 0);
+  // The table its page buttons control, which takes the focus when they turn the page
+  const tableId = useId();
   return (
     <div className={cx('sobTable', loading && 'sobTable--loading')} data-test-subj={testId}>
-      <table className="sobTable__table">
+      <table className="sobTable__table" id={tableId} tabIndex={-1}>
+        <caption className="sobHidden">{tableCaption(items.length, pagination)}</caption>
         <colgroup>
           {selection && <col style={{ width: 32 }} />}
           {columns.map((column) => (
@@ -551,9 +562,19 @@ export function BasicTable<T>({
           )}
         </tbody>
       </table>
-      {pagination && pagination.totalItemCount > 0 && onChange && <TablePagination {...pagination} onChange={onChange} />}
+      {pagination && pagination.totalItemCount > 0 && onChange && <TablePagination {...pagination} controls={tableId} onChange={onChange} />}
     </div>
   );
+}
+
+/** What the table tells a screen reader of itself, in EuiBasicTable's words */
+export function tableCaption(shown: number, pagination?: Paging): string {
+  if (!pagination) return `This table contains ${shown} rows.`;
+  const page = pagination.pageIndex + 1;
+  const pageCount = Math.ceil(pagination.totalItemCount / pagination.pageSize);
+  return pagination.totalItemCount > 0
+    ? `This table contains ${shown} rows out of ${pagination.totalItemCount} rows; Page ${page} of ${pageCount}.`
+    : `This table contains ${shown} rows; Page ${page} of ${pageCount}.`;
 }
 
 /**
@@ -574,8 +595,9 @@ function TablePagination({
   pageSize,
   totalItemCount,
   pageSizeOptions,
+  controls,
   onChange,
-}: Paging & { onChange: (page: { index: number; size: number }) => void }) {
+}: Paging & { controls: string; onChange: (page: { index: number; size: number }) => void }) {
   const pageCount = Math.ceil(totalItemCount / pageSize);
   // A page that is not there any more, after objects went: the last one is shown
   useEffect(() => {
@@ -591,6 +613,7 @@ function TablePagination({
       pageSize={pageSize}
       pageSizes={pageSizeOptions}
       onPageSize={(size) => onChange({ index: 0, size })}
+      controls={controls}
     />
   );
 }

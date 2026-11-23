@@ -123,7 +123,7 @@ export abstract class BaseMapsVis<Data = unknown> {
       try {
         const tmsServices = await this.serviceSettings().getTMSServices();
         const initBasemapLayer = tmsServices[0] ? tmsServices[0] : tmsServices.find((s) => s.id === emsTileLayerId.bright);
-        if (initBasemapLayer) await this.setTmsLayer(initBasemapLayer);
+        if (initBasemapLayer) this.setTmsLayerUnwaited(initBasemapLayer);
       } catch (error) {
         services.toasts.warning(error instanceof Error ? error.message : String(error));
       }
@@ -141,11 +141,19 @@ export abstract class BaseMapsVis<Data = unknown> {
           options: { minZoom: WMS_MINZOOM, maxZoom: WMS_MAXZOOM, url: mapParams.wms?.url, ...mapParams.wms?.options },
         });
       } else if (mapParams.wms?.selectedTmsLayer) {
-        await this.setTmsLayer(mapParams.wms.selectedTmsLayer);
+        this.setTmsLayerUnwaited(mapParams.wms.selectedTmsLayer);
       }
     } catch (error) {
       services.toasts.warning(error instanceof Error ? error.message : String(error));
     }
+  }
+
+  /**
+   * Sets a TMS layer without waiting for it, as the original's _updateBaseLayer calls _setTmsLayer:
+   * a failure to reach the maps service is no toast, only an error in the console
+   */
+  private setTmsLayerUnwaited(tmsLayer: TmsService) {
+    this.setTmsLayer(tmsLayer).catch((error: unknown) => console.error(error));
   }
 
   protected serviceSettings() {

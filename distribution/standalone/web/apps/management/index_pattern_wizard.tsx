@@ -59,7 +59,7 @@ async function catchAndWarn(work: Promise<MatchedItem[]>, title: string): Promis
 }
 
 export function CreateIndexPatternWizard() {
-  useBreadcrumbs([MANAGEMENT_CRUMB, LIST_CRUMB, { text: 'Create index pattern' }]);
+  useBreadcrumbs([MANAGEMENT_CRUMB, LIST_CRUMB, { text: 'Create index pattern', to: `${LIST_CRUMB.to}create` }]);
   const [allIndices, setAllIndices] = useState<MatchedItem[]>();
   const [step, setStep] = useState<1 | 2>(1);
   const [chosen, setChosen] = useState<{ pattern: string; timeField?: string; displayName?: string }>();

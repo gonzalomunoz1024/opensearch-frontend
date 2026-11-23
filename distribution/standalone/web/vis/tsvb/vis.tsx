@@ -18,6 +18,7 @@ import { visFailure, type VisFailure } from '../types';
 import {
   fetchTsvb,
   fetchTsvbTable,
+  MathScriptError,
   TooMuchDataError,
   isSortable,
   metricBackground,
@@ -782,10 +783,12 @@ export function TsvbVis({
       .catch((failure) => {
         if ((failure as Error).name === 'AbortError') return;
         setLoading(false);
-        // A panel the product would not ask for at all fails its request, told around the panel
-        // (the editor's "Search Error"); a request that could not be made (a query in DQL that
-        // cannot be read) or that OpenSearch refused is shown in the panel, and nowhere else
-        if (failure instanceof TooMuchDataError && reportError.current) reportError.current(visFailure('tsvb', failure));
+        // A panel the product would not ask for at all, or whose Math it cannot work out, fails its
+        // request, told around the panel (the editor's "Search Error"); a request that could not
+        // be made (a query in DQL that cannot be read) or that OpenSearch refused is shown in the
+        // panel, and nowhere else
+        const request = failure instanceof TooMuchDataError || failure instanceof MathScriptError;
+        if (request && reportError.current) reportError.current(visFailure('tsvb', failure));
         else setError(panelError(failure));
       });
     return () => controller.abort();
