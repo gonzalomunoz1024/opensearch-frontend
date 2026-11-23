@@ -478,9 +478,12 @@ export function BasicTable<T>({
   const selectedIds = new Set(selection?.selected.map(itemId));
   const allSelected = items.length > 0 && items.every((item) => selectedIds.has(itemId(item)));
   const span = columns.length + (selection ? 1 : 0);
+  // The table its page buttons control, which takes the focus when they turn the page
+  const tableId = useId();
   return (
     <div className={cx('sobTable', loading && 'sobTable--loading')} data-test-subj={testId}>
-      <table className="sobTable__table">
+      <table className="sobTable__table" id={tableId} tabIndex={-1}>
+        <caption className="sobHidden">{tableCaption(items.length, pagination)}</caption>
         <colgroup>
           {selection && <col style={{ width: 32 }} />}
           {columns.map((column) => (
@@ -554,9 +557,32 @@ export function BasicTable<T>({
           )}
         </tbody>
       </table>
-      {pagination && pagination.totalItemCount > 0 && onChange && <TablePagination {...pagination} onChange={onChange} />}
+      {pagination && pagination.totalItemCount > 0 && onChange && <TablePagination {...pagination} controls={tableId} onChange={onChange} />}
     </div>
   );
+}
+
+/** What the table tells a screen reader of itself, in EuiBasicTable's words */
+export function tableCaption(shown: number, pagination?: Paging): string {
+  if (!pagination) return `This table contains ${shown} rows.`;
+  const page = pagination.pageIndex + 1;
+  const pageCount = Math.ceil(pagination.totalItemCount / pagination.pageSize);
+  return pagination.totalItemCount > 0
+    ? `This table contains ${shown} rows out of ${pagination.totalItemCount} rows; Page ${page} of ${pageCount}.`
+    : `This table contains ${shown} rows; Page ${page} of ${pageCount}.`;
+}
+
+/**
+ * A page asked for, as EuiPagination answers it: the focus goes to the table its buttons control,
+ * then the page turns
+ */
+export function turnPage(
+  tableId: string,
+  turn: () => void,
+  root: { getElementById(id: string): { focus(): void } | null } = document
+) {
+  root.getElementById(tableId)?.focus();
+  turn();
 }
 
 /** The buttons of a row: only the icon, in the row's last column */
@@ -594,10 +620,14 @@ function TablePagination({
   pageSize,
   totalItemCount,
   pageSizeOptions,
+  controls,
   onChange,
-}: Paging & { onChange: (page: { index: number; size: number }) => void }) {
+}: Paging & { controls: string; onChange: (page: { index: number; size: number }) => void }) {
   const [open, setOpen] = useState(false);
   const pageCount = Math.ceil(totalItemCount / pageSize);
+  const go = (index: number) => turnPage(controls, () => onChange({ index, size: pageSize }));
+  const first = pageIndex === 0;
+  const last = pageIndex === pageCount - 1;
   // As the original's menu, in the kit's popover that holds the focus: its first item has the focus
   // when it opens, Tab and the arrows go round the items, and the focus goes back to the button when
   // it closes from inside
@@ -637,12 +667,14 @@ function TablePagination({
         />
       </Popover>
       <nav className="sobPagination__pages" aria-label="Pagination">
+        {/* As the original's: a button that can be used controls the table, the current page cannot be */}
         <button
           type="button"
           className="sobPagination__arrow"
-          disabled={pageIndex === 0}
-          aria-label={pageIndex === 0 ? 'Previous page' : `Previous page, ${pageIndex}`}
-          onClick={() => onChange({ index: pageIndex - 1, size: pageSize })}
+          disabled={first}
+          aria-controls={first ? undefined : controls}
+          aria-label={first ? 'Previous page' : `Previous page, ${pageIndex}`}
+          onClick={() => go(pageIndex - 1)}
           data-test-subj="pagination-button-previous"
         >
           <Icon name="chevronLeft" />
@@ -658,9 +690,11 @@ function TablePagination({
                 <button
                   type="button"
                   className={cx('sobPagination__page', page === pageIndex && 'sobPagination__page--active')}
+                  disabled={page === pageIndex}
+                  aria-controls={controls}
                   aria-label={`Page ${page + 1} of ${pageCount}`}
                   aria-current={page === pageIndex ? true : undefined}
-                  onClick={() => onChange({ index: page, size: pageSize })}
+                  onClick={() => go(page)}
                   data-test-subj={`pagination-button-${page}`}
                 >
                   {page + 1}
@@ -672,9 +706,10 @@ function TablePagination({
         <button
           type="button"
           className="sobPagination__arrow"
-          disabled={pageIndex === pageCount - 1}
-          aria-label={pageIndex === pageCount - 1 ? 'Next page' : `Next page, ${pageIndex + 2}`}
-          onClick={() => onChange({ index: pageIndex + 1, size: pageSize })}
+          disabled={last}
+          aria-controls={last ? undefined : controls}
+          aria-label={last ? 'Next page' : `Next page, ${pageIndex + 2}`}
+          onClick={() => go(pageIndex + 1)}
           data-test-subj="pagination-button-next"
         >
           <Icon name="chevronRight" />
