@@ -107,7 +107,7 @@ export function RefreshPicker({
             data-test-subj="superDatePickerToggleQuickMenuButton"
           >
             <Icon name="clock" />
-            <Icon name="chevronDown" />
+            <Icon name="chevronDown" size="s" />
           </button>
         }
       >

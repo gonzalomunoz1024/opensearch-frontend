@@ -27,6 +27,27 @@
   --color-healthy-text: #007871;
   --color-warning-text: #83650a;
   --color-critical-text: #bd271e;
+  /* The healthy and warning colours as the theme draws a shape in them on the surface: the second
+     colour of an application's icon, a health's dot (the component library's graphic shades) */
+  --color-healthy-graphic: #30a74e;
+  --color-warning-graphic: #d57f06;
+  /* The text of a button that is not filled, as the theme writes it in each colour: an empty
+     button, an icon button, an outlined one. In light the accent and the critical colour darken to
+     be read; an invalid field's label takes the critical one */
+  --color-accent-button-text: #0371e9;
+  --color-healthy-button-text: #2b8342;
+  --color-critical-button-text: #d5352d;
+  /* The text of a filled button that cannot be pressed, on the border's colour */
+  --color-disabled-fill-text: #8f8f93;
+  /* A call-out of each kind as the theme draws it: its title and icon, and its fill */
+  --color-accent-callout-text: #0569d5;
+  --color-accent-callout-fill: #e6f2ff;
+  --color-healthy-callout-text: #2a7e40;
+  --color-healthy-callout-fill: #ebf9ee;
+  --color-warning-callout-text: #9e610d;
+  --color-warning-callout-fill: #fff4e6;
+  --color-critical-callout-text: #c3332b;
+  --color-critical-callout-fill: #ffebea;
   --color-on-accent: #ffffff;
 
   /* A colour as a soft fill */
@@ -121,6 +142,20 @@
   --color-healthy-text: #7dded8;
   --color-warning-text: #f3d371;
   --color-critical-text: #f86b63;
+  --color-healthy-graphic: #30d158;
+  --color-warning-graphic: #ff9f0a;
+  --color-accent-button-text: #0a84ff;
+  --color-healthy-button-text: #30d158;
+  --color-critical-button-text: #ff453a;
+  --color-disabled-fill-text: #656567;
+  --color-accent-callout-text: #76baff;
+  --color-accent-callout-fill: #021426;
+  --color-healthy-callout-text: #62dc80;
+  --color-healthy-callout-fill: #071f0d;
+  --color-warning-callout-text: #ffb645;
+  --color-warning-callout-fill: #261802;
+  --color-critical-callout-text: #ff9791;
+  --color-critical-callout-fill: #260a09;
 
   --tint-opacity: 15%;
   --color-hover: color-mix(in srgb, var(--color-text-primary) 8%, transparent);

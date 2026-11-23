@@ -357,7 +357,7 @@ function AdvancedAggregation({ form, fields, change }: { form: RollupForm; field
       align: 'right',
       render: (row) => (
         <IconButton
-          icon="error"
+          icon="crossInACircleFilled"
           label="Delete"
           size="s"
           onClick={() => set(removeDimension(dimensions, row.field.label))}
@@ -463,7 +463,7 @@ function MetricsCalculation({
       align: 'right',
       render: (row) => (
         <IconButton
-          icon="error"
+          icon="crossInACircleFilled"
           label="Delete"
           size="s"
           onClick={() => set(metrics.filter((metric) => metric !== row))}

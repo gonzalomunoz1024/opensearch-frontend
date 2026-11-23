@@ -224,7 +224,7 @@ function TransformIndices({
               onClick={() => onChangeFilter('')}
               aria-label="Clear Source Index Filter"
             >
-              <Icon name="cross" />
+              <Icon name="cross" size="s" />
             </button>
           </span>
           <Popover
@@ -316,7 +316,7 @@ function PercentsField({
             onClick={() => onChange(percents.filter((_item, index) => index !== at))}
             aria-label={`Remove ${percent}`}
           >
-            <Icon name="cross" />
+            <Icon name="cross" size="s" />
           </button>
         </span>
       ))}
@@ -509,7 +509,7 @@ function TransformOptions({ field, onAdd }: { field: FieldItem; onAdd: (item: Ag
             aria-label={`Transform options of ${name}`}
             data-test-subj={`${name}OptionsPopover`}
           >
-            <Icon name="plus" />
+            <Icon name="plusInCircleFilled" />
           </button>
         }
       >
@@ -671,7 +671,7 @@ export function PreviewTransform({
               <p>
                 From the table above, select a field you want to transform by clicking{' '}
                 <span className="ismGridAdd ismGridAdd--inline">
-                  <Icon name="plus" />
+                  <Icon name="plusInCircleFilled" />
                 </span>{' '}
                 next to the field name.
               </p>
@@ -1209,7 +1209,7 @@ export function CreateTransform() {
               </Details>
             </div>
           </FormPanel>
-          <CallOut tone="warning">
+          <CallOut tone="warning" size="s">
             You can only change the description and schedule after creating a job. Double-check your choices before
             proceeding.
           </CallOut>

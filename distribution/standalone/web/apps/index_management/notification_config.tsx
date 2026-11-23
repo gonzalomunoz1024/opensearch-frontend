@@ -143,7 +143,7 @@ function NotificationCallout({
   };
   return (
     <div data-test-subj="defaultNotificationCallout">
-      <CallOut title={texts[known] ?? <></>} />
+      <CallOut icon="info" title={texts[known] ?? <></>} />
     </div>
   );
 }

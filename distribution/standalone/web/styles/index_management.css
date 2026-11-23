@@ -1502,7 +1502,8 @@
   color: var(--color-accent);
 }
 
-/* The mark that opens what a field can become: a plus in a filled circle */
+/* The button that opens what a field can become: OUI's plus in a filled circle, as an icon button
+   draws it; written into a sentence, in the sentence's colour */
 .ismGridAdd {
   flex: 0 0 auto;
   display: inline-flex;
@@ -1513,15 +1514,9 @@
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: var(--color-accent);
-  color: var(--color-on-accent);
+  background: none;
+  color: var(--color-accent-button-text);
   cursor: pointer;
-}
-
-.ismGridAdd .atlIcon {
-  width: 10px;
-  height: 10px;
-  stroke-width: 2.5;
 }
 
 .ismGridAdd:focus-visible,
@@ -1530,6 +1525,7 @@
 }
 
 .ismGridAdd--inline {
+  color: inherit;
   vertical-align: -3px;
   cursor: default;
 }

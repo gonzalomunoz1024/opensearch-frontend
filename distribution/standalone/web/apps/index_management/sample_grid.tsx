@@ -49,7 +49,8 @@ function ColumnSelector({
           onClick={() => setOpen(!open)}
           data-test-subj="dataGridColumnSelectorButton"
         >
-          <Icon name="list" />
+          {/* The original's small empty button draws its icon small */}
+          <Icon name="list" size="s" />
           {count > 0 ? `${count} columns hidden` : 'Columns'}
         </button>
       }

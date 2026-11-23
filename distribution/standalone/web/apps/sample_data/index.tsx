@@ -93,7 +93,7 @@ function ViewDataButton({ set }: { set: SampleDataSetSummary }) {
           <Button
             className="homSampleDataSetCard__button"
             aria-label={ariaLabel}
-            icon="arrowDown"
+            icon="chevronDown"
             iconSide="right"
             onClick={() => setOpen((was) => !was)}
           >

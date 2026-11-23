@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Button, EmptyPrompt, IconButton, Link, Loading, PageHeader, Panel } from '../components/basic';
 import { SearchField } from '../components/form';
+import type { IconName } from '../components/icon';
 import { ConfirmModal } from '../components/overlay';
 import { DataTable, type Column } from '../components/table';
 import { formatDate } from '../lib/dates';
@@ -18,6 +19,15 @@ export interface ListedAttributes {
 }
 
 export type Listed = SavedObject<ListedAttributes>;
+
+/** The application's icon the original's empty list draws, by the kind of object listed */
+const EMPTY_ICONS: Record<string, IconName> = {
+  dashboard: 'dashboardApp',
+  visualization: 'visualizeApp',
+};
+
+export const emptyListIcon = (types: string[]): IconName =>
+  types.length > 0 && Object.prototype.hasOwnProperty.call(EMPTY_ICONS, types[0]) ? EMPTY_ICONS[types[0]] : 'plusCircle';
 
 export interface ListingProps {
   title: string;
@@ -154,7 +164,7 @@ export function Listing({
         <Loading />
       ) : nothingAtAll ? (
         <Panel>
-          <EmptyPrompt icon="plusCircle" title={`Create your first ${entity}`} actions={createButton}>
+          <EmptyPrompt icon={emptyListIcon(types)} title={`Create your first ${entity}`} actions={createButton}>
             {emptyBody}
           </EmptyPrompt>
         </Panel>

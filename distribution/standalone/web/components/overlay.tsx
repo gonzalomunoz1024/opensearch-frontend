@@ -413,11 +413,12 @@ export function Flyout({
   );
 }
 
-// The original's icons: a check, an i, a question mark in a ring, and a triangle for what failed
+// The original's icons: a check, an i in a ring, OUI's `help` (a ring buoy) for a warning, and a
+// triangle for what failed
 const TOAST_ICONS: Record<string, IconName> = {
   healthy: 'check',
   info: 'info',
-  warning: 'help',
+  warning: 'lifebuoy',
   critical: 'warning',
 };
 
