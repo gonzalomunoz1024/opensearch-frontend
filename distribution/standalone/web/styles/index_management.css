@@ -3460,8 +3460,30 @@
 }
 
 .ismGrid .atlPagination {
-  padding: var(--space-2) var(--space-3);
-  border-top: 1px solid var(--color-border-light);
+  margin-top: 0;
+  padding: var(--space-1) 0 0;
+}
+
+/* The panel that defines a transform: its title 16 px in, what it holds 10 px in */
+.ismDefineHead {
+  padding: 0 var(--space-4);
+}
+
+.ismDefineBody {
+  padding: 10px;
+}
+
+.ismDefineNote {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+/* With a sentence under the title of an empty look at the result: 16 px between them */
+.ismPreviewEmpty.ismPreviewEmpty--text p {
+  margin-top: var(--space-4);
+  line-height: 21px;
 }
 
 .ismGrid__heading {
@@ -3473,6 +3495,7 @@
 }
 
 .ismGrid__heading b {
+  flex: 0 1 auto;
   min-width: 0;
   font-weight: var(--font-weight-semibold);
 }
@@ -3489,22 +3512,32 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   border: 0;
-  border-radius: 50%;
+  border-radius: var(--radius-md);
   background: none;
   color: var(--color-accent-button-text);
   cursor: pointer;
 }
 
 .ismGridAdd:focus-visible,
-.ismGridAdd:hover {
-  box-shadow: 0 0 0 4px var(--color-accent-tint);
+.ismGridAdd:hover,
+.ismGridAdd[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+
+/* A heading with that button is as high as it, the name at its top */
+.ismGrid__heading:has(.ismGridAdd) {
+  gap: var(--space-6);
+  align-items: flex-start;
+  min-height: 32px;
 }
 
 .ismGridAdd--inline {
+  width: 16px;
+  height: 16px;
   color: inherit;
   vertical-align: -3px;
   cursor: default;
@@ -3545,20 +3578,40 @@
 
 /* --- The menus of a transform job's fields --------------------------------------------------------- */
 
-.ismOptionsMenu {
-  min-width: 248px;
+/* As the component library's small context menu: 256 px wide, nothing around it, a title of 33 px
+   over a line, rows of 37 px; a panel with a form is 350 px wide */
+.atlMenu.ismOptionsMenu {
+  width: 256px;
+  padding: 0;
+}
+
+.atlMenu.ismOptionsMenu--wide {
+  width: 350px;
+}
+
+.ismOptionsMenu .atlMenu__item {
+  height: 37px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: 0;
+  line-height: 21px;
 }
 
 /* A panel with an editor is wider than a popover usually gets to be */
-.ismOptionsPopover,
-.ismFilterPopover {
+.ismOptionsPopover {
   max-width: calc(100vw - 16px);
 }
 
+.atlPopover.ismOptionsPopover {
+  padding: 0;
+  overflow: hidden;
+}
+
 .ismMenuTitle {
-  padding: var(--space-2);
+  padding: 6px var(--space-2);
+  border-bottom: 1px solid var(--color-border-light);
   font-size: var(--font-size-s);
   font-weight: var(--font-weight-semibold);
+  line-height: 20px;
 }
 
 .ismMenuBack {
@@ -3566,44 +3619,58 @@
   align-items: center;
   gap: var(--space-2);
   width: 100%;
-  padding: var(--space-2);
+  padding: 6px var(--space-2);
   border: 0;
   border-bottom: 1px solid var(--color-border-light);
   background: none;
   color: var(--color-text-primary);
   font-size: var(--font-size-s);
   font-weight: var(--font-weight-semibold);
+  line-height: 20px;
   text-align: left;
   cursor: pointer;
 }
 
+/* A form in a menu, as the plugin's panel in a panel: 16 px inside a line, 16 px over its
+   buttons, which are 16 px apart */
 .ismMenuPanel {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-3);
+  gap: var(--space-4);
+  padding: 17px;
+}
+
+.ismMenuPanel .ismButtons {
+  gap: var(--space-4);
 }
 
 .ismMenuPanel--editor {
   width: 38vw;
 }
 
-.ismMenuPanel--date {
-  width: 326px;
-}
-
 .ismDateInterval {
   display: grid;
   grid-template-columns: 100px minmax(0, 1fr);
-  gap: var(--space-2) var(--space-4);
+  gap: var(--space-3) var(--space-6);
   align-items: center;
   font-size: var(--font-size-s);
 }
 
 .ismDateInterval h4 {
   margin: 0;
-  font-size: var(--font-size-xs);
+  font-size: 15px;
   font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+.ismDateInterval .atlField {
+  width: 100%;
+}
+
+/* A heading of a column with a button after its name is as high as the button, the name at its top */
+.ismGrid__heading:has(.atlButton) {
+  align-items: flex-start;
+  min-height: 32px;
 }
 
 /* Values typed one after the other into one field */
@@ -3665,45 +3732,53 @@
 
 /* --- The filter of a transform job's source -------------------------------------------------------- */
 
+/* The filter as the component library's badge (22 px high, 8 px in, its cross 4 px after the text)
+   and, straight after it, the small empty button that opens its editor: one line of 28 px */
 .ismFilterRow {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  margin-top: var(--space-2);
+  height: 28px;
 }
 
 .ismFilterBadge {
   display: inline-flex;
   align-items: center;
-  max-width: 300px;
-  min-height: 20px;
-  border-radius: 10px;
+  box-sizing: border-box;
+  max-width: 100%;
+  height: 22px;
+  padding: 1px var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   background: var(--color-surface-secondary);
   font-size: var(--font-size-xs);
+  line-height: 18px;
 }
 
 .ismFilterBadge button {
   display: inline-flex;
   align-items: center;
-  min-height: 20px;
+  padding: 0;
   border: 0;
   background: none;
-  color: var(--color-text-secondary);
+  color: inherit;
   cursor: pointer;
 }
 
 .ismFilterBadge__text {
   min-width: 0;
-  padding: 0 0 0 var(--space-2);
   overflow: hidden;
   font-family: inherit;
   font-size: inherit;
+  line-height: inherit;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .ismFilterBadge__clear {
-  padding: 0 var(--space-2) 0 var(--space-1);
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin-left: var(--space-1);
 }
 
 .ismFilterBadge .atlIcon {
@@ -3711,22 +3786,83 @@
   height: 12px;
 }
 
+.ismFilterEdit {
+  height: 28px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--color-accent-button-text);
+  font: inherit;
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 21px;
+  cursor: pointer;
+}
+
+.ismFilterEdit:hover {
+  text-decoration: underline;
+}
+
+.ismFilterEdit:focus {
+  outline: none;
+  background: var(--color-accent-callout-fill);
+}
+
+/* What the filter is for, and where to read more: the smallest text, the first in 400 px */
+.ismFilterHelp {
+  max-width: 400px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+.ismFilterHelp--link {
+  max-width: none;
+  color: inherit;
+}
+
+.ismFilterError {
+  color: var(--color-critical);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+/* The editor of the filter in its popover, as the plugin's: two fifths of the window wide, 16 px
+   around, a title over a line, the editor in a compressed row (at most 400 px), the buttons 24 px
+   under it at the right, Cancel without padding */
+.atlPopover.ismDslPopover {
+  max-width: calc(100vw - 16px);
+  padding: var(--space-4);
+}
+
 .ismFilterEditor {
   width: 40vw;
 }
 
 .ismFilterEditor__title {
+  margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-4)) var(--space-4);
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--color-border-light);
   font-size: var(--font-size-s);
   font-weight: var(--font-weight-semibold);
+  line-height: 20px;
 }
 
-.ismFilterEditor__body {
+.ismFilterEditor__code {
+  height: 40vh;
+}
+
+.ismFilterEditor__buttons {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-4);
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.ismFilterEditor__buttons .atlButton--empty {
+  min-width: 0;
+  padding: 0;
 }
 
 /* --- What a transform job would write --------------------------------------------------------------- */
@@ -3750,6 +3886,7 @@
   margin: 0;
   font-size: 15px;
   line-height: 20px;
+  letter-spacing: -0.0196em;
   font-weight: var(--font-weight-semibold);
 }
 
@@ -3862,6 +3999,23 @@
   font-size: 15px;
   line-height: 20px;
   font-weight: var(--font-weight-semibold);
+}
+
+.ismAcc__text {
+  line-height: 21px;
+}
+
+.ismAcc__button:hover .ismAcc__text {
+  text-decoration: underline;
+}
+
+/* A heading as the label of a compressed row */
+.ismSr__heading {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 15px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
 }
 
 .ismAcc__title--l {

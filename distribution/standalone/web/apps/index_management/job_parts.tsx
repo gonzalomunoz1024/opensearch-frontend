@@ -298,14 +298,18 @@ export function SmallRow({
  */
 export function Fold({
   title,
-  large,
+  size,
   onOpen,
+  keepMounted,
   children,
 }: {
   title: string;
-  large?: boolean;
+  /** 'l': a heading at 17 px; 'text': ordinary text; left out, a heading at 15 px */
+  size?: 'l' | 'text';
   /** Called each time it is opened */
   onOpen?: () => void;
+  /** What it holds is there while it is closed too, as the component library's: it loads what it needs at once */
+  keepMounted?: boolean;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -321,9 +325,15 @@ export function Fold({
         }}
       >
         <Icon name="chevronRight" className="ismAcc__arrow" />
-        {large ? <h3 className="ismAcc__title ismAcc__title--l">{title}</h3> : <h4 className="ismAcc__title">{title}</h4>}
+        {size === 'l' ? (
+          <h3 className="ismAcc__title ismAcc__title--l">{title}</h3>
+        ) : size === 'text' ? (
+          <span className="ismAcc__text">{title}</span>
+        ) : (
+          <h4 className="ismAcc__title">{title}</h4>
+        )}
       </button>
-      {open && children}
+      {(open || keepMounted) && <div hidden={!open}>{children}</div>}
     </div>
   );
 }
