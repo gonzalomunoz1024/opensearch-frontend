@@ -7,7 +7,7 @@
  * into view; a saved search on a dashboard shows them in pages of 50 under a pager.
  */
 
-import { Fragment, memo, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, memo, useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { FieldValue } from '../../components/formatted';
 import { Icon, type IconName } from '../../components/icon';
 import { Tooltip } from '../../components/overlay';
@@ -36,17 +36,22 @@ export interface DocTableProps {
   onRemoveColumn?: (fieldName: string) => void;
   onMoveColumn?: (fieldName: string, by: number) => void;
   onFilter?: (fieldName: string, value: unknown, negate: boolean) => void;
-  /** What a row shows under it once it is opened */
-  details?: (hit: RawHit) => ReactNode;
+  /**
+   * What a row shows under it once it is opened, given the names of the columns drawn (the time
+   * field's first), which the original's opened document is handed
+   */
+  details?: (hit: RawHit, columns: string[]) => ReactNode;
   /** Pages of 50 rows with a pager above and below, as a saved search on a dashboard */
   paged?: boolean;
   /** How many documents matched, which the pager counts */
   hits?: number;
   /** The "Back to top." of the note under the last row */
   onBackToTop?: () => void;
+  /** The row drawn highlighted, by its index and id: the anchor among its neighbours */
+  highlightRow?: string;
 }
 
-const SOURCE_LIMIT = 200;
+const META_FIELDS = ['_source', '_id', '_type', '_index', '_score'];
 const SORTABLE_TYPES = new Set(['string', 'number', 'date', 'ip', 'boolean']);
 const FILTERABLE_TYPES = new Set(['string', 'number', 'date', 'ip', 'boolean', 'histogram']);
 
@@ -56,12 +61,12 @@ export function isSortable(field: Field | undefined, name: string): boolean {
 }
 
 /**
- * What a cell can be filtered on. The original filters a computed field with a script, which the
- * filters of this build cannot write, so a computed field offers no filter here.
+ * What a cell can be filtered on, as the original's field says: the id, a scripted field (its
+ * filter carries the script), or a searchable field of a kind that filters
  */
 export function isFilterable(field: Field | undefined, name: string): boolean {
   if (name === '_id') return true;
-  return Boolean(field && !field.scripted && field.searchable && FILTERABLE_TYPES.has(field.type));
+  return Boolean(field && (field.scripted || (field.searchable && FILTERABLE_TYPES.has(field.type))));
 }
 
 /**
@@ -73,6 +78,30 @@ export function tableColumns(columns: string[], timeFieldName: string | undefine
   if (shown.length === 0) shown = ['_source'];
   if (shown.length === 1 && timeFieldName && shown[0] === timeFieldName) shown = [...shown, '_source'];
   return shown;
+}
+
+/**
+ * The columns after a field's column button is pressed, as the original's addColumn and
+ * removeColumn leave them: a chosen field is taken out, the whole source back when none is left;
+ * any other is added at the end, in place of the whole source
+ */
+export function toggledColumns(columns: string[], name: string): string[] {
+  const without = columns.filter((column) => column !== name);
+  if (without.length !== columns.length) return without.length ? without : ['_source'];
+  return [...columns.filter((column) => column !== '_source'), name];
+}
+
+/**
+ * The columns Discover's table shows, as the original's filterColumns: with the setting
+ * discover:modifyColumnsOnSwitch on, the chosen and the default columns that the index pattern or
+ * the documents have (so a column of another pattern is dropped), the whole source when none is
+ * left; with it off, the chosen columns as they are
+ */
+export function filterColumns(columns: string[], names: ReadonlySet<string>, defaultColumns: string[], modify: boolean): string[] {
+  if (!modify) return columns.length > 0 ? columns : ['_source'];
+  const kept = [...new Set([...columns, ...defaultColumns])].filter((name) => names.has(name));
+  const built = kept.length > 1 && kept.includes('_source') ? kept.filter((name) => name !== '_source') : kept;
+  return built.length > 0 ? built : ['_source'];
 }
 
 /** A sort when none is chosen: the time field's, newest first by the setting, or the score's */
@@ -107,30 +136,83 @@ export function shortDots(name: string): string {
   return name.replace(/(.).+?\./g, '$1.');
 }
 
+/** As lodash's isPlainObject, which the original asks of a value: an object of {} or of no prototype */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object') return false;
+  const prototype: unknown = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+/**
+ * A document's fields in the order the original's source cell lists them, as its index pattern
+ * flattens a hit: the source's own as the document holds them (a list of objects, then each field
+ * of its objects), the meta fields of the setting, then the fields the search returned beside the
+ * source. A field the mapping knows keeps an object whole.
+ */
+export function sourceEntries(hit: RawHit, indexPattern: IndexPattern, metaFields: string[]): Array<[string, unknown]> {
+  const known = new Map(indexPattern.fields.map((field) => [field.name, field]));
+  const flat = new Map<string, unknown>();
+  const walk = (object: Record<string, unknown>, prefix: string) => {
+    for (const [own, value] of Object.entries(object)) {
+      const name = prefix ? `${prefix}.${own}` : own;
+      const field = known.get(name);
+      if (Array.isArray(value) && isPlainObject(value[0]) && field?.type !== 'nested') {
+        flat.set(name, value);
+        for (const item of value) if (isPlainObject(item)) walk(item, name);
+        continue;
+      }
+      if ((field && field.type !== 'conflict') || !isPlainObject(value)) {
+        const before = flat.get(name);
+        // The original tests the value it holds, so that a 0 or an empty string is written over;
+        // here a value is added to the ones before it whatever it is
+        if (!flat.has(name)) flat.set(name, Array.isArray(value) ? [...value] : value);
+        else if (Array.isArray(before)) before.push(value);
+        else flat.set(name, [before, value]);
+        continue;
+      }
+      walk(value, name);
+    }
+  };
+  walk(hit._source ?? {}, '');
+  const raw: Record<string, unknown> = { ...hit };
+  for (const name of metaFields) if (name !== '_source') flat.set(name, raw[name]);
+  for (const [name, values] of Object.entries(hit.fields ?? {})) {
+    if (name.startsWith('_') && !metaFields.includes(name)) continue;
+    flat.set(name, Array.isArray(values) && values.length <= 1 ? values[0] : values);
+  }
+  return [...flat];
+}
+
+/** A value as the original's formats write it in a cell: " - " when there is none, nothing for an empty string */
+export function CellValue({ indexPattern, name, value, hit }: { indexPattern: IndexPattern; name: string; value: unknown; hit: RawHit }) {
+  if (value === undefined || value === null) return <>{' - '}</>;
+  if (value === '') return null;
+  return <FieldValue indexPattern={indexPattern} fieldName={name} value={value} hit={hit} />;
+}
+
 const SourceCell = memo(function SourceCell({ hit, indexPattern }: { hit: RawHit; indexPattern: IndexPattern }) {
-  const flat = flattenHit(hit, indexPattern);
-  // What the search marked comes first, as it is why the document was found
-  const highlighted = Object.keys(hit.highlight ?? {});
-  const names = [
-    ...highlighted.filter((name) => name in flat),
-    ...Object.keys(flat)
-      .filter((name) => !highlighted.includes(name) && !name.startsWith('_'))
-      .sort((a, b) => a.localeCompare(b)),
-  ].slice(0, SOURCE_LIMIT);
+  const metaFields = services.uiSettings.get<string[]>('metaFields', META_FIELDS);
+  const shorten = services.uiSettings.get('shortDots:enable', false);
+  const entries = sourceEntries(hit, indexPattern, metaFields);
   return (
     <dl className="dscSource">
-      {names.map((name, index) => (
+      {entries.map(([name, value], index) => (
         <Fragment key={name}>
-          <dt data-test-subj="dscDataGridTableCellListFieldTitle">{name}:</dt>
+          <dt data-test-subj="dscDataGridTableCellListFieldTitle">{shorten ? shortDots(name) : name}:</dt>
           <dd>
-            <FieldValue indexPattern={indexPattern} fieldName={name} value={flat[name]} hit={hit} />
+            <CellValue indexPattern={indexPattern} name={name} value={value} hit={hit} />
           </dd>
-          {index !== names.length - 1 && ' '}
+          {index !== entries.length - 1 && ' '}
         </Fragment>
       ))}
     </dl>
   );
 });
+
+/** The height the setting lets a cell take before it is cut, which the cells read: 0 lets them grow */
+export function cellHeightStyle(maxHeight: number): CSSProperties {
+  return { '--dsc-cell-max-height': maxHeight > 0 ? `${maxHeight}px` : 'none' } as CSSProperties;
+}
 
 /** A small button of the table: the arrow that opens a row, a header's, a cell's filter */
 function TableButton({
@@ -245,6 +327,7 @@ const Row = memo(function Row({
   open,
   onToggle,
   details,
+  highlight = false,
 }: {
   hit: RawHit;
   indexPattern: IndexPattern;
@@ -254,6 +337,7 @@ const Row = memo(function Row({
   open: boolean;
   onToggle: (key: string) => void;
   details?: DocTableProps['details'];
+  highlight?: boolean;
 }) {
   const flat = flattenHit(hit, indexPattern);
   const cell = (name: string) => {
@@ -273,8 +357,7 @@ const Row = memo(function Row({
     const content = (
       <>
         <span className="dscTable__value" data-test-subj="osdDocTableCellDataField">
-          {/* A value a document lacks reads " - ", as the original's formats write it */}
-          {missing ? ' - ' : <FieldValue indexPattern={indexPattern} fieldName={name} value={value} hit={hit} />}
+          <CellValue indexPattern={indexPattern} name={name} value={value} hit={hit} />
         </span>
         {onFilter && !missing && isFilterable(field, name) && (
           <span className="dscTable__filter" data-test-subj="osdDocTableCellFilter">
@@ -310,7 +393,7 @@ const Row = memo(function Row({
   };
   return (
     <>
-      <tr data-test-subj="docTableRow">
+      <tr className={highlight ? 'dscTable__row--highlight' : undefined} data-test-subj="docTableRow">
         <td className="dscTable__toggle" data-test-subj="docTableExpandToggleColumn">
           <button
             type="button"
@@ -328,7 +411,7 @@ const Row = memo(function Row({
       {open && (
         <tr>
           <td className="dscTable__details" colSpan={columns.length + 1} data-test-subj="osdDocTableDetailsParent">
-            {details?.(hit)}
+            {details?.(hit, columns)}
           </td>
         </tr>
       )}
@@ -425,10 +508,12 @@ export function DocTable({
   paged = false,
   hits,
   onBackToTop,
+  highlightRow,
 }: DocTableProps) {
   const sampleSize = services.uiSettings.get<number>('discover:sampleSize', 500);
   const hideTime = services.uiSettings.get('doc_table:hideTimeColumn', false);
   const shorten = services.uiSettings.get('shortDots:enable', false);
+  const cellHeight = services.uiSettings.get<number>('truncate:maxHeight', 115);
   const timeField = indexPattern.timeFieldName;
   const columns = tableColumns(chosen, timeField);
 
@@ -549,7 +634,7 @@ export function DocTable({
   return (
     <div className="dscTable" data-test-subj="discoverTable">
       {pager}
-      <table ref={table} className="dscTable__table" data-test-subj="docTable">
+      <table ref={table} className="dscTable__table" style={cellHeightStyle(cellHeight)} data-test-subj="docTable">
         <thead>
           <tr className="dscTable__header" data-test-subj="docTableHeader">
             <th style={{ width: 28 }} />
@@ -579,6 +664,7 @@ export function DocTable({
                 open={opened.has(key)}
                 onToggle={toggle}
                 details={details}
+                highlight={key === highlightRow}
               />
             );
           })}

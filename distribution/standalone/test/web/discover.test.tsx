@@ -3,7 +3,19 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { Pager } from '../../web/apps/discover/doc_table';
+import {
+  anchorRequest,
+  contextCount,
+  contextRows,
+  isValidCount,
+  loadMoreCount,
+  surroundingRequest,
+  tieBreakerField,
+} from '../../web/apps/discover/context';
+import { Pager, filterColumns, isFilterable, sourceEntries, toggledColumns } from '../../web/apps/discover/doc_table';
+import { docFieldType, docFields } from '../../web/apps/discover/doc_viewer';
+import { valueFilter } from '../../web/apps/discover/filters';
+import { allFields } from '../../web/apps/discover/search';
 import {
   bucketAt,
   bucketSpan,
@@ -28,6 +40,7 @@ import {
 } from '../../web/apps/discover/sidebar';
 import { FieldToken, fieldTypeName } from '../../web/components/field_token';
 import { timeZoneOffset } from '../../web/lib/dates';
+import { createFormatter } from '../../web/lib/field_formats';
 import type { RawHit } from '../../web/lib/docs';
 import type { Field, IndexPattern } from '../../web/lib/types';
 
@@ -362,5 +375,162 @@ describe('the token of a field kind', () => {
     assert.equal(fieldTypeName('geo_shape'), 'Geo shape field');
     assert.equal(fieldTypeName('ip'), 'IP address field');
     assert.equal(fieldTypeName('_source'), 'Unknown field');
+  });
+});
+
+describe('a document as the original lists it', () => {
+  const META = ['_source', '_id', '_type', '_index', '_score'];
+  const pattern = patternOf([field('geo.coordinates', 'geo_point'), field('@timestamp', 'date')]);
+  const hit = (): RawHit => ({
+    _id: 'a1',
+    _index: 'logs',
+    _score: null,
+    _source: {
+      zeta: 1,
+      geo: { coordinates: { lat: 1, lon: 2 }, src: 'CN' },
+      products: [{ price: 5, tags: ['x'] }, { price: 0 }, { price: 7 }],
+      empty: '',
+    },
+    fields: { '@timestamp': ['2026-11-22T00:00:00Z'], hour: [3], _ignored: ['zeta'] },
+  });
+
+  it('lists the source as the document holds it, then the meta fields, then the fields beside it', () => {
+    const entries = sourceEntries(hit(), pattern, META);
+    assert.deepEqual(
+      entries.map(([name]) => name),
+      ['zeta', 'geo.coordinates', 'geo.src', 'products', 'products.price', 'products.tags', 'empty', '_id', '_type', '_index', '_score', '@timestamp', 'hour']
+    );
+    const values = Object.fromEntries(entries);
+    // A field the mapping knows keeps its object; a list of objects is listed, then each field of them
+    assert.deepEqual(values['geo.coordinates'], { lat: 1, lon: 2 });
+    assert.equal((values.products as unknown[]).length, 3);
+    // The original writes the 5 over with the 0 it tests as missing; here every value is kept
+    assert.deepEqual(values['products.price'], [5, 0, 7]);
+    assert.equal(values._type, undefined);
+    assert.equal(values._score, null);
+    assert.equal(values['@timestamp'], '2026-11-22T00:00:00Z');
+  });
+
+  it('sorts the fields of an opened document by the codes of their characters', () => {
+    assert.deepEqual(
+      docFields(hit(), pattern, META).map(([name]) => name),
+      ['@timestamp', '_id', '_index', '_score', '_type', 'empty', 'geo.coordinates', 'geo.src', 'hour', 'products', 'products.price', 'products.tags', 'zeta']
+    );
+  });
+
+  it('calls a name the pattern lacks nested when a nested path starts there', () => {
+    const nested = patternOf([field('user.name', 'string', { subType: { nested: { path: 'user' } } }), field('bytes', 'number')]);
+    assert.equal(docFieldType(nested, 'bytes'), 'number');
+    assert.equal(docFieldType(nested, 'user'), 'nested');
+    assert.equal(docFieldType(nested, 'extra'), 'undefined');
+  });
+
+  it("writes an object as indented JSON, and a list on several lines when one of its values takes several", () => {
+    const format = createFormatter({ id: 'string' });
+    assert.equal(format({ lat: 1, lon: 2 }).text, '{\n  "lat": 1,\n  "lon": 2\n}');
+    assert.equal(format(['a', 'b']).text, 'a, b');
+    assert.equal(format([{ a: 1 }, { a: 2 }]).text, '{\n  "a": 1\n},\n{\n  "a": 2\n}');
+  });
+
+  it("adds a field's column in place of the whole source, and takes it out to leave the source when none is left", () => {
+    assert.deepEqual(toggledColumns(['_source'], 'bytes'), ['bytes']);
+    assert.deepEqual(toggledColumns(['bytes'], 'agent'), ['bytes', 'agent']);
+    assert.deepEqual(toggledColumns(['bytes', 'agent'], 'bytes'), ['agent']);
+    assert.deepEqual(toggledColumns(['agent'], 'agent'), ['_source']);
+  });
+});
+
+describe("Discover's settings as the original reads them", () => {
+  const known = new Set(['_source', '_id', 'bytes', 'agent', 'message']);
+
+  it('shows only the chosen and default columns the pattern or the documents have (discover:modifyColumnsOnSwitch)', () => {
+    // A column of another index pattern is dropped, the whole source shown when none is left
+    assert.deepEqual(filterColumns(['geo.src'], known, ['_source'], true), ['_source']);
+    assert.deepEqual(filterColumns(['geo.src', 'bytes'], known, ['_source'], true), ['bytes']);
+    // A default column the pattern has is shown beside the chosen ones, as the original does
+    assert.deepEqual(filterColumns(['bytes'], known, ['message'], true), ['bytes', 'message']);
+    // With the setting off the chosen columns stay as they are
+    assert.deepEqual(filterColumns(['geo.src'], known, ['_source'], false), ['geo.src']);
+    assert.deepEqual(filterColumns([], known, ['_source'], false), ['_source']);
+  });
+
+  it('offers a filter on a scripted field, as its filter carries the script', () => {
+    assert.equal(isFilterable(field('hour', 'number', { scripted: true, searchable: false }), 'hour'), true);
+    assert.equal(isFilterable(field('point', 'geo_point'), 'point'), false);
+    assert.equal(isFilterable(undefined, '_id'), true);
+  });
+
+  it('adds fields: ["*"] to a search only with search:includeAllFields on', () => {
+    assert.deepEqual(allFields(true), { fields: ['*'] });
+    assert.deepEqual(allFields(false), {});
+  });
+
+  it('filters for a value with a phrase, and for a null with the absence of the field', () => {
+    const phrase = valueFilter({ name: 'agent' }, 'curl', true, 'logs', false);
+    assert.deepEqual([phrase.meta.type, phrase.meta.negate, phrase.query, phrase.$state], [
+      'phrase',
+      true,
+      { match_phrase: { agent: 'curl' } },
+      { store: 'appState' },
+    ]);
+    // As the original's: "Filter for value" on a null keeps the documents without the field,
+    // "Filter out value" those with it
+    const absent = valueFilter({ name: 'agent' }, null, false, 'logs', false);
+    assert.deepEqual([absent.meta.type, absent.meta.negate, absent.meta.key], ['exists', true, 'agent']);
+    assert.equal(valueFilter({ name: 'agent' }, undefined, true, 'logs', false).meta.negate, false);
+    // filters:pinnedByDefault puts it among the pinned filters
+    assert.deepEqual(valueFilter({ name: 'agent' }, 'curl', false, 'logs', true).$state, { store: 'globalState' });
+  });
+});
+
+describe('a document among its neighbours', () => {
+  const pattern = patternOf([field('@timestamp', 'date'), field('tie', 'number'), field('text', 'string', { aggregatable: false })]);
+
+  it('breaks ties on the first field of context:tieBreakerFields that a search can sort on', () => {
+    assert.equal(tieBreakerField(pattern, ['_doc']), '_doc');
+    assert.equal(tieBreakerField(pattern, ['missing', 'text', 'tie', '_doc']), 'tie');
+    assert.equal(tieBreakerField(pattern, ['missing', 'text']), undefined);
+    assert.equal(tieBreakerField(pattern, 'not a list'), undefined);
+  });
+
+  it('loads context:step more on a side, never past OpenSearch\'s limit', () => {
+    assert.equal(loadMoreCount(5, 5), 10);
+    assert.equal(loadMoreCount(9998, 5), undefined);
+    assert.equal(isValidCount(0), true);
+    assert.equal(isValidCount(10000), true);
+    assert.equal(isValidCount(-1), false);
+    assert.equal(isValidCount(Number.NaN), false);
+  });
+
+  it('starts each side at context:defaultSize unless the address says otherwise', () => {
+    assert.equal(contextCount(undefined, 5), 5);
+    assert.equal(contextCount(undefined, '7'), 7);
+    assert.equal(contextCount(12, 5), 12);
+    assert.equal(contextCount('3', 5), 3);
+    assert.equal(contextCount('x', 'y'), 5);
+  });
+
+  it('searches each side after the anchor in its own direction, without the anchor, with the filters', () => {
+    const anchor: RawHit = { _id: 'a', _index: 'logs', sort: [1700000000000, 42] };
+    const filters = { bool: { must: [], filter: [{ term: { tag: 'x' } }], should: [], must_not: [{ exists: { field: 'gone' } }] } };
+    const newer = surroundingRequest('predecessors', anchor, '@timestamp', '_doc', 5, filters);
+    assert.deepEqual(newer.sort, [{ '@timestamp': 'asc' }, { _doc: 'asc' }]);
+    assert.deepEqual(newer.search_after, [1700000000000, 42]);
+    assert.deepEqual(newer.query, {
+      bool: { must: [], filter: [{ term: { tag: 'x' } }], should: [], must_not: [{ exists: { field: 'gone' } }, { ids: { values: ['a'] } }] },
+    });
+    const older = surroundingRequest('successors', anchor, '@timestamp', '_doc', 2, filters);
+    assert.deepEqual(older.sort, [{ '@timestamp': 'desc' }, { _doc: 'desc' }]);
+    assert.equal(older.size, 2);
+    assert.deepEqual(anchorRequest('a', '@timestamp', 'tie').sort, [{ '@timestamp': 'desc' }, { tie: 'desc' }]);
+  });
+
+  it('lists the newer documents newest first above the anchor, the older ones under it', () => {
+    const hit = (id: string): RawHit => ({ _id: id, _index: 'logs' });
+    // The newer side comes back from the anchor up
+    assert.deepEqual(
+      contextRows([hit('n1'), hit('n2')], hit('a'), [hit('o1'), hit('o2')]).map((row) => row._id),
+      ['n2', 'n1', 'a', 'o1', 'o2']
+    );
   });
 });

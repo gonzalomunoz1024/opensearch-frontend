@@ -736,12 +736,12 @@
   border-bottom: 1px solid var(--color-border-light);
 }
 
+/* As tall as its tallest part: the count with the 32 px "Reset search" inside 4 px, or the CSV button */
 .dscResultsBar__actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-  min-height: 40px;
 }
 
 .dscResultsBar__count {
@@ -908,8 +908,10 @@
   word-break: normal;
 }
 
+/* A cell no taller than the truncate:maxHeight setting allows */
 .dscTable__truncate {
   display: inline-block;
+  max-height: var(--dsc-cell-max-height, 115px);
   overflow: hidden;
 }
 
@@ -990,40 +992,274 @@
   word-break: break-word;
 }
 
+/* As the original's: each name and value on 18 px in lines of 24, a value broken anywhere */
 .dscSource dt,
 .dscSource dd {
   display: inline;
   margin: 0;
+  line-height: 18px;
+}
+
+.dscSource dd {
+  word-break: break-all;
 }
 
 .dscSource dt {
   margin-right: var(--space-1);
-  padding: 2px var(--space-1);
+  padding: 0 var(--space-1);
+  border: 1px solid var(--color-border-light);
   border-radius: var(--radius-sm);
   background: var(--color-accent-tint);
   word-break: normal;
 }
 
-.dscTable__details {
-  padding-bottom: var(--space-4) !important;
+/*
+ * An opened document, as the original's: a header with the links to the document, the Table and
+ * JSON tabs, and the table of its fields, in the lines and code face of the legacy table
+ */
+.dscDetails__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 20px;
 }
 
-.dscDetails {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
+.dscDetails__icon {
+  display: inline-flex;
 }
 
 .dscDetails__title {
-  font-family: var(--font-family-code);
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
   font-size: var(--font-size-s);
   font-weight: var(--font-weight-semibold);
+  line-height: 20px;
 }
 
 .dscDetails__links {
+  display: flex;
+  flex: 1 1 0;
+  justify-content: flex-end;
   gap: var(--space-4);
+  min-width: 0;
+}
+
+.dscDetails__link {
+  color: var(--color-accent);
+  font-weight: var(--font-weight-regular);
+  text-decoration: none;
+}
+
+.dscDetails__link:hover {
+  text-decoration: underline;
+}
+
+.dscDetails__link > .atlIcon {
+  width: 12px;
+  height: 12px;
+  margin-left: var(--space-1);
+  vertical-align: middle;
+}
+
+.dscDetails > .dscDocViewer {
+  margin-top: var(--space-2);
+}
+
+.dscDocViewer__tabs {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.dscDocViewer__tab {
+  padding: var(--space-1) 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-secondary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 21px;
+  cursor: pointer;
+  transition:
+    color var(--duration-fast) ease-out,
+    background-color var(--duration-fast) ease-out;
+}
+
+.dscDocViewer__tab:hover,
+.dscDocViewer__tab:focus-visible {
+  color: var(--color-text-primary);
+}
+
+.dscDocViewer__tab[aria-selected="true"] {
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  cursor: default;
+}
+
+/* The document as JSON: the original's code block, with its copy button in the corner */
+.dscDocViewer__code {
+  position: relative;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+}
+
+.dscDocViewer__pre {
+  margin: 0;
+  padding: var(--space-2) 36px var(--space-2) var(--space-2);
+  overflow: auto;
+  color: var(--color-full-shade);
   font-family: var(--font-family-code);
   font-size: var(--font-size-xs);
+  line-height: 18px;
+  white-space: pre-wrap;
+}
+
+.dscDocViewer__copy {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.dscDocViewer__copy:hover {
+  background: var(--color-hover);
+}
+
+.dscJson__string {
+  color: var(--code-block-string);
+}
+
+.dscJson__number {
+  color: var(--code-block-number);
+}
+
+.dscJson__keyword {
+  color: var(--code-block-keyword);
+}
+
+.dscJson__punctuation {
+  opacity: 0.7;
+}
+
+/* The bootstrap table of the original's style sheet, condensed: 5 px around a cell, a line over
+   every row but the first, in the code face of the legacy table wherever the viewer is drawn */
+.dscDocViewer__table {
+  width: 100%;
+  margin: var(--space-2) 0 20px;
+  border-collapse: collapse;
+  background: var(--color-surface);
+  font-family: var(--font-family-code);
+  font-size: var(--font-size-xs);
+}
+
+.dscTable__table .dscDocViewer__table td,
+.dscDocViewer__table td {
+  padding: 5px;
+  border-top: 1px solid var(--dsc-table-line);
+  line-height: 1.42857143;
+  vertical-align: top;
+}
+
+.dscDocViewer__table tr:first-child > td {
+  border-top-color: transparent;
+}
+
+/* At least 160 px, and as wide as the longest name: the original never cuts a field's name */
+.dscDocViewer__table td.dscDocViewer__field {
+  width: 160px;
+  padding-top: var(--space-2);
+  white-space: nowrap;
+}
+
+.dscDocViewer__buttons {
+  width: 60px;
+  white-space: nowrap;
+}
+
+.dscDocViewer__fieldName {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* A field's buttons, shown while its row is pointed at or one of them has the focus */
+.dscDocViewer__actionButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--color-accent);
+  vertical-align: top;
+  cursor: pointer;
+}
+
+.dscDocViewer__actionButton .atlIcon {
+  width: 12px;
+  height: 12px;
+}
+
+.dscDocViewer__actionButton:hover:not(:disabled) {
+  background: var(--color-accent-tint);
+}
+
+.dscDocViewer__actionButton:disabled {
+  color: var(--color-text-tertiary);
+  cursor: not-allowed;
+}
+
+.dscDocViewer__buttons .dscDocViewer__actionButton {
+  opacity: 0;
+}
+
+.dscDocViewer__table tr:hover .dscDocViewer__actionButton,
+.dscDocViewer__buttons:focus-within .dscDocViewer__actionButton {
+  opacity: 1;
+}
+
+.dscDocViewer__warning {
+  display: inline-flex;
+  margin-right: var(--space-2);
+  color: var(--color-warning-text);
+  vertical-align: top;
+}
+
+.dscDocViewer__warning .atlIcon {
+  width: 12px;
+  height: 12px;
+  margin-top: 4px;
+}
+
+.dscDocViewer__value {
+  display: inline-block;
+  padding-top: 2px;
+  color: var(--color-full-shade);
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow-wrap: break-word;
+  vertical-align: top;
+}
+
+.dscDocViewer__value--cut {
+  max-height: var(--dsc-cell-max-height, 115px);
+  overflow: hidden;
 }
 
 /* The bar that shows more rows are on their way, and the note under the last of them */
@@ -1156,36 +1392,75 @@
   color: var(--color-text-tertiary);
 }
 
-.dscDocFields td {
-  vertical-align: top;
-  font-size: var(--font-size-xs);
-}
-
-.dscDocFields__actions {
-  width: 1%;
-  white-space: nowrap;
-  padding-right: 0 !important;
-}
-
-.dscDocFields__actions .atlButton {
-  width: 22px;
-  height: 22px;
-}
-
-.dscDocFields__name {
-  width: 30%;
-  font-weight: var(--font-weight-medium);
-  overflow-wrap: anywhere;
-}
-
-.dscDocFields__value {
-  font-family: var(--font-family-code);
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
-
+/* One document on its own page, as the original's: in a panel across the page, 8 px inside it */
 .dscDocPage {
-  max-width: 1120px;
+  padding: var(--space-4);
+}
+
+.dscDocPage > .dscDocPage__content {
+  padding: var(--space-2);
+}
+
+/*
+ * A document among its neighbours, as the original's context view: the action bar over the newer
+ * documents ("Load", the count, its words, 8 px above the table) and its twin under the older ones
+ */
+.dscContextBar {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: var(--space-2);
+}
+
+.dscContextBar--older {
+  gap: var(--space-2);
+  padding: var(--space-2) 0 0;
+}
+
+.dscContextBar__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* The original's small empty button, flush on its right: the icon, 8 px, the word */
+.dscContextBar__load.atlButton {
+  gap: var(--space-2);
+  margin-left: var(--space-2);
+  padding: 0 1px;
+}
+
+.dscContextBar__count.atlField {
+  flex: none;
+  width: 114px;
+  padding: 0 var(--space-2);
+}
+
+.dscContextBar__text {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+}
+
+/* The anchor, in the tint the original's table writes for a highlighted row */
+:root {
+  --dsc-row-highlight: rgb(229.5 241.7 255);
+}
+
+:root.themeDark {
+  --dsc-row-highlight: rgb(23.3 59.9 98.2);
+}
+
+.dscTable__row--highlight > td {
+  background: var(--dsc-row-highlight);
+}
+
+.dscTable__row--highlight .dscTable__filter::before {
+  background-image: linear-gradient(to right, transparent 0, var(--dsc-row-highlight) 16px);
+}
+
+/* Before the first search, when the setting discover:searchOnPageLoad is off */
+.dscUninitialized {
+  display: flex;
+  justify-content: center;
 }
 
 @media (max-width: 767px) {

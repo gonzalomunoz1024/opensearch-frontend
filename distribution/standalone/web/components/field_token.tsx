@@ -106,12 +106,21 @@ export function fieldTypeName(type: string): string {
 }
 
 /** The small mark that says what kind of field a field is; a scripted field's is filled */
-export function FieldToken({ type, scripted = false }: { type: string; scripted?: boolean }) {
+export function FieldToken({
+  type,
+  scripted = false,
+  plain = false,
+}: {
+  type: string;
+  scripted?: boolean;
+  /** Without fill and in gray, as the original's table of a document's fields draws every kind */
+  plain?: boolean;
+}) {
   const look = LOOKS[type] ?? UNKNOWN;
   const glyph = GLYPHS[look.glyph];
   const name = fieldTypeName(type);
-  const classes = ['atlToken', `atlToken--${look.color}`, `atlToken--${look.shape}`];
-  if (look.solid || scripted) classes.push('atlToken--solid');
+  const classes = ['atlToken', plain ? 'atlToken--plain' : `atlToken--${look.color}`, `atlToken--${look.shape}`];
+  if (!plain && (look.solid || scripted)) classes.push('atlToken--solid');
   return (
     <span className={classes.join(' ')} title={name} aria-label={name} role="img" data-type={type}>
       <svg className={glyph.small ? 'atlToken__glyph atlToken__glyph--small' : 'atlToken__glyph'} viewBox="0 0 16 16" aria-hidden>

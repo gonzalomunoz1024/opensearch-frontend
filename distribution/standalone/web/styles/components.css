@@ -1549,6 +1549,13 @@ select.atlField {
   --token-on: var(--token-on-solid);
 }
 
+/* No fill and no ring, the glyph in gray: a field's kind in the original's document table */
+.atlToken--plain {
+  --token: var(--token-plain);
+  --token-fill: transparent;
+  --token-ring: transparent;
+}
+
 /* A conflict: the original names a colour the library does not know, so its token has no fill */
 .atlToken--none {
   --token: var(--color-text-primary);

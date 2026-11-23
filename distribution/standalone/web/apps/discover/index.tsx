@@ -10,7 +10,7 @@ import { CopyableCode, downloadFile, Tooltip } from '../../components/overlay';
 import { dateInterval, tabify } from '../../lib/aggs';
 import { formatDate, parseInterval, resolveTimeRange, timeZoneOffset } from '../../lib/dates';
 import { flattenHit, toCsv, type RawHit } from '../../lib/docs';
-import { existsFilter, mergeFilters, phraseFilter } from '../../lib/query';
+import { existsFilter, mergeFilters } from '../../lib/query';
 import { parseSearchSource, serializeSearchSource } from '../../lib/search_source';
 import type { Field, Filter, IndexPattern, Query } from '../../lib/types';
 import { appUrl, decodeState, encodeState } from '../../lib/url';
@@ -30,8 +30,9 @@ import { SearchBar } from '../../shell/search_bar';
 import { showSearchError } from '../../shell/search_error';
 import { addRecentlyAccessed, currentGlobalParam, useAutoRefresh, useBreadcrumbs, useGlobalState } from '../../shell/state';
 import { DocDetails } from './doc_viewer';
-import { DocTable, type SortPair } from './doc_table';
+import { DocTable, filterColumns, toggledColumns, type SortPair } from './doc_table';
 import { DocPage, ContextPage } from './doc_pages';
+import { valueFilter } from './filters';
 import { Histogram } from './histogram';
 import { bucketSpan, parseBucketInterval, shortestBucket } from './histogram_scale';
 import { aggContext, buildDiscoverRequest, histogramAgg } from './search';
@@ -142,7 +143,14 @@ export function Discover({ basePath }: { basePath: string }) {
     return <DocPage indexPatternId={decodeURIComponent(doc[1])} index={decodeURIComponent(doc[2])} id={location.hashParams.id ?? ''} basePath={basePath} />;
   }
   if (context) {
-    return <ContextPage indexPatternId={decodeURIComponent(context[1])} id={decodeURIComponent(context[2])} basePath={basePath} />;
+    return (
+      <ContextPage
+        key={`${context[1]}/${context[2]}`}
+        indexPatternId={decodeURIComponent(context[1])}
+        id={decodeURIComponent(context[2])}
+        basePath={basePath}
+      />
+    );
   }
   const savedId = /^\/view\/(.+)$/.exec(hashPath)?.[1];
   return <DiscoverMain basePath={basePath} savedId={savedId ? decodeURIComponent(savedId) : undefined} />;
@@ -305,8 +313,19 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
   // --- The search ---
   const sampleSize = services.uiSettings.get<number>('discover:sampleSize', 500);
   const queryKey = JSON.stringify([query, filters, sort, interval]);
+  // With discover:searchOnPageLoad off the page waits, as the original's, until it is asked for a
+  // search: a query, filters, a time range, a refresh. A saved search or a running refresh
+  // interval searches at once.
+  const [searchStarted, setSearchStarted] = useState(
+    () => services.uiSettings.get<boolean>('discover:searchOnPageLoad', true) || Boolean(savedId) || !global.refreshInterval.pause
+  );
+  const startKey = JSON.stringify([queryKey, global.time.from, global.time.to, tick]);
+  const firstStartKey = useRef(startKey);
   useEffect(() => {
-    if (!indexPattern || indexPattern.id !== indexPatternId) return undefined;
+    if (!searchStarted && startKey !== firstStartKey.current) setSearchStarted(true);
+  }, [startKey, searchStarted]);
+  useEffect(() => {
+    if (!searchStarted || !indexPattern || indexPattern.id !== indexPatternId) return undefined;
     const controller = new AbortController();
     const range = indexPattern.timeFieldName
       ? resolveTimeRange(global.time, { weekStart: services.weekStart() })
@@ -340,7 +359,7 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
       });
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [indexPattern, indexPatternId, queryKey, global.time.from, global.time.to, sampleSize, tick]);
+  }, [searchStarted, indexPattern, indexPatternId, queryKey, global.time.from, global.time.to, sampleSize, tick]);
 
   const refresh = useCallback(() => setTick((count) => count + 1), []);
   useAutoRefresh(global.refreshInterval, refresh);
@@ -348,10 +367,7 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
   // --- What the page does ---
   const toggleColumn = useCallback(
     (name: string) => {
-      const without = columns.filter((column) => column !== name);
-      let next: string[];
-      if (without.length !== columns.length) next = without.length ? without : ['_source'];
-      else next = [...columns.filter((column) => column !== '_source'), name];
+      const next = toggledColumns(columns, name);
       writeApp({ columns: next, sort: sort.filter(([field]) => next.includes(field) || field === indexPattern?.timeFieldName) });
     },
     [columns, sort, writeApp, indexPattern]
@@ -372,19 +388,18 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
     (name: string, value: unknown, negate: boolean) => {
       if (!indexPattern) return;
       const values = Array.isArray(value) ? value : [value];
-      const made = values.map((item) => {
-        const filter = phraseFilter({ name }, item, indexPattern.id);
-        filter.meta.negate = negate;
-        if (services.uiSettings.get('filters:pinnedByDefault', false)) filter.$state = { store: 'globalState' };
-        return filter;
-      });
-      setFilters(mergeFilters(filters, made));
+      // The field itself, so that a filter on a scripted field carries its script
+      const field = indexPattern.fields.find((candidate) => candidate.name === name) ?? { name };
+      const pinned = services.uiSettings.get('filters:pinnedByDefault', false);
+      setFilters(mergeFilters(filters, values.map((item) => valueFilter(field, item, negate, indexPattern.id, pinned))));
     },
     [indexPattern, filters, setFilters]
   );
   const addExists = useCallback(
     (name: string) => {
-      if (indexPattern) setFilters(mergeFilters(filters, [existsFilter({ name }, indexPattern.id)]));
+      if (!indexPattern) return;
+      const field = indexPattern.fields.find((candidate) => candidate.name === name) ?? { name };
+      setFilters(mergeFilters(filters, [existsFilter(field, indexPattern.id)]));
     },
     [indexPattern, filters, setFilters]
   );
@@ -415,16 +430,40 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
     [indexPattern, appFilters, query]
   );
 
+  // The columns the table shows, as the original's filterColumns leaves them: the names the
+  // pattern has and those the documents found hold
+  const shownColumns = useMemo(() => {
+    if (!indexPattern) return columns;
+    const names = new Set(indexPattern.fields.map((field) => field.name));
+    for (const row of result?.rows ?? []) for (const name of Object.keys(flattenHit(row, indexPattern))) names.add(name);
+    return filterColumns(
+      columns,
+      names,
+      services.uiSettings.get<string[]>('defaultColumns', ['_source']),
+      services.uiSettings.get<boolean>('discover:modifyColumnsOnSwitch', true)
+    );
+  }, [columns, indexPattern, result]);
+
   const details = useCallback(
-    (hit: RawHit) => (
+    (hit: RawHit, drawn: string[]) => (
       <DocDetails
         hit={hit}
         indexPattern={indexPattern as IndexPattern}
         basePath={basePath}
-        actions={{ columns, onToggleColumn: toggleColumn, onFilter: addFilter, onFilterExists: addExists }}
+        appFilters={filters.filter((filter) => !isPinned(filter))}
+        actions={{
+          columns: drawn,
+          // As the original's: a column drawn is taken out, another added; the time column the
+          // table adds of itself is no chosen column, so taking it out does nothing
+          onToggleColumn: (name) => {
+            if (drawn.includes(name) === columns.includes(name)) toggleColumn(name);
+          },
+          onFilter: addFilter,
+          onFilterExists: addExists,
+        }}
       />
     ),
-    [indexPattern, basePath, columns, toggleColumn, addFilter, addExists]
+    [indexPattern, basePath, filters, columns, toggleColumn, addFilter, addExists]
   );
 
   // The zone the chart is drawn in: the setting dateFormat:tz, or the browser's own
@@ -617,7 +656,21 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
           savedQueryId={savedQueryId}
           onSavedQueryChange={onSavedQueryChange}
         />
-        {failed || (result && total === 0) ? (
+        {!searchStarted ? (
+          <div className="dscUninitialized">
+            <EmptyPrompt
+              icon="discover"
+              title="Start searching"
+              actions={
+                <Button variant="primary" size="s" onClick={() => setSearchStarted(true)} testId="discover-refreshDataButton">
+                  Refresh data
+                </Button>
+              }
+            >
+              <p>Write a query, add some filters, or simply hit Refresh to retrieve results for the current query.</p>
+            </EmptyPrompt>
+          </div>
+        ) : failed || (result && total === 0) ? (
           <NoResults query={query} />
         ) : !result ? (
           <Loading>Searching</Loading>
@@ -718,10 +771,14 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
             <DocTable
               rows={rows}
               indexPattern={indexPattern}
-              columns={columns}
+              columns={shownColumns}
               sort={sort}
               onSort={(next) => writeApp({ sort: next })}
-              onRemoveColumn={toggleColumn}
+              onRemoveColumn={(name) => {
+                // A default column the table adds of itself is no chosen column: the original
+                // leaves the columns as they are
+                if (columns.includes(name)) toggleColumn(name);
+              }}
               onMoveColumn={moveColumn}
               onFilter={addFilter}
               details={details}

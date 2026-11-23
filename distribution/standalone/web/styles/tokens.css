@@ -17,6 +17,8 @@
   --color-text-primary: #1d1d1f;
   --color-text-secondary: #6e6e73;
   --color-text-tertiary: #86868b;
+  /* The component library's full shade, in which the original writes a document's values */
+  --color-full-shade: #000000;
 
   /* The one accent and the three states */
   --color-accent: #007aff;
@@ -57,6 +59,10 @@
   --code-name: #006bb4;
   --code-number: #00756c;
   --code-keyword: #6b4fa8;
+  /* The component library's code block, as the original's theme colours a JSON document */
+  --code-block-string: #d74987;
+  --code-block-number: #0c8967;
+  --code-block-keyword: #6e28c3;
 
   /* Field kind tokens: Atlas names none, these are the component library's tokens as the
      original's theme compiles them: the glyph, the fill and the ring of each kind, and its solid
@@ -93,6 +99,8 @@
   --token-gray-fill: #f1f1f1;
   --token-gray-ring: #d4d4d5;
   --token-gray-solid: #6e6e73;
+  /* The gray of a token without fill */
+  --token-plain: #6e6e73;
   /* The glyph on a solid fill: dark on the colours, white on the gray */
   --token-on-solid: #1d1d1f;
   --token-on-gray-solid: #ffffff;
@@ -155,6 +163,7 @@
   --color-text-primary: #f5f5f7;
   --color-text-secondary: #98989d;
   --color-text-tertiary: #636366;
+  --color-full-shade: #ffffff;
 
   --color-accent: #0a84ff;
   --color-healthy: #30d158;
@@ -182,6 +191,9 @@
   --code-name: #6ab0f1;
   --code-number: #10b688;
   --code-keyword: #b174fc;
+  --code-block-string: #d0809b;
+  --code-block-number: #10b688;
+  --code-block-keyword: #b174fc;
 
   --token-number: #74c1ac;
   --token-number-fill: #2e4a44;
@@ -208,6 +220,7 @@
   --token-gray-fill: #323234;
   --token-gray-ring: #39393b;
   --token-gray-solid: #636366;
+  --token-plain: #636366;
 
   color-scheme: dark;
 }

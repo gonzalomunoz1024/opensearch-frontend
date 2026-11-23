@@ -75,7 +75,8 @@ function toDate(value: unknown): Date | undefined {
 export function stringify(value: unknown): string {
   if (isMissing(value)) return MISSING;
   if (typeof value === 'string') return value;
-  if (typeof value === 'object') return JSON.stringify(value);
+  // As the original's formats write an object: indented by two spaces
+  if (typeof value === 'object') return JSON.stringify(value, null, 2);
   return String(value);
 }
 
@@ -297,7 +298,9 @@ export function createFormatter(spec: FieldFormatSpec | undefined, settings = DE
     if (Array.isArray(value)) {
       if (value.length === 1) return one(value[0]);
       const parts = value.map((item) => one(item));
-      return { ...parts[0], text: parts.map((part) => part.text).join(', '), href: undefined, image: undefined };
+      // As the original joins a list: a line to each value when one of them takes several
+      const separator = parts.some((part) => part.text.includes('\n')) ? ',\n' : ', ';
+      return { ...parts[0], text: parts.map((part) => part.text).join(separator), href: undefined, image: undefined };
     }
     return one(value);
   };
