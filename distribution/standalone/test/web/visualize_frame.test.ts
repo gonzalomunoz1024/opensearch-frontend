@@ -20,6 +20,7 @@ import {
 import { newVis } from '../../web/apps/visualize/defaults';
 import { editorAggs, editorHeading, hasUnappliedChanges } from '../../web/apps/visualize/editor_layout';
 import { INDEX_PATTERNS_LINK, SavedObjectNotFound, found, loadFailure } from '../../web/apps/visualize/load_failure';
+import { visualizeRoute } from '../../web/apps/visualize/routes';
 import {
   editorStateFor,
   incomingEditorState,
@@ -218,6 +219,19 @@ describe('the aggregations the editor shows and draws', () => {
   it('are those that were saved when the address has none, and those of the address for a kind drawn from none', () => {
     assert.equal(editorAggs(undefined, SAMPLE_PIE.aggs, true, {}), SAMPLE_PIE.aggs);
     assert.equal(editorAggs(fromDiscover, [], false, {}), fromDiscover);
+  });
+});
+
+describe('the pages of Visualize an address names', () => {
+  it("opens the editor at /create without a kind too, which then fails to load as the original's", () => {
+    assert.deepEqual(visualizeRoute('/create'), { page: 'create' });
+  });
+
+  it('opens the list with the dialog of a new visualization at /new, the editor of a saved one at /edit/<id>, else the list', () => {
+    assert.deepEqual(visualizeRoute('/new'), { page: 'new' });
+    assert.deepEqual(visualizeRoute('/edit/a%20b'), { page: 'edit', id: 'a%20b' });
+    assert.deepEqual(visualizeRoute('/'), { page: 'listing' });
+    assert.deepEqual(visualizeRoute(''), { page: 'listing' });
   });
 });
 
