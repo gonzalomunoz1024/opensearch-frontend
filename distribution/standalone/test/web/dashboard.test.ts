@@ -13,6 +13,7 @@ import {
   emptyDashboard,
   existingFilter,
   findPlace,
+  finderName,
   handedPanel,
   moveItem,
   newPanelIndex,
@@ -647,6 +648,20 @@ describe('what a panel offers', () => {
   it('offers no Inspect for the kinds of visualization the original gives no inspector', () => {
     for (const type of ['input_control_vis', 'markdown', 'metrics', 'timelion']) assert.equal(offersInspector(type), false, type);
     for (const type of ['area', 'pie', 'table', 'vega', 'region_map', 'tile_map']) assert.equal(offersInspector(type), true, type);
+  });
+
+  it('names what Add panels found as the original does in its tooltip and in the toast', () => {
+    // As the dashboard's flyouts name the types they add
+    const types = [
+      { type: 'visualization', name: 'Visualization' },
+      { type: 'visualization-visbuilder', name: 'VisBuilder' },
+      { type: 'search', name: 'Saved search' },
+    ];
+    const found = (type: string, attributes: { title?: string; visState?: string }) => ({ id: 'x', type, attributes, references: [] });
+    assert.equal(finderName(found('visualization', { title: 'Sales by Gender', visState: '{"type":"pie"}' }), types), 'Sales by Gender (Pie)');
+    assert.equal(finderName(found('visualization', { title: 'Notes', visState: '{"type":"markdown"}' }), types), 'Notes (Markdown)');
+    assert.equal(finderName(found('search', { title: '[eCommerce] Orders' }), types), '[eCommerce] Orders (Saved search)');
+    assert.equal(finderName(found('visualization-visbuilder', { title: 'Built' }), types), 'Built (VisBuilder)');
   });
 });
 

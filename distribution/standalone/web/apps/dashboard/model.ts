@@ -10,6 +10,7 @@ import type { SavedObjectReference } from '../../../common/saved_objects';
 import { parseSearchSource, serializeSearchSource } from '../../lib/search_source';
 import type { Filter, Query, RefreshInterval } from '../../lib/types';
 import { encodeState } from '../../lib/url';
+import { visType as visTypeOf } from '../../lib/vis';
 
 export const GRID_COLUMNS = 48;
 export const ROW_HEIGHT = 20;
@@ -666,6 +667,25 @@ const NOT_INSPECTED = new Set(['input_control_vis', 'markdown', 'metrics', 'time
 
 /** Whether a panel drawing a visualization of this kind offers Inspect, as in the original */
 export const offersInspector = (visType: string): boolean => !NOT_INSPECTED.has(visType);
+
+/**
+ * What the original's finder calls a found object, in its tooltip and in the toast that says it
+ * was added: its title and its kind, a visualization's kind its own ("Sales (Pie)")
+ */
+export function finderName(
+  object: { type: string; attributes: { title?: string; visState?: string } },
+  types: ReadonlyArray<{ type: string; name: string }>
+): string {
+  let kind = types.find((type) => type.type === object.type)?.name ?? object.type;
+  if (object.type === 'visualization') {
+    try {
+      kind = visTypeOf((JSON.parse(object.attributes.visState ?? '') as { type?: string }).type ?? '')?.title ?? kind;
+    } catch {
+      // the type's own name, as above
+    }
+  }
+  return `${object.attributes.title ?? ''} (${kind})`;
+}
 
 // --- The round trip to an editor -----------------------------------------------------------------
 
