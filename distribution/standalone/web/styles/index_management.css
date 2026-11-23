@@ -2676,14 +2676,14 @@
 /* A link that leaves the product, as the plugin's in the pages of Snapshot Management: part of
    its line, the small arrow 4 px after its words */
 .ismListPanel .ismExternal,
-.ismPolicyPage .ismExternal,
+.ismSnapshotPolicyPage .ismExternal,
 .ismSnapshotFlyout .ismExternal {
   display: inline;
   white-space: normal;
 }
 
 .ismListPanel .ismExternal > .atlIcon,
-.ismPolicyPage .ismExternal > .atlIcon,
+.ismSnapshotPolicyPage .ismExternal > .atlIcon,
 .ismSnapshotFlyout .ismExternal > .atlIcon {
   display: inline-block;
   width: 12px;
