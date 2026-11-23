@@ -2,8 +2,8 @@
 
 /* TSVB: series over time as a chart, or their latest values as a number, bars, a gauge, text or a table. */
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ChartMessage, fitText, readableOn, useSize, type LegendPosition } from '../../charts/core';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { ChartMessage, type LegendPosition } from '../../charts/core';
 import { XYChart, type XYAxis, type XYSeries } from '../../charts/xy';
 import { Icon } from '../../components/icon';
 import { formatDate, scaledDateFormat, type TimeRange } from '../../lib/dates';
@@ -30,6 +30,7 @@ import {
   type TsvbTableSort,
 } from './data';
 import { panelError, TsvbError, type TsvbPanelError } from './error';
+import { isInverted, placeBox, placedStyle, type BoxSize, type Placement } from './fit';
 import { annotationIcon } from './icons';
 import { convertSeriesToVars } from './markdown_vars';
 
@@ -206,55 +207,99 @@ function TimeSeries({ params, data, onTimeChange }: { params: TsvbParams; data: 
   );
 }
 
+const darkTheme = (): boolean => services.uiSettings.get<boolean>('theme:darkMode', false) === true;
+
+/** An element's size as the product reads it to place a box, in whole pixels before any transform */
+function useClientSize<T extends HTMLElement>(): [(element: T | null) => void, BoxSize] {
+  const [element, setElement] = useState<T | null>(null);
+  const [size, setSize] = useState<BoxSize>({ width: 0, height: 0 });
+  useLayoutEffect(() => {
+    if (!element) return undefined;
+    const measure = () =>
+      setSize((current) =>
+        current.width === element.clientWidth && current.height === element.clientHeight
+          ? current
+          : { width: element.clientWidth, height: element.clientHeight }
+      );
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [element]);
+  return [setElement, size];
+}
+
+/** The style of a box laid over a panel, hidden until both are measured */
+const placed = (placement: Placement | null): CSSProperties => (placement ? placedStyle(placement) : { visibility: 'hidden' });
+
+/** The colour rule of a metric's panel: the last one its first series' last value meets, 0 without one */
+const metricRule = (params: TsvbParams, data: TsvbData) => ruleFor(params.background_color_rules, data.series[0]?.last ?? 0);
+
+/** The background of a metric's panel: that of its colour rule, or the panel's own */
+const metricBackground = (params: TsvbParams, data: TsvbData): string | undefined =>
+  metricRule(params, data)?.background_color || params.background_color || undefined;
+
+/**
+ * A metric as the product draws it: its label at half the size of its value, a second series at
+ * a third and the name of its part at a quarter, in a box the size of its text, scaled to the
+ * largest size that fits the panel and laid in its middle
+ */
 function Metric({ params, data, extra }: { params: TsvbParams; data: TsvbData; extra?: string }) {
+  const [panelRef, panel] = useClientSize<HTMLDivElement>();
+  const [innerRef, inner] = useClientSize<HTMLDivElement>();
   const [primary, secondary] = data.series;
-  if (!primary) return <ChartMessage>No results found</ChartMessage>;
-  const rule = ruleFor(params.background_color_rules, primary.last);
-  const background = rule?.background_color ?? params.background_color;
-  const color = rule?.color ?? (background ? readableOn(background) : undefined);
+  const color = metricRule(params, data)?.color || undefined;
+  const inverted = isInverted(metricBackground(params, data), darkTheme());
   return (
-    <div className="visTsvbMetric" style={{ background, color }} data-test-subj="tsvbMetric">
-      <div className="visTsvbMetric__label">{primary.label}</div>
-      <div className="visTsvbMetric__value" data-test-subj="tsvbMetricValue">
-        {primary.format(primary.last)}
-      </div>
-      {secondary && (
-        <div className="visTsvbMetric__secondary">
-          <span>{secondary.label}</span> <strong>{secondary.format(secondary.last)}</strong>
+    <div className={`visTsvbMetric${inverted ? ' visTsvbMetric--reversed' : ''}`} data-test-subj="tsvbMetric">
+      <div ref={panelRef} className="visTsvbMetric__resize">
+        <div ref={innerRef} className="visTsvbMetric__inner" style={placed(placeBox(panel, inner))}>
+          <div className="visTsvbMetric__primary">
+            {primary?.label && <div className="visTsvbMetric__label">{primary.label}</div>}
+            <div className="visTsvbMetric__value" style={{ color }} data-test-subj="tsvbMetricValue">
+              {primary ? primary.format(primary.last) : 0}
+            </div>
+          </div>
+          {secondary && (
+            <div className="visTsvbMetric__secondary">
+              {secondary.label && <div className="visTsvbMetric__secondaryLabel">{secondary.label}</div>}
+              <div className="visTsvbMetric__secondaryValue">{secondary.format(secondary.last)}</div>
+            </div>
+          )}
+          {extra && <div className="visTsvbMetric__additional">{extra}</div>}
         </div>
-      )}
-      {extra && <div className="visTsvbMetric__additional">{extra}</div>}
+      </div>
     </div>
   );
 }
 
-/** A metric or a gauge, or one of either for each part of its split, each in the frame of a panel */
+/**
+ * A metric or a gauge, or one of either for each part of its split, each in the frame of a panel
+ * with the background it takes
+ */
 function Splits({
   params,
   data,
-  framed,
+  background,
   draw,
 }: {
   params: TsvbParams;
   data: TsvbData;
-  framed: boolean;
+  background: (data: TsvbData) => string | undefined;
   draw: (data: TsvbData, extra?: string) => ReactNode;
 }) {
   const parts = splitParts(params, data);
-  const background = params.background_color || undefined;
   if (!parts) {
-    return framed ? (
-      <div className="visTsvbFrame" style={{ background }}>
+    return (
+      <div className="visTsvbFrame" style={{ background: background(data) }}>
         {draw(data)}
       </div>
-    ) : (
-      <>{draw(data)}</>
     );
   }
   return (
     <div className="visTsvbSplit" data-test-subj="tsvbSplitVis">
       {parts.map((part) => (
-        <div key={part.key} className="visTsvbSplit__part" style={framed ? { background } : undefined}>
+        <div key={part.key} className="visTsvbSplit__part" style={{ background: background(part.data) }}>
           {draw(part.data, part.label)}
         </div>
       ))}
@@ -292,99 +337,73 @@ function TopN({ params, data }: { params: TsvbParams; data: TsvbData }) {
   );
 }
 
-// The lines the product writes over a gauge: their height, the middle of their text from their
-// top, and the size of their text, in the box it lays over the arc
-const GAUGE_LINES = { label: [11, 3.5, 7], value: [12.6, 6.3, 12.6], extra: [10.72, 5.36, 5.6] } as const;
-type GaugeLine = keyof typeof GAUGE_LINES;
+// The ring of a gauge as the product draws it: its circle, the drawing, the box the drawing sits
+// in (as tall as its line, a little taller than the drawing) and the size the product reads it at
+const GAUGE_CIRCUMFERENCE = 2 * Math.PI * 50;
+const GAUGE_TRACK = 'rgba(105,112,125,0.2)';
+const GAUGE_RING = {
+  half: { svg: [120.72, 78.72], box: [120.72, 81.72], read: { width: 121, height: 82 }, sweep: 0.6 },
+  circle: { svg: [120.72, 120.72], box: [120.72, 123.72], read: { width: 121, height: 124 }, sweep: 1 },
+} as const;
 
 /**
- * Where the product writes the lines of a gauge, in the square of 120 its arc is drawn in: in a
- * box of 100 by 70 laid over the arc, stacked at its foot, for a half gauge, or in the middle of
- * one of 100 by 100 for a circle, the value first; the box is scaled to the panel apart from the
- * arc, to 82/70 (124/100 for a circle) of its scale.
+ * A gauge as the product draws it: its label, value and the name of its part in a box of 100 by
+ * 70 (100 by 100 for a circle), and its ring in a box of its own, each scaled to the largest size
+ * that fits the panel and laid in its middle, the ring over the text
  */
-function gaugeLines(half: boolean, extra: boolean): Record<GaugeLine, { y: number; size: number }> {
-  const scale = half ? 82 / 70 : 124 / 100;
-  const order: GaugeLine[] = half ? ['label', 'value'] : ['value', 'label'];
-  if (extra) order.push('extra');
-  const total = order.reduce((sum, line) => sum + GAUGE_LINES[line][0], 0);
-  let top = half ? 62 - total : 50 - total / 2;
-  const at = { label: { y: 0, size: 0 }, value: { y: 0, size: 0 }, extra: { y: 0, size: 0 } };
-  for (const line of order) {
-    const [height, middle, size] = GAUGE_LINES[line];
-    at[line] = { y: (top + middle) * scale, size: size * scale };
-    top += height;
-  }
-  return at;
-}
-
 function Gauge({ params, data, extra }: { params: TsvbParams; data: TsvbData; extra?: string }) {
-  const [ref, size] = useSize<HTMLDivElement>();
+  const [panelRef, panel] = useClientSize<HTMLDivElement>();
   const series = data.series[0];
-  if (!series) return <ChartMessage>No results found</ChartMessage>;
   const half = params.gauge_style !== 'circle';
-  const rule = ruleFor(params.gauge_color_rules, series.last);
-  const color = rule?.gauge ?? (series.color || '#8ac336');
-  const value = series.last ?? 0;
+  const ring = GAUGE_RING[half ? 'half' : 'circle'];
+  const rule = ruleFor(params.gauge_color_rules, series?.last ?? 0);
+  const value = series?.last || 0;
   // Without a maximum of its own, a gauge goes up to the largest value of its series
-  const largest = Math.max(...series.data.map(([, y]) => y ?? Number.NEGATIVE_INFINITY));
+  const largest = Math.max(...(series?.data ?? []).map(([, y]) => y ?? Number.NEGATIVE_INFINITY));
   const max = number(params.gauge_max, 0) || (Number.isFinite(largest) && largest !== 0 ? largest : 1);
-  const share = Math.max(0, Math.min(1, value / max));
-  // Drawn in a square of 120 with the ring's middle 50 from the centre, as TSVB draws it, so
-  // that the widths a panel was saved with mean what they meant
+  const share = value < max ? Math.max(0, value / max) : 1;
   const stroke = number(params.gauge_width, 0) || 10;
   const track = number(params.gauge_inner_width, 0) || 2;
-  const radius = 50;
-  const edge = Math.max(stroke, track) / 2;
-  const sweep = half ? 0.6 : 1;
-  const start = half ? -Math.PI * sweep : 0;
-  const arc = (portion: number) => {
-    const end = start + Math.PI * 2 * sweep * Math.min(portion, 0.9999);
-    const point = (angle: number) => `${60 + radius * Math.sin(angle)},${60 - radius * Math.cos(angle)}`;
-    return `M${point(start)}A${radius},${radius} 0 ${end - start > Math.PI ? 1 : 0} 1 ${point(end)}`;
-  };
-  const height = half ? 60 + radius * Math.cos(Math.PI * (1 - sweep)) + edge + 2 : 120;
-  const scale = Math.max(0.1, Math.min(size.width / 120, size.height / height));
-  const text = series.format(series.last);
-  const lines = gaugeLines(half, Boolean(extra));
-  // On a background of the panel's own, the text takes the colour that reads on it
-  const background = params.background_color || undefined;
-  const ink = background ? readableOn(background) : undefined;
+  const inverted = isInverted(params.background_color || undefined, darkTheme());
+  const label = <div className="visTsvbGauge__label">{series?.label ?? ''}</div>;
+  const text = (
+    <div className="visTsvbGauge__value" style={{ color: rule?.text || undefined }} data-test-subj="tsvbGaugeValue">
+      {series ? series.format(series.last) : 0}
+    </div>
+  );
   return (
-    <div ref={ref} className="visTsvbGauge" data-test-subj="tsvbGauge">
-      {size.width > 0 && (
-        <svg width={120 * scale} height={height * scale} viewBox={`0 0 120 ${height}`} role="img" aria-label={`${series.label}: ${text}`}>
-          <path d={arc(1)} fill="none" stroke={params.gauge_inner_color || 'var(--chart-band)'} strokeWidth={track} />
-          {share > 0 && <path d={arc(share)} fill="none" stroke={color} strokeWidth={stroke} />}
-          <text
-            x={60}
-            y={lines.label.y}
-            dominantBaseline="central"
-            textAnchor="middle"
-            fontSize={lines.label.size}
-            fill={ink ?? 'var(--color-text-secondary)'}
-            fillOpacity={ink ? 0.6 : undefined}
-          >
-            {fitText(series.label, (half ? 60 : 68) * (lines.label.size / 7), lines.label.size)}
-          </text>
-          <text
-            x={60}
-            y={lines.value.y}
-            dominantBaseline="central"
-            textAnchor="middle"
-            fontSize={lines.value.size}
-            fill={rule?.text ?? ink ?? 'var(--color-text-primary)'}
-            data-test-subj="tsvbGaugeValue"
-          >
-            {text}
-          </text>
-          {extra && (
-            <text x={60} y={lines.extra.y} dominantBaseline="central" textAnchor="middle" fontSize={lines.extra.size} fill={ink ?? 'var(--color-text-primary)'}>
-              {fitText(extra, (half ? 68 : 76) * (lines.extra.size / 5.6), lines.extra.size)}
-            </text>
-          )}
-        </svg>
-      )}
+    <div ref={panelRef} className={`visTsvbGauge${inverted ? ' visTsvbGauge--reversed' : ''}`} data-test-subj="tsvbGauge">
+      <div className={`visTsvbGauge__metrics${half ? ' visTsvbGauge__metrics--half' : ''}`} style={placed(placeBox(panel, { width: 100, height: half ? 70 : 100 }))}>
+        {half ? label : text}
+        {half ? text : label}
+        {extra && <div className="visTsvbGauge__additional">{extra}</div>}
+      </div>
+      <div className="visTsvbGauge__rings">
+        <div className="visTsvbGauge__ring" style={{ width: ring.box[0], height: ring.box[1], ...placed(placeBox(panel, ring.read)) }}>
+          <svg width={ring.svg[0]} height={ring.svg[1]} aria-hidden="true">
+            <circle
+              r={50}
+              cx={60}
+              cy={60}
+              fill="none"
+              stroke={params.gauge_inner_color || GAUGE_TRACK}
+              strokeWidth={track}
+              strokeDasharray={`${ring.sweep * GAUGE_CIRCUMFERENCE} ${GAUGE_CIRCUMFERENCE}`}
+              transform={half ? 'rotate(162 60 60)' : undefined}
+            />
+            <circle
+              r={50}
+              cx={60}
+              cy={60}
+              fill="none"
+              stroke={rule?.gauge || series?.color || '#8ac336'}
+              strokeWidth={stroke}
+              strokeDasharray={`${share * ring.sweep * GAUGE_CIRCUMFERENCE} ${GAUGE_CIRCUMFERENCE}`}
+              transform={half ? 'rotate(-197.8 60 60)' : 'rotate(-90 60 60)'}
+            />
+          </svg>
+        </div>
+      </div>
     </div>
   );
 }
@@ -547,9 +566,23 @@ function NoData() {
 
 const PANELS: Record<string, (props: { params: TsvbParams; data: TsvbData; onTimeChange?: (range: TimeRange) => void }) => ReactNode> = {
   timeseries: (props) => <TimeSeries {...props} />,
-  metric: ({ params, data }) => <Splits params={params} data={data} framed={false} draw={(part, extra) => <Metric params={params} data={part} extra={extra} />} />,
+  metric: ({ params, data }) => (
+    <Splits
+      params={params}
+      data={data}
+      background={(part) => metricBackground(params, part)}
+      draw={(part, extra) => <Metric params={params} data={part} extra={extra} />}
+    />
+  ),
   top_n: (props) => <TopN {...props} />,
-  gauge: ({ params, data }) => <Splits params={params} data={data} framed draw={(part, extra) => <Gauge params={params} data={part} extra={extra} />} />,
+  gauge: ({ params, data }) => (
+    <Splits
+      params={params}
+      data={data}
+      background={() => params.background_color || undefined}
+      draw={(part, extra) => <Gauge params={params} data={part} extra={extra} />}
+    />
+  ),
   markdown: (props) => <MarkdownPanel {...props} />,
 };
 
