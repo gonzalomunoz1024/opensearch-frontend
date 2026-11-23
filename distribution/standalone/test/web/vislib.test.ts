@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { bucketFilter, otherBucketTerms, tabify, type AggConfig, type AggContext, type TableColumn } from '../../web/lib/aggs';
+import { aggLabel, bucketFilter, buildAggsDsl, otherBucketTerms, tabify, type AggConfig, type AggContext, type TableColumn } from '../../web/lib/aggs';
 import { DEFAULT_FORMAT_SETTINGS } from '../../web/lib/field_formats';
 import type { Filter, IndexPattern } from '../../web/lib/types';
 import { splitDrawing, splitParts, splitTables, splitTimeFilter } from '../../web/vis/types';
@@ -1154,5 +1154,42 @@ describe('a gauge', () => {
     assert.equal(draw(150, false).value.startsWith('M0,325.01875A'), true);
     assert.equal(draw(150, true).value, draw(100, true).value);
     assert.equal(draw(150, true).scale, undefined);
+  });
+});
+
+describe('the interval of a date histogram over a long time range', () => {
+  const pattern: IndexPattern = {
+    id: 'logs',
+    title: 'logs',
+    timeFieldName: 'timestamp',
+    fields: [{ name: 'timestamp', type: 'date', searchable: true, aggregatable: true, esTypes: ['date'] }],
+    fieldFormatMap: {},
+  };
+  const over = (days: number, interval = 'auto') => {
+    const agg: AggConfig = { id: '2', enabled: true, type: 'date_histogram', schema: 'segment', params: { field: 'timestamp', interval } };
+    const start = Date.UTC(2020, 0, 1);
+    const context: AggContext = { indexPattern: pattern, timeZone: 'UTC', timeRange: { from: new Date(start), to: new Date(start + days * DAY) } };
+    const count: AggConfig = { id: '1', enabled: true, type: 'count', schema: 'metric', params: {} };
+    const dsl = buildAggsDsl([count, agg], context)['2'] as { date_histogram: Record<string, unknown> };
+    const { fixed_interval: fixed, calendar_interval: calendar } = dsl.date_histogram;
+    return { fixed, calendar, label: aggLabel(agg, context) };
+  };
+
+  it('asks for a month the time range chose as 30 fixed days, and a year as 365, as the original writes a length of time', () => {
+    // About 22 and 73 days a bar: the original's month, which it asks for as 30 days
+    assert.deepEqual(over(1096), { fixed: '30d', calendar: undefined, label: 'timestamp per 30 days' });
+    assert.deepEqual(over(3653), { fixed: '30d', calendar: undefined, label: 'timestamp per 30 days' });
+    // More than a year a bar: the original's year of 365 days
+    assert.deepEqual(over(21915), { fixed: '365d', calendar: undefined, label: 'timestamp per 365 days' });
+    // Weeks, days and hours as before
+    assert.deepEqual(over(365), { fixed: undefined, calendar: '1w', label: 'timestamp per week' });
+    assert.deepEqual(over(7), { fixed: '3h', calendar: undefined, label: 'timestamp per 3 hours' });
+    assert.deepEqual(over(1), { fixed: '30m', calendar: undefined, label: 'timestamp per 30 minutes' });
+  });
+
+  it('widens an interval asked for that gives too many bars to 30 fixed days, and keeps a month or a year asked for', () => {
+    assert.deepEqual(over(7305, 'w'), { fixed: '30d', calendar: undefined, label: 'timestamp per 30 days' });
+    assert.deepEqual(over(1096, 'M'), { fixed: undefined, calendar: '1M', label: 'timestamp per month' });
+    assert.deepEqual(over(21915, 'y'), { fixed: undefined, calendar: '1y', label: 'timestamp per year' });
   });
 });
