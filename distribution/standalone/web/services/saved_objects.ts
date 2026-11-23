@@ -20,6 +20,8 @@ export interface FindOptions {
   perPage?: number;
   sortField?: string;
   hasReference?: { type: string; id: string };
+  /** How the words searched for combine; the server's default is OR */
+  defaultSearchOperator?: 'AND' | 'OR';
 }
 
 export interface WriteOptions {
@@ -47,6 +49,7 @@ export class SavedObjectsClient {
         per_page: options.perPage ?? 1000,
         sort_field: options.sortField,
         has_reference: options.hasReference ? JSON.stringify(options.hasReference) : undefined,
+        default_search_operator: options.defaultSearchOperator,
       },
     });
   }

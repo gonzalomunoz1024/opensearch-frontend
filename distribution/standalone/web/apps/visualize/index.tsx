@@ -6,7 +6,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { Badge, cx } from '../../components/basic';
+import { Badge, Button, cx } from '../../components/basic';
 import { SearchField } from '../../components/form';
 import { Icon, type IconName } from '../../components/icon';
 import { Modal } from '../../components/overlay';
@@ -14,12 +14,13 @@ import { appUrl } from '../../lib/url';
 import { VIS_TYPES, visIcon, visType, type VisType } from '../../lib/vis';
 import { navigate, navigateHash, useLocation } from '../../router';
 import { services } from '../../services';
-import { Listing, type Listed } from '../../shell/listing';
+import { Listing, ListingEmpty, type Listed, type ListingColumn } from '../../shell/listing';
 import { SavedObjectFinder } from '../../shell/saved_objects_ui';
 import { currentGlobalParam, useBreadcrumbs } from '../../shell/state';
 import { canDraw } from '../../vis/visualization';
 import { VIS_BUILDER_APP, VIS_BUILDER_TITLE, VIS_BUILDER_TYPE, visBuilderEditUrl } from '../vis_builder/model';
 import { VISUALIZE, VisEditor } from './editor';
+import { editorStateFor, type ContainerInfo } from './state_transfer';
 import '../../styles/visualize.css';
 
 const SOURCE_TYPES = [
@@ -78,6 +79,7 @@ function VisualizeList({ creating }: { creating: boolean }) {
     <>
       <Listing
         title="Visualizations"
+        headingId="visualizeListingHeading"
         entity="visualization"
         entities="visualizations"
         types={[VIS_BUILDER_TYPE, 'visualization']}
@@ -85,27 +87,26 @@ function VisualizeList({ creating }: { creating: boolean }) {
         createLabel="Create visualization"
         onCreate={() => setDialog(true)}
         linkTo={editUrl}
+        titleTestId={visTitleTestId}
         editTo={editUrl}
-        extraColumns={[
-          {
-            id: 'type',
-            name: 'Type',
-            width: 170,
-            render: (object) => {
-              const type = typeOf(object);
-              return (
-                <span className="atlRow">
-                  <Icon name={type === VIS_BUILDER_TYPE ? 'visBuilder' : (visIcon(type) as IconName)} />
-                  {typeTitle(type)}
-                </span>
-              );
-            },
-            sortValue: (object) => typeTitle(typeOf(object)),
-          },
-        ]}
-        emptyBody="You can create different visualizations based on your data."
+        typeColumn={VIS_TYPE_COLUMN}
+        padding="l"
+        deleteErrors={{ title: 'Error deleting visualization', per: 'each' }}
+        noItems={
+          <ListingEmpty
+            icon="visualize"
+            headingId="visualizeListingHeading"
+            title="Create your first visualization"
+            actions={
+              <Button variant="primary" icon="plus" onClick={() => setDialog(true)} testId="createVisualizationPromptButton">
+                Create new visualization
+              </Button>
+            }
+          >
+            <p>You can create different visualizations based on your data.</p>
+          </ListingEmpty>
+        }
         keep={labsEnabled() ? undefined : isNotLab}
-        testId="visualizeLandingPage"
       />
       {dialog && (
         <NewVisModal
@@ -119,8 +120,38 @@ function VisualizeList({ creating }: { creating: boolean }) {
   );
 }
 
-/** "New Visualization": every kind there is, then what an aggregation-based one is drawn from */
-export function NewVisModal({ onClose }: { onClose: () => void }) {
+const visTitleTestId = (title: string) => `visListingTitleLink-${title.split(' ').join('-')}`;
+
+const VIS_TYPE_COLUMN: ListingColumn = {
+  field: 'typeTitle',
+  name: 'Type',
+  value: (object) => typeTitle(typeOf(object)),
+  render: (object) => {
+    const type = typeOf(object);
+    return (
+      <span className="vzeListType">
+        <Icon name={type === VIS_BUILDER_TYPE ? 'visBuilder' : (visIcon(type) as IconName)} />
+        {typeTitle(type)}
+      </span>
+    );
+  },
+};
+
+/**
+ * "New Visualization": every kind there is, then what an aggregation-based one is drawn from. An
+ * application that opens it (a dashboard's "Create new") names itself and its container: the
+ * editor is opened with them, to come back to it.
+ */
+export function NewVisModal({
+  onClose,
+  originatingApp,
+  containerInfo,
+}: {
+  onClose: () => void;
+  originatingApp?: string;
+  containerInfo?: ContainerInfo;
+}) {
+  const state = editorStateFor(originatingApp, containerInfo);
   const [filter, setFilter] = useState('');
   const [hovered, setHovered] = useState<VisType>();
   const [chosen, setChosen] = useState<VisType>();
@@ -137,7 +168,7 @@ export function NewVisModal({ onClose }: { onClose: () => void }) {
 
   const create = (type: VisType, source: { indexPattern?: string; savedSearchId?: string } = {}) => {
     onClose();
-    navigate(appUrl(VISUALIZE, '/create', { type: type.name, ...source, _g: currentGlobalParam() }), { force: true });
+    navigate(appUrl(VISUALIZE, '/create', { type: type.name, ...source, _g: currentGlobalParam() }), { force: true, state });
   };
 
   if (chosen) {
@@ -181,7 +212,7 @@ export function NewVisModal({ onClose }: { onClose: () => void }) {
                     onClick={() => {
                       if (alias) {
                         onClose();
-                        navigate(alias.open(), { force: true });
+                        navigate(alias.open(), { force: true, state });
                         return;
                       }
                       if (!drawn) return;

@@ -17,7 +17,7 @@ import {
   visProblems,
 } from '../../web/apps/visualize/defaults';
 import { classicTimeTicks } from '../../web/charts/core';
-import { OTHER_KEY, buildAggsDsl, planOtherBucket, tabify, type AggConfig, type AggContext } from '../../web/lib/aggs';
+import { OTHER_KEY, buildAggsDsl, otherBucketAggs, planOtherBucket, tabify, type AggConfig, type AggContext } from '../../web/lib/aggs';
 import type { Field, IndexPattern } from '../../web/lib/types';
 import { visType } from '../../web/lib/vis';
 
@@ -357,6 +357,41 @@ describe('the bucket of other values', () => {
     const plain = [count, dest({ otherBucket: false })];
     const response = { aggregations: { '2': { buckets: [{ key: 'CN', doc_count: 9 }] } } };
     assert.equal(planOtherBucket(plain, buildAggsDsl(plain, context), response, context), undefined);
+  });
+
+  it('asks for the rest of a terms aggregation under another in turn, under the rest of that one too', () => {
+    const outer = { ...dest(), id: '3', params: { ...dest().params, field: 'machine.os.keyword' } };
+    const aggs = [count, outer, dest()];
+    assert.deepEqual(otherBucketAggs(aggs).map((agg) => agg.id), ['3', '2']);
+    const dsl = buildAggsDsl(aggs, context);
+    const response = {
+      aggregations: { '3': { buckets: [{ key: 'osx', doc_count: 20, '2': { buckets: [{ key: 'CN', doc_count: 9 }] } }] } },
+    };
+    const first = planOtherBucket(aggs, dsl, response, context, '3');
+    if (!first) throw new Error('nothing is asked for the outer terms');
+    // The outer rest comes with the inner terms under it
+    first.apply({ 'other-filter': { buckets: { '': { doc_count: 15, '2': { buckets: [{ key: 'US', doc_count: 6 }] } } } } });
+    const second = planOtherBucket(aggs, dsl, response, context, '2');
+    if (!second) throw new Error('nothing is asked for the inner terms');
+    const filters = (second.aggs['other-filter'] as { filters: { filters: Record<string, { bool: Record<string, unknown[]> }> } }).filters.filters;
+    assert.deepEqual(Object.keys(filters), ['-osx', '-__other__']);
+    // Under the outer rest: none of the outer terms, then none of the inner ones there
+    assert.deepEqual(filters['-__other__'].bool.filter, [{ exists: { field: 'geo.dest' } }]);
+    assert.deepEqual(filters['-__other__'].bool.must_not, [
+      { bool: { should: [{ match_phrase: { 'machine.os.keyword': 'osx' } }], minimum_should_match: 1 } },
+      { match_phrase: { 'geo.dest': 'US' } },
+    ]);
+    second.apply({ 'other-filter': { buckets: { '-osx': { doc_count: 11 }, '-__other__': { doc_count: 9 } } } });
+    const table = tabify(aggs, response, context);
+    assert.deepEqual(
+      table.rows.map((row) => [row[table.columns[0].id], row[table.columns[1].id], row[table.columns[2].id]]),
+      [
+        ['osx', 'CN', 9],
+        ['osx', OTHER_KEY, 11],
+        [OTHER_KEY, 'US', 6],
+        [OTHER_KEY, OTHER_KEY, 9],
+      ]
+    );
   });
 });
 
