@@ -185,7 +185,10 @@ function fromEnvironment(raw: string): unknown {
   const text = raw.trim();
   if (/^[[{"]/.test(text) || /^(true|false|-?\d+(\.\d+)?)$/.test(text)) {
     try {
-      return JSON.parse(text);
+      const value: unknown = JSON.parse(text);
+      // Digits that a number would be written back differently from stay text: a password of
+      // "1.50" or of twenty digits is not the number 1.5 or one rounded to seventeen
+      return typeof value === 'number' && String(value) !== text ? raw : value;
     } catch {
       return raw;
     }
@@ -233,9 +236,27 @@ export function loadConfig(
   if (basePath !== '' && (!basePath.startsWith('/') || basePath.endsWith('/'))) {
     throw new Error('server.basePath must start with a slash and must not end with one');
   }
-  const hosts = read('opensearch.hosts', ['http://localhost:9200']).map((host) =>
-    host.replace(/\/+$/, '')
-  );
+  // A user name and a password written into an address are sent, as the client library of
+  // OpenSearch Dashboards sends them, and are taken out of the address, which is logged and is
+  // what Dev Tools shows
+  let inAddress: { username: string; password: string } | undefined;
+  const hosts: string[] = [];
+  for (const given of read('opensearch.hosts', ['http://localhost:9200'])) {
+    let host = given;
+    if (/^https?:\/\/[^/?#]*@/.test(host)) {
+      const url = new URL(host);
+      if (url.username !== '' && url.password !== '') {
+        inAddress ??= {
+          username: decodeURIComponent(url.username),
+          password: decodeURIComponent(url.password),
+        };
+      }
+      url.username = '';
+      url.password = '';
+      host = url.href;
+    }
+    hosts.push(host.replace(/\/+$/, ''));
+  }
   for (const host of hosts) {
     if (!/^https?:\/\//.test(host)) throw new Error(`opensearch.hosts: "${host}" is not a URL`);
   }
@@ -251,8 +272,8 @@ export function loadConfig(
     },
     opensearch: {
       hosts,
-      username: read<string | undefined>('opensearch.username', undefined),
-      password: read<string | undefined>('opensearch.password', undefined),
+      username: read<string | undefined>('opensearch.username', inAddress?.username),
+      password: read<string | undefined>('opensearch.password', inAddress?.password),
       requestTimeout: read('opensearch.requestTimeout', 30000),
       customHeaders: read('opensearch.customHeaders', {}) as Record<string, string>,
       ssl: {
