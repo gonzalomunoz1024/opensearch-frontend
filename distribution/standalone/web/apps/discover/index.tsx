@@ -8,7 +8,7 @@ import { Select } from '../../components/form';
 import { Icon } from '../../components/icon';
 import { CopyableCode, downloadFile, Tooltip } from '../../components/overlay';
 import { dateInterval, tabify } from '../../lib/aggs';
-import { formatDate, parseInterval, resolveTimeRange, timeZoneOffset } from '../../lib/dates';
+import { formatDate, parseInterval, timeZoneOffset } from '../../lib/dates';
 import { flattenHit, toCsv, type RawHit } from '../../lib/docs';
 import { existsFilter, mergeFilters } from '../../lib/query';
 import { parseSearchSource, serializeSearchSource } from '../../lib/search_source';
@@ -35,7 +35,7 @@ import { DocPage, ContextPage } from './doc_pages';
 import { filtersOf, valueFilter } from './filters';
 import { Histogram } from './histogram';
 import { bucketSpan, parseBucketInterval, shortestBucket } from './histogram_scale';
-import { aggContext, buildDiscoverRequest, histogramAgg } from './search';
+import { aggContext, buildDiscoverRequest, histogramAgg, searchTimeRange } from './search';
 import { Sidebar } from './sidebar';
 import { normalizeSort } from './sort';
 import '../../styles/discover.css';
@@ -327,9 +327,18 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
   useEffect(() => {
     if (!searchStarted || !indexPattern || indexPattern.id !== indexPatternId) return undefined;
     const controller = new AbortController();
-    const range = indexPattern.timeFieldName
-      ? resolveTimeRange(global.time, { weekStart: services.weekStart() })
-      : undefined;
+    const range = searchTimeRange(indexPattern, global.time, services.weekStart());
+    if (range === null) {
+      // A time range that cannot be read: the original's Discover searches nothing and says so,
+      // where a search without it would run over all the documents there are
+      setFailed(true);
+      setLoading(false);
+      services.toasts.danger(
+        'Invalid time range',
+        `The provided time range is invalid. (from: '${global.time.from}', to: '${global.time.to}')`
+      );
+      return undefined;
+    }
     let body: Record<string, unknown>;
     try {
       body = buildDiscoverRequest({ indexPattern, query, filters, range, sort, size: sampleSize, interval });

@@ -15,7 +15,7 @@ import {
 import { Pager, filterColumns, isFilterable, sourceEntries, toggledColumns } from '../../web/apps/discover/doc_table';
 import { contextLinkState, docFieldType, docFields } from '../../web/apps/discover/doc_viewer';
 import { filtersOf, valueFilter } from '../../web/apps/discover/filters';
-import { allFields, sortClause } from '../../web/apps/discover/search';
+import { allFields, searchTimeRange, sortClause } from '../../web/apps/discover/search';
 import {
   bucketAt,
   bucketSpan,
@@ -546,6 +546,26 @@ describe('the sort of a search', () => {
     assert.deepEqual(sortClause(pattern, [['hour', 'asc']], options, 'desc'), [
       { _script: { script: { source: "doc['@timestamp'].value.getHour()", lang: 'painless' }, type: 'number', order: 'asc' } },
     ]);
+  });
+});
+
+describe('the time range of a search', () => {
+  const timed: IndexPattern = { ...patternOf([field('@timestamp', 'date')]), timeFieldName: '@timestamp' };
+
+  it('is none to search in when the address holds one that cannot be read, as the original will not search then', () => {
+    // Without it the search had no time filter and ran over every document there is
+    for (const [from, to] of [
+      ['yesterday', 'now'],
+      ['now-15x', 'now'],
+      ['2026-13-45', 'now'],
+      ['now-30d', 'garbage'],
+    ]) {
+      assert.equal(searchTimeRange(timed, { from, to }), null, `${from} to ${to}`);
+    }
+    const range = searchTimeRange(timed, { from: '2026-11-15T00:00:00.000Z', to: 'now/d' }, 0);
+    assert.equal(range?.from.toISOString(), '2026-11-15T00:00:00.000Z');
+    // A pattern without a time field is searched without a range, whatever the time picker holds
+    assert.equal(searchTimeRange(patternOf([field('@timestamp', 'date')]), { from: 'yesterday', to: 'now' }), undefined);
   });
 });
 
