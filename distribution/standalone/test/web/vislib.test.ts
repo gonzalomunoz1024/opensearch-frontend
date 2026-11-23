@@ -49,7 +49,7 @@ import {
 import { bandScale, linearNice, linearTicks, tickCount, utcTicks, zonedTimeTicks } from '../../web/vis/vislib/scales';
 import { dimmingOpacity, zoneOffset } from '../../web/vis/vislib/settings';
 import { arcCentroid, arcPath } from '../../web/vis/vislib/shapes';
-import { placeTooltip } from '../../web/vis/vislib/tooltip';
+import { fitTooltipCells, placeTooltip } from '../../web/vis/vislib/tooltip';
 
 const HOUR = 3600000;
 const DAY = 24 * HOUR;
@@ -489,6 +489,47 @@ describe('the tooltip of a chart', () => {
       _top: 'north',
       _left: 'west',
     });
+  });
+
+  // A tooltip laid out at its size, with the first row's cells and the label and value containers
+  const laidOut = (size: { width: number; height: number }, cellWidths: number[]) => {
+    const cells = cellWidths.map((width) => ({ getBoundingClientRect: () => ({ width }) }));
+    const labels = cellWidths.slice(0, cellWidths.length === 3 ? 2 : 1).map(() => ({ style: { maxWidth: '' } }));
+    const values = cellWidths.length === 2 ? [{ style: { maxWidth: '' } }] : [];
+    const element = {
+      getBoundingClientRect: () => size,
+      querySelectorAll: (selector: string) => {
+        if (selector === 'tbody > tr:nth-of-type(1) > td') return cells;
+        if (selector === '.visTooltip__labelContainer') return labels;
+        if (selector === '.visTooltip__valueContainer') return values;
+        return [...labels, ...values];
+      },
+      querySelector: (selector: string) => cells[Number(/nth-child\((\d)\)/.exec(selector)?.[1] ?? 0) - 1] ?? null,
+    };
+    return { element: element as unknown as HTMLElement, labels, values };
+  };
+
+  it("narrows a pie's field and bucket to share what its measure leaves, each time it is measured", () => {
+    const { element, labels } = laidOut({ width: 320, height: 86 }, [180.9, 39.9, 83.1875]);
+    // The pointer moves: the tooltip is measured again, and its labels keep their width
+    for (const move of [1, 2]) {
+      assert.deepEqual(fitTooltipCells(element), { width: 320, height: 86 }, `move ${move}`);
+      assert.deepEqual(
+        labels.map((label) => label.style.maxWidth),
+        ['102.40625px', '102.40625px'],
+        `move ${move}`
+      );
+    }
+  });
+
+  it('leaves the values their room, or half of it when they are wider, as vislib narrows the labels', () => {
+    const narrow = laidOut({ width: 200, height: 40 }, [120, 60]);
+    fitTooltipCells(narrow.element);
+    assert.deepEqual([narrow.labels[0].style.maxWidth, narrow.values[0].style.maxWidth], ['116px', '']);
+    // A value wider than half of a tooltip as wide as it goes: both halves
+    const wide = laidOut({ width: 320, height: 40 }, [100, 200]);
+    fitTooltipCells(wide.element);
+    assert.deepEqual([wide.labels[0].style.maxWidth, wide.values[0].style.maxWidth], ['128px', '128px']);
   });
 });
 
