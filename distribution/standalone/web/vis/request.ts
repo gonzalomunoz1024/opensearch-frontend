@@ -108,6 +108,31 @@ export function fieldBoundsAggs(bounded: AggConfig[], indexPattern: IndexPattern
   return aggs;
 }
 
+/**
+ * The body of a visualization's search as the original's search source writes it, in its order:
+ * the aggregations, no documents, and what it asks of every document all the same (the stored
+ * fields, the scripted fields, the dates as text, the source without the fields the index pattern
+ * filters out), then the query. The total is tracked by the search service, as the original's
+ * server does it.
+ */
+export function visSearchBody(indexPattern: IndexPattern, query: unknown, aggs: Record<string, unknown>): Record<string, unknown> {
+  const scripted: Record<string, unknown> = {};
+  for (const field of indexPattern.fields) {
+    if (field.scripted && field.script) scripted[field.name] = { script: { source: field.script, lang: field.lang ?? 'painless' } };
+  }
+  return {
+    aggs,
+    size: 0,
+    stored_fields: ['*'],
+    script_fields: scripted,
+    docvalue_fields: indexPattern.fields
+      .filter((field) => field.type === 'date' && field.readFromDocValues !== false && !field.scripted && !field.name.startsWith('_'))
+      .map((field) => ({ field: field.name, format: 'date_time' })),
+    _source: { excludes: (indexPattern.sourceFilters ?? []).map((filter) => filter.value) },
+    query,
+  };
+}
+
 // Which visualizations show the measure of every level of buckets, not only of the last
 const metricsAtAllLevels = (vis: Vis) =>
   vis.type === 'pie' || (vis.type === 'table' && Boolean(vis.params.showMetricsAtAllLevels));
@@ -128,10 +153,9 @@ export async function fetchVisData(vis: Vis, input: VisInput, signal?: AbortSign
   const bounded = resolved.aggs.filter((agg) => agg.enabled !== false && needsFieldBounds(agg));
   if (bounded.length) {
     const aggs = fieldBoundsAggs(bounded, indexPattern);
-    const body = { size: 0, query, aggs };
-    const record: RequestRecord = { name: 'Field bounds', index: indexPattern.title, body, startedAt: Date.now() };
-    requests.push(record);
-    const answer = await services.search.search(indexPattern.title, body, { signal, record });
+    const body = visSearchBody(indexPattern, query, aggs);
+    // The original keeps no record of this search: Inspect lists the requests after it only
+    const answer = await services.search.search(indexPattern.title, body, { signal });
     const found = (answer.aggregations ?? {}) as Record<string, { value: number | null }>;
     context.fieldBounds = {};
     for (const agg of bounded) {
@@ -144,8 +168,15 @@ export async function fetchVisData(vis: Vis, input: VisInput, signal?: AbortSign
 
   const options = { metricsAtAllLevels: metricsAtAllLevels(resolved), partialRows: Boolean(resolved.params.showPartialRows) };
   const aggs = buildAggsDsl(resolved.aggs, context, options);
-  const body = { size: 0, track_total_hits: true, query, aggs };
-  const record: RequestRecord = { name: 'Data', index: indexPattern.title, body, startedAt: Date.now() };
+  const body = visSearchBody(indexPattern, query, aggs);
+  const record: RequestRecord = {
+    name: 'Data',
+    index: indexPattern.title,
+    indexPatternId: indexPattern.id,
+    description: 'This request queries OpenSearch to fetch the data for the visualization.',
+    body,
+    startedAt: Date.now(),
+  };
   requests.push(record);
   const response = await services.search.search(indexPattern.title, body, { signal, record });
 
@@ -154,8 +185,15 @@ export async function fetchVisData(vis: Vis, input: VisInput, signal?: AbortSign
   for (const other of otherBucketAggs(resolved.aggs)) {
     const rest = planOtherBucket(resolved.aggs, aggs, response, context, other.id);
     if (!rest) continue;
-    const otherBody = { size: 0, query, aggs: rest.aggs };
-    const otherRecord: RequestRecord = { name: 'Other bucket', index: indexPattern.title, body: otherBody, startedAt: Date.now() };
+    const otherBody = visSearchBody(indexPattern, query, rest.aggs);
+    const otherRecord: RequestRecord = {
+      name: 'Other bucket',
+      index: indexPattern.title,
+      indexPatternId: indexPattern.id,
+      description: 'This request counts the number of documents that fall outside the criterion of the data buckets.',
+      body: otherBody,
+      startedAt: Date.now(),
+    };
     requests.push(otherRecord);
     const answer = await services.search.search(indexPattern.title, otherBody, { signal, record: otherRecord });
     rest.apply(answer.aggregations as Record<string, unknown> | undefined);

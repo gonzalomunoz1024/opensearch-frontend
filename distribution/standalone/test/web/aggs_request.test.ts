@@ -5,7 +5,7 @@ import { describe, it } from 'node:test';
 import { buildAggsDsl, type AggConfig, type AggContext } from '../../web/lib/aggs';
 import type { Field, Filter, IndexPattern } from '../../web/lib/types';
 import type { Vis } from '../../web/lib/vis';
-import { contextFilters, fieldBoundsAggs, uniqueQueries, visQuery } from '../../web/vis/request';
+import { contextFilters, fieldBoundsAggs, uniqueQueries, visQuery, visSearchBody } from '../../web/vis/request';
 
 const field = (name: string, type: string, more: Partial<Field> = {}): Field => ({ name, type, searchable: true, aggregatable: true, ...more });
 const logs: IndexPattern = {
@@ -56,6 +56,23 @@ describe('the query of a visualization, as the original puts it together', () =>
         ['win 8', false],
       ]
     );
+  });
+});
+
+describe('the body of a search, as the original writes it', () => {
+  it('asks the aggregations, no documents, the computed fields and the query, in that order', () => {
+    const dated: IndexPattern = { ...logs, fields: [...logs.fields, field('timestamp', 'date'), field('_seen', 'date')], sourceFilters: [{ value: 'secret*' }] };
+    const body = visSearchBody(dated, { match_all: {} }, { '2': {} });
+    assert.deepEqual(Object.keys(body), ['aggs', 'size', 'stored_fields', 'script_fields', 'docvalue_fields', '_source', 'query']);
+    assert.deepEqual(body, {
+      aggs: { '2': {} },
+      size: 0,
+      stored_fields: ['*'],
+      script_fields: { hour_of_day: { script: { source: "doc['timestamp'].value.getHour()", lang: 'painless' } } },
+      docvalue_fields: [{ field: 'timestamp', format: 'date_time' }],
+      _source: { excludes: ['secret*'] },
+      query: { match_all: {} },
+    });
   });
 });
 
