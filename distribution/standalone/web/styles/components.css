@@ -271,11 +271,13 @@ svg.atlIcon:not([role="img"]) {
 
 /* --- Fields -------------------------------------------------------------------------------- */
 
+/* Its text 12 px from its edge, as the original's: the theme draws the edge inside the field, and
+   the border here takes its pixel from the padding */
 .atlField {
   display: block;
   width: 100%;
   height: var(--control-height);
-  padding: 0 var(--space-3);
+  padding: 0 calc(var(--space-3) - 1px);
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-md);
   background: var(--color-surface-secondary);
@@ -1194,7 +1196,9 @@ select.atlField {
 
 /* --- What floats: popovers, menus, dialogs, flyouts, toasts ---------------------------------- */
 
-/* A popover is opened from a field or a button, and those are in dialogs and flyouts too: it floats above both */
+/* A popover is opened from a field or a button, and those are in dialogs and flyouts too: it floats
+   above both. Its panel is the theme's, as the original's: corners of 16 px, opaque, with the
+   material's edge and shadow but not its glass */
 .atlPopover {
   position: fixed;
   z-index: 4500;
@@ -1202,7 +1206,9 @@ select.atlField {
   max-width: min(480px, calc(100vw - 16px));
   max-height: calc(100vh - 16px);
   overflow: auto;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  backdrop-filter: none;
   animation: atlPop var(--duration-fast) var(--ease-out-quint);
 }
 
@@ -1276,16 +1282,13 @@ select.atlField {
   background: var(--color-border-light);
 }
 
-/* A popover placed as the original's: its panel as the theme draws one, opaque, without padding,
-   and not cutting what is in it, as the original's: the ring of an item's focus is drawn outside
-   it, and its first item, when it has the focus, fills the corners */
+/* A popover placed as the original's: without padding, and not cutting what is in it, as the
+   original's: the ring of an item's focus is drawn outside it, and its first item, when it has the
+   focus, fills the corners */
 .atlPopover--placed {
   min-width: 112px;
   max-height: none;
   overflow: visible;
-  border-radius: var(--radius-lg);
-  background-color: var(--color-surface);
-  backdrop-filter: none;
 }
 
 /* The original's context menu: rows from edge to edge, the surface under the pointer */
@@ -2005,22 +2008,24 @@ select.atlField {
   padding-left: 7px;
 }
 
-/* The text typed: 24 px high, as the original's, its line in the middle of the field */
+/* The text typed: 24 px high, as the original's, its line in the middle of the field, and as wide
+   as what is typed (2 px while nothing is), as the original's field grows with its text: it takes
+   what is left of its line, but never holds the combo box wider than its text */
 .atlCombo > input {
-  flex: 1 1 24px;
-  min-width: 24px;
+  flex: 1 1 auto;
+  min-width: 2px;
   height: 24px;
   margin: 0 4px;
-  padding: 0;
+  padding: 0 1px 0 0;
   border: 0;
   background: transparent;
   color: inherit;
   outline: none;
+  field-sizing: content;
 }
 
 .atlCombo--single > input {
   flex-basis: 2px;
-  min-width: 2px;
 }
 
 /* The one value chosen, written as plain text on the line of the original's compressed pills */

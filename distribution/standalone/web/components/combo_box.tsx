@@ -439,6 +439,8 @@ export function ComboBox({
             aria-autocomplete="list"
             autoComplete="off"
             spellCheck={false}
+            // As wide as its text where a browser cannot size it to its text, not 20 letters
+            size={Math.max(1, text.length)}
             data-test-subj="comboBoxSearchInput"
           />
           {loading && <span className="atlSpinner" />}

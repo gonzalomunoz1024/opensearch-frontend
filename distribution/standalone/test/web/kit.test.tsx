@@ -82,6 +82,17 @@ describe('the fields and boxes, as the original draws them', () => {
     assert.match(declarationsOf('.atlField--s.atlFieldGroup'), /padding: 0 calc\(var\(--space-2\) - 1px\);/);
   });
 
+  it('starts the text of a field of the usual size 12 px in, as the original', () => {
+    assert.match(declarationsOf('.atlField'), /padding: 0 calc\(var\(--space-3\) - 1px\);/);
+  });
+
+  it('draws the panel of a popover as the theme draws the original\'s: corners of 16 px, opaque', () => {
+    const panel = declarationsOf('.atlPopover');
+    assert.match(panel, /border-radius: var\(--radius-lg\);/);
+    assert.match(panel, /background-color: var\(--color-surface\);/);
+    assert.match(panel, /backdrop-filter: none;/);
+  });
+
   it('draws its tick boxes and radios itself, with the original\'s tick and dot', () => {
     const own = declarationsOf('.atlCheckbox input,\n.atlRadio input');
     assert.match(own, /appearance: none;/);
@@ -202,6 +213,14 @@ describe('the combo box', () => {
   it('keeps the class of a compact field for a page\'s rules, the field being the same', () => {
     const html = markupOf(<ComboBox options={options} selected={[]} onChange={() => undefined} compact single />);
     assert.equal(classOf(html), 'atlField atlCombo atlCombo--s atlCombo--single atlCombo--clearable');
+  });
+
+  it('makes what is typed as wide as its text, so that it never holds the combo box wide, as the original', () => {
+    const input = declarationsOf('.atlCombo > input');
+    assert.match(input, /field-sizing: content;/);
+    assert.match(input, /min-width: 2px;/);
+    // Where a browser cannot size it to its text, a letter wide while empty, not twenty
+    assert.match(markupOf(<ComboBox options={options} selected={[]} onChange={() => undefined} />), /<input [^>]*size="1"/);
   });
 });
 
