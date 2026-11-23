@@ -21,6 +21,7 @@ import { createServices, type BootData } from './services';
 import { DEFAULT_MAP_CONFIG } from '../common/map_config';
 // After every page's own sheets: the search bar, the time picker, share and inspect, wherever they are
 import './styles/search_bar.css';
+import './styles/date_picker.css';
 
 function readBootData(): BootData {
   const element = document.getElementById('boot-data');

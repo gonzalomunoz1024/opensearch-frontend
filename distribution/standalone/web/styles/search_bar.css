@@ -363,10 +363,6 @@
   min-width: 0;
 }
 
-.shlSearchBar__dates > .shlTime {
-  min-width: 0;
-}
-
 .shlSearchBar__dates--hidden {
   width: 0;
   max-width: 0;

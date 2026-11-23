@@ -114,6 +114,11 @@ function parse(value: string, roundUp: boolean, context: DateContext): Date | un
   return parseDateMath(value, { roundUp, now: context.now, weekStart: context.weekStart });
 }
 
+/** The moment one end of a range is, read as the original's date math reads it; none when it is no date */
+export function dateOf(value: string, roundUp = false, context: DateContext = {}): Date | undefined {
+  return parse(value, roundUp, context);
+}
+
 /** How long a number of milliseconds is in a unit, the way a moment duration counts it */
 function durationAs(ms: number, unit: RelativeUnit): number {
   const days = ms / 864e5;
