@@ -419,6 +419,13 @@
   field-sizing: content;
 }
 
+/* A list the original leaves at the component library's width, where no field row of that width
+   holds it: as wide as its item, up to 400 px */
+.tvbCombo--narrow {
+  width: 100%;
+  max-width: 400px;
+}
+
 /* A list that can be cleared: the original keeps 54 px at its right for the two buttons, whether
    anything is chosen or not */
 .tvbCombo--clearable {

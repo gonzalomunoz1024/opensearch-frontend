@@ -705,7 +705,7 @@ function PositiveRateAgg(props: AggProps) {
         </Item>
         <Item>
           <Field label="Scale" full>
-            <Combo options={RATE_UNITS} value={model.unit} placeholder="Select scale..." onChange={(unit) => change({ unit })} />
+            <Combo options={RATE_UNITS} value={model.unit} placeholder="Select scale..." narrow onChange={(unit) => change({ unit })} />
           </Field>
         </Item>
       </Row>

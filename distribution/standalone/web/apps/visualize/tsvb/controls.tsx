@@ -216,6 +216,7 @@ export function Combo({
   invalid,
   testId,
   fullWidth = true,
+  narrow,
 }: {
   options: Choice[];
   value: unknown;
@@ -227,6 +228,11 @@ export function Combo({
   testId?: string;
   /** False for a list in an item that takes only the room it needs */
   fullWidth?: boolean;
+  /**
+   * At most 400 px wide, as the component library's list that is not full width, where no field
+   * row of that width holds it
+   */
+  narrow?: boolean;
 }) {
   const selected = options.some((option) => option.value === value) ? [String(value)] : [];
   const combo = (
@@ -247,7 +253,8 @@ export function Combo({
   const shown = clearable && !disabled ? <div className="tvbCombo--clearable">{combo}</div> : combo;
   // A list in an item that takes only the room it needs asks for no more than what it shows, and
   // fills its item when a label makes that wider, as the original's does
-  return fullWidth ? shown : <div className="tvbCombo--fit">{shown}</div>;
+  if (!fullWidth) return <div className="tvbCombo--fit">{shown}</div>;
+  return narrow ? <div className="tvbCombo--narrow">{shown}</div> : shown;
 }
 
 /** Yes and No as radios, saved as 1 and 0 */
