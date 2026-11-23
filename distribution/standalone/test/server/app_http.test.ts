@@ -295,6 +295,13 @@ describe('a path', () => {
       // A named part keeps its "\", as there
       const saved = await call(server.port, 'GET', '/api/saved_objects/index-pattern/zz-agent-srv-a\\b');
       assert.equal(said(saved), '404 Saved object [index-pattern/zz-agent-srv-a\\b] not found');
+      // An address in full is read as one, as hapi reads it; a target that is no address is refused in its words
+      const full = await raw(server.port, 'GET http://other.example/api/st%61tus HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n');
+      assert.match(full, /^HTTP\/1\.1 200 OK\r\n/);
+      for (const line of ['OPTIONS * HTTP/1.1', 'GET http://[x HTTP/1.1']) {
+        const refused = await raw(server.port, `${line}\r\nHost: x\r\nConnection: close\r\n\r\n`);
+        assert.equal(refused.slice(refused.indexOf('\r\n\r\n') + 4), '{"statusCode":400,"error":"Bad Request","message":"Invalid URL"}', line);
+      }
     } finally {
       await server.stop();
     }

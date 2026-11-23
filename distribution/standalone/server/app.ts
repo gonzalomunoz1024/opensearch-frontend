@@ -582,8 +582,9 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
     try {
       // The host is given, so that what follows "//" is never read as the name of another one
       url = relative ? new URL(`http://localhost${target}`) : new URL(target);
-    } catch {
-      throw badRequest('The address of the request cannot be read');
+    } catch (error) {
+      // As hapi answers a target it cannot read ("*", "http://[x"): 400 with the words of URL
+      throw badRequest((error as Error).message);
     }
     const { basePath, rewriteBasePath } = config.server;
     const rewritten = basePath !== '' && rewriteBasePath;
