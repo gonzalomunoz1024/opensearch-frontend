@@ -11,7 +11,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, CallOut, EmptyPrompt, IconButton, Loading, Tabs, cx } from '../../components/basic';
+import { CallOut, EmptyPrompt, IconButton, Loading, Tabs, cx } from '../../components/basic';
 import { Switch } from '../../components/form';
 import { Icon } from '../../components/icon';
 import type { AggConfig, AggContext } from '../../lib/aggs';
@@ -31,7 +31,7 @@ import { SaveModal, ShareModal, type SaveResult } from '../../shell/saved_object
 import { pageFiltersOf, savedQueryGlobalParam, type SavedQueryChange } from '../../shell/saved_query';
 import { SearchBar } from '../../shell/search_bar';
 import { showSearchError } from '../../shell/search_error';
-import { addRecentlyAccessed, useAutoRefresh, useBreadcrumbs, useGlobalState } from '../../shell/state';
+import { addRecentlyAccessed, currentGlobalParam, useAutoRefresh, useBreadcrumbs, useGlobalState } from '../../shell/state';
 import { resolveVisSource, visContext, type VisInput } from '../../vis/request';
 import type { TsvbData, TsvbTableData } from '../../vis/tsvb/data';
 import { specIndexPatterns } from '../../vis/vega/index_patterns';
@@ -42,6 +42,7 @@ import { DataTab } from './data_tab';
 import { newVis, syncParams, visProblems, withoutDisabledBuckets } from './defaults';
 import { canAutoApply, dragWidths, editorHeading, initialWidths, keyWidths, searchBarParts, type SplitWidths } from './editor_layout';
 import { LeaveConfirmModal } from './leave_confirm';
+import { INDEX_PATTERNS_LINK, found, loadFailure } from './load_failure';
 import { optionTabs } from './options';
 import { SidebarControls, SidebarTitle } from './sidebar';
 import { incomingEditorState, visualizationPackage } from './state_transfer';
@@ -86,25 +87,37 @@ interface EditorView {
  */
 let handedOver: { id: string; loaded: Loaded; view: EditorView } | undefined;
 
+/**
+ * The visualization the address names, with what it is drawn from, failing as the original's
+ * fails (`load_failure.ts`): what is missing as `SavedObjectNotFound`, in the order the original
+ * looks (the visualization, its index pattern, its saved search, then its kind)
+ */
 async function load(savedId: string | undefined, create: { type?: string; indexPattern?: string; savedSearchId?: string }): Promise<Loaded> {
   let vis: Vis;
   if (savedId) {
-    vis = visFromSavedObject(await services.savedObjects.get<VisualizationAttributes>('visualization', savedId));
+    vis = visFromSavedObject(await found('visualization', savedId, () => services.savedObjects.get<VisualizationAttributes>('visualization', savedId)));
   } else {
-    if (!create.type || !visType(create.type)) throw new Error('The address names no kind of visualization to create');
-    vis = newVis(create.type, { indexPatternId: create.indexPattern, savedSearchId: create.savedSearchId });
+    const kind = create.type ? visType(create.type) : undefined;
+    if (!kind) throw new Error('You must provide a valid visualization type');
+    // A kind drawn from an index pattern's aggregations is drawn from one, or from a saved search
+    if (kind.aggBased && !create.indexPattern && !create.savedSearchId) throw new Error('You must provide either an indexPattern or a savedSearchId');
+    vis = newVis(kind.name, { indexPatternId: create.indexPattern, savedSearchId: create.savedSearchId });
   }
-  // The setup of a map: the base map, and a region map's vector map and join field, not chosen yet
-  vis = await setupVis(vis);
+  const patternOf = (id: string) => found('index-pattern', id, () => services.indexPatterns.get(id), INDEX_PATTERNS_LINK);
+  let indexPattern = vis.source.indexId ? await patternOf(vis.source.indexId) : undefined;
   let searchTitle: string | undefined;
   const searchId = vis.savedSearchId;
   if (searchId) {
-    vis = await resolveVisSource(vis);
-    const search = await services.savedObjects.get<{ title?: string }>('search', searchId);
+    const linkedTo = vis;
+    vis = await found('search', searchId, () => resolveVisSource(linkedTo));
+    const search = await found('search', searchId, () => services.savedObjects.get<{ title?: string }>('search', searchId));
     searchTitle = search.attributes.title;
+    if (!indexPattern && vis.parent?.indexId) indexPattern = await patternOf(vis.parent.indexId);
   }
-  const indexId = vis.source.indexId ?? vis.parent?.indexId;
-  const indexPattern = indexId ? await services.indexPatterns.get(indexId) : undefined;
+  // A kind this product does not have, as the original's `Vis` refuses it
+  if (!visType(vis.type)) throw new Error(`Invalid visualization type "${vis.type}"`);
+  // The setup of a map: the base map, and a region map's vector map and join field, not chosen yet
+  vis = await setupVis(vis);
   // TSVB reads its saved params over the defaults of its type, as the product does
   if (vis.type === 'metrics') vis = { ...vis, params: withTsvbDefaults(vis.params) };
   return { vis, indexPattern, searchTitle };
@@ -141,7 +154,6 @@ export function VisEditor({ savedId }: { savedId?: string }) {
     return given;
   });
   const [loaded, setLoaded] = useState<Loaded | undefined>(handed?.loaded);
-  const [loadError, setLoadError] = useState<string>();
   const [draft, setDraft] = useState<Draft>();
   const [tab, setTab] = useState<string | undefined>(handed?.view.tab);
   const [collapsed, setCollapsed] = useState(handed?.view.collapsed ?? false);
@@ -186,7 +198,6 @@ export function VisEditor({ savedId }: { savedId?: string }) {
     if (handed) return undefined;
     let live = true;
     setLoaded(undefined);
-    setLoadError(undefined);
     load(savedId, { type: createType, indexPattern: createPattern, savedSearchId: createSearch })
       .then((answer) => {
         if (!live) return;
@@ -195,7 +206,13 @@ export function VisEditor({ savedId }: { savedId?: string }) {
         setLoaded(answer);
         if (savedId) addRecentlyAccessed(appUrl(VISUALIZE, `/edit/${encodeURIComponent(savedId)}`), answer.vis.title, savedId);
       })
-      .catch((failure) => live && setLoadError(errorMessage(failure)));
+      .catch((failure: unknown) => {
+        if (!live) return;
+        // As the original: a warning, and away to where it can be dealt with, asking nothing
+        const { title, text, to, replace } = loadFailure(failure, savedId, currentGlobalParam());
+        services.toasts.warning(title, text);
+        navigate(to, { replace, force: true, state: null });
+      });
     return () => {
       live = false;
     };
@@ -389,23 +406,6 @@ export function VisEditor({ savedId }: { savedId?: string }) {
     return { ...vis, aggs: applied.aggs, params: applied.params, uiState, source: { ...vis.source, query: undefined, filters: [] } };
   }, [vis, applied, uiState]);
 
-  if (loadError) {
-    return (
-      <div className="shlPage">
-        <EmptyPrompt
-          icon="warning"
-          title="The visualization could not be loaded"
-          actions={
-            <Button variant="primary" to={appUrl(VISUALIZE, '/')}>
-              Back to the visualizations
-            </Button>
-          }
-        >
-          {loadError}
-        </EmptyPrompt>
-      </div>
-    );
-  }
   if (!saved || !vis || !loaded || !applied || !draft || !shown) return <Loading />;
 
   // The original's `unlinkSavedSearch`: the saved search's query and filters become the
