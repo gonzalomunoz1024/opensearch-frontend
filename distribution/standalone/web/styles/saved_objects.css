@@ -688,47 +688,6 @@
   background: var(--color-hover);
 }
 
-/* The original's menu does not cut what is in it: the ring of the focus is drawn outside it, and
-   the first item, when it has the focus, fills the corners */
-.sobPagination__sizes.atlPopover {
-  min-width: 112px;
-  overflow: visible;
-  border-radius: var(--radius-lg);
-}
-
-.sobPagination__sizeItem {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  width: 100%;
-  padding: var(--space-2) var(--space-3);
-  border: 0;
-  background: transparent;
-  color: var(--color-text-primary);
-  font-size: var(--font-size-s);
-  line-height: 17px;
-  text-align: left;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.sobPagination__sizeItem:hover,
-.sobPagination__sizeItem:focus {
-  background: var(--color-surface-secondary);
-  outline: none;
-}
-
-/* As the original's: the ring of the keyboard's focus stands off the item */
-.sobPagination__sizeItem:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-
-.sobPagination__sizeMark {
-  display: inline-flex;
-  width: 16px;
-}
-
 .sobPagination__pages {
   display: flex;
   align-items: center;

@@ -198,6 +198,8 @@ export function Checkbox({
   label,
   disabled,
   indeterminate,
+  ariaLabel,
+  title,
   testId,
 }: {
   checked: boolean;
@@ -205,6 +207,9 @@ export function Checkbox({
   label?: ReactNode;
   disabled?: boolean;
   indeterminate?: boolean;
+  /** What a screen reader calls a box without a label */
+  ariaLabel?: string;
+  title?: string;
   testId?: string;
 }) {
   return (
@@ -217,7 +222,8 @@ export function Checkbox({
           if (input) input.indeterminate = Boolean(indeterminate) && !checked;
         }}
         onChange={(event) => onChange(event.target.checked)}
-        aria-label={typeof label === 'string' ? undefined : 'Select'}
+        aria-label={ariaLabel ?? (typeof label === 'string' ? undefined : 'Select')}
+        title={title}
         data-test-subj={testId}
       />
       {label && <span>{label}</span>}
@@ -257,16 +263,19 @@ export function Switch({
   onChange,
   label,
   disabled,
+  compressed,
   testId,
 }: {
   checked: boolean;
   onChange: (checked: boolean) => void;
   label?: ReactNode;
   disabled?: boolean;
+  /** The original's compressed switch, 28 by 16 pixels, in forms and popovers */
+  compressed?: boolean;
   testId?: string;
 }) {
   return (
-    <span className="atlSwitch">
+    <span className={cx('atlSwitch', compressed && 'atlSwitch--compressed')}>
       <button
         type="button"
         role="switch"
