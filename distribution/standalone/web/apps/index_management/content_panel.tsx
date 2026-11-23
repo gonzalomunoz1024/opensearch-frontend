@@ -7,8 +7,9 @@
  * (ContentPanelActions) are the theme's small buttons, each with the test id its text gives it.
  */
 
-import type { CSSProperties, ReactNode } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import { Button, Panel, cx, type ButtonProps } from '../../components/basic';
+import { Icon } from '../../components/icon';
 
 export function ContentPanel({
   title,
@@ -20,6 +21,7 @@ export function ContentPanel({
   panelStyles,
   noExtraPadding,
   ghost,
+  accordion,
   testId,
 }: {
   /** Text is drawn as the plugin draws it; anything else stands as it is */
@@ -36,28 +38,43 @@ export function ContentPanel({
   noExtraPadding?: boolean;
   /** No panel: the title, the rule and what it holds on the page itself */
   ghost?: boolean;
+  /** The title opens and closes what the panel holds, which is closed at first */
+  accordion?: boolean;
   testId?: string;
 }) {
-  const header = (
+  const [open, setOpen] = useState(false);
+  const titles = title ? (
+    <div className={cx('ismContentPanel__titles', accordion && 'ismContentPanel__titles--toggle')}>
+      {typeof title === 'string' ? (
+        <h1 className="ismContentPanel__title">
+          {title}
+          <span className="panel-header-count">
+            {' '}
+            {itemCount > 0 ? `(${itemCount})` : null}{' '}
+          </span>
+        </h1>
+      ) : (
+        title
+      )}
+      {typeof subTitleText === 'string'
+        ? subTitleText && <div className="ismContentPanel__subtitle">{subTitleText}</div>
+        : subTitleText}
+    </div>
+  ) : null;
+  // As the theme's accordion, the title is the button and its arrow turns down when open
+  const header = accordion ? (
+    <button
+      type="button"
+      className="ismContentPanel__toggle"
+      aria-expanded={open}
+      onClick={() => setOpen(!open)}
+    >
+      <Icon name="chevronRight" className="ismContentPanel__arrow" />
+      {titles}
+    </button>
+  ) : (
     <div className={cx('ismContentPanel__header', ghost && 'ismContentPanel__header--ghost')}>
-      {title ? (
-        <div className="ismContentPanel__titles">
-          {typeof title === 'string' ? (
-            <h1 className="ismContentPanel__title">
-              {title}
-              <span className="panel-header-count">
-                {' '}
-                {itemCount > 0 ? `(${itemCount})` : null}{' '}
-              </span>
-            </h1>
-          ) : (
-            title
-          )}
-          {typeof subTitleText === 'string'
-            ? subTitleText && <div className="ismContentPanel__subtitle">{subTitleText}</div>
-            : subTitleText}
-        </div>
-      ) : null}
+      {titles}
       {actions ? (
         <div className="ismContentPanel__actions">
           {Array.isArray(actions) ? (
@@ -78,13 +95,22 @@ export function ContentPanel({
         />
       )}
       {children ? (
-        <div className={cx(!ghost && 'ismContentPanel__body')} style={bodyStyles}>
+        <div
+          className={cx(!ghost && 'ismContentPanel__body')}
+          style={accordion && !open ? { ...bodyStyles, display: 'none' } : bodyStyles}
+        >
           {children}
         </div>
       ) : null}
     </>
   );
-  if (ghost) return <div data-test-subj={testId}>{content}</div>;
+  if (ghost) {
+    return (
+      <div className={cx(noExtraPadding && 'ismContentPanel--ghostFlush')} data-test-subj={testId}>
+        {content}
+      </div>
+    );
+  }
   return (
     <div
       className={cx('ismContentPanel', noExtraPadding && 'ismContentPanel--flush')}
@@ -165,13 +191,25 @@ export function TitledPanel({
   );
 }
 
-/** What something is, as the plugin's grid of descriptions: a name over each value, four to a row, 24 px apart */
-export function FactGrid({ items, columns = 4 }: { items: Array<[string, ReactNode]>; columns?: number }) {
+/**
+ * What something is, as the plugin's grid of descriptions: a name over each value, four to a row,
+ * 24 px apart. `headings`: each name is the fourth heading of a small text, 15 px on 20, as in the
+ * plugin's horizontal description lists.
+ */
+export function FactGrid({
+  items,
+  columns = 4,
+  headings,
+}: {
+  items: Array<[string, ReactNode]>;
+  columns?: number;
+  headings?: boolean;
+}) {
   return (
     <div className="ismFactGrid" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
       {items.map(([title, value]) => (
         <dl key={title} className="ismFactGrid__item">
-          <dt>{title}</dt>
+          <dt>{headings ? <h4 className="ismFactGrid__h4">{title}</h4> : title}</dt>
           <dd>{value}</dd>
         </dl>
       ))}

@@ -455,10 +455,10 @@ interface ComponentRow extends ComponentTemplate {
 /** What a component template may hold, in the order of its badges */
 const TYPES = ['aliases', 'settings', 'mappings'];
 /** The same, in the order the filter offers them */
-const TYPE_FILTERS = ['aliases', 'mappings', 'settings'];
+export const TYPE_FILTERS = ['aliases', 'mappings', 'settings'];
 
 /** The plugin's hollow badges of what a component template holds */
-function TypeBadges({ template }: { template?: Record<string, unknown> }) {
+export function TypeBadges({ template }: { template?: Record<string, unknown> }) {
   return (
     <div className="ismTypeBadges">
       {TYPES.filter((type) => template?.[type]).map((type) => (

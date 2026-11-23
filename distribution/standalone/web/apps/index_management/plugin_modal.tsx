@@ -10,6 +10,7 @@ import { useState, type ReactNode } from 'react';
 import { Button, cx } from '../../components/basic';
 import { TextField } from '../../components/form';
 import { Modal } from '../../components/overlay';
+import { JsonBlock } from './json_block';
 
 export function PluginModal({
   title,
@@ -177,6 +178,41 @@ export function DeleteModal({
       <div className="ismSpacer ismSpacer--l" />
       <TypeTheWord word="delete" value={value} onChange={setValue} testId="deleteInput" />
     </PluginModal>
+  );
+}
+
+/**
+ * The plugin's `Modal.show` of something as JSON, 768 px wide: the title (`large`: the second
+ * heading of a small text, 22 px, as the page of an index template gives it), the JSON in the
+ * theme's code block with its copy button, and a filled Close named after the dialog's test id.
+ */
+export function JsonShowModal({
+  title,
+  large,
+  json,
+  testId,
+  onClose,
+}: {
+  title: string;
+  large?: boolean;
+  json: unknown;
+  testId: string;
+  onClose: () => void;
+}) {
+  return (
+    <Modal
+      title={large ? <span className="ismModal__h2">{title}</span> : title}
+      onClose={onClose}
+      testId={testId}
+      className="ismModal ismModal--json"
+      footer={
+        <Button variant="primary" onClick={onClose} testId={`${testId}-ok`}>
+          Close
+        </Button>
+      }
+    >
+      <JsonBlock text={JSON.stringify(json, null, 2)} copyable />
+    </Modal>
   );
 }
 

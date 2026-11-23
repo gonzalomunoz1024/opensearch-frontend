@@ -255,30 +255,15 @@ tr:hover .ismRowActions > *,
   margin-left: var(--space-2);
 }
 
-/* What a component template holds: the theme's hollow badges, on lines 28 px high */
+/* What a component template holds: the theme's hollow badges (below, with the mapping editor's), on
+   lines 28 px high and written with a capital, as the plugin's; a field's type keeps its own case */
 .ismTypeBadges {
   line-height: 28px;
 }
 
-.ismHollowBadge {
-  display: inline-block;
-  max-width: 100%;
-  overflow: hidden;
-  padding: 1px var(--space-2);
-  border: 1px solid var(--color-border-light);
-  border-radius: 999px;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
-  line-height: 18px;
-  text-overflow: ellipsis;
+.ismTypeBadges > .ismHollowBadge {
   text-transform: capitalize;
-  white-space: nowrap;
   vertical-align: middle;
-}
-
-.ismHollowBadge + .ismHollowBadge {
-  margin-left: var(--space-1);
 }
 
 /* The controls above a list 8 px apart, the plugin's small gutter */
@@ -896,6 +881,11 @@ tr:hover .ismRowActions > *,
   margin-top: 36px;
 }
 
+/* A template's settings have the theme's spacer between them: 48 px from one group to the next */
+.ismSettings--template > .ismDescribed + .ismDescribed {
+  margin-top: 48px;
+}
+
 .ismDescribed__text {
   flex: 1 1 0%;
   min-width: 0;
@@ -1127,7 +1117,8 @@ button.ismTreeView__inner {
   color: var(--color-accent);
 }
 
-.ismAccordion__button h3 {
+.ismAccordion__button h3,
+.ismAccordion__button h4 {
   margin: 0;
   font: inherit;
 }
@@ -1159,6 +1150,17 @@ button.ismTreeView__inner {
 /* The box a test finds the title by: the whole line, as the theme's title box */
 .ismModal__title {
   display: block;
+}
+
+/* The dialog of JSON: its 800 px held to the theme's widest modal, 768 px */
+.atlModal.ismModal.ismModal--json {
+  width: 100%;
+}
+
+/* A title that is the second heading of a small text: 22 px on 28 */
+.ismModal__h2 {
+  font-size: var(--font-size-xl);
+  line-height: 28px;
 }
 
 .ismModal__body {
@@ -1264,6 +1266,29 @@ button.ismTreeView__inner {
   font-family: inherit;
 }
 
+/* A code block with its copy button: room for it at the right, the button 24 px from the corner */
+.ismCodeBlock--controls {
+  position: relative;
+}
+
+.ismCodeBlock--controls > .ismCodeBlock__pre {
+  padding-right: 52px;
+}
+
+.ismCodeBlock__controls {
+  position: absolute;
+  top: var(--space-6);
+  right: var(--space-6);
+}
+
+.ismCodeBlock__controls > .ismCodeBlock__copy {
+  width: 24px;
+  min-width: 0;
+  height: 24px;
+  padding: 0;
+  border-radius: 50%;
+}
+
 .ismCodeBlock__line {
   display: block;
 }
@@ -1287,4 +1312,304 @@ button.ismTreeView__inner {
 
 .ismTok--punctuation {
   opacity: 0.7;
+}
+
+/* --- The pages of an index template (template_pages.tsx) ------------------------------------------ */
+
+/* A field of the theme's own width in a row as wide as the page (the field may be wrapped) */
+.ismCustomRow--narrow > .ismCustomRow__field > :not(.ismCustomRow__help) {
+  max-width: 400px;
+}
+
+/* A name of the plugin's horizontal description list: the fourth heading of a small text */
+.ismFactGrid__h4 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-m);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+/* A panel without room above and below its title: the title 12 px from the edge and the rule */
+.ismContentPanel--flush > .ismContentPanel__header,
+.ismContentPanel--ghostFlush > .ismContentPanel__header {
+  padding-top: var(--space-3);
+  padding-bottom: var(--space-3);
+}
+
+/* A panel whose title opens it, as the theme's accordion: the arrow 4 px in, 8 px before the title */
+.ismContentPanel__toggle {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ismContentPanel__arrow {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0 var(--space-2) 0 var(--space-1);
+  transition: transform var(--duration-fast) ease-in-out;
+}
+
+.ismContentPanel__toggle[aria-expanded='true'] .ismContentPanel__arrow {
+  transform: rotate(90deg);
+}
+
+.ismContentPanel__titles--toggle {
+  padding: var(--space-3) 0;
+}
+
+.ismContentPanel__toggle:hover,
+.ismContentPanel__toggle:focus {
+  text-decoration: underline;
+}
+
+.ismContentPanel__toggle:focus {
+  outline: none;
+}
+
+.ismContentPanel__toggle:focus-visible .ismContentPanel__arrow {
+  color: var(--color-accent);
+}
+
+/* A line of the theme's medium text */
+.ismTextM {
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+/* Indexes or data streams: the theme's compressed radios, one under the other, 24 px each */
+.ismRadios {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  font-size: var(--font-size-s);
+}
+
+.ismRadios > .atlRadio {
+  height: 24px;
+  line-height: 24px;
+}
+
+/* The two ways to define a template: the theme's checkable cards, 350 px wide, 24 px apart */
+.ismFlowCards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+}
+
+.ismFlowCard {
+  display: flex;
+  flex: none;
+  width: 350px;
+  overflow: hidden;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+}
+
+.ismFlowCard--checked {
+  border-color: var(--color-accent);
+}
+
+.ismFlowCard__side {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  width: 48px;
+  padding: var(--space-4);
+  background: var(--color-surface-secondary);
+}
+
+.ismFlowCard--checked .ismFlowCard__side {
+  background: var(--color-accent-tint);
+}
+
+.ismFlowCard__side input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
+.ismFlowCard__body {
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  min-width: 0;
+  padding: var(--space-4);
+}
+
+.ismFlowCard__title {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-m);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+.ismFlowCard__text {
+  margin-top: var(--space-4);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+/* A component template the index template is composed of: the theme's panel, 4 px above and below */
+.ismComposed {
+  padding: var(--space-1) 0;
+}
+
+.ismComposed--dragged {
+  opacity: 0.5;
+}
+
+.ismComposed__panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.ismComposed__what {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.ismComposed__grab {
+  display: flex;
+  flex: none;
+  cursor: grab;
+}
+
+.ismComposed__name {
+  margin-left: var(--space-3);
+  line-height: 14px;
+}
+
+.ismComposed__badges {
+  margin-left: var(--space-3);
+}
+
+.ismComposed__buttons {
+  display: flex;
+  flex: none;
+  gap: var(--space-3);
+}
+
+/* Associate and Create, 20 px apart */
+.ismComposedButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-5);
+}
+
+/* The dialog that associates component templates: its 860 px held to the theme's widest modal */
+.atlModal.ismAssociateModal {
+  width: 100%;
+  max-width: 768px;
+}
+
+/*
+ * What it lists, as the theme's selectable list: the search, 40 px high with its icon 12 px in,
+ * 24 px from the filter of types; under them the bordered list, 480 px high, of rows 40 px high
+ * with a tick, or room for one, 12 px before each name and what the template holds at the right.
+ */
+.ismPicker__top {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-6);
+}
+
+.ismPicker__top .ismPicker__search {
+  height: 40px;
+  padding: 0 var(--space-3);
+  gap: var(--space-3);
+}
+
+.ismPicker__list {
+  height: 482px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  list-style: none;
+}
+
+.ismPicker__item {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  padding: var(--space-1) var(--space-3);
+  line-height: 21px;
+  cursor: pointer;
+}
+
+.ismPicker__item:hover,
+.ismPicker__item:focus-visible {
+  outline: none;
+  background: var(--color-hover);
+}
+
+.ismPicker__item--disabled {
+  color: var(--color-text-tertiary);
+  cursor: not-allowed;
+}
+
+.ismPicker__check {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-right: var(--space-3);
+}
+
+/* The name at the top of its line, which the badges make 28 px high */
+.ismPicker__text {
+  display: flex;
+  flex: 1 1 0%;
+  align-items: flex-start;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.ismPicker__name {
+  flex: 1 1 0%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The dialog that creates a component template is 70 % of the window wide, as the plugin's */
+.atlModal.ismCreateComponentModal {
+  width: 70vw;
+  max-width: none;
+}
+
+/* The bar of a page that creates something: its buttons at the right, 24 px apart; an outlined one */
+.ismChangesBar__row--end {
+  justify-content: flex-end;
+  gap: var(--space-6);
+}
+
+.ismChangesBar .ismChangesBar__outline {
+  padding: 0 var(--space-3);
+  border: 1px solid #ffffff;
 }
