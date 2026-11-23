@@ -3101,9 +3101,9 @@
   padding: 0 var(--space-4);
 }
 
+/* Never narrower than its title, as the plugin's: on a narrow screen the buttons go past the panel */
 .ismListPanel__heading {
   flex: 1 1 0;
-  min-width: 0;
 }
 
 .ismListPanel__heading h1 {
