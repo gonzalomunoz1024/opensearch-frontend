@@ -122,7 +122,7 @@ const translate = (x: number, y: number) => `translate(${x},${y})`;
 
 function AxisSvg({ placed, drawn }: { placed: PlacedAxis; drawn: DrawnAxis }) {
   const { config } = placed.input;
-  const rect = placed.rect;
+  const rect = placed.rects[0];
   if (!rect) return null;
   const horizontal = isHorizontal(config);
   const scale = placed.scale as AxisScaleInfo;
@@ -163,15 +163,16 @@ function AxisSvg({ placed, drawn }: { placed: PlacedAxis; drawn: DrawnAxis }) {
 
 function TitleSvg({ placed }: { placed: PlacedAxis }) {
   const title = placed.title;
-  if (!title) return null;
+  const rect = title?.rects[0];
+  if (!title || !rect) return null;
   const horizontal = isHorizontal(placed.input.config);
   return (
     <svg
       className={`visAxis__svg axis-title ${horizontal ? 'x' : 'y'}-axis-title`}
       focusable="false"
-      width={horizontal ? title.rect.width : titleSize(title.text)}
-      height={title.rect.height}
-      style={{ left: title.rect.x, top: title.rect.y }}
+      width={horizontal ? rect.width : titleSize(title.text)}
+      height={rect.height}
+      style={{ left: rect.x, top: rect.y }}
     >
       <text transform={title.transform} textAnchor="middle" dominantBaseline="hanging">
         {title.text}
@@ -221,7 +222,7 @@ export function PointSeriesChart({ model, colorOf, offsetAt, dimming, legend, on
         scaleFor: (length) => scaleCategory(axis, length).info,
       }));
       const layout = layoutPointSeries(size.width, size.height, valueInputs, categoryInputs);
-      const chart = layout.chart;
+      const chart = layout.charts[0];
       // The scales the marks are drawn with: those of the chart's own size, when an axis is hidden too
       scaled.categories = model.categoryAxes.map((axis) => scaleCategory(axis, isHorizontal(axis.config) ? chart.width : chart.height));
       scaled.category = scaled.categories[0];
@@ -281,7 +282,7 @@ export function PointSeriesChart({ model, colorOf, offsetAt, dimming, legend, on
       );
     }
     const { layout, scaled } = drawn;
-    const chart: Rect = layout.chart;
+    const chart: Rect = layout.charts[0];
     const category = scaled.category;
     const categoryConfig = model.categoryAxes[0]?.config;
     const horizontal = categoryConfig ? isHorizontal(categoryConfig) : true;
@@ -814,7 +815,7 @@ export function PointSeriesChart({ model, colorOf, offsetAt, dimming, legend, on
           <TitleSvg key={`title-${axis.input.config.id}`} placed={axis} />
         ))}
         {layout.axes.map((axis) =>
-          axis.drawn && axis.rect ? <AxisSvg key={`axis-${axis.input.config.id}`} placed={axis} drawn={axis.drawn} /> : null
+          axis.drawn && axis.rects.length ? <AxisSvg key={`axis-${axis.input.config.id}`} placed={axis} drawn={axis.drawn} /> : null
         )}
         <div
           ref={chartRef}

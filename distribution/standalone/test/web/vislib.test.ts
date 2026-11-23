@@ -168,11 +168,12 @@ describe('the axes of the classic charts', () => {
     const layout = layoutPointSeries(500, 300, [axis(value)], [axis(category)]);
     // An axis with no labels is its ticks and five pixels; a title beside it with no text is a
     // pixel wide (its min-width), one under it nothing
-    assert.deepEqual(layout.chart, { x: 12, y: 10, width: 487, height: 269 });
+    assert.deepEqual(layout.charts, [{ x: 12, y: 10, width: 487, height: 269 }]);
     const [left, bottom] = layout.axes;
-    assert.deepEqual(left.rect, { x: 1, y: 10, width: 11, height: 269 });
+    assert.deepEqual(left.rects, [{ x: 1, y: 10, width: 11, height: 269 }]);
     assert.equal(left.transform, 'translate(11,0)');
-    assert.deepEqual(bottom.rect, { x: 12, y: 279, width: 487, height: 11 });
+    assert.deepEqual(bottom.rects, [{ x: 12, y: 279, width: 487, height: 11 }]);
+    assert.equal(layout.splitTitles, undefined);
   });
 });
 
