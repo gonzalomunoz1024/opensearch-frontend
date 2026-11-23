@@ -7,7 +7,7 @@ import { buildAggsDsl, tabify, type AggConfig, type AggContext } from '../../web
 import { describeFilter } from '../../web/lib/query';
 import type { Field, Filter, IndexPattern } from '../../web/lib/types';
 import { decodeGeoHash } from '../../web/maps/geohash';
-import { GEOHASH_DEFAULTS, MAP_TYPE_OPTIONS, tileMapDefaults } from '../../web/vis/tile_map/defaults';
+import { DEFAULT_WMS, GEOHASH_DEFAULTS, MAP_TYPE_OPTIONS, tileMapDefaults } from '../../web/vis/tile_map/defaults';
 import {
   convertToGeoJson,
   darker,
@@ -333,5 +333,14 @@ describe('a new coordinate map', () => {
       MAP_TYPE_OPTIONS.map((option) => option.value),
       ['Scaled Circle Markers', 'Shaded Circle Markers', 'Shaded Geohash Grid', 'Heatmap']
     );
+  });
+});
+
+describe('the base map of a new coordinate map', () => {
+  it('starts as the setting visualization:tileMap:WMSdefaults says, as tile_map_type.js reads it', () => {
+    const wms = { enabled: true, url: 'https://maps.example/wms', options: { layers: 'roads', format: 'image/png' } };
+    assert.deepEqual(tileMapDefaults(wms).wms, wms);
+    assert.notEqual(tileMapDefaults(wms).wms, wms, 'a copy, as the original clones the defaults');
+    assert.deepEqual(tileMapDefaults().wms, DEFAULT_WMS);
   });
 });

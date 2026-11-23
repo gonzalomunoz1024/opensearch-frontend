@@ -70,17 +70,53 @@ export function getLocation(): AppLocation {
   return current;
 }
 
-/** Goes to a path of this product: `/app/dashboards#/view/<id>` */
-export function navigate(url: string, options: { replace?: boolean; force?: boolean } = {}) {
+/**
+ * What came with the entry of the history the browser is at: what one app hands another, as the
+ * original's `navigateToApp(appId, { path, state })` puts it in the location's state (the
+ * dashboard and the Visualize editor hand each other a panel this way)
+ */
+export function locationState<T>(): T | undefined {
+  const state: unknown = window.history.state;
+  return state === null ? undefined : (state as T);
+}
+
+/**
+ * Changes what the entry of the history the browser is at carries, and keeps the address: what
+ * the original's state transfer does with `removeAfterFetch`, so that a reload, which keeps the
+ * state, does not hand the same panel over twice
+ */
+export function setLocationState(state: unknown) {
+  window.history.replaceState(state === undefined ? null : state, '', window.location.href);
+}
+
+/**
+ * Goes to a path of this product: `/app/dashboards#/view/<id>`. A new entry of the history
+ * carries `state`, or none; a replaced one keeps what its entry carried unless `state` is given.
+ */
+export function navigate(
+  url: string,
+  options: { replace?: boolean; force?: boolean; state?: unknown } = {}
+) {
   const target = href(url);
   const from = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-  if (target === from) return;
+  if (target === from) {
+    // The same address with something handed over: the entry carries it, and the pages read again
+    if (options.state === undefined) return;
+    window.history.replaceState(options.state, '', target);
+    currentKey = '';
+    emit();
+    return;
+  }
   const leavesPage =
     new URL(target, window.location.href).pathname !== window.location.pathname ||
     new URL(target, window.location.href).hash.split('?')[0] !== window.location.hash.split('?')[0];
   if (leavesPage && !options.force && leaveGuard && !leaveGuard()) return;
-  if (options.replace) window.history.replaceState(null, '', target);
-  else window.history.pushState(null, '', target);
+  if (options.replace) {
+    const state: unknown = options.state === undefined ? window.history.state : options.state;
+    window.history.replaceState(state, '', target);
+  } else {
+    window.history.pushState(options.state ?? null, '', target);
+  }
   emit();
 }
 
