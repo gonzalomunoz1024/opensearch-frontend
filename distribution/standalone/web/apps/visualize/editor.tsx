@@ -604,10 +604,12 @@ export function VisEditor({ savedId }: { savedId?: string }) {
       )}
       {dialog === 'inspect' && (
         <Inspector
-          title={saved.title || 'Visualization'}
+          title={saved.title}
           requests={lastData.current?.requests ?? []}
           table={lastData.current?.table}
           vega={lastData.current?.vega}
+          context={lastData.current?.context}
+          onFilter={addFilters}
           onClose={() => setDialog(undefined)}
         />
       )}

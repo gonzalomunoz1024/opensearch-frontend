@@ -107,6 +107,10 @@ export class SearchService {
         body,
         { signal: options.signal }
       );
+      // As the original's search strategy answers (shimHitsTotal): the total of the hits is a
+      // number, in what the page reads and in what Inspect shows
+      const total = response.hits?.total;
+      if (total !== null && typeof total === 'object') response.hits.total = total.value;
       if (record) {
         record.response = response;
         record.tookMs = Date.now() - started;

@@ -168,6 +168,7 @@ export function SaveModal({
             // shows, as the next save confirms it (`isTitleDuplicateConfirmed`)
             invalid={title.trim() === ''}
             testId="savedObjectTitle"
+            compact
             autoFocus
           />
         </FormRow>

@@ -7,7 +7,7 @@ import { ChartMessage } from '../../charts/core';
 import { Badge, cx } from '../../components/basic';
 import { Icon } from '../../components/icon';
 import { Tooltip, type ContextMenuItem } from '../../components/overlay';
-import type { Table } from '../../lib/aggs';
+import type { AggContext, Table } from '../../lib/aggs';
 import { resolveTimeRange, type TimeRange } from '../../lib/dates';
 import type { RawHit } from '../../lib/docs';
 import { existsFilter } from '../../lib/query';
@@ -58,6 +58,7 @@ export interface LoadedObject {
 export interface PanelData {
   requests: RequestRecord[];
   table?: Table;
+  context?: AggContext;
   vega?: VegaDebugValues;
 }
 
@@ -167,7 +168,14 @@ function SearchPanel({
       fail(failure);
       return undefined;
     }
-    const record: RequestRecord = { name: 'Data', index: indexPattern.title, body, startedAt: Date.now() };
+    const record: RequestRecord = {
+      name: 'Data',
+      index: indexPattern.title,
+      indexPatternId: indexPattern.id,
+      description: 'This request queries OpenSearch to fetch the data for the search.',
+      body,
+      startedAt: Date.now(),
+    };
     services.search
       .search(indexPattern.title, body, { signal: controller.signal, record })
       .then((response) => {
