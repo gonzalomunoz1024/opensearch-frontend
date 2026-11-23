@@ -3,7 +3,7 @@
 /* What every page uses: made once when the page loads, from what the server put in it. */
 
 import type { MapConfig } from '../../common/map_config';
-import { scaledDateRules } from '../lib/dates';
+import { scaledDateRules, setDefaultTimeZone } from '../lib/dates';
 import { DEFAULT_DATE_NANOS_FORMAT, DEFAULT_FORMAT_SETTINGS, type FormatSettings } from '../lib/field_formats';
 import type { QueryConfig } from '../lib/query';
 import type { FieldFormatSpec } from '../lib/types';
@@ -80,6 +80,11 @@ export function createServices(boot: BootData): Services {
     const zone = uiSettings.get<string>('dateFormat:tz', 'Browser');
     return zone && zone !== 'Browser' ? zone : undefined;
   };
+  // Date math counts on the clock of that zone, from the start and whenever the settings change,
+  // as the original makes it the default zone of its dates
+  const applyTimeZone = () => setDefaultTimeZone(timeZone());
+  applyTimeZone();
+  uiSettings.subscribe(applyTimeZone);
 
   let formats: { version: number; value: FormatSettings } | undefined;
   const formatSettings = () => {
@@ -130,7 +135,9 @@ export function createServices(boot: BootData): Services {
     formatSettings,
     queryConfig: () => ({
       queryStringOptions: uiSettings.get<Record<string, unknown>>('query:queryString:options', {}),
-      dateFormatTZ: timeZone(),
+      // "Browser" too: a date typed in a query is then read on the clock of the browser, as the
+      // original's getOpenSearchQueryConfig hands the setting on whatever it says
+      dateFormatTZ: uiSettings.get<string>('dateFormat:tz', 'Browser'),
       ignoreFilterIfFieldNotInIndex: uiSettings.get('courier:ignoreFilterIfFieldNotInIndex', false),
       allowLeadingWildcards: uiSettings.get('query:allowLeadingWildcards', true),
     }),

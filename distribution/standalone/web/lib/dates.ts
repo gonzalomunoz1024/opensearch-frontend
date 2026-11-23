@@ -30,16 +30,137 @@ export const UNIT_NAMES: Record<TimeUnit, [string, string]> = {
   y: ['year', 'years'],
 };
 
-export function addUnits(date: Date, amount: number, unit: TimeUnit): Date {
-  const result = new Date(date.getTime());
+let clockZone: string | undefined;
+
+/**
+ * The zone on whose clock date math counts ("now/d" is the start of the day there): the one the
+ * setting dateFormat:tz names, or the browser's own when it names none, or one the browser does
+ * not know. The services set it when the settings load and when they change, as OpenSearch
+ * Dashboards makes the zone of that setting the default of its dates.
+ */
+export function setDefaultTimeZone(timeZone: string | undefined): void {
+  clockZone = undefined;
+  if (!timeZone || timeZone === 'Browser') return;
+  try {
+    timeZoneOffset(0, timeZone);
+    clockZone = timeZone;
+  } catch {
+    // no zone of that name: the clock of the browser
+  }
+}
+
+// The minutes east of UTC a moment made on the clock of a named zone is counted with there. The
+// original keeps the offset it found the moment by, which after a move into an hour the clocks
+// skip is not the zone's own at that moment, and counts on from it
+const countedWith = new WeakMap<Date, number>();
+
+/**
+ * A moment moved on the clock of a named zone. The clock is a date whose UTC fields are what the
+ * zone shows. After the move the moment is found as the original's moment-timezone finds it, by
+ * the offset the zone has where the new reading falls under the offset the moment had, so that a
+ * reading the clocks of the zone skip or show twice gives the moment the original gives.
+ */
+function onClock(date: Date, timeZone: string, move: (clock: Date) => void): Date {
+  if (Number.isNaN(date.getTime())) return new Date(Number.NaN);
+  const offset = countedWith.get(date) ?? timeZoneOffset(date.getTime(), timeZone);
+  const clock = new Date(date.getTime() + offset * UNIT_MS.m);
+  move(clock);
+  const under = new Date(clock.getTime() - offset * UNIT_MS.m);
+  // Further than a date reaches: no date, as on the clock of the browser
+  if (Number.isNaN(under.getTime())) return under;
+  const found = timeZoneOffset(under.getTime(), timeZone);
+  const moved = new Date(clock.getTime() - found * UNIT_MS.m);
+  countedWith.set(moved, found);
+  return moved;
+}
+
+function addOnClock(clock: Date, amount: number, unit: TimeUnit): void {
   switch (unit) {
     case 'y':
-      result.setFullYear(result.getFullYear() + amount);
+    case 'M': {
+      const month = clock.getUTCMonth() + (unit === 'y' ? amount * 12 : amount);
+      const last = new Date(clock.getTime());
+      last.setUTCMonth(month + 1, 0);
+      clock.setUTCMonth(month, Math.min(clock.getUTCDate(), last.getUTCDate()));
       break;
+    }
+    case 'w':
+      clock.setUTCDate(clock.getUTCDate() + amount * 7);
+      break;
+    case 'd':
+      clock.setUTCDate(clock.getUTCDate() + amount);
+      break;
+    default:
+      clock.setTime(clock.getTime() + amount * UNIT_MS[unit]);
+  }
+}
+
+function startOnClock(clock: Date, unit: TimeUnit, weekStart: number): void {
+  switch (unit) {
+    case 'y':
+      clock.setUTCMonth(0, 1);
+      clock.setUTCHours(0, 0, 0, 0);
+      break;
+    case 'M':
+      clock.setUTCDate(1);
+      clock.setUTCHours(0, 0, 0, 0);
+      break;
+    case 'w':
+      clock.setUTCDate(clock.getUTCDate() - ((clock.getUTCDay() - weekStart + 7) % 7));
+      clock.setUTCHours(0, 0, 0, 0);
+      break;
+    case 'd':
+      clock.setUTCHours(0, 0, 0, 0);
+      break;
+    case 'h':
+      clock.setUTCMinutes(0, 0, 0);
+      break;
+    case 'm':
+      clock.setUTCSeconds(0, 0);
+      break;
+    case 's':
+      clock.setUTCMilliseconds(0);
+      break;
+    default:
+  }
+}
+
+// A date and a time that name no zone
+const CLOCK_READING = /^(\d{4}|[+-]\d{6})-\d{2}(-\d{2})?[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/;
+
+/**
+ * The moment the clock of a named zone shows a date and time. A reading that clock shows twice is
+ * its first pass, and one it skips is counted on from before the change, as the original reads them.
+ */
+function readOnClock(text: string, timeZone: string): Date | undefined {
+  const reading = Date.parse(`${text}Z`);
+  // Not within two days of the first and the last date there are: the days before and after count
+  if (!(Math.abs(reading) < 8.64e15 - 2 * UNIT_MS.d)) return undefined;
+  const before = timeZoneOffset(reading - UNIT_MS.d, timeZone);
+  if (timeZoneOffset(reading - before * UNIT_MS.m, timeZone) === before) {
+    return new Date(reading - before * UNIT_MS.m);
+  }
+  const after = timeZoneOffset(reading + UNIT_MS.d, timeZone);
+  const fits = timeZoneOffset(reading - after * UNIT_MS.m, timeZone) === after;
+  return new Date(reading - (fits ? after : before) * UNIT_MS.m);
+}
+
+export function addUnits(date: Date, amount: number, unit: TimeUnit): Date {
+  const result = new Date(date.getTime());
+  // Nothing to add leaves the moment alone: setting the date it has would move a moment in the
+  // hour that repeats when clocks go back to the first pass of that hour
+  if (amount === 0) return result;
+  // Days and longer are counted on the clock: that of the zone the settings name, when they do
+  if (clockZone && UNIT_MS[unit] >= UNIT_MS.d) {
+    return onClock(date, clockZone, (clock) => addOnClock(clock, amount, unit));
+  }
+  switch (unit) {
+    // A year is twelve months, as the original counts it: a year from 29 February is 28 February
+    case 'y':
     case 'M': {
       const day = result.getDate();
       result.setDate(1);
-      result.setMonth(result.getMonth() + amount);
+      result.setMonth(result.getMonth() + (unit === 'y' ? amount * 12 : amount));
       const last = new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate();
       result.setDate(Math.min(day, last));
       break;
@@ -58,6 +179,7 @@ export function addUnits(date: Date, amount: number, unit: TimeUnit): Date {
 
 /** The first moment of the unit the date falls in; `weekStart` is 0 for Sunday */
 export function startOf(date: Date, unit: TimeUnit, weekStart = 0): Date {
+  if (clockZone) return onClock(date, clockZone, (clock) => startOnClock(clock, unit, weekStart));
   const result = new Date(date.getTime());
   switch (unit) {
     case 'y':
@@ -76,14 +198,15 @@ export function startOf(date: Date, unit: TimeUnit, weekStart = 0): Date {
       result.setHours(0, 0, 0, 0);
       break;
     case 'h':
-      result.setMinutes(0, 0, 0);
-      break;
     case 'm':
-      result.setSeconds(0, 0);
+    case 's': {
+      // Counted from the moment by the clock's offset then, as the original does: setting the
+      // minutes of a moment in the hour that repeats when clocks go back lands in its first pass
+      const size = UNIT_MS[unit];
+      const local = result.getTime() - result.getTimezoneOffset() * 60000;
+      result.setTime(result.getTime() - (((local % size) + size) % size));
       break;
-    case 's':
-      result.setMilliseconds(0);
-      break;
+    }
     default:
   }
   return result;
@@ -91,6 +214,14 @@ export function startOf(date: Date, unit: TimeUnit, weekStart = 0): Date {
 
 export function endOf(date: Date, unit: TimeUnit, weekStart = 0): Date {
   if (unit === 'ms') return new Date(date.getTime());
+  if (clockZone) {
+    // In one move, as the original makes it: the last reading before the next unit starts
+    return onClock(date, clockZone, (clock) => {
+      startOnClock(clock, unit, weekStart);
+      addOnClock(clock, 1, unit);
+      clock.setTime(clock.getTime() - 1);
+    });
+  }
   return new Date(addUnits(startOf(date, unit, weekStart), 1, unit).getTime() - 1);
 }
 
@@ -118,9 +249,14 @@ export function parseDateMath(text: string, options: DateMathOptions = {}): Date
     const split = input.indexOf('||');
     const base = split === -1 ? input : input.slice(0, split);
     math = split === -1 ? '' : input.slice(split + 2);
-    const parsed = /^\d+$/.test(base) ? new Date(Number(base)) : new Date(base);
+    // A date without a time is the start of that day on the clock, as the original reads it;
+    // JavaScript alone reads it as midnight UTC
+    const dated = /^(\d{4}|[+-]\d{6})-\d{2}(-\d{2})?$/.test(base) ? `${base}T00:00` : base;
+    const parsed = /^\d+$/.test(base) ? new Date(Number(base)) : new Date(dated);
     if (Number.isNaN(parsed.getTime())) return undefined;
-    date = parsed;
+    // The clock is that of the zone the settings name, when they do and the text names none
+    const zoned = clockZone && CLOCK_READING.test(dated) ? readOnClock(dated, clockZone) : undefined;
+    date = zoned ?? parsed;
   }
 
   let rest = math;
@@ -135,9 +271,12 @@ export function parseDateMath(text: string, options: DateMathOptions = {}): Date
     const rounding = /^\/(ms|[smhdwMy])/.exec(rest);
     if (rounding) {
       const unit = rounding[1] as TimeUnit;
-      date = options.roundUp
-        ? endOf(date, unit, options.weekStart)
-        : startOf(date, unit, options.weekStart);
+      // (to the millisecond there is nothing to round)
+      if (unit !== 'ms') {
+        date = options.roundUp
+          ? endOf(date, unit, options.weekStart)
+          : startOf(date, unit, options.weekStart);
+      }
       rest = rest.slice(rounding[0].length);
       continue;
     }
@@ -236,6 +375,7 @@ function partsOf(date: Date, timeZone?: string): Parts {
     format = new Intl.DateTimeFormat('en-US', {
       timeZone,
       hourCycle: 'h23',
+      era: 'short',
       year: 'numeric',
       month: 'numeric',
       day: 'numeric',
@@ -247,11 +387,17 @@ function partsOf(date: Date, timeZone?: string): Parts {
   }
   const fields: Record<string, number> = {};
   for (const part of format.formatToParts(date)) {
-    if (part.type !== 'literal') fields[part.type] = Number(part.value);
+    if (part.type === 'era') fields.era = part.value === 'BC' ? 1 : 0;
+    else if (part.type !== 'literal') fields[part.type] = Number(part.value);
   }
-  const asUtc = Date.UTC(fields.year, fields.month - 1, fields.day, fields.hour, fields.minute, fields.second);
+  // The years before the year 1 are counted backwards from it; and Date.UTC would read the years
+  // 0 to 99 as 1900 to 1999, so the year is set on its own
+  const year = fields.era ? 1 - fields.year : fields.year;
+  const asUtc = new Date(
+    Date.UTC(2000, fields.month - 1, fields.day, fields.hour, fields.minute, fields.second)
+  ).setUTCFullYear(year);
   return {
-    year: fields.year,
+    year,
     month: fields.month - 1,
     day: fields.day,
     weekday: new Date(asUtc).getUTCDay(),

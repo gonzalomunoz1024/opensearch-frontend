@@ -12,7 +12,7 @@ import { Tooltip, copyText } from '../../components/overlay';
 import type { RawHit } from '../../lib/docs';
 import { fieldFormatter } from '../../lib/field_formats';
 import { tokenizeJson } from '../../lib/json_text';
-import { appUrl } from '../../lib/url';
+import { appUrl, decodeState } from '../../lib/url';
 import type { Filter, IndexPattern } from '../../lib/types';
 import { href } from '../../router';
 import { services } from '../../services';
@@ -306,6 +306,25 @@ function DocLink({ to, index, children }: { to: string; index: number; children:
   );
 }
 
+/**
+ * What the original's link to the surrounding documents carries: of the address's `_g` the pinned
+ * filters and nothing else (the time range stays behind), then the columns and the page's own
+ * filters switched off
+ */
+export function contextLinkState(globalParam: string | undefined, columns?: string[], appFilters?: Filter[]): Record<string, unknown> {
+  const pinned = decodeState<{ filters: Filter[] }>(globalParam).filters;
+  return {
+    _g: { filters: Array.isArray(pinned) ? pinned : [] },
+    _a:
+      columns || appFilters
+        ? {
+            columns: columns ?? ['_source'],
+            filters: (appFilters ?? []).map((filter) => ({ ...filter, meta: { ...filter.meta, disabled: true } })),
+          }
+        : undefined,
+  };
+}
+
 export function DocDetails({
   hit,
   indexPattern,
@@ -326,17 +345,11 @@ export function DocDetails({
       ? [
           {
             label: 'View surrounding documents',
-            // As the original's link: the pinned filters, the columns, and the page's filters off
-            to: appUrl(basePath, `/context/${encodeURIComponent(indexPattern.id)}/${encodeURIComponent(hit._id)}`, {
-              _g: currentGlobalParam(),
-              _a:
-                actions || appFilters
-                  ? {
-                      columns: actions?.columns ?? ['_source'],
-                      filters: (appFilters ?? []).map((filter) => ({ ...filter, meta: { ...filter.meta, disabled: true } })),
-                    }
-                  : undefined,
-            }),
+            to: appUrl(
+              basePath,
+              `/context/${encodeURIComponent(indexPattern.id)}/${encodeURIComponent(hit._id)}`,
+              contextLinkState(currentGlobalParam(), actions?.columns, appFilters)
+            ),
           },
         ]
       : []),

@@ -79,6 +79,19 @@ describe('dates', () => {
     assert.equal(range.to.getTime() - range.from.getTime(), 86400000 - 1);
   });
 
+  it('counts a year from 29 February to the last day of February, as the original does', () => {
+    const leapDay = new Date(2024, 1, 29, 12, 0, 0, 0);
+    const at = (expression: string) => parseDateMath(expression, { now: leapDay })?.getTime();
+    assert.equal(at('now-1y'), new Date(2023, 1, 28, 12).getTime());
+    assert.equal(at('now+1y'), new Date(2025, 1, 28, 12).getTime());
+    assert.equal(at('now-5y'), new Date(2019, 1, 28, 12).getTime());
+    assert.equal(at('now+4y'), new Date(2028, 1, 29, 12).getTime());
+    assert.equal(at('now-1y-1M'), new Date(2023, 0, 28, 12).getTime());
+    // and any other day of a year stays the day it is
+    assert.equal(parseDateMath('now-1y', { now })?.getTime(), new Date(2025, 10, 22, 3, 52, 10, 500).getTime());
+    assert.equal(parseDateMath('now+100y', { now })?.getTime(), new Date(2126, 10, 22, 3, 52, 10, 500).getTime());
+  });
+
   it('writes dates with the tokens of the date settings', () => {
     const date = new Date(Date.UTC(2026, 10, 22, 1, 37, 55, 7));
     assert.equal(formatDate(date, 'MMM D, YYYY @ HH:mm:ss.SSS', 'UTC'), 'Nov 22, 2026 @ 01:37:55.007');
