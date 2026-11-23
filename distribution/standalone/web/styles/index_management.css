@@ -2,42 +2,48 @@
 
 /* Index Management: the menu of its lists beside its pages. Class prefix: ism. */
 
+/* As the plugin's page: a 16 px margin, the menu 200 px wide and 16 px from the page, which has
+   25 px around it (the plugin's own padding) */
 .ismFrame {
   display: flex;
-  align-items: flex-start;
   flex: 1 1 auto;
   min-width: 0;
+  padding: var(--space-4);
+  background: var(--color-surface);
 }
 
-/* The menu as the plugin's side bar: 200 px wide, 16 px from the page's edges and from the list */
 .ismNav {
-  flex: 0 0 200px;
-  min-width: 0;
-  margin: var(--space-4);
+  flex: none;
+  width: 200px;
+  margin-right: var(--space-4);
+  font-size: var(--font-size-s);
+  line-height: 1.5;
 }
 
 .ismNav__group + .ismNav__group {
   margin-top: var(--space-8);
 }
 
+/* The name of an application, then its lists: as the theme's side navigation, a row of 21 px with
+   2 px above and below, its hover 8 px wider on each side */
 .ismNav__title,
 .ismNav__link {
   display: block;
-  margin: 0 calc(-1 * var(--space-2));
+  width: calc(100% + 16px);
+  margin-left: calc(-1 * var(--space-2));
   padding: 2px var(--space-2);
-  border-radius: var(--radius-sm);
   overflow: hidden;
+  border-radius: var(--radius-sm);
   color: var(--color-text-secondary);
-  font-size: var(--font-size-s);
-  line-height: 1.5;
-  text-overflow: ellipsis;
   text-decoration: none;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .ismNav__title {
   margin-bottom: var(--space-2);
-  padding-block: 0;
+  padding-top: 0;
+  padding-bottom: 0;
   color: var(--color-text-primary);
   font-size: var(--font-size-m);
   font-weight: var(--font-weight-semibold);
@@ -45,15 +51,14 @@
 }
 
 .ismNav ul {
-  display: flex;
-  flex-direction: column;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-/* An item under another hangs from a thin line, as the plugin's */
+/* A list under another: a line at its left with a tick to each */
 .ismNav ul.ismNav__inner {
+  width: 100%;
   margin-left: var(--space-2);
 }
 
@@ -61,59 +66,62 @@
   position: relative;
 }
 
-.ismNav__inner > li::before,
 .ismNav__inner > li::after {
-  content: "";
+  content: '';
   position: absolute;
+  top: 0;
+  bottom: 0;
   left: 0;
+  width: 1px;
   background: var(--color-border-light);
 }
 
-.ismNav__inner > li::before {
-  top: 0;
-  bottom: 0;
-  width: 1px;
-}
-
-.ismNav__inner > li:last-child::before {
-  bottom: auto;
-  height: var(--space-3);
-}
-
-.ismNav__inner > li::after {
-  top: var(--space-3);
-  width: var(--space-1);
-  height: 1px;
+.ismNav__inner > li:last-of-type::after {
+  height: 12px;
 }
 
 .ismNav__inner .ismNav__link {
-  margin: 0;
+  position: relative;
+  width: 100%;
+  margin-left: 0;
+}
+
+.ismNav__inner .ismNav__link::after {
+  content: '';
+  position: absolute;
+  top: 12px;
+  left: 0;
+  width: 4px;
+  height: 1px;
+  background: var(--color-border-light);
 }
 
 .ismNav__link:hover,
-.ismNav__link:focus-visible {
+.ismNav__link:focus,
+.ismNav__title:hover,
+.ismNav__title:focus {
   color: var(--color-text-primary);
 }
 
 .ismNav__link--selected,
-.ismNav__link--selected:hover {
+.ismNav__link--selected:hover,
+.ismNav__link--selected:focus {
   color: var(--color-accent);
   font-weight: var(--font-weight-medium);
 }
 
 .ismBody {
-  flex: 1 1 auto;
+  flex: 1 1 100%;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  padding: var(--space-6);
+  padding: 25px;
 }
 
-/* A list beside the menu has the plugin's margins: the page's 16 px and its own 25 px */
-.ismNav + .ismBody {
-  padding: calc(var(--space-4) + 25px);
-  padding-left: 25px;
+/* A page the plugin's frame leaves to its own padding (index.tsx names them) */
+.ismBody--bare {
+  padding: 0;
 }
 
 /* --- The panel around a list or a part of a form ------------------------------------------------ */
@@ -327,16 +335,19 @@
   overflow-wrap: anywhere;
 }
 
-@media (max-width: 900px) {
+/* As the theme's page on a narrow screen: the menu above the page */
+@media (max-width: 767px) {
   .ismFrame {
     flex-direction: column;
-    align-items: stretch;
   }
 
   .ismNav {
-    flex: none;
+    width: auto;
+    margin: 0 0 var(--space-4);
   }
+}
 
+@media (max-width: 900px) {
   .ismDetails {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
@@ -348,11 +359,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  padding: 0 var(--space-5);
-}
-
-.ismPage--details {
-  padding: 0 var(--space-6);
 }
 
 .ismPage--loading {
@@ -485,71 +491,157 @@
   color: var(--color-text-secondary);
 }
 
-/* States */
+/* A policy's states, each an accordion as the plugin's: its name and counts in the button, the buttons
+   that change it at the right, and, opened, its actions and transitions in small panels */
+/* The title in a row of its own, 2 px out of it on every side, as the plugin's */
+.ismStates > h2 {
+  margin: -2px;
+}
+
+.ismStates__description {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 350;
+  line-height: 18px;
+}
+
+.ismDocs__icon {
+  margin-left: var(--space-1);
+}
+
 .ismState {
+  padding: 15px;
   border-bottom: 1px solid var(--color-border-light);
-  padding: var(--space-3) var(--space-2);
+}
+
+.ismState__trigger {
+  display: flex;
+  align-items: center;
+}
+
+.ismState__button {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  line-height: 21px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ismState__arrow {
+  display: inline-flex;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0 var(--space-2) 0 var(--space-1);
+  border-radius: 8px;
+}
+
+.ismState__arrow .atlIcon {
+  transition: transform var(--duration-normal) var(--ease-out-quint);
+}
+
+.ismState--open .ismState__arrow .atlIcon {
+  transform: rotate(90deg);
 }
 
 .ismState__title {
-  display: inline-flex;
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.ismState__name {
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-semibold);
+  line-height: 21px;
+}
+
+.ismState__initial {
+  padding: 0 10px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.ismCount {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.ismCount__badge {
+  display: inline-block;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 var(--space-1);
+  border-radius: 999px;
+  background: var(--color-surface-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: 16px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.ismState__extra {
+  display: flex;
+  flex: none;
   align-items: center;
   gap: var(--space-4);
 }
 
-.ismState__initial {
-  padding: 0 var(--space-3);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-xs);
-}
-
-.ismCount {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
-}
-
-.ismCount b {
-  display: inline-block;
-  min-width: 16px;
-  padding: 0 var(--space-1);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-tertiary);
-  text-align: center;
-  font-weight: var(--font-weight-medium);
+/* The component library's small icon buttons are round */
+.ismRoundButton {
+  border-radius: 50%;
 }
 
 .ismState__body {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
+  gap: var(--space-6);
+  padding: var(--space-6);
 }
 
-.ismState__body h5,
-.ismTemplates h5 {
+.ismState__body h5 {
   margin: 0;
   font-size: var(--font-size-s);
   font-weight: var(--font-weight-semibold);
+  line-height: 20px;
 }
 
-.ismState__body p {
-  margin: 0;
+.ismState__none {
+  font-size: var(--font-size-s);
+  line-height: 21px;
 }
 
 .ismChips {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3);
+  gap: var(--space-6);
 }
 
 .ismChip {
   margin: 0;
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-2);
   border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   background: var(--color-surface);
+  box-shadow: var(--shadow-card);
   font-size: var(--font-size-s);
+  line-height: 21px;
 }
 
 .ismChip dt {
@@ -557,31 +649,102 @@
 }
 
 .ismChip dd {
-  margin: 0 0 var(--space-1);
+  margin: 0;
 }
 
+.ismChip dd + dt {
+  margin-top: 14px;
+}
+
+/* The initial state: a select with its name before it, in one box */
 .ismInitial {
   display: flex;
-  align-items: center;
   max-width: 300px;
-  margin-bottom: var(--space-3);
+  height: var(--control-height);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  overflow: hidden;
 }
 
 .ismInitial__label {
+  display: flex;
   flex: none;
-  padding: 0 var(--space-3);
+  align-items: center;
+  padding: var(--space-2);
+  background: var(--color-border-light);
+  color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
+  line-height: 14px;
   white-space: nowrap;
 }
 
-.ismTemplates {
-  display: grid;
-  grid-template-columns: minmax(0, 400px) 120px auto;
-  gap: var(--space-3) var(--space-5);
+.ismInitial .ismInitial__select {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+}
+
+/* A policy with no states yet: the plugin's empty prompt */
+.ismStates__empty {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: start;
-  padding: var(--space-3) 0 var(--space-3) var(--space-3);
+  max-width: 36em;
+  margin: 0 auto;
+  padding: var(--space-6);
+  text-align: center;
+}
+
+.ismStates__empty h3 {
+  font-size: var(--font-size-l);
+  font-weight: var(--font-weight-semibold);
+  line-height: 22px;
+}
+
+.ismStates__empty p {
+  color: var(--color-text-secondary);
+  line-height: 21px;
+}
+
+/* A policy's ISM templates: a row of names over a row of fields for each template */
+.ismTemplates {
+  padding: 10px 0 0 10px;
+}
+
+.ismTemplates__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.ismTemplates__row + .ismTemplates__row {
+  margin-top: var(--space-3);
+}
+
+.ismTemplates__row h5 {
+  margin: 0;
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+.ismTemplates__patterns {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 400px;
+}
+
+.ismTemplates__priority {
+  flex: none;
+  width: 234px;
+}
+
+.ismTemplates__empty {
+  max-width: 37em;
 }
 
 .ismDraggables {
@@ -619,6 +782,478 @@
   max-width: 1200px;
 }
 
+/* --- Policies, managed indexes, rollup jobs and transform jobs, as the plugin draws them -------------- */
+
+.ismSpacer {
+  flex: none;
+}
+
+.ismSpacer--xs {
+  height: var(--space-1);
+}
+
+.ismSpacer--s {
+  height: var(--space-2);
+}
+
+.ismSpacer--m {
+  height: var(--space-4);
+}
+
+.ismSpacer--l {
+  height: var(--space-6);
+}
+
+.ismSpacer--xl {
+  height: var(--space-8);
+}
+
+.ismRuleXs {
+  flex: none;
+  width: 100%;
+  height: 1px;
+  margin: var(--space-2) 0;
+  border: 0;
+  background: var(--color-border-light);
+}
+
+/* The panel of a list: the plugin's ContentPanel */
+.ismLp {
+  padding: var(--space-4) 0;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.ismLp__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-6);
+  padding: 0 var(--space-4);
+}
+
+.ismLp__title {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.ismLp__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+/* The panel of the lists of jobs: the title and the buttons in a row, the list under them */
+.ismJp__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+  padding: 0 10px;
+}
+
+.ismJp__title {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.ismJp__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* A panel of a form or of details: its title, a line, what it holds */
+.ismTp__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1);
+  margin: -2px;
+}
+
+.ismTp__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 2px;
+}
+
+/* A title with "– optional" after it is a row of items, which the plugin's row keeps in place */
+.ismTp__header--optional {
+  justify-content: flex-start;
+  margin: 0;
+}
+
+.ismTp__optional {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+.ismTp__description {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 350;
+  line-height: 18px;
+}
+
+/* The search box over a list and the pages beside it */
+.ismLs {
+  display: flex;
+  gap: var(--space-6);
+  padding: 0 5px;
+}
+
+.ismLs__search {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.ismLs__pages {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+
+.ismLs__pages .atlPagination {
+  padding: 0;
+}
+
+/* A table whose columns share the width alike, as the plugin's tables do */
+.ismFixed .atlTable {
+  table-layout: fixed;
+}
+
+.ismCell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* What a list says when it has no rows: the plugin's empty prompt in the table's one cell */
+.ismFixed .ismTable__empty,
+.ismAuto .ismTable__empty {
+  display: block;
+  max-width: none;
+  padding: 0;
+}
+
+.ismPrompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 45em;
+  margin: 0 auto;
+  padding: var(--space-6);
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.ismPrompt p {
+  line-height: 21px;
+}
+
+.ismPrompt__actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-4);
+}
+
+/* The page of one policy: its name and buttons over its settings, templates and states */
+.ismPolicyPage {
+  padding: 5px 50px;
+}
+
+.ismDetailsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+}
+
+.ismDetailsHeader__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ismPolicySettings {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-6);
+}
+
+.ismPolicySettings dl,
+.ismPolicySettings dt,
+.ismPolicySettings dd {
+  margin: 0;
+  font-size: var(--font-size-s);
+  line-height: 21px;
+  overflow-wrap: break-word;
+}
+
+.ismPolicySettings dt {
+  font-weight: var(--font-weight-semibold);
+}
+
+.ismLoadingCenter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 100px;
+}
+
+/* The page that writes a policy with forms */
+.ismPolicyEditor {
+  padding: 25px 50px;
+}
+
+.ismPolicyEditor__intro {
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+.ismSmallText {
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+/* A compressed form row with a 17 px name over the field and the help under it */
+.ismFormRow {
+  display: flex;
+  flex-direction: column;
+  max-width: 400px;
+}
+
+.ismFormRow__label {
+  margin-bottom: var(--space-1);
+  font-size: var(--font-size-l);
+  font-weight: var(--font-weight-semibold);
+  line-height: 22px;
+}
+
+.ismFormRow__error,
+.ismFormRow__help {
+  padding-top: var(--space-1);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+.ismFormRow__error {
+  color: var(--color-critical);
+}
+
+.ismFormRow__help {
+  color: var(--color-text-tertiary);
+}
+
+/* A field's name at 17 px and what it is for in 14 px light type, as the plugin's own labels */
+.ismLabel__title {
+  margin: 0 0 5px;
+  font-size: var(--font-size-l);
+  font-weight: var(--font-weight-semibold);
+  line-height: 22px;
+}
+
+.ismLabel__title--invalid {
+  color: var(--color-critical);
+}
+
+.ismLabel__optional {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-regular);
+}
+
+.ismLabel__help {
+  margin: 0 0 5px;
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+.ismLabel__help > span {
+  font-size: var(--font-size-s);
+  font-weight: 300;
+}
+
+/* A field as wide as the plugin's compressed form rows */
+.ismField400 {
+  max-width: 400px;
+}
+
+/* The compressed text area: 8 px in from its sides, at least 150 px tall, and 2 px over what
+   follows, as the plugin's form row holds it on a line of text */
+.ismTextArea.atlField {
+  min-height: 150px;
+  margin-bottom: 2px;
+  padding: var(--space-2);
+  line-height: 21px;
+}
+
+/* A channel, the button that asks for the channels again and the one that manages them */
+.ismChannel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 592px;
+}
+
+.ismChannel__select {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* A button that is only its icon but drawn as a button, 12 px either side of it */
+.ismRefreshButton.atlButton--icon {
+  width: auto;
+  padding: 0 13px;
+}
+
+.ismCallOutText {
+  margin-bottom: 18px;
+}
+
+/* The buttons under a form, at its right */
+.ismFormButtons {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* JSON as the plugin's code editor shows it. Light: Ace's "github" theme in Ace's own fonts, the
+   numbers of the lines in a grey gutter 50 px wide, bold brackets and keywords, a line at the 80th
+   column. Dark: Ace's dark theme as the Atlas theme colours it, in the Atlas code font, with a line
+   at the left of the gutter. Lines are as tall as the font makes them, which is what Ace measures,
+   and the line of the cursor lies on a band. */
+.ismAce.atlCodeEditor {
+  --ace-edge: 0px;
+  --code-gutter: calc(54px + var(--ace-edge));
+  --ace-edge-color: transparent;
+  --ace-gutter: #e8e8e8;
+  --ace-gutter-text: #aaaaaa;
+  --ace-gutter-active: color-mix(in srgb, #000000 7%, var(--ace-gutter));
+  --ace-background: #ffffff;
+  --ace-active: #f5f5f5;
+  --ace-text: #000000;
+  --ace-key: #000000;
+  --ace-string: #dd1144;
+  --ace-number: #009999;
+  --ace-constant: #000000;
+  --ace-strong: 700;
+  --ace-margin: #e8e8e8;
+  --ace-cursor: #000000;
+  --ace-selection: rgb(0 110 255 / 29%);
+  --ace-guide: linear-gradient(#ffffff 50%, #d3d3d3 50%) right top / 1px 2px repeat-y;
+  border: 0;
+  border-radius: 0;
+  background:
+    linear-gradient(var(--ace-edge-color), var(--ace-edge-color)) 0 0 / var(--ace-edge) 100% no-repeat,
+    linear-gradient(var(--ace-gutter), var(--ace-gutter)) 0 0 / calc(50px + var(--ace-edge)) 100% no-repeat,
+    var(--ace-background);
+  color: var(--ace-text);
+  font-family: Monaco, Menlo, 'Ubuntu Mono', Consolas, source-code-pro, monospace;
+  font-size: var(--font-size-s);
+  line-height: normal;
+}
+
+:root.themeDark .ismAce.atlCodeEditor {
+  --ace-edge: 1px;
+  --ace-edge-color: var(--color-border);
+  --ace-gutter: var(--color-surface);
+  --ace-gutter-text: var(--color-text-secondary);
+  --ace-gutter-active: color-mix(in srgb, var(--color-border) 70%, var(--ace-gutter));
+  --ace-background: var(--color-surface-secondary);
+  --ace-active: color-mix(in srgb, var(--color-border) 70%, var(--ace-background));
+  --ace-text: var(--color-text-primary);
+  --ace-key: rgb(94 171 198);
+  --ace-string: rgb(77 184 103);
+  --ace-number: var(--ace-key);
+  --ace-constant: rgb(150 152 249);
+  --ace-strong: 400;
+  --ace-margin: var(--color-border);
+  --ace-cursor: #ffffff;
+  --ace-selection: rgb(10 132 255 / 30%);
+  --ace-guide: linear-gradient(to left, var(--color-text-tertiary) 1px, transparent 1px);
+  font-family: var(--font-family-code);
+}
+
+.ismAce.atlCodeEditor:focus-within {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.ismAce .atlCodeEditor__paint,
+.ismAce .atlCodeEditor__input {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.ismAce .atlCodeEditor__input {
+  caret-color: var(--ace-cursor);
+}
+
+.ismAce .atlCodeEditor__input::selection {
+  background: var(--ace-selection);
+}
+
+.ismAce .atlCodeEditor__body {
+  background: linear-gradient(var(--ace-margin), var(--ace-margin)) calc(var(--code-gutter) + 80ch) 0 / 1px 100% no-repeat;
+}
+
+.ismAce .atlCodeEditor__line {
+  padding-left: var(--code-gutter);
+  background: transparent;
+}
+
+.ismAce .atlCodeEditor__line::before {
+  width: calc(37px + var(--ace-edge));
+  margin-right: 17px;
+  background: linear-gradient(90deg, var(--ace-edge-color) var(--ace-edge), var(--ace-gutter) var(--ace-edge));
+  box-shadow: 13px 0 0 var(--ace-gutter);
+  color: var(--ace-gutter-text);
+}
+
+.ismAce .atlCodeEditor__line--marked {
+  background: var(--ace-active);
+}
+
+.ismAce .atlCodeEditor__line--marked::before {
+  background: linear-gradient(90deg, var(--ace-edge-color) var(--ace-edge), var(--ace-gutter-active) var(--ace-edge));
+  box-shadow: 13px 0 0 var(--ace-gutter-active);
+}
+
+.ismAce .tokKey {
+  color: var(--ace-key);
+}
+
+.ismAce .tokString {
+  color: var(--ace-string);
+}
+
+.ismAce .tokNumber {
+  color: var(--ace-number);
+}
+
+.ismAce .tokKeyword {
+  color: var(--ace-constant);
+  font-weight: var(--ace-strong);
+}
+
+.ismAce .tokParen {
+  font-weight: var(--ace-strong);
+}
+
+.ismAce .tokIndent {
+  background: var(--ace-guide);
+}
 
 /* --- A form that describes an index ------------------------------------------------------------- */
 
@@ -2655,19 +3290,16 @@
   align-items: center;
 }
 
-/* The page of a policy, as the plugin's: 5 px and 50 px in from the page, its panels 24 px apart */
-.ismBody:has(> .ismPolicyPage) {
-  padding: var(--space-4);
-}
-
-.ismPolicyPage {
+/* The page of a snapshot policy, as the plugin's: 5 px and 50 px in from the page, its panels 24 px
+   apart. The frame gives these pages no padding of its own. */
+.ismSnapshotPolicyPage {
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
   padding: 5px 50px;
 }
 
-.ismPolicyPage__header {
+.ismSnapshotPolicyPage__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2675,11 +3307,11 @@
   padding: 0 10px;
 }
 
-.ismPolicyPage__header h1 {
+.ismSnapshotPolicyPage__header h1 {
   margin: 0;
 }
 
-.ismPolicyPage__actions {
+.ismSnapshotPolicyPage__actions {
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -2687,15 +3319,15 @@
 
 /* The page that makes or changes a policy: its parts one under the other, as the plugin's spacers
    set them */
-.ismPolicyPage--form {
+.ismSnapshotPolicyPage--form {
   display: block;
 }
 
-.ismPolicyPage--form > h1 {
+.ismSnapshotPolicyPage--form > h1 {
   margin: 0;
 }
 
-.ismPolicyPage__subtitle {
+.ismSnapshotPolicyPage__subtitle {
   margin: 0;
   padding: 5px 0;
   color: var(--color-text-secondary);
@@ -2703,7 +3335,7 @@
   line-height: 1.5;
 }
 
-.ismPolicyPage__footer {
+.ismSnapshotPolicyPage__footer {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-2);

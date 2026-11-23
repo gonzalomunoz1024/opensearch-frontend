@@ -5,7 +5,7 @@
  * time range, the visualization's own, and its aggregations, answered as a table.
  */
 
-import { buildAggsDsl, fieldNameOf, needsFieldBounds, planOtherBucket, tabify, type AggContext, type Table } from '../lib/aggs';
+import { buildAggsDsl, fieldNameOf, needsFieldBounds, otherBucketAggs, planOtherBucket, tabify, type AggContext, type Table } from '../lib/aggs';
 import { resolveTimeRange, type TimeRange } from '../lib/dates';
 import { buildQuery, timeRangeFilter } from '../lib/query';
 import type { Filter, IndexPattern, Query } from '../lib/types';
@@ -106,9 +106,11 @@ export async function fetchVisData(vis: Vis, input: VisInput, signal?: AbortSign
   requests.push(record);
   const response = await services.search.search(indexPattern.title, body, { signal, record });
 
-  // A terms aggregation that groups the rest asks for the rest once it knows its terms
-  const rest = planOtherBucket(resolved.aggs, aggs, response, context);
-  if (rest) {
+  // A terms aggregation that groups the rest asks for the rest once it knows its terms, each in
+  // turn, one under another under the rest of the one above too
+  for (const other of otherBucketAggs(resolved.aggs)) {
+    const rest = planOtherBucket(resolved.aggs, aggs, response, context, other.id);
+    if (!rest) continue;
     const otherBody = { size: 0, query, aggs: rest.aggs };
     const otherRecord: RequestRecord = { name: 'Other bucket', index: indexPattern.title, body: otherBody, startedAt: Date.now() };
     requests.push(otherRecord);
