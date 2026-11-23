@@ -19,7 +19,6 @@ export interface FindOptions {
   page?: number;
   perPage?: number;
   sortField?: string;
-  sortOrder?: 'asc' | 'desc';
   hasReference?: { type: string; id: string };
 }
 
@@ -40,14 +39,13 @@ export class SavedObjectsClient {
     return this.http.get<FindResponse<A>>('/api/saved_objects/_find', {
       query: {
         type: ([] as string[]).concat(options.type),
-        // A word being typed matches what starts with it
-        search: options.search ? `${options.search.replace(/[*"]/g, '')}*` : undefined,
-        search_fields: options.searchFields ?? (options.search ? ['title'] : undefined),
+        // As the original's client sends it: a caller that wants what starts with a word adds the `*`
+        search: options.search || undefined,
+        search_fields: options.searchFields,
         fields: options.fields,
         page: options.page ?? 1,
         per_page: options.perPage ?? 1000,
         sort_field: options.sortField,
-        sort_order: options.sortOrder,
         has_reference: options.hasReference ? JSON.stringify(options.hasReference) : undefined,
       },
     });
