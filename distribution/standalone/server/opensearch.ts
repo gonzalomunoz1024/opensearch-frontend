@@ -80,6 +80,31 @@ export function parseBody(response: OpenSearchResponse): unknown {
   return text;
 }
 
+const DOT_PART = /^(\.|%2e){1,2}$/i;
+
+/**
+ * The path and query to ask for. `new URL()` takes the "." and ".." parts out of a path, which
+ * would let a name that came with a request (an index called "..") take it to the path above
+ * its own. OpenSearch reads such a part as a name and answers that there is none, so the parts
+ * are sent as they were written, as the client library of OpenSearch Dashboards sends them.
+ */
+function pathToAsk(url: URL, prefix: string, path: string): string {
+  // As new URL() reads it: space is cut from the end, tabs and line ends from everywhere, a
+  // "\" is a "/", and the path ends at the first "?" or "#"
+  const written = path
+    .replace(/[\u0000- ]+$/, '')
+    .replace(/[\t\n\r]/g, '')
+    .replace(/^\/+/, '')
+    .split(/[?#]/, 1)[0]
+    .replace(/\\/g, '/');
+  const parts = written.split('/');
+  if (!parts.some((part) => DOT_PART.test(part))) return url.pathname + url.search;
+  const encoded = parts.map((part) =>
+    DOT_PART.test(part) ? part : new URL(`http://localhost/${part}/`).pathname.slice(1, -1)
+  );
+  return `${prefix}/${encoded.join('/')}${url.search}`;
+}
+
 export class OpenSearchClient {
   private readonly hosts: URL[];
   private readonly agents = new Map<string, http.Agent>();
@@ -183,7 +208,12 @@ export class OpenSearchClient {
     return new Promise((resolve, reject) => {
       const outgoing = transport.request(
         url,
-        { method: request.method, headers, agent: this.agents.get(host.origin) },
+        {
+          method: request.method,
+          path: pathToAsk(url, prefix, request.path),
+          headers,
+          agent: this.agents.get(host.origin),
+        },
         (incoming) => {
           const chunks: Buffer[] = [];
           incoming.on('data', (chunk: Buffer) => chunks.push(chunk));

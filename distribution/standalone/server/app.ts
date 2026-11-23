@@ -236,9 +236,17 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
     if (!target) throw badRequest('[request query.path]: expected a path');
     if (!PROXY_METHODS.has(method)) throw badRequest(`Method ${method} is not allowed`);
     const body = await context.body();
+    let path = `/${target.replace(/^\/+/, '')}`;
+    // What is typed in Dev Tools is an address, in which "." and ".." are steps, as the console
+    // of OpenSearch Dashboards reads it. In a request of the pages they are names (the title of
+    // an index pattern), which the client sends as they are written.
+    if (context.path === '/api/console/proxy') {
+      const typed = new URL(`http://localhost${path}`);
+      path = typed.pathname + typed.search;
+    }
     const response = await client.raw({
       method,
-      path: `/${target.replace(/^\/+/, '')}`,
+      path,
       body: body.length ? body : undefined,
       headers: body.length
         ? { 'content-type': String(context.req.headers['content-type'] ?? 'application/json') }

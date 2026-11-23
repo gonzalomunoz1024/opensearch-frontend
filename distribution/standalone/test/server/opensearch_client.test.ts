@@ -1,45 +1,10 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
 import assert from 'node:assert/strict';
-import http from 'node:http';
-import type { AddressInfo, Socket } from 'node:net';
 import { describe, it } from 'node:test';
 import { loadConfig } from '../../server/config';
 import { OpenSearchClient, OpenSearchUnavailableError } from '../../server/opensearch';
-
-interface Fake {
-  url: string;
-  /** Each request that arrived, as "METHOD path" */
-  seen: string[];
-  close(): Promise<void>;
-}
-
-/** Listens as OpenSearch does: notes each request and answers it, or never answers */
-async function fake(answer: 'answer' | 'hang' = 'answer'): Promise<Fake> {
-  const seen: string[] = [];
-  const sockets = new Set<Socket>();
-  const server = http.createServer((req, res) => {
-    seen.push(`${req.method} ${req.url}`);
-    if (answer === 'hang') return;
-    res.writeHead(200, { 'content-type': 'application/json' });
-    res.end('{}');
-  });
-  server.on('connection', (socket) => {
-    sockets.add(socket);
-    socket.on('close', () => sockets.delete(socket));
-  });
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const { port } = server.address() as AddressInfo;
-  return {
-    url: `http://127.0.0.1:${port}`,
-    seen,
-    close: () =>
-      new Promise((resolve) => {
-        for (const socket of sockets) socket.destroy();
-        server.close(() => resolve());
-      }),
-  };
-}
+import { fakeOpenSearch as fake } from './fake_opensearch';
 
 const clientFor = (hosts: string[], timeout = 30000) =>
   new OpenSearchClient(
@@ -47,6 +12,83 @@ const clientFor = (hosts: string[], timeout = 30000) =>
       env: { OPENSEARCH_HOSTS: JSON.stringify(hosts), OPENSEARCH_REQUESTTIMEOUT: String(timeout) },
     }).config.opensearch
   );
+
+describe('the path of a request to OpenSearch', () => {
+  /** What OpenSearch is asked for each of the paths, in order */
+  const asked = async (paths: string[], hostPath = '', query?: Record<string, string>) => {
+    const opensearch = await fake();
+    const client = clientFor([opensearch.url + hostPath]);
+    try {
+      for (const path of paths) await client.raw({ method: 'GET', path, query });
+      return opensearch.seen.map((line) => line.replace(/^GET /, ''));
+    } finally {
+      client.close();
+      await opensearch.close();
+    }
+  };
+
+  it('is encoded and sent as before when no part of it is "." or ".."', async () => {
+    assert.deepEqual(
+      await asked([
+        '/my index/_search?q=a b',
+        '/a%2Fb/_doc/x%3Ay?refresh=true',
+        '/logs-*,-logs-old/_search',
+        '/.kibana/_doc/config%3A3.9.0',
+        '/a.b/..c/.d./...',
+        '/a#b',
+        '_cat/indices',
+      ]),
+      [
+        '/my%20index/_search?q=a%20b',
+        '/a%2Fb/_doc/x%3Ay?refresh=true',
+        '/logs-*,-logs-old/_search',
+        '/.kibana/_doc/config%3A3.9.0',
+        '/a.b/..c/.d./...',
+        '/a',
+        '/_cat/indices',
+      ]
+    );
+  });
+
+  it('keeps a "." or ".." part as a name, so that it cannot take the request to another path', async () => {
+    assert.deepEqual(
+      await asked([
+        // what an index pattern, a repository or an index called ".." or "." made of these requests
+        '/../_field_caps?fields=*',
+        '/_snapshot/../my-index',
+        '/./_mapping',
+        '/..',
+        '/a b/../c d?x=1 2',
+        '/a/%2e%2e/b',
+        '/a/.%2E/%2e/b',
+        '/a/.\t./b',
+        '/a\\..\\b',
+        '/a/.. ',
+        '/a/..#b',
+      ]),
+      [
+        '/../_field_caps?fields=*',
+        '/_snapshot/../my-index',
+        '/./_mapping',
+        '/..',
+        '/a%20b/../c%20d?x=1%202',
+        '/a/%2e%2e/b',
+        '/a/.%2E/%2e/b',
+        '/a/../b',
+        '/a/../b',
+        '/a/..',
+        '/a/..',
+      ]
+    );
+  });
+
+  it('comes after the path of the host, with the parameters of the request', async () => {
+    assert.deepEqual(await asked(['/../_search', '/idx/_search?q=1'], '/behind/a/proxy/', { size: '0' }), [
+      '/behind/a/proxy/../_search?size=0',
+      '/behind/a/proxy/idx/_search?q=1&size=0',
+    ]);
+  });
+});
 
 describe('the hosts of opensearch.hosts', () => {
   it('a host that did not answer in time is not the one the next request starts with', async () => {
