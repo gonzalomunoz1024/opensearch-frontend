@@ -3,13 +3,14 @@
 /* TSVB: series over time as a chart, or their latest values as a number, bars, a gauge, text or a table. */
 
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { ChartMessage, type LegendPosition } from '../../charts/core';
+import { ChartMessage, SERIES_COLORS, assignColors, type LegendPosition } from '../../charts/core';
 import { XYChart, type XYAxis, type XYSeries } from '../../charts/xy';
 import { Icon } from '../../components/icon';
 import { formatDate, scaledDateFormat, type TimeRange } from '../../lib/dates';
 import { Markdown } from '../../lib/markdown';
 import { renderTemplate } from '../../lib/template';
 import type { UiState, Vis } from '../../lib/vis';
+import { href, navigate } from '../../router';
 import { services } from '../../services';
 import type { RequestRecord } from '../../services/search';
 import type { VisInput } from '../request';
@@ -21,6 +22,7 @@ import {
   ruleFor,
   seriesFormatter,
   splitParts,
+  topNRows,
   type TsvbData,
   type TsvbParams,
   type TsvbPoint,
@@ -119,6 +121,11 @@ function TimeSeries({ params, data, onTimeChange }: { params: TsvbParams; data: 
     exact: true,
     format: first ? seriesFormatter(first.series.formatter, first.series.value_template) : seriesFormatter('0.[00]a', undefined),
   });
+  // A part of a split its series gave no colour takes the colour of its name, as on every chart
+  const named = assignColors(data.series.filter((item) => !item.color).map((item) => item.label));
+  const colorOf = (item: TsvbSeriesData) => item.color || named.get(item.label) || SERIES_COLORS[0];
+  // A series with no name, or set so, is drawn but left out of the legend
+  const hideInLegend = (item: TsvbSeriesData) => Boolean(item.series.hide_in_legend) || item.label === '';
   const series: XYSeries[] = data.series.map((item) => {
     const own = item.series.separate_axis ? `own-${item.seriesId}` : main;
     if (!axes.has(own)) {
@@ -142,7 +149,8 @@ function TimeSeries({ params, data, onTimeChange }: { params: TsvbParams; data: 
       return {
         id: item.id,
         label: item.label,
-        color: item.color,
+        color: colorOf(item),
+        hideInLegend: hideInLegend(item),
         type: bar ? 'histogram' : 'area',
         mode: 'normal',
         axisId: own,
@@ -158,7 +166,8 @@ function TimeSeries({ params, data, onTimeChange }: { params: TsvbParams; data: 
     return {
       id: item.id,
       label: item.label,
-      color: item.color,
+      color: colorOf(item),
+      hideInLegend: hideInLegend(item),
       type: bar ? 'histogram' : number(item.series.fill, 0) > 0 || stacked ? 'area' : 'line',
       mode: stacked ? 'stacked' : 'normal',
       axisId: own,
@@ -307,32 +316,74 @@ function Splits({
   );
 }
 
+/**
+ * Goes where a Top N's drilldown address leads for a term: in the product when it is an address
+ * of the product, else to the page; an address that cannot be filled in goes nowhere
+ */
+function drillDown(template: string, key: string) {
+  let address: string;
+  try {
+    address = renderTemplate(template, { key, args: {} }, { strict: true });
+  } catch (failure) {
+    if (!String(failure).includes('Parse error')) return;
+    address = template;
+  }
+  const target = new URL(address, window.location.href);
+  const base = new URL(href('/'), window.location.href).pathname;
+  if (target.origin === window.location.origin && target.pathname.startsWith(`${base}app/`)) {
+    navigate(`/${target.pathname.slice(base.length)}${target.search}${target.hash}`);
+  } else {
+    window.location.assign(target.href);
+  }
+}
+
+/**
+ * A Top N as the product draws it: a row for each part, its label (at most a little over a third
+ * of the width), a bar as long as its share of the largest, and its value; when the values are
+ * both above and below zero, the bars of each run from the middle
+ */
 function TopN({ params, data }: { params: TsvbParams; data: TsvbData }) {
-  if (data.series.length === 0) return <ChartMessage>No results found</ChartMessage>;
-  const max = Math.max(0, ...data.series.map((series) => series.last ?? 0));
-  const min = Math.min(0, ...data.series.map((series) => series.last ?? 0));
-  const span = max - min || 1;
+  const [tableRef, table] = useClientSize<HTMLTableElement>();
+  const rows = topNRows(params, data.series);
+  const values = rows.map((row) => row.last ?? 0);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const mode = min >= 0 ? 'positive' : max < 0 ? 'negative' : 'mixed';
+  const domain = mode === 'mixed' ? Math.max(max, Math.abs(min)) : mode === 'negative' ? Math.abs(min) : max;
+  const models = new Map((params.series ?? []).map((model) => [model.id, model]));
+  const rules = (params.bar_color_rules ?? []).filter((rule) => rule.bar_color);
+  const background = params.background_color || undefined;
+  const inverted = isInverted(background, darkTheme());
   return (
-    <div className="visTsvbTopN" data-test-subj="tsvbTopN">
-      <table>
-        <tbody>
-          {data.series.map((series) => {
-            const value = series.last ?? 0;
-            const color = ruleFor(params.bar_color_rules, series.last)?.bar_color ?? series.color;
-            return (
-              <tr key={series.id}>
-                <td className="visTsvbTopN__label" title={series.label}>
-                  {series.label}
-                </td>
-                <td className="visTsvbTopN__bar">
-                  <span style={{ width: `${Math.max(0.5, (Math.abs(value) / span) * 100)}%`, background: color }} />
-                </td>
-                <td className="visTsvbTopN__value">{series.format(series.last)}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div className="visTsvbFrame" style={{ background }}>
+      <div className={`visTsvbTopN${inverted ? ' visTsvbTopN--reversed' : ''}`} data-test-subj="tsvbTopN">
+        <table ref={tableRef} className="visTsvbTopN__table" data-test-subj="tvbVisTopNTable">
+          <tbody>
+            {rows.map((row) => {
+              const value = row.last ?? 0;
+              const positive = value >= 0;
+              const width = 100 * (Math.abs(value) / domain) || 0;
+              const color = ruleFor(rules, value)?.bar_color || row.color || models.get(row.seriesId)?.color;
+              const drill = params.drilldown_url;
+              return (
+                <tr key={row.id || row.label} onClick={drill ? () => drillDown(drill, row.label) : undefined}>
+                  <td title={row.label} className="visTsvbTopN__label" style={{ maxWidth: table.width > 0 ? table.width * 0.35 : 150 }}>
+                    {row.label}
+                  </td>
+                  <td width="100%" className="visTsvbTopN__bar">
+                    <div className="visTsvbTopN__innerBar" style={mode === 'mixed' ? { [positive ? 'marginLeft' : 'marginRight']: '50%' } : undefined}>
+                      <div style={{ backgroundColor: color, width: `${width}%`, float: positive ? 'left' : 'right' }} />
+                    </div>
+                  </td>
+                  <td className="visTsvbTopN__value" data-test-subj="tsvbTopNValue">
+                    {row.format(value)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

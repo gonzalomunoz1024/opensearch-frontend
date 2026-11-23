@@ -77,6 +77,7 @@ export interface TsvbSeries {
   axis_max?: number | string;
   steps?: number;
   hidden?: boolean;
+  hide_in_legend?: number;
   offset_time?: string;
   override_index_pattern?: number;
   series_index_pattern?: string;
@@ -176,7 +177,10 @@ export interface TsvbSeriesData {
   id: string;
   seriesId: string;
   label: string;
+  /** The colour the series was given, none for a part of a split the chart colours by its label */
   color: string;
+  /** A term's name as OpenSearch writes it, when it writes one (a date or a yes or no) */
+  labelFormatted?: string;
   data: TsvbPoint[];
   /** A band from each point's lower value up to its value, instead of a line */
   band?: TsvbBand;
@@ -277,12 +281,14 @@ function rgbOf(color: string): [number, number, number] {
 }
 
 /**
- * The colours of the terms a series is split by. "rainbow" is a fixed list; "gradient", the
- * default, starts at the colour of the series and darkens in equal steps, each as large as the
- * brightness of the colour allows for the number of terms.
+ * The colours of the terms a series is split by. "rainbow" is a fixed list; "gradient" starts at
+ * the colour of the series and darkens in equal steps, each as large as the brightness of the
+ * colour allows for the number of terms; the default gives none, and a chart colours the terms by
+ * their names instead.
  */
 export function splitColors(color: string, size: number, mode: string | undefined): string[] {
   if (mode === 'rainbow') return RAINBOW;
+  if (mode !== 'gradient') return [];
   const [r, g, b] = rgbOf(color).map((channel) => channel / 255);
   const linear = (channel: number) => (channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
   const luminosity = 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
@@ -385,6 +391,30 @@ export function splitParts(params: TsvbParams, data: TsvbData): Array<{ key: str
     const all = !whole ? series : wholeAt > 0 ? [...series, whole] : [whole, ...series];
     return { key, label, data: { ...data, series: all } };
   });
+}
+
+/**
+ * The rows of a Top N in the product's order: series by series, the parts of each by their last
+ * value, largest first unless the series sorts its terms the other way, and as they came when it
+ * sorts them by their key; the parts of a series that sorts largest first and are level come in
+ * the reverse of the order they came in, as the product's reversed sort leaves them
+ */
+export function topNRows(params: TsvbParams, series: TsvbSeriesData[]): TsvbSeriesData[] {
+  return (params.series ?? []).flatMap((model) => {
+    const rows = series.filter((item) => item.id.split(':')[0] === model.id);
+    if (model.terms_order_by === '_key') return rows;
+    const sorted = [...rows].sort((a, b) => (a.last ?? 0) - (b.last ?? 0));
+    return (model.terms_direction || 'desc') === 'desc' ? sorted.reverse() : sorted;
+  });
+}
+
+/**
+ * The name of a term: the term as OpenSearch keys it, or the series' label with the term in place
+ * of the first {{key}} it holds
+ */
+export function termLabel(series: TsvbSeries, key: string): string {
+  const label = series.label ?? '';
+  return /{{\s*key\s*}}/.test(label) ? label.replace(/{{\s*key\s*}}/, () => key) : key;
 }
 
 /** The colour a value gets from a panel's rules: the last rule that holds */
@@ -927,7 +957,7 @@ async function fetchSeries(
     const found = container[series.id] as { buckets?: unknown; timeseries?: { buckets: TimeBucket[] } } | undefined;
     if (!found) return [];
     // A split draws one line, or a line for each percentile or rank of the metric, or a band
-    const make = (id: string, label: string, color: string, node: { timeseries?: { buckets: TimeBucket[] } }): TsvbSeriesData[] =>
+    const make = (id: string, label: string, color: string, node: { timeseries?: { buckets: TimeBucket[] } }, labelFormatted?: string): TsvbSeriesData[] =>
       seriesLines(series, node.timeseries?.buckets ?? [], plan.intervalMs, Boolean(pivot)).map((line) => {
         const data = finish(line.points, plan, shift);
         return {
@@ -935,6 +965,7 @@ async function fetchSeries(
           seriesId: series.id,
           label: `${label}${line.suffix}`,
           color,
+          ...(labelFormatted ? { labelFormatted } : {}),
           data,
           ...(line.band ? { band: line.band } : {}),
           last: getLastValue(data),
@@ -944,11 +975,12 @@ async function fetchSeries(
       });
     if (mode === 'terms' && Array.isArray(found.buckets)) {
       const list = found.buckets as Array<{ key: string | number; key_as_string?: string; timeseries?: { buckets: TimeBucket[] } }>;
-      const tones = splitColors(base, list.length, series.split_color_mode);
+      // A Top N draws every term in the colour of its series; other panels give each the colour
+      // its split gives it, if any
+      const tones = params.type === 'top_n' ? [] : splitColors(base, list.length, series.split_color_mode);
       return list.flatMap((bucket, index) => {
-        const term = bucket.key_as_string ?? String(bucket.key);
-        // A term goes by its own name, and by a colour of its own among its neighbours
-        return make(`${series.id}:${term}`, term, tones[index % tones.length], bucket);
+        const key = String(bucket.key);
+        return make(`${series.id}:${key}`, termLabel(series, key), params.type === 'top_n' ? base : tones[index] ?? '', bucket, bucket.key_as_string);
       });
     }
     if (mode === 'filters' && found.buckets && !Array.isArray(found.buckets)) {
@@ -956,7 +988,7 @@ async function fetchSeries(
       return (series.split_filters ?? []).flatMap((item) => {
         const bucket = byId[item.id];
         const text = typeof item.filter === 'string' ? item.filter : typeof item.filter?.query === 'string' ? item.filter.query : '';
-        return bucket ? make(`${series.id}:${item.id}`, item.label || text || item.id, item.color || base, bucket) : [];
+        return bucket ? make(`${series.id}:${item.id}`, item.label || text || '*', item.color || '', bucket) : [];
       });
     }
     return make(series.id, series.label || metricLabel(series), base, found);

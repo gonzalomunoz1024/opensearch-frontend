@@ -870,46 +870,64 @@
   white-space: nowrap;
 }
 
+/* A TSVB Top N as the product draws it, in its colours and at its base size */
 .visTsvbTopN {
-  flex: 1 1 auto;
-  min-height: 0;
-  padding: var(--space-2);
+  --vis-tsvb-text: color-mix(in srgb, var(--color-text-primary) 40%, transparent);
+  --vis-tsvb-value: color-mix(in srgb, var(--color-text-primary) 70%, transparent);
+  --vis-tsvb-hover: color-mix(in srgb, var(--color-text-primary) 10%, transparent);
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
   overflow: auto;
+  font-size: var(--font-size-s);
+  line-height: normal;
 }
 
-.visTsvbTopN table {
-  width: 100%;
+.visTsvbTopN--reversed {
+  --vis-tsvb-text: color-mix(in srgb, var(--color-surface) 60%, transparent);
+  --vis-tsvb-value: color-mix(in srgb, var(--color-surface) 80%, transparent);
+  --vis-tsvb-hover: color-mix(in srgb, var(--color-surface) 10%, transparent);
+}
+
+.visTsvbTopN__table {
   border-collapse: collapse;
-  font-size: var(--font-size-xs);
+  border-spacing: 0;
 }
 
-.visTsvbTopN td {
-  padding: var(--space-1) var(--space-2);
-  vertical-align: middle;
+.visTsvbTopN tr:hover td {
+  background-color: var(--vis-tsvb-hover);
 }
 
 .visTsvbTopN__label {
-  max-width: 180px;
+  padding: var(--space-1) 0;
   overflow: hidden;
+  color: var(--vis-tsvb-text);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .visTsvbTopN__bar {
-  width: 60%;
+  padding: var(--space-1) var(--space-3);
+  vertical-align: middle;
 }
 
-.visTsvbTopN__bar span {
-  display: block;
-  height: 14px;
-  border-radius: 0 4px 4px 0;
+.visTsvbTopN__innerBar {
+  position: relative;
+}
+
+.visTsvbTopN__innerBar > div {
+  width: 100%;
+  min-height: var(--space-4);
 }
 
 .visTsvbTopN__value {
-  font-variant-numeric: tabular-nums;
-  font-weight: var(--font-weight-medium);
+  padding: var(--space-1) var(--space-1) 0;
+  color: var(--vis-tsvb-value);
+  line-height: 0;
   text-align: right;
   white-space: nowrap;
+  vertical-align: middle;
 }
 
 /* The box a gauge writes its label and value in: the foot of 100 by 70 for a half circle */

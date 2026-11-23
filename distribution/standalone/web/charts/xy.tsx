@@ -68,6 +68,8 @@ export interface XYSeries {
   joinMissing?: boolean;
   /** A band from each point's y0 up to its y: its two edges named in the legend and the tooltip, after its label */
   band?: { upper: string; lower: string };
+  /** Drawn, but left out of the legend */
+  hideInLegend?: boolean;
 }
 
 export interface XYAxis {
@@ -475,7 +477,7 @@ export function XYChart({
   // A band is named twice, by each of its edges; either hides or brings back the whole band
   const lowerEdges = new Map(series.filter((item) => item.band).map((item) => [`${item.id}::lower`, item.id]));
   const seriesOf = (id: string) => lowerEdges.get(id) ?? id;
-  const legendItems = series.flatMap((item) => {
+  const legendItems = series.filter((item) => !item.hideInLegend).flatMap((item) => {
     const value = legendValues?.[item.id];
     const entry = { id: item.id, label: item.label, color: item.color, hidden: hidden.includes(item.id), value: Array.isArray(value) ? value[0] : value };
     if (!item.band) return [entry];

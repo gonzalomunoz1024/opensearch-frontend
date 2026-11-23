@@ -113,10 +113,13 @@ describe('TSVB series', () => {
     assert.equal(metricLabel({ id: 's', metrics: [] }), 'Unknown');
   });
 
-  it('colour the terms they are split by from their own colour, darkening', () => {
+  it('colour the terms they are split by from their own colour, darkening, or leave it to the chart', () => {
     assert.deepEqual(splitColors('#ff0000', 3, 'gradient'), ['#ff0000', '#c90000', '#930000']);
-    assert.deepEqual(splitColors('rgba(255,0,0,1)', 1, undefined), ['#ff0000']);
+    assert.deepEqual(splitColors('rgba(255,0,0,1)', 1, 'gradient'), ['#ff0000']);
     assert.equal(splitColors('#ff0000', 3, 'rainbow')[0], '#68BC00');
+    // The default colours the terms by their names, in the chart
+    assert.deepEqual(splitColors('#ff0000', 3, 'opensearchDashboards'), []);
+    assert.deepEqual(splitColors('#ff0000', 3, undefined), []);
   });
 
   it('write their values in their format, inside their template', () => {

@@ -99,6 +99,13 @@ export function convertSeriesToVars(series: TsvbSeriesData[], params: TsvbParams
         },
       });
       setPath(variables, `${snakeCase(row.label)}.label`, row.label);
+      // A term OpenSearch writes in words of its own (a date, true or false) is given as well, a
+      // date in the date format, as the product reads it with moment
+      if (row.labelFormatted) {
+        const time = new Date(row.labelFormatted);
+        const formatted = Number.isNaN(time.getTime()) ? row.labelFormatted : formatDate(time, dateFormat, zone);
+        setPath(variables, `${snakeCase(row.label)}.formatted`, formatted);
+      }
     }
   }
   return variables;

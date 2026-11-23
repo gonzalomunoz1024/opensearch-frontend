@@ -2,7 +2,8 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { metricAggs, seriesLines, type TimeBucket, type TsvbMetric, type TsvbSeries } from '../../web/vis/tsvb/data';
+import { metricAggs, seriesLines, termLabel, topNRows, type TimeBucket, type TsvbMetric, type TsvbSeries, type TsvbSeriesData } from '../../web/vis/tsvb/data';
+import { convertSeriesToVars } from '../../web/vis/tsvb/markdown_vars';
 
 const HOUR = 3600000;
 
@@ -114,5 +115,47 @@ describe('the lines a split of a TSVB series draws', () => {
     assert.deepEqual(difference('p[90.0]'), [[0, null], [HOUR, 3]]);
     assert.deepEqual(difference('p[90]'), [[0, null], [HOUR, 3]]);
     assert.deepEqual(difference('p'), [[0, null], [HOUR, 1]]);
+  });
+});
+
+/** A part of a series as the panels get it, its last value given */
+const part = (id: string, last: number, label = id.split(':')[1] ?? id): TsvbSeriesData => ({
+  id,
+  seriesId: id.split(':')[0],
+  label,
+  color: '',
+  data: [[0, last]],
+  last,
+  series: { id: id.split(':')[0] },
+  format: String,
+});
+
+describe('the parts of a TSVB series as the panels show them', () => {
+  it('orders the rows of a Top N series by series, by last value, largest first unless told otherwise', () => {
+    const rows = [part('a:x', 1), part('a:y', 3), part('a:z', 2), part('b:p', 5), part('b:q', 9)];
+    const ids = (series: TsvbSeries[]) => topNRows({ series }, rows).map((row) => row.id);
+    assert.deepEqual(ids([{ id: 'b' }, { id: 'a' }]), ['b:q', 'b:p', 'a:y', 'a:z', 'a:x']);
+    assert.deepEqual(ids([{ id: 'a', terms_direction: 'asc' }]), ['a:x', 'a:z', 'a:y']);
+    assert.deepEqual(ids([{ id: 'a', terms_order_by: '_key', terms_direction: 'desc' }]), ['a:x', 'a:y', 'a:z']);
+    // Level values come in the reverse of their order when the largest come first
+    assert.deepEqual(topNRows({ series: [{ id: 'a' }] }, [part('a:x', 1), part('a:y', 1)]).map((row) => row.id), ['a:y', 'a:x']);
+  });
+
+  it('names a term by its key, or puts it in the place of {{key}} in the series label', () => {
+    assert.equal(termLabel({ id: 's' }, 'gz'), 'gz');
+    assert.equal(termLabel({ id: 's', label: 'Count' }, '1'), '1');
+    assert.equal(termLabel({ id: 's', label: 'Bytes of {{ key }} ({{key}})' }, 'gz'), 'Bytes of gz ({{key}})');
+    assert.equal(termLabel({ id: 's', label: 'Spent {{key}}' }, '$&'), 'Spent $&');
+  });
+
+  it('gives a Markdown panel the name OpenSearch writes for a term, a date in the date format', () => {
+    const variables = convertSeriesToVars(
+      [{ ...part('s:1', 2, '1'), labelFormatted: 'true' }, { ...part('s:1794787200000', 3, '1794787200000'), labelFormatted: '2026-11-16T00:00:00.000Z' }],
+      { series: [{ id: 's' }] },
+      'YYYY-MM-DD HH:mm',
+      'UTC'
+    ) as Record<string, { formatted?: string }>;
+    assert.equal(variables['1'].formatted, 'true');
+    assert.equal(variables['1794787200000'].formatted, '2026-11-16 00:00');
   });
 });
