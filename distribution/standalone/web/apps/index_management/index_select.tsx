@@ -122,7 +122,6 @@ export function IndexSelect({
       turn.current += 1;
     };
   }, [search]);
-  const spaced = useSpaced(search, 200);
 
   const offered = useMemo(
     () => withoutOverlaps(excludeSystem ? withoutSystem(options) : options, exclude),
@@ -145,7 +144,8 @@ export function IndexSelect({
           names.map((name) => known.current.get(name) ?? { label: name, group: 'indices' })
         )
       }
-      onSearch={spaced}
+      // asked at every key, as the plugin's
+      onSearch={search}
     />
   );
 }

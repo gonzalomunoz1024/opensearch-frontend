@@ -95,6 +95,37 @@ describe('DQL, as OpenSearch Dashboards reads it', () => {
     }
   });
 
+  it('leaves scripted fields out of an exists query, without the fault of the original', () => {
+    // The original's own functions drop what they had gathered at a scripted field, then fail on
+    // the next plain field; here a scripted field adds nothing and the others are kept
+    const field = (name: string, scripted = false) => ({
+      name,
+      type: 'string',
+      searchable: true,
+      aggregatable: true,
+      ...(scripted ? { scripted: true, lang: 'painless', script: "doc['x'].value" } : {}),
+    });
+    const ask = (...fields: Array<ReturnType<typeof field>>) => {
+      const indexPattern = { fields: [...fields, field('zzz')] } as unknown as IndexPattern;
+      try {
+        return kueryToDsl(parseKuery('a_*:*'), indexPattern);
+      } catch (error) {
+        return `${(error as Error).name} ${(error as Error).message}`;
+      }
+    };
+    const exist = (...names: string[]) => ({
+      bool: { should: names.map((name) => ({ exists: { field: name } })), minimum_should_match: 1 },
+    });
+    assert.deepEqual(ask(field('a_one'), field('a_two', true)), exist('a_one'));
+    assert.deepEqual(ask(field('a_one'), field('a_two', true), field('a_four', true)), exist('a_one'));
+    assert.deepEqual(ask(field('a_one'), field('a_two', true), field('a_three')), exist('a_one', 'a_three'));
+    assert.deepEqual(ask(field('a_two', true), field('a_one')), exist('a_one'));
+    assert.deepEqual(ask(field('a_one'), field('a_three')), exist('a_one', 'a_three'));
+    // a scripted field asked for a value is still asked by its script
+    const scripted = kueryToDsl(parseKuery('a_two:x'), { fields: [field('a_two', true)] } as unknown as IndexPattern);
+    assert.ok(JSON.stringify(scripted).includes('"script"'));
+  });
+
   it('reads words without quotes as one value, spaces included', () => {
     assert.deepEqual(kueryToDsl(parseKuery('zz-agent short')), {
       multi_match: { type: 'best_fields', query: 'zz-agent short', lenient: true },

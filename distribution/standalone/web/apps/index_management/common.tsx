@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button, CallOut, CodeBlock, Health, Spinner, cx, type Tone } from '../../components/basic';
 import { CodeEditor } from '../../components/code_editor';
-import { Checkbox, FormRow, SearchField, TextField } from '../../components/form';
+import { Checkbox, FormRow, TextField } from '../../components/form';
 import { Icon } from '../../components/icon';
 import { MenuButton, Modal, copyText, type MenuItem } from '../../components/overlay';
 import { Pagination } from '../../components/table';
@@ -18,6 +18,7 @@ import { tokenizeJson } from '../../lib/json_text';
 import { getLocation, navigate, navigateHash, useLocation } from '../../router';
 import { services } from '../../services';
 import { errorMessage, type FetchOptions } from '../../services/http';
+import { tableCaption } from './model';
 import { SNAPSHOT_MANAGEMENT_PATH } from './routes';
 
 export const APP_PATH = '/app/opensearch_index_management_dashboards';
@@ -155,7 +156,12 @@ export function useListQuery<Extra extends Record<string, string>>(
   const setQuery = useCallback(
     (changes: Partial<ListQuery & Extra>) => {
       const next = { ...latest.current, ...changes };
-      const params = Object.fromEntries(Object.entries(next).map(([name, value]) => [name, String(value)]));
+      // in the order of their names, as the plugin writes them
+      const params = Object.fromEntries(
+        Object.entries(next)
+          .map(([name, value]): [string, string] => [name, String(value)])
+          .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      );
       navigateHash(hashPath, params, { replace: true });
     },
     [hashPath]
@@ -274,6 +280,7 @@ export function ExternalLink({ href, children = 'Learn more' }: { href: string; 
     <a href={href} target="_blank" rel="noopener noreferrer" className="ismExternal">
       {children}
       <Icon name="external" />
+      <span className="atlScreenReaderOnly">(opens in a new tab or window)</span>
     </a>
   );
 }
@@ -307,12 +314,16 @@ export interface TableProps<Row> {
   selectable?: (row: Row) => boolean;
   loading?: boolean;
   empty?: ReactNode;
+  /** What the table says when it has no rows shows while they load as well, as the theme's table */
+  emptyWhileLoading?: boolean;
   testId?: string;
   pageSizes?: number[];
   /** Whether the rows come in pages; a table that shows them all has no pager */
   paged?: boolean;
   /** Laid out as the theme's tables are: the columns of fixed widths, the others sharing the rest */
   fixed?: boolean;
+  /** The theme's caption, which says how many rows there are: read aloud, and a pixel high */
+  caption?: boolean;
 }
 
 export function Table<Row>({
@@ -327,10 +338,12 @@ export function Table<Row>({
   selectable,
   loading,
   empty,
+  emptyWhileLoading,
   testId,
   pageSizes = PAGE_SIZES,
   paged = true,
   fixed,
+  caption,
 }: TableProps<Row>) {
   const ids = new Set((selected ?? []).map(rowId));
   const tickable = rows.filter((row) => (selectable ? selectable(row) : true));
@@ -341,6 +354,11 @@ export function Table<Row>({
     <div className={cx('ismTable', loading && 'ismTable--loading', fixed && 'ismTable--fixed')}>
       <div className="ismTable__scroll">
         <table className="atlTable" data-test-subj={testId}>
+          {caption && (
+            <caption className="ismTable__caption">
+              {tableCaption(rows.length, total, query.size, query.from, paged)}
+            </caption>
+          )}
           <thead>
             <tr>
               {onSelect && (
@@ -360,6 +378,7 @@ export function Table<Row>({
                 return (
                   <th
                     key={`${column.field}-${index}`}
+                    className={column.align === 'right' ? 'ismTable__right' : undefined}
                     style={{ width: column.width, textAlign: column.align }}
                     data-test-subj={`tableHeaderCell_${column.field}_${index}`}
                     aria-sort={sorted ? (query.sortDirection === 'asc' ? 'ascending' : 'descending') : undefined}
@@ -423,7 +442,7 @@ export function Table<Row>({
             {rows.length === 0 && (
               <tr>
                 <td colSpan={columns.length + (onSelect ? 1 : 0)}>
-                  <div className="ismTable__empty">{loading ? <Spinner /> : empty}</div>
+                  <div className="ismTable__empty">{loading && !emptyWhileLoading ? <Spinner /> : empty}</div>
                 </td>
               </tr>
             )}
@@ -527,6 +546,8 @@ export function SearchRow({
   placeholder = 'Search',
   children,
   className,
+  autoFocus,
+  clearable,
 }: {
   search: string;
   onSearch: (text: string) => void;
@@ -534,10 +555,15 @@ export function SearchRow({
   children?: ReactNode;
   /** In the place of the row's own spacing and line under it */
   className?: string;
+  /** The box has the focus when the list opens */
+  autoFocus?: boolean;
+  /** The theme's small round button at the end of a box that holds text, which empties it */
+  clearable?: boolean;
 }) {
   // What is typed is shown at once and searched for a moment later
   const [text, setText] = useState(search);
   const sent = useRef(search);
+  const field = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (search !== sent.current) {
       sent.current = search;
@@ -556,7 +582,34 @@ export function SearchRow({
   return (
     <div className={className ?? 'ismSearchRow'}>
       <div className="atlGrow">
-        <SearchField compact value={text} onChange={setText} placeholder={placeholder} aria-label={placeholder} />
+        {/* The theme's search field, with a hold on its box to give it the focus back */}
+        <TextField
+          ref={field}
+          icon="search"
+          type="search"
+          compact
+          className={clearable ? 'ismSearchField' : undefined}
+          value={text}
+          onChange={setText}
+          placeholder={placeholder}
+          aria-label={placeholder}
+          autoFocus={autoFocus}
+          append={
+            clearable && text !== '' ? (
+              <button
+                type="button"
+                className="ismSearchField__clear"
+                aria-label="Clear input"
+                onClick={() => {
+                  setText('');
+                  field.current?.focus();
+                }}
+              >
+                <Icon name="cross" />
+              </button>
+            ) : undefined
+          }
+        />
       </div>
       {children}
     </div>
@@ -893,6 +946,7 @@ export function LocalTable<Row>({
   onSelect,
   selectable,
   fixed,
+  caption,
 }: {
   columns: Array<TableColumn<Row>>;
   rows: Row[];
@@ -907,6 +961,7 @@ export function LocalTable<Row>({
   onSelect?: (rows: Row[]) => void;
   selectable?: (row: Row) => boolean;
   fixed?: boolean;
+  caption?: boolean;
 }) {
   const [query, setQuery] = useState<Pick<ListQuery, 'from' | 'size' | 'sortField' | 'sortDirection'>>({
     from: 0,
@@ -933,6 +988,7 @@ export function LocalTable<Row>({
       onSelect={onSelect}
       selectable={selectable}
       fixed={fixed}
+      caption={caption}
     />
   );
 }

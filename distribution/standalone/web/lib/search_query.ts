@@ -602,11 +602,17 @@ export function removeOrFieldValue(clauses: QueryClause[], field: string, value:
 
 type Item = Record<string, unknown>;
 
+/**
+ * What an item holds under a field's name, as the original's lodash `get`: the key of that very
+ * name when the item has one (`machine.os`), else each part between the dots in turn, into
+ * whatever is there (a text has a `length`, a list its places)
+ */
 function get(item: Item, path: string): unknown {
+  if (path in item) return item[path];
   let value: unknown = item;
   for (const part of path.split('.')) {
-    if (value === null || value === undefined || typeof value !== 'object') return undefined;
-    value = (value as Item)[part];
+    if (value === null || value === undefined) return undefined;
+    value = (Object(value) as Item)[part];
   }
   return value;
 }

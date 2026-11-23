@@ -56,7 +56,6 @@ import {
   nestedNames,
   nestedTable,
   openCompletions,
-  parseSearch,
   queryIndex,
   readAnswer,
   reasonOf,
@@ -445,20 +444,18 @@ describe('the search box', () => {
   });
 
   it('takes either side of OR in brackets', () => {
-    assert.deepEqual(ids('(osx OR bytes<200)'), [0, 2]);
+    assert.deepEqual(ids('(bytes<200 OR osx)'), [0, 2]);
+    // a number must end with a space or the text, in the original's grammar: this is no search
+    assert.deepEqual(ids('(osx OR bytes<200)'), [0, 1, 2]);
     assert.deepEqual(ids('-(osx OR ios)'), [2]);
     assert.deepEqual(ids('is:bytes'), [0, 1, 2]);
     assert.deepEqual(ids('-is:missing'), [0, 1, 2]);
   });
 
   it('filters nothing with a text that is not a search', () => {
-    assert.equal(parseSearch('"open'), undefined);
-    assert.equal(parseSearch('(a OR'), undefined);
     assert.deepEqual(ids('"open'), [0, 1, 2]);
-    assert.deepEqual(parseSearch('  a  -b '), [
-      { type: 'term', match: 'must', value: 'a' },
-      { type: 'term', match: 'must_not', value: 'b' },
-    ]);
+    assert.deepEqual(ids('(a OR'), [0, 1, 2]);
+    assert.deepEqual(ids('osx OR ios'), [0, 1, 2]);
   });
 });
 

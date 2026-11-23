@@ -4,27 +4,23 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Button, Health, type Tone } from '../../components/basic';
-import type { MenuItem } from '../../components/overlay';
+import { Tooltip, type MenuItem } from '../../components/overlay';
 import { useBreadcrumbs } from '../../shell/state';
 import {
   ActionsMenu,
-  ContentPanel,
   ExternalLink,
-  Names,
-  PanelButton,
   SearchRow,
   Table,
-  TypeToConfirmModal,
-  capital,
   go,
   ism,
-  to,
   toasts,
   useListQuery,
   type TableColumn,
 } from './common';
+import { ContentPanel, ContentPanelActions, ListEmpty, TitleHelp } from './content_panel';
 import { pageChanges, pageQuery } from './model';
 import { ClearCacheModal, FlushModal, RefreshModal } from './operations';
+import { DeleteModal } from './plugin_modal';
 import { CRUMBS, ROUTES } from './routes';
 
 export const DATA_STREAM_DOCS = 'https://opensearch.org/docs/latest/opensearch/data-streams/';
@@ -35,7 +31,11 @@ export const HEALTH_TIPS: Record<string, string> = {
   red: 'One or more primary shards are unassigned, so some data is unavailable.',
 };
 
-export const HEALTH_TONES: Record<string, Tone> = { green: 'healthy', yellow: 'warning', red: 'critical' };
+export const HEALTH_TONES: Record<string, Tone> = {
+  green: 'healthy',
+  yellow: 'warning',
+  red: 'critical',
+};
 
 export interface DataStream {
   name: string;
@@ -92,12 +92,39 @@ export function DataStreamsActions({
       label: 'Roll over',
       disabled: selected.length > 1,
       testId: 'rolloverAction',
-      onClick: () => go(none ? ROUTES.ROLLOVER : `${ROUTES.ROLLOVER}/${names[0]}`),
+      // as the plugin's: the address ends in a stroke when nothing is ticked
+      onClick: () => go(`${ROUTES.ROLLOVER}/${names.join(',')}`),
     },
-    { id: 'clearCache', label: 'Clear cache', disabled: none, testId: 'ClearCacheAction', separated: true, onClick: () => setDialog('clearCache') },
-    { id: 'flush', label: 'Flush', disabled: none, testId: 'Flush Action', onClick: () => setDialog('flush') },
-    { id: 'refresh', label: 'Refresh', disabled: none, testId: 'refreshAction', onClick: () => setDialog('refresh') },
-    { id: 'delete', label: 'Delete', disabled: none, testId: 'deleteAction', separated: true, onClick: () => setDialog('delete') },
+    {
+      id: 'clearCache',
+      label: 'Clear cache',
+      disabled: none,
+      testId: 'ClearCacheAction',
+      separated: true,
+      onClick: () => setDialog('clearCache'),
+    },
+    {
+      id: 'flush',
+      label: 'Flush',
+      disabled: none,
+      testId: 'Flush Action',
+      onClick: () => setDialog('flush'),
+    },
+    {
+      id: 'refresh',
+      label: 'Refresh',
+      disabled: none,
+      testId: 'refreshAction',
+      onClick: () => setDialog('refresh'),
+    },
+    {
+      id: 'delete',
+      label: 'Delete',
+      disabled: none,
+      testId: 'deleteAction',
+      separated: true,
+      onClick: () => setDialog('delete'),
+    },
   ];
 
   const deleteDataStreams = async () => {
@@ -113,28 +140,23 @@ export function DataStreamsActions({
 
   return (
     <>
-      <ActionsMenu items={items} />
+      <ActionsMenu items={items} size="m" />
       {dialog === 'delete' && (
-        <TypeToConfirmModal
+        <DeleteModal
           title="Delete data streams"
-          label="Delete"
-          word="delete"
-          danger
+          tips="The following data streams will be permanently deleted. The backing indexes belonging to the data streams will also be deleted."
+          names={names}
           onClose={close}
-          onConfirm={deleteDataStreams}
-          inputTestId="deleteInput"
-          confirmTestId="deleteConfirmButton"
-        >
-          <p>
-            The following data streams will be permanently deleted. The backing indexes belonging to the data streams
-            will also be deleted.
-          </p>
-          <Names names={names} />
-        </TypeToConfirmModal>
+          onConfirm={() => void deleteDataStreams()}
+        />
       )}
-      {dialog === 'clearCache' && <ClearCacheModal items={operands} target="data streams" onClose={close} />}
+      {dialog === 'clearCache' && (
+        <ClearCacheModal items={operands} target="data streams" onClose={close} />
+      )}
       {dialog === 'flush' && <FlushModal items={operands} target="data streams" onClose={close} />}
-      {dialog === 'refresh' && <RefreshModal items={operands} target="data streams" onClose={close} />}
+      {dialog === 'refresh' && (
+        <RefreshModal items={operands} target="data streams" onClose={close} />
+      )}
     </>
   );
 }
@@ -161,11 +183,15 @@ export function DataStreams() {
     if (streams.ok && stats.ok) {
       // A data stream is listed with its size, so one without statistics is left out
       const rows = (streams.response?.data_streams ?? []).flatMap((stream) => {
-        const size = (stats.response?.data_streams ?? []).find((item) => item.data_stream === stream.name);
+        const size = (stats.response?.data_streams ?? []).find(
+          (item) => item.data_stream === stream.name
+        );
         return size ? [{ ...stream, ...size } as DataStreamRow] : [];
       });
       setAll(rows);
-      setSelected((before) => before.flatMap((item) => rows.filter((remote) => remote.name === item.name)));
+      setSelected((before) =>
+        before.flatMap((item) => rows.filter((remote) => remote.name === item.name))
+      );
     } else {
       toasts.danger((streams.ok ? stats.error : streams.error) || '');
     }
@@ -187,18 +213,25 @@ export function DataStreams() {
       field: 'name',
       name: 'Data stream name',
       sortable: true,
-      render: (row) => <a href={`#${ROUTES.CREATE_DATA_STREAM}/${row.name}/readonly`}>{row.name}</a>,
+      render: (row) => (
+        <a className="ismCellLink" href={`#${ROUTES.CREATE_DATA_STREAM}/${row.name}/readonly`}>
+          {row.name}
+        </a>
+      ),
     },
     {
       field: 'status',
       name: 'Status',
       sortable: true,
       render: (row) => {
+        // written as it comes, shown with a capital
         const health = (row.status || '').toLowerCase();
         return (
-          <span title={HEALTH_TIPS[health]}>
-            <Health tone={HEALTH_TONES[health]}>{capital(health)}</Health>
-          </span>
+          <Tooltip content={HEALTH_TIPS[health] || ''}>
+            <span className="ismCapitalize">
+              <Health tone={HEALTH_TONES[health]}>{health}</Health>
+            </span>
+          </Tooltip>
         );
       },
     },
@@ -206,33 +239,73 @@ export function DataStreams() {
       field: 'template',
       name: 'Template',
       sortable: true,
-      render: (row) => <a href={`#${ROUTES.CREATE_TEMPLATE}/${row.template}`}>{row.template}</a>,
+      render: (row) => (
+        <a className="ismCellLink" href={`#${ROUTES.CREATE_TEMPLATE}/${row.template}`}>
+          {row.template}
+        </a>
+      ),
     },
-    { field: 'backing_indices', name: 'Backing indexes count', sortable: true, align: 'right', render: (row) => row.backing_indices },
-    { field: 'store_size_bytes', name: 'Total size', sortable: true, align: 'right', render: (row) => row.store_size || '' },
+    {
+      field: 'backing_indices',
+      name: 'Backing indexes count',
+      sortable: true,
+      align: 'right',
+      render: (row) => row.backing_indices,
+    },
+    {
+      field: 'store_size_bytes',
+      name: 'Total size',
+      sortable: true,
+      align: 'right',
+      render: (row) => row.store_size || '',
+    },
   ];
 
   const filtered = query.search !== '';
   return (
     <ContentPanel
-      title="Data streams"
-      description={
+      bodyStyles={{ padding: 'initial' }}
+      title={
         <>
-          Data streams simplify the management of time-series data. Data streams are composed of multiple backing
-          indexes. Search requests are routed to all backing indexes, while indexing requests are routed to the
-          latest write index. <ExternalLink href={DATA_STREAM_DOCS} />
+          <h1 className="ismContentPanel__title">
+            <span>Data streams</span>
+          </h1>
+          <TitleHelp>
+            Data streams simplify the management of time-series data. Data streams are composed of
+            multiple backing indexes. Search requests are routed to all backing indexes, while
+            indexing requests are routed to the latest write index.{' '}
+            <ExternalLink href={DATA_STREAM_DOCS} />
+          </TitleHelp>
         </>
       }
       actions={
-        <>
-          <DataStreamsActions selected={selected} onDelete={load} />
-          <PanelButton text="Create data stream" variant="primary" icon="plus" to={to(ROUTES.CREATE_DATA_STREAM)} />
-        </>
+        <ContentPanelActions
+          actions={[
+            { text: '', children: <DataStreamsActions selected={selected} onDelete={load} /> },
+            {
+              text: 'Create data stream',
+              buttonProps: {
+                variant: 'primary',
+                icon: 'plus',
+                onClick: () => go(ROUTES.CREATE_DATA_STREAM),
+              },
+            },
+          ]}
+        />
       }
     >
-      <SearchRow search={query.search} onSearch={(search) => setQuery({ search, from: 0 })} placeholder="Search..." />
+      <SearchRow
+        className="ismListControls ismListControls--edge"
+        clearable
+        search={query.search}
+        onSearch={(search) => setQuery({ search, from: 0 })}
+        placeholder="Search..."
+      />
+      <hr className="ismContentPanel__rule" />
       <div data-test-subj="dataStreamsTable">
         <Table
+          fixed
+          caption
           columns={columns}
           rows={rows}
           total={all.length}
@@ -243,22 +316,24 @@ export function DataStreams() {
           onSelect={setSelected}
           loading={loading}
           empty={
-            <div className="ismEmpty">
-              <p>
-                {filtered
+            <ListEmpty
+              text={
+                filtered
                   ? 'There are no data streams matching your applied filters. Reset your filters to view your data streams.'
-                  : 'You have no data streams.'}
-              </p>
+                  : 'You have no data streams.'
+              }
+            >
               {filtered ? (
-                <Button variant="primary" size="s" onClick={() => setQuery({ search: '' })}>
+                // the plus is the plugin's
+                <Button variant="primary" icon="plus" onClick={() => setQuery({ search: '' })}>
                   Reset filters
                 </Button>
               ) : (
-                <Button variant="primary" size="s" icon="plus" to={to(ROUTES.CREATE_DATA_STREAM)}>
+                <Button variant="primary" icon="plus" onClick={() => go(ROUTES.CREATE_DATA_STREAM)}>
                   Create data stream
                 </Button>
               )}
-            </div>
+            </ListEmpty>
           }
         />
       </div>
