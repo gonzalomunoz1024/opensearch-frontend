@@ -166,8 +166,10 @@ describe('the hosts of opensearch.hosts', () => {
         failure = error;
       });
       assert.ok(failure instanceof OpenSearchUnavailableError);
-      assert.match((failure as Error).message, /no answer within 300 ms/);
-      // What timed out is not sent to the other host: it may have been done
+      // in the words of opensearch-js, which the console's proxy answers with
+      assert.equal((failure as Error).message, 'OpenSearch cannot be reached: Request timed out');
+      assert.equal(((failure as Error).cause as Error).message, 'Request timed out');
+      // What changes something and timed out is not sent to the other host: it may have been done
       assert.deepEqual(silent.seen, ['POST /_a']);
       assert.deepEqual(healthy.seen, []);
 
@@ -256,11 +258,60 @@ describe('a request to OpenSearch that fails', () => {
   });
 });
 
+describe('a request to OpenSearch that meets the time limit', () => {
+  it('is sent again, three more times, when it only reads, as opensearch-js sends it again', async () => {
+    const silent = await fake('hang');
+    const client = clientFor([silent.url], 100);
+    try {
+      const tries = async (request: Parameters<OpenSearchClient['raw']>[0]) => {
+        silent.seen.length = 0;
+        const failure = await failureOf(client.raw(request));
+        assert.ok(failure instanceof OpenSearchUnavailableError);
+        return silent.seen.length;
+      };
+      assert.equal(await tries({ method: 'GET', path: '/_cluster/health' }), 4);
+      assert.equal(await tries({ method: 'HEAD', path: '/logs' }), 4);
+      // a search with a body is sent with POST, and only reads
+      assert.equal(await tries({ method: 'POST', path: '/logs/_search?size=0', body: {} }), 4);
+      assert.equal(await tries({ method: 'POST', path: '/_msearch', body: '{}\n{}\n' }), 4);
+      assert.equal(await tries({ method: 'POST', path: '/logs/_count', body: {} }), 4);
+      // what changes something may have been done meanwhile (opensearch-js sends it again)
+      assert.equal(await tries({ method: 'POST', path: '/logs/_doc', body: {} }), 1);
+      assert.equal(await tries({ method: 'PUT', path: '/logs' }), 1);
+      assert.equal(await tries({ method: 'DELETE', path: '/logs' }), 1);
+      assert.equal(await tries({ method: 'POST', path: '/_search/scroll', body: {} }), 1);
+      // and a look at whether OpenSearch answers says so at once
+      assert.equal(await tries({ method: 'GET', path: '/', retryOnTimeout: false }), 1);
+    } finally {
+      client.close();
+      await silent.close();
+    }
+  });
+
+  it('is the wait for the answer to begin: a body that comes slowly is read to its end, as in opensearch-js', async () => {
+    const slow = await scripted((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.write('{"a":');
+      setTimeout(() => res.end('1}'), 350);
+    });
+    const client = clientFor([slow.url], 100);
+    try {
+      const response = await client.raw({ method: 'GET', path: '/_a' });
+      assert.equal(response.body.toString('utf8'), '{"a":1}');
+      assert.equal(slow.seen.length, 1);
+    } finally {
+      client.close();
+      await slow.close();
+    }
+  });
+});
+
 describe('the connections to OpenSearch', () => {
   it('are 256 to a host, and the time limit counts from when one carries the request', async () => {
-    const slow = await scripted((_req, res) => setTimeout(() => answerJson(res, 200, {}), 300));
-    // 300 at once with a limit of 800 ms: the last 44 wait 300 ms for a connection, which is not counted
-    const client = clientFor([slow.url], 800);
+    const slow = await scripted((_req, res) => setTimeout(() => answerJson(res, 200, {}), 1000));
+    // 300 at once, each answered after a second, with a limit of 1.6 s: the last 44 wait a second
+    // for a connection, which is not counted (counted, they would wait 2 s); none is sent again
+    const client = clientFor([slow.url], 1600);
     try {
       const answers = await Promise.all(
         Array.from({ length: 300 }, (_, index) =>

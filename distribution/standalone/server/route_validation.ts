@@ -50,7 +50,13 @@ const required = <T>(value: unknown, options: Options<T>, message: () => string,
   throw new SchemaTypeError(message(), path);
 };
 
-export function string(options: Options<string> & { minLength?: number; maxLength?: number } = {}): Schema<string> {
+/**
+ * A text; `validate` says what is wrong with one, or nothing. (config-schema loses its check of
+ * the type when it is given `validate`, and hands it a list: here a list is no text either way.)
+ */
+export function string(
+  options: Options<string> & { minLength?: number; maxLength?: number; validate?: (value: string) => string | void } = {}
+): Schema<string> {
   return {
     validate(value, path) {
       const message = () => `expected value of type [string] but got [${typeDetect(value)}]`;
@@ -68,6 +74,8 @@ export function string(options: Options<string> & { minLength?: number; maxLengt
           path
         );
       }
+      const problem = options.validate?.(value);
+      if (typeof problem === 'string') throw new SchemaTypeError(problem, path);
       return value;
     },
   };

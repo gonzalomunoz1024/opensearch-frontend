@@ -22,6 +22,7 @@ import type { Socket } from 'node:net';
 import { join } from 'node:path';
 import type { Duplex } from 'node:stream';
 import type { Config, ServerSslConfig } from './config';
+import { registerConsole } from './console_proxy';
 import {
   ClientClosedError,
   HttpError,
@@ -50,8 +51,19 @@ import {
 import { SavedObjectsRepository } from './saved_objects';
 import { registerSavedObjectsManagement } from './saved_objects_management';
 import { registerSavedObjects } from './saved_objects_routes';
-import { any, literal, maybe, object, oneOf, queryObject, validateRequestPart } from './route_validation';
+import {
+  any,
+  arrayOf,
+  literal,
+  maybe,
+  object,
+  oneOf,
+  queryObject,
+  string,
+  validateRequestPart,
+} from './route_validation';
 import { registerSampleData } from './sample_data/routes';
+import { registerSearch } from './search_routes';
 import { registerShortUrls } from './short_urls';
 import { registerSqlConsole } from './sql_console';
 import { contentSecurityPolicy, readBuild, renderPage, serveStatic } from './static';
@@ -133,6 +145,24 @@ function xsrfExempt(allowlist: string[]): Set<string> {
   return shapes;
 }
 
+/**
+ * The meta fields of a request of the fields of a pattern: a list as it came (the parameter
+ * repeated), one parameter read as JSON as the original reads it. One that is no JSON is one
+ * name here, where the original answers 400, so that a single meta field (the parameter once,
+ * as a browser sends a list of one) is not refused.
+ */
+export function metaFieldsOf(given: string | string[]): string[] {
+  if (Array.isArray(given)) return given;
+  try {
+    const parsed: unknown = JSON.parse(given);
+    if (Array.isArray(parsed) && parsed.every((item) => typeof item === 'string')) return parsed as string[];
+    if (typeof parsed === 'string') return [parsed];
+  } catch {
+    // one name
+  }
+  return [given];
+}
+
 /** A search's path with the original's shard time limit (getShardTimeout), unless it has one */
 export function withShardTimeout(path: string, ms: number): string {
   const at = path.indexOf('?');
@@ -202,8 +232,10 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
       const info = await client.request<{ version?: { number?: string } }>({
         method: 'GET',
         path: '/',
-        // The time limit of a look at whether OpenSearch answers: opensearch.pingTimeout
+        // The time limit of a look at whether OpenSearch answers: opensearch.pingTimeout, and
+        // what does not answer within it is not asked again
         timeout: config.opensearch.pingTimeout ?? Math.min(config.opensearch.requestTimeout, 10000),
+        retryOnTimeout: false,
       });
       const made = await repository.ensureIndex();
       if (made === 'created') logger.info(`Created the saved objects index ${config.index}_1`);
@@ -267,19 +299,6 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
 
   // --- Saved objects ---------------------------------------------------------------------------
 
-  const all = (query: URLSearchParams, name: string) =>
-    query.getAll(name).flatMap((value) => {
-      // A list may come as repeated parameters or as one JSON array
-      if (value.startsWith('[')) {
-        try {
-          return (JSON.parse(value) as unknown[]).map(String);
-        } catch {
-          return [value];
-        }
-      }
-      return [value];
-    });
-
   registerSavedObjects(router, repository, config.savedObjects);
   registerSavedObjectsManagement(router, repository);
 
@@ -325,39 +344,42 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
 
   // --- Index patterns --------------------------------------------------------------------------
 
+  // The query of the original's route (src/plugins/data/server/index_patterns/routes.ts); an
+  // empty pattern is every index, as there
+  const fieldsQuery = object({
+    pattern: string(),
+    meta_fields: oneOf<string | string[]>([string(), arrayOf(string())], { defaultValue: [] }),
+    data_source: maybe(string()),
+  });
   router.get('/api/index_patterns/_fields_for_wildcard', async ({ query }) => {
-    const pattern = query.get('pattern');
-    if (!pattern) throw badRequest('[request query.pattern]: expected a pattern');
-    const metaFields = all(query, 'meta_fields');
-    return {
-      body: {
-        fields: await fieldsForWildcard(
-          client,
-          pattern,
-          metaFields.length ? metaFields : ['_source', '_id', '_type', '_index', '_score']
-        ),
-      },
-    };
+    const { pattern, meta_fields: given, data_source: dataSource } = validateRequestPart(
+      fieldsQuery,
+      queryObject(query),
+      'query'
+    );
+    // The original turns to the data source named; there are none here (data_source.enabled)
+    if (dataSource) throw badRequest('[request query.data_source]: there are no data sources: data_source.enabled is off');
+    return { body: { fields: await fieldsForWildcard(client, pattern, metaFieldsOf(given)) } };
   });
 
   // --- OpenSearch itself -----------------------------------------------------------------------
 
-  // One request to OpenSearch, passed on as it is and answered as OpenSearch answers it. Dev
-  // Tools is this and nothing more; the other pages use it for the APIs they are built on.
-  const proxy: Handler = async (context) => {
+  // Dev Tools' console: the routes of the original's console plugin
+  registerConsole(router, client, config, logger);
+  // The search route of the original's data plugin
+  registerSearch(router, client, { shardTimeout: config.opensearch.shardTimeout, uiSettings });
+
+  // One request of the pages to OpenSearch, passed on as it is and answered as OpenSearch
+  // answers it: the APIs the pages are built on. "." and ".." in its path are names (the title
+  // of an index pattern), which the client sends as they are written.
+  const pagesRequest: Handler = async (context) => {
     const method = (context.query.get('method') ?? 'GET').toUpperCase();
     const target = context.query.get('path');
     if (!target) throw badRequest('[request query.path]: expected a path');
     if (!PROXY_METHODS.has(method)) throw badRequest(`Method ${method} is not allowed`);
     const body = await context.body();
     let path = `/${target.replace(/^\/+/, '')}`;
-    // What is typed in Dev Tools is an address, in which "." and ".." are steps, as the console
-    // of OpenSearch Dashboards reads it. In a request of the pages they are names (the title of
-    // an index pattern), which the client sends as they are written.
-    if (context.path === '/api/console/proxy') {
-      const typed = new URL(`http://localhost${path}`);
-      path = typed.pathname + typed.search;
-    } else if (method === 'POST' || method === 'GET') {
+    if (method === 'POST' || method === 'GET') {
       // A search of the pages: the original makes it through its search strategy, which asks
       // OpenSearch to give up on a shard after opensearch.shardTimeout
       path = withShardTimeout(path, config.opensearch.shardTimeout);
@@ -366,8 +388,6 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
       method,
       path,
       body: body.length ? body : undefined,
-      // An id of its own for each request, as OpenSearch Dashboards sends: OpenSearch warns of a
-      // deprecated API once for each id, and the console shows the warning with every answer
       headers: {
         'x-opaque-id': randomUUID(),
         ...(body.length
@@ -375,24 +395,13 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
           : {}),
       },
     });
-    const type = String(response.headers['content-type'] ?? 'text/plain; charset=utf-8');
-    const headers: Record<string, string> = { 'content-type': type };
-    if (context.path === '/api/console/proxy') {
-      // As the console's proxy of the original answers: JSON as JSON in UTF-8, and a warning
-      // header always, empty when OpenSearch sent none (other text keeps OpenSearch's type,
-      // where the original calls it HTML)
-      if (type.includes('application/json')) headers['content-type'] = 'application/json; charset=utf-8';
-      headers.warning = String(response.headers.warning ?? '');
-    } else if (response.headers.warning) {
-      headers.warning = String(response.headers.warning);
-    }
+    const headers: Record<string, string> = {
+      'content-type': String(response.headers['content-type'] ?? 'text/plain; charset=utf-8'),
+    };
+    if (response.headers.warning) headers.warning = String(response.headers.warning);
     return { status: response.status, headers, body: response.body };
   };
-  const proxyOptions = { maxBytes: config.savedObjects.maxImportPayloadBytes };
-  router.post('/api/console/proxy', proxy, proxyOptions);
-  // The address "Copy as cURL" writes: the first OpenSearch this server talks to
-  router.get('/api/console/opensearch_config', () => ({ body: { host: config.opensearch.hosts[0] } }));
-  router.post('/internal/opensearch', proxy, proxyOptions);
+  router.post('/internal/opensearch', pagesRequest, { maxBytes: config.savedObjects.maxImportPayloadBytes });
 
   // --- Query Workbench -------------------------------------------------------------------------
 
@@ -462,6 +471,8 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
           map: config.map,
           visTypeVega: config.visTypeVega,
           home: config.home,
+          // console.enabled: the original leaves the console out of Dev Tools when it is false
+          console: { enabled: config.console.enabled },
           libraries: {
             vega: `${config.server.basePath}/${build.assets.vega ?? ''}`,
             vegaLite: `${config.server.basePath}/${build.assets.vegaLite ?? ''}`,
@@ -574,11 +585,14 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
 
     const { route, params } = router.match(method, path);
     if (route) {
+      const maxBytes = route.maxBytes ?? config.server.maxPayloadBytes;
+      let cached: Promise<Buffer> | undefined;
+      const body = () => (cached ??= readBody(req, maxBytes));
+      // hapi reads the body before it looks at the headers: one said to be larger than the
+      // route takes is refused (413) before the osd-xsrf and osd-version checks
+      if (!SAFE_METHODS.has(method) && Number(req.headers['content-length'] ?? 0) > maxBytes) await body();
       checkXsrf(req, method, route.pattern);
       checkVersion(req);
-      let cached: Promise<Buffer> | undefined;
-      const body = () =>
-        (cached ??= readBody(req, route.maxBytes ?? config.server.maxPayloadBytes));
       const context: RequestContext = {
         req,
         method,

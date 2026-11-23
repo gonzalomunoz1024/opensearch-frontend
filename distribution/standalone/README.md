@@ -25,7 +25,8 @@ What it keeps, so that it can stand where OpenSearch Dashboards stood:
   `compression.*`, `keepaliveTimeout`, `socketTimeout` and `ssl.*` (with PEM files);
   `opensearch.hosts`, `username`, `password`, `customHeaders`, `requestHeadersWhitelist`,
   `requestTimeout`, `pingTimeout`, `shardTimeout`, `memoryCircuitBreaker.*` and `ssl.*` (PEM
-  files); `logging.quiet`, `silent` and `verbose`. A setting of OpenSearch Dashboards that this
+  files); `console.enabled` and `console.proxyFilter`; `logging.quiet`, `silent` and
+  `verbose`. A setting of OpenSearch Dashboards that this
   server has no use for is named once at start; one whose absence would leave the server less
   safe than the file asks, or listening or storing elsewhere (a PKCS#12 keystore or truststore,
   `server.cors: true`, `server.autoListen: false`, `savedObjects.permission.enabled: true`), stops

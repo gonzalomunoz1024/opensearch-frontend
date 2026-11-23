@@ -102,6 +102,11 @@ export interface Config {
   visTypeVega: { enableExternalUrls: boolean };
   /** home.disableWelcomeScreen: whether the first page leaves out the welcome screen */
   home: { disableWelcomeScreen: boolean };
+  /**
+   * console.enabled: whether Dev Tools' console and its routes are there; console.proxyFilter:
+   * the regular expressions one of which a path the console sends to OpenSearch must match
+   */
+  console: { enabled: boolean; proxyFilter: string[] };
 }
 
 /** Reads a setting's value; `fromEnvironment` is true for a value that came as text from the environment */
@@ -247,6 +252,30 @@ const regionLayers: Reader = (value, key) => {
     };
   });
 };
+/** console.proxyFilter: a list of regular expressions, as the original's schema and its plugin read it */
+const regularExpressions: Reader = (given, key, fromEnvironment) => {
+  let value = given;
+  // config-schema reads a list given as text as JSON
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value) as unknown;
+    } catch {
+      throw configError(key, 'could not parse array value from json input');
+    }
+    if (!Array.isArray(value)) throw configError(key, 'could not parse array value from json input');
+  }
+  if (!Array.isArray(value)) throw configError(key, `expected value of type [array] but got [${typeName(value)}]`);
+  return value.map((item: unknown, index) => {
+    const source = string(item, `${key}.${index}`, fromEnvironment) as string;
+    try {
+      RegExp(source);
+    } catch (error) {
+      // The original stops where its plugin makes the expression, in these words
+      throw configError(`${key}.${index}`, (error as Error).message);
+    }
+    return source;
+  });
+};
 const oneOf =
   (...allowed: string[]): Reader =>
   (value, key) => {
@@ -309,6 +338,8 @@ const SETTINGS: Record<string, Reader> = {
   'csp.allowedImgSources': list,
   'vis_type_vega.enableExternalUrls': boolean,
   'home.disableWelcomeScreen': boolean,
+  'console.enabled': boolean,
+  'console.proxyFilter': regularExpressions,
   'map.includeOpenSearchMapsService': boolean,
   'map.proxyOpenSearchMapsServiceInMaps': boolean,
   'map.showRegionDeniedWarning': boolean,
@@ -713,6 +744,7 @@ export function loadConfig(
     },
     visTypeVega: { enableExternalUrls: read('vis_type_vega.enableExternalUrls', false) },
     home: { disableWelcomeScreen: read('home.disableWelcomeScreen', false) },
+    console: { enabled: read('console.enabled', true), proxyFilter: read('console.proxyFilter', ['.*']) },
   };
   return { config, ignored, deprecations };
 }

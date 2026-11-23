@@ -78,10 +78,11 @@ describe('the two ways from a page to OpenSearch', () => {
       assert.equal((await typed('nosuch/../_cat/health')).status, 200);
       await typed('/_search?q=a b');
       await typed('logs/./_count');
+      // with the pretty=true the original adds, its query written again as new URL() writes one
       assert.deepEqual(opensearch.seen.filter((line) => !/^(GET \/|HEAD \/\.kibana)$/.test(line)), [
-        'GET /_cat/health',
-        'GET /_search?q=a%20b',
-        'GET /logs/_count',
+        'GET /_cat/health?pretty=true',
+        'GET /_search?q=a+b&pretty=true',
+        'GET /logs/_count?pretty=true',
       ]);
     } finally {
       await server.stop();

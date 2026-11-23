@@ -143,6 +143,34 @@ describe('a setting the original does not know', () => {
   });
 });
 
+describe("the settings of Dev Tools' console", () => {
+  it('console.enabled and console.proxyFilter are read, with the defaults of the original', () => {
+    assert.deepEqual(fromFile('server.port: 5601').config.console, { enabled: true, proxyFilter: ['.*'] });
+    const { config, ignored } = fromFile(
+      "console.enabled: false\nconsole.proxyFilter: ['^_cat/', '^/?logs-[0-9]{4},?']\nconsole.ssl.verify: true"
+    );
+    assert.deepEqual(config.console, { enabled: false, proxyFilter: ['^_cat/', '^/?logs-[0-9]{4},?'] });
+    // what the original's plugin reads and does nothing with is reported
+    assert.deepEqual(ignored, ['console.ssl.verify']);
+    assert.deepEqual(loadConfig({ env: { CONSOLE_PROXYFILTER: '["^_search$"]' } }).config.console.proxyFilter, ['^_search$']);
+    // a list written as JSON text, as config-schema reads one
+    assert.deepEqual(fromFile(`console.proxyFilter: '["^_cat"]'`).config.console.proxyFilter, ['^_cat']);
+  });
+
+  it('console.proxyFilter is refused as the original refuses it', () => {
+    assert.throws(() => fromFile("console.proxyFilter: '.*'"), {
+      message: '[config validation of [console].proxyFilter]: could not parse array value from json input',
+    });
+    assert.throws(() => fromFile('console.proxyFilter: [1]'), {
+      message: '[config validation of [console].proxyFilter.0]: expected value of type [string] but got [number]',
+    });
+    // where the plugin makes the expression
+    assert.throws(() => fromFile("console.proxyFilter: ['(']"), {
+      message: '[config validation of [console].proxyFilter.0]: Invalid regular expression: /(/: Unterminated group',
+    });
+  });
+});
+
 describe('a value of a setting', () => {
   it('of another type is refused as the original refuses it', () => {
     assert.throws(() => fromFile('server.name: 1.50'), {

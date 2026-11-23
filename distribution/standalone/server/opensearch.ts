@@ -3,10 +3,11 @@
 /*
  * The connection to OpenSearch: plain HTTP requests against its REST API with Node's own
  * `http` and `https`, with what the client library of OpenSearch Dashboards (opensearch-js)
- * brings to them: kept-alive connections, 256 of them per host, a time limit that counts from
- * when a connection is there to carry the request, the next host of the list and up to three
- * more tries when a connection fails or a host answers that it cannot serve, and a refusal of
- * an answer too large to be held. There is no client library between this and the wire.
+ * brings to them: kept-alive connections, 256 of them per host, a time limit on the wait for
+ * the answer that counts from when a connection is there to carry the request, the next host of
+ * the list and up to three more tries when a connection fails, a host answers that it cannot
+ * serve or a request that only reads met the time limit, and a refusal of an answer too large
+ * to be held. There is no client library between this and the wire.
  */
 
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -32,6 +33,8 @@ export interface OpenSearchRequest {
   body?: unknown;
   headers?: Record<string, string>;
   timeout?: number;
+  /** Whether a try that met the time limit is followed by another; by default when the request only reads */
+  retryOnTimeout?: boolean;
 }
 
 /** OpenSearch answered, with a status that says the request failed */
@@ -46,10 +49,10 @@ export class OpenSearchError extends Error {
   }
 }
 
-/** No host of the list could be reached, or none answered in time */
+/** No host of the list could be reached, or none answered in time; `cause` is the last try's failure */
 export class OpenSearchUnavailableError extends Error {
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, cause?: unknown) {
+    super(message, { cause });
     this.name = 'OpenSearchUnavailableError';
   }
 }
@@ -82,6 +85,21 @@ const HEAP_SIZE_LIMIT = getHeapStatistics().heap_size_limit;
 
 /** The code of the error of a request that met the time limit */
 const TIMED_OUT = 'ETIMEDOUT';
+/** Its message, in the words of opensearch-js */
+export const TIMED_OUT_MESSAGE = 'Request timed out';
+
+/** The requests sent with POST that only read: searches, counts, the fields of indices */
+const READS = /(?:^|\/)(?:_search|_msearch|_count|_mget|_field_caps|_validate\/query|_search\/template|_msearch\/template)$/;
+
+/**
+ * Whether a request only reads, so that sending it again changes nothing: GET, HEAD, and a
+ * search sent with POST because it has a body
+ */
+function onlyReads(request: OpenSearchRequest): boolean {
+  const method = request.method.toUpperCase();
+  if (method === 'GET' || method === 'HEAD') return true;
+  return method === 'POST' && READS.test(request.path.split('?', 1)[0].replace(/\/+$/, ''));
+}
 
 function reason(body: unknown, status: number): string {
   if (body && typeof body === 'object') {
@@ -141,11 +159,12 @@ function pathToAsk(url: URL, prefix: string, path: string): string {
 }
 
 /** Whether a failure of one try is one opensearch-js tries again */
-function retried(error: unknown): boolean {
+function retried(error: unknown, request: OpenSearchRequest): boolean {
   if (error instanceof OpenSearchAnswerRefusedError) return false;
   const code = (error as NodeJS.ErrnoException).code;
-  // What met the time limit may have been done: it is not sent again (opensearch-js sends it again)
-  if (code === TIMED_OUT) return false;
+  // opensearch-js sends again what met the time limit, whatever it is. What changes something
+  // may have been done meanwhile, and is not sent again here; what only reads is
+  if (code === TIMED_OUT) return request.retryOnTimeout ?? onlyReads(request);
   // A request that cannot be written fails the same way each time
   return code !== 'ERR_UNESCAPED_CHARACTERS' && code !== 'ERR_INVALID_CHAR';
 }
@@ -195,7 +214,7 @@ export class OpenSearchClient {
   /**
    * The answer whatever its status; throws only when no host answers. A try that fails before
    * its answer is read, or that a host answers with 502, 503 or 504, is followed by another, to
-   * the next host, three more at most; one that met the time limit is not.
+   * the next host, three more at most; one that met the time limit is, when it only reads.
    */
   async raw(request: OpenSearchRequest): Promise<OpenSearchResponse> {
     const start = this.next;
@@ -210,15 +229,16 @@ export class OpenSearchClient {
       } catch (error) {
         lastError = error;
         if (error instanceof OpenSearchAnswerRefusedError) throw error;
-        if (!retried(error)) {
+        if ((error as NodeJS.ErrnoException).code === TIMED_OUT) {
           // The next request starts with the host after it, or each would wait for this one
           this.next = (index + 1) % this.hosts.length;
-          break;
         }
+        if (!retried(error, request)) break;
       }
     }
     throw new OpenSearchUnavailableError(
-      `OpenSearch cannot be reached: ${(lastError as Error | undefined)?.message ?? 'no host answered'}`
+      `OpenSearch cannot be reached: ${(lastError as Error | undefined)?.message ?? 'no host answered'}`,
+      lastError
     );
   }
 
@@ -283,6 +303,13 @@ export class OpenSearchClient {
     const transport = url.protocol === 'https:' ? https : http;
     const timeout = request.timeout ?? this.timeout;
     return new Promise((resolve, reject) => {
+      const timedOut = () => {
+        const error: NodeJS.ErrnoException = new Error(TIMED_OUT_MESSAGE);
+        error.code = TIMED_OUT;
+        // Before the connection is closed, whose end would be a failure that is tried again
+        reject(error);
+        outgoing.destroy(error);
+      };
       const outgoing = transport.request(
         url,
         {
@@ -295,6 +322,10 @@ export class OpenSearchClient {
           timeout,
         },
         (incoming) => {
+          // The time limit is the wait for the answer to begin, as in opensearch-js: its body
+          // takes the time it takes
+          outgoing.off('timeout', timedOut);
+          outgoing.setTimeout(0);
           const length = incoming.headers['content-length'];
           const encoding = String(incoming.headers['content-encoding'] ?? '').toLowerCase();
           const refused =
@@ -317,13 +348,7 @@ export class OpenSearchClient {
           incoming.on('aborted', () => reject(new Error('Response aborted while reading the body')));
         }
       );
-      outgoing.on('timeout', () => {
-        const error: NodeJS.ErrnoException = new Error(`no answer within ${timeout} ms`);
-        error.code = TIMED_OUT;
-        // Before the connection is closed, whose end would be a failure that is tried again
-        reject(error);
-        outgoing.destroy(error);
-      });
+      outgoing.on('timeout', timedOut);
       outgoing.on('error', reject);
       outgoing.end(payload);
     });

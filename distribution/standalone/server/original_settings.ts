@@ -183,18 +183,13 @@ export const REFUSED: Refused[] = [
     refuses: (value) => value === false || value === 'false',
     reason: 'InfraDashboard cannot keep the advanced settings from being changed',
   },
-  {
-    key: 'console.enabled',
-    refuses: (value) => value === false || value === 'false',
-    reason:
-      'InfraDashboard cannot turn Dev Tools off: its pages reach OpenSearch through a proxy of the server as the console does',
-  },
 ];
 
 /**
  * The namespaces of the plugins of the original: those the fork builds in (src/plugins) and the
  * two it installs. Their keys are accepted and reported as not read, except those this server
- * reads (map.*, vis_type_vega.*, home.*) and those of REFUSED.
+ * reads (map.*, vis_type_vega.*, home.*, console.enabled and console.proxyFilter) and those of
+ * REFUSED.
  */
 export const PLUGIN_NAMESPACES = [
   'advanced_settings',
