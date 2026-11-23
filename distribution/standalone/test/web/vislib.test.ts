@@ -5,7 +5,7 @@ import { describe, it } from 'node:test';
 import { bucketFilter, otherBucketTerms, tabify, type AggConfig, type AggContext, type TableColumn } from '../../web/lib/aggs';
 import { DEFAULT_FORMAT_SETTINGS } from '../../web/lib/field_formats';
 import type { Filter, IndexPattern } from '../../web/lib/types';
-import { splitParts, splitTables, splitTimeFilter } from '../../web/vis/types';
+import { splitDrawing, splitParts, splitTables, splitTimeFilter } from '../../web/vis/types';
 import { axisConfig, keptTicks, placeTick, truncateLabel, type AxisScaleInfo } from '../../web/vis/vislib/axis';
 import { heatmapColor } from '../../web/vis/vislib/color_maps';
 import { drawMeter, gaugeBucket, gaugeColors, gaugeLabels, gaugeSize, meterConfig } from '../../web/vis/vislib/gauge';
@@ -672,6 +672,13 @@ describe('the buckets of a chart', () => {
     const table = { columns: [count], rows: [{ 'col-0-1': 4 }] };
     assert.equal(splitParts(table), undefined);
     assert.deepEqual(splitTables(table), [{ table }]);
+  });
+
+  it('leave the split of a data table to the table, which draws a table of each bucket from the whole', () => {
+    assert.equal(splitDrawing('table'), 'whole');
+    // vislib's pies and gauges lay out their charts in its frame; the page draws the parts of the rest
+    assert.deepEqual(['pie', 'gauge', 'goal'].map(splitDrawing), ['frame', 'frame', 'frame']);
+    assert.deepEqual(['histogram', 'metric', 'tagcloud'].map(splitDrawing), ['parts', 'parts', 'parts']);
   });
 
   it('cut the title of a chart of a split as vislib does: to the letters nine tenths of its room hold, less five', () => {
