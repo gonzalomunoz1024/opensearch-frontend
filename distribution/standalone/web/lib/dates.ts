@@ -480,6 +480,20 @@ const LONG_DATE_FORMATS: Record<string, string> = {
 
 const LONG_DATE_TOKENS = /(\[[^[]*\])|(\\)?(LTS|LT|LL?L?L?|l{1,4})/g;
 
+const zoneNames = new Map<string, Intl.DateTimeFormat>();
+
+/** The short name of a zone at a moment ("EST"); none for the browser's own, as moment gives none */
+function zoneAbbreviation(date: Date, timeZone?: string): string {
+  if (!timeZone || timeZone === 'Browser') return '';
+  if (timeZone === 'UTC') return 'UTC';
+  let format = zoneNames.get(timeZone);
+  if (!format) {
+    format = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'short' });
+    zoneNames.set(timeZone, format);
+  }
+  return format.formatToParts(date).find((part) => part.type === 'timeZoneName')?.value ?? '';
+}
+
 // moment's tokens: a text in brackets, an escaped letter, the longest token at each place, or
 // any other letter, which is written as it is
 const TOKENS =
@@ -488,7 +502,8 @@ const TOKENS =
 /**
  * A date written with a format of moment's tokens, as the product's date settings and formats
  * name them, in moment's English locale: `[text]` and an escaped letter are written as they are.
- * The zone's abbreviation (z, zz) is not known here and is written as the letters.
+ * The zone's abbreviation (z, zz) is the browser's short name of the zone, which is moment's in UTC
+ * and the US zones; there is none for the browser's own zone, as moment gives none.
  */
 export function formatDate(date: Date, pattern: string, timeZone?: string): string {
   if (Number.isNaN(date.getTime())) return 'Invalid date';
@@ -641,6 +656,9 @@ export function formatDate(date: Date, pattern: string, timeZone?: string): stri
         return offset(':');
       case 'ZZ':
         return offset('');
+      case 'z':
+      case 'zz':
+        return zoneAbbreviation(date, timeZone);
       case 'X':
         return String(Math.floor(date.getTime() / 1000));
       case 'x':
