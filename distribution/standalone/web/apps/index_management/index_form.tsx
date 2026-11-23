@@ -230,6 +230,7 @@ export function AdvancedSettings({
   label = 'Specify advanced index settings',
   forTemplate,
   nested,
+  fullWidth = true,
   children,
 }: {
   value: Settings;
@@ -240,6 +241,8 @@ export function AdvancedSettings({
   forTemplate?: boolean;
   /** The value is more than settings: what is nested in it stays nested */
   nested?: boolean;
+  /** The row as wide as what holds it; without, the theme's 400 px, as a split or a shrink has it */
+  fullWidth?: boolean;
   title?: ReactNode;
   label?: ReactNode;
   children?: ReactNode;
@@ -265,13 +268,13 @@ export function AdvancedSettings({
     <div className="ismAccordion">
       <button type="button" className="ismAccordion__button" aria-expanded={open} onClick={() => setOpen(!open)}>
         <Icon name="chevronRight" className="ismAccordion__icon" />
-        <span>{typeof title === 'string' ? <h3>{title}</h3> : title}</span>
+        <span>{typeof title !== 'string' ? title : forTemplate ? <h4>{title}</h4> : <h3>{title}</h3>}</span>
       </button>
       {open && (
         <div className="ismAccordion__body">
           <FormRow
             label={label}
-            fullWidth
+            fullWidth={fullWidth}
             testId="formNameAdvancedSettings"
             help={
               children ?? (
@@ -339,6 +342,8 @@ export function SettingsFields({
   errors = {},
   withShards = true,
   forTemplate,
+  forDataStream,
+  forComponent,
   across = isEdit,
 }: {
   value: Settings | undefined;
@@ -350,6 +355,13 @@ export function SettingsFields({
   withShards?: boolean;
   /** The settings a template gives: every one of them can be set, and none has to be */
   forTemplate?: boolean;
+  /** The settings a data stream takes from its template, whose shards row is as wide as the page too */
+  forDataStream?: boolean;
+  /**
+   * With forTemplate, the settings a component template gives: named in the size of an index's, the
+   * two counts in rows as wide as the page with fields of the theme's own width
+   */
+  forComponent?: boolean;
   across?: boolean;
 }) {
   const settings = value ?? {};
@@ -366,11 +378,16 @@ export function SettingsFields({
     const now = settings[name];
     return now === undefined || now === '' ? undefined : Number(now);
   };
+  // A template's settings are named a size smaller (a component template's are not), 24 px apart, as the plugin's
+  const small = forTemplate && !forComponent;
   return (
-    <div className="ismSettings">
+    <div className={cx('ismSettings', forTemplate && 'ismSettings--template')}>
       {withShards && (
         <FormRow
           title="Number of primary shards"
+          small={small}
+          fullWidth={forTemplate && (forDataStream || forComponent)}
+          narrow={forComponent}
           across={across}
           testId={forTemplate ? 'form-row-template.settings.index.number_of_shards' : 'form-name-index.number_of_shards'}
           error={errors['index.number_of_shards']}
@@ -400,6 +417,9 @@ export function SettingsFields({
       )}
       <FormRow
         title="Number of replicas"
+        small={small}
+        fullWidth={forTemplate}
+        narrow={forTemplate}
         across={across}
         testId={forTemplate ? 'form-row-template.settings.index.number_of_replicas' : 'form-name-index.number_of_replicas'}
         error={errors['index.number_of_replicas']}
@@ -419,6 +439,7 @@ export function SettingsFields({
       </FormRow>
       <FormRow
         title="Refresh interval"
+        small={small}
         across={across}
         testId={forTemplate ? 'form-row-template.settings.index.refresh_interval' : 'form-name-index.refresh_interval'}
         help={
@@ -438,7 +459,7 @@ export function SettingsFields({
           />
         )}
       </FormRow>
-      <div className="ismSpacer ismSpacer--m" />
+      <div className={cx('ismSpacer', forTemplate ? 'ismSpacer--l' : 'ismSpacer--m')} />
       <AdvancedSettings
         value={settings}
         old={old}

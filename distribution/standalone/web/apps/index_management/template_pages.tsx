@@ -6,17 +6,21 @@
  */
 
 import { useCallback, useEffect, useImperativeHandle, useRef, useState, forwardRef, type ReactNode } from 'react';
-import { Badge, Button, CallOut, IconButton, Panel, cx } from '../../components/basic';
+import { Button, CallOut, IconButton, Panel, Tabs, cx } from '../../components/basic';
 import { ComboBox } from '../../components/combo_box';
-import { Checkbox, NumberField, SearchField, Switch, TextField } from '../../components/form';
+import { NumberField, SearchField, Switch, TextField } from '../../components/form';
 import { Icon } from '../../components/icon';
 import { Modal } from '../../components/overlay';
 import { useLocation } from '../../router';
 import { useBreadcrumbs } from '../../shell/state';
-import { ExternalLink, FilterButton, JSONModal, Labeled, UnsavedBar, go, ism, to, toasts } from './common';
-import { AliasSelect, MappingEditor, SettingsFields, aliasesError } from './index_form';
+import { PageBottomBar, UnsavedChangesBar } from './bottom_bar';
+import { ExternalLink, go, ism, to, toasts } from './common';
+import { ContentPanel, FactGrid, TitledPanel } from './content_panel';
+import { FilterBox } from './filter_box';
+import { FormRow } from './form_row';
+import { JsonShowModal } from './plugin_modal';
+import { AdvancedSettings, AliasSelect, MappingEditor, SettingsFields, aliasesError } from './index_form';
 import {
-  PARTS,
   comparableComponent,
   comparableTemplate,
   countChanges,
@@ -36,7 +40,14 @@ import {
 } from './index_model';
 import { TEMPLATE_NAMING_MESSAGE, TEMPLATE_NAMING_PATTERN, matchesAny } from './model';
 import { CRUMBS, INDEX_MANAGEMENT_PATH, ROUTES } from './routes';
-import { DeleteComponentModal, DeleteTemplateModal, loadIndexTemplates, type IndexTemplate } from './templates';
+import {
+  DeleteComponentModal,
+  DeleteTemplateModal,
+  TYPE_FILTERS,
+  TypeBadges,
+  loadIndexTemplates,
+  type IndexTemplate,
+} from './templates';
 
 const DOCS = 'https://opensearch.org/docs/latest';
 const TEMPLATE_DOCS = `${DOCS}/opensearch/index-templates/`;
@@ -46,32 +57,6 @@ const COMPONENT_TEXT =
   'Component templates are reusable building blocks for composing index or data stream templates. You can define component templates with common index configurations and associate them to an index template.';
 
 const copy = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
-
-/** A list of names and what they stand for, side by side */
-export function Facts({ items, columns = 4 }: { items: Array<[string, ReactNode]>; columns?: number }) {
-  return (
-    <div className="ismFacts" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
-      {items.map(([title, value]) => (
-        <div key={title}>
-          <h4>{title}</h4>
-          <div>{value === undefined || value === null || value === '' ? '-' : value}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function PartBadges({ template }: { template: Record<string, unknown> | undefined }) {
-  return (
-    <span className="atlRow" style={{ gap: 'var(--space-1)' }}>
-      {PARTS.filter((part) => template?.[part]).map((part) => (
-        <Badge key={part}>
-          <span className="ismCapital">{part}</span>
-        </Badge>
-      ))}
-    </span>
-  );
-}
 
 // --- What a template gives an index, as a form and as a summary -----------------------------------------
 
@@ -89,128 +74,6 @@ const hasErrors = (errors: BodyErrors, body: TemplateBody | undefined) =>
   Object.keys(errors.settings).length > 0 ||
   fieldsHaveErrors(body?.mappings?.properties ?? [], undefined, false);
 
-function AliasPart({
-  body,
-  onChange,
-  readOnly,
-  across,
-  error,
-}: {
-  body: TemplateBody;
-  onChange: (body: TemplateBody) => void;
-  readOnly?: boolean;
-  across?: boolean;
-  error?: string;
-}) {
-  if (readOnly) return <Facts items={[['Alias names', Object.keys(body.aliases ?? {}).join(',')]]} />;
-  return (
-    <Labeled
-      title="Index alias"
-      across={across}
-      testId="form-row-template.aliases"
-      help="Select existing aliases or specify a new alias."
-      error={error}
-    >
-      <AliasSelect value={body.aliases} onChange={(aliases) => onChange({ ...body, aliases })} invalid={Boolean(error)} />
-    </Labeled>
-  );
-}
-
-function SettingsPart({
-  body,
-  onChange,
-  readOnly,
-  across,
-  errors,
-  columns,
-}: {
-  body: TemplateBody;
-  onChange: (body: TemplateBody) => void;
-  readOnly?: boolean;
-  across?: boolean;
-  errors: Record<string, string>;
-  columns?: number;
-}) {
-  if (readOnly) {
-    return (
-      <Facts
-        columns={columns}
-        items={[
-          ['Number of primary shards', body.settings?.['index.number_of_shards'] as ReactNode],
-          ['Number of replicas', body.settings?.['index.number_of_replicas'] as ReactNode],
-          ['Refresh interval', body.settings?.['index.refresh_interval'] as ReactNode],
-        ]}
-      />
-    );
-  }
-  return (
-    <SettingsFields
-      value={body.settings}
-      onChange={(settings) => onChange({ ...body, settings })}
-      errors={errors}
-      forTemplate
-      across={across}
-    />
-  );
-}
-
-export function MappingsHelp() {
-  return (
-    <div className="ismLabeled__help">
-      Define how documents and their fields are stored and indexed. <ExternalLink href={MAPPINGS_DOCS} />
-    </div>
-  );
-}
-
-/** The three things a template gives, one under the other */
-function Definition({
-  body,
-  onChange,
-  readOnly,
-  across,
-  showErrors,
-  columns,
-}: {
-  body: TemplateBody;
-  onChange: (body: TemplateBody) => void;
-  readOnly?: boolean;
-  across?: boolean;
-  showErrors: boolean;
-  columns?: number;
-}) {
-  const errors = bodyErrors(body);
-  return (
-    <div className="ismDefinition">
-      <div>
-        <h3 className="ismDefinition__title">Index alias</h3>
-        <div className="ismLabeled__help">
-          Allow the new indexes to be referenced by existing aliases or specify a new alias.
-        </div>
-      </div>
-      <AliasPart body={body} onChange={onChange} readOnly={readOnly} across={across} error={showErrors ? errors.aliases : undefined} />
-      <h3 className="ismDefinition__title">Index settings</h3>
-      <SettingsPart
-        body={body}
-        onChange={onChange}
-        readOnly={readOnly}
-        across={across}
-        errors={showErrors ? errors.settings : {}}
-        columns={columns}
-      />
-      <div>
-        <h3 className="ismDefinition__title">Index mapping</h3>
-        <MappingsHelp />
-      </div>
-      <MappingEditor
-        value={body.mappings}
-        onChange={(mappings) => onChange({ ...body, mappings })}
-        readOnly={readOnly}
-        showErrors={showErrors}
-      />
-    </div>
-  );
-}
-
 // --- An index template ----------------------------------------------------------------------------------
 
 interface RemoteComponent {
@@ -224,16 +87,21 @@ async function loadComponents(): Promise<RemoteComponent[]> {
 }
 
 const typeName = (item: TemplateItem) => (item.data_stream === undefined ? 'Indexes' : 'Data streams');
+const nothing = () => undefined;
+/** A setting as the plugin's summary writes it: a dash for nothing */
+const shownSetting = (value: unknown) => (value ? String(value) : '-');
 
-function Overview({ item, columns }: { item: TemplateItem; columns?: number }) {
+/** What a template is, as the plugin's overview of it: a heading over each value, `columns` to a row */
+function OverviewItems({ item, columns }: { item: TemplateItem; columns?: number }) {
   const composed = item.composed_of ?? [];
   return (
-    <Facts
+    <FactGrid
+      headings
       columns={columns}
       items={[
         ['Template type', typeName(item)],
-        ['Index patterns', item.index_patterns?.join(', ')],
-        ['Priority', item.priority as ReactNode],
+        ['Index patterns', item.index_patterns?.join(', ') ?? '-'],
+        ['Priority', item.priority ?? '-'],
         [
           'Associated component templates',
           composed.length === 0
@@ -242,6 +110,7 @@ function Overview({ item, columns }: { item: TemplateItem; columns?: number }) {
                 <div key={name}>
                   <a href={to(`${ROUTES.CREATE_COMPOSABLE_TEMPLATE}/${name}`)} target="_blank" rel="noreferrer">
                     {name}
+                    <span className="atlScreenReaderOnly">(opens in a new tab or window)</span>
                   </a>
                 </div>
               )),
@@ -251,8 +120,326 @@ function Overview({ item, columns }: { item: TemplateItem; columns?: number }) {
   );
 }
 
+interface PartProps {
+  body: TemplateBody;
+  onChange: (body: TemplateBody) => void;
+  readOnly?: boolean;
+  /** Each field beside its title, as the plugin edits a template there is */
+  across?: boolean;
+}
+
+/** The aliases of the new indexes: what they are for, then their names, or the field to choose them */
+function TemplateAliases({ body, onChange, readOnly, across, error }: PartProps & { error?: string }) {
+  return (
+    <>
+      <FormRow
+        fullWidth
+        title="Index alias"
+        help="Allow the new indexes to be referenced by existing aliases or specify a new alias."
+      />
+      <div className="ismSpacer ismSpacer--s" />
+      {readOnly ? (
+        <FactGrid headings items={[['Alias names', Object.keys(body.aliases ?? {}).join(',') || '-']]} />
+      ) : (
+        <FormRow
+          fullWidth
+          narrow
+          small
+          across={across}
+          title="Index alias"
+          help="Select existing aliases or specify a new alias."
+          testId="form-row-template.aliases"
+          error={error}
+        >
+          <AliasSelect value={body.aliases} onChange={(aliases) => onChange({ ...body, aliases })} invalid={Boolean(error)} />
+        </FormRow>
+      )}
+    </>
+  );
+}
+
+/** The settings of the new indexes: three of them by name, or written out, and all of them as JSON */
+function TemplateIndexSettings({
+  body,
+  onChange,
+  readOnly,
+  across,
+  errors,
+  columns,
+}: PartProps & { errors: Record<string, string>; columns?: number }) {
+  const settings = body.settings ?? {};
+  return (
+    <>
+      <h3 className="ismCustomRow__title">Index settings</h3>
+      <div className="ismSpacer ismSpacer--s" />
+      {readOnly ? (
+        <>
+          <FactGrid
+            headings
+            columns={columns}
+            items={[
+              ['Number of primary shards', shownSetting(settings['index.number_of_shards'])],
+              ['Number of replicas', shownSetting(settings['index.number_of_replicas'])],
+              ['Refresh interval', shownSetting(settings['index.refresh_interval'])],
+            ]}
+          />
+          <div className="ismSpacer ismSpacer--l" />
+          <AdvancedSettings value={settings} onChange={nothing} readOnly forTemplate />
+        </>
+      ) : (
+        <SettingsFields
+          value={body.settings}
+          onChange={(next) => onChange({ ...body, settings: next })}
+          errors={errors}
+          forTemplate
+          across={across}
+        />
+      )}
+    </>
+  );
+}
+
+/** The mapping of the new indexes, with where to read about mappings under its title */
+function TemplateMappings({ body, onChange, readOnly, showErrors }: PartProps & { showErrors: boolean }) {
+  return (
+    <>
+      <h3 className="ismCustomRow__title">Index mapping</h3>
+      <FormRow
+        fullWidth
+        helpAt="bottom"
+        help={
+          <div>
+            Define how documents and their fields are stored and indexed. <ExternalLink href={MAPPINGS_DOCS} />
+          </div>
+        }
+      />
+      <div className="ismSpacer ismSpacer--s" />
+      <MappingEditor
+        value={body.mappings}
+        onChange={(mappings) => onChange({ ...body, mappings })}
+        readOnly={readOnly}
+        showErrors={showErrors}
+      />
+    </>
+  );
+}
+
+/** The three things a template gives the indexes, one under the other, 24 px apart */
+function TemplateParts({
+  body,
+  onChange,
+  readOnly,
+  across,
+  showErrors,
+  columns,
+}: PartProps & { showErrors: boolean; columns?: number }) {
+  const errors = bodyErrors(body);
+  return (
+    <>
+      <TemplateAliases
+        body={body}
+        onChange={onChange}
+        readOnly={readOnly}
+        across={across}
+        error={showErrors ? errors.aliases : undefined}
+      />
+      <div className="ismSpacer ismSpacer--l" />
+      <TemplateIndexSettings
+        body={body}
+        onChange={onChange}
+        readOnly={readOnly}
+        across={across}
+        errors={showErrors ? errors.settings : {}}
+        columns={columns}
+      />
+      <div className="ismSpacer ismSpacer--l" />
+      <TemplateMappings body={body} onChange={onChange} readOnly={readOnly} showErrors={showErrors} />
+    </>
+  );
+}
+
+/** Indexes or data streams, as the theme's compressed radios, and a data stream's time field */
+function TemplateType({
+  value,
+  onChange,
+}: {
+  value: TemplateItem['data_stream'];
+  onChange: (value: TemplateItem['data_stream']) => void;
+}) {
+  return (
+    <>
+      <div className="ismRadios">
+        <label className="atlRadio">
+          <input type="radio" id="Indexes" checked={value === undefined} onChange={(event) => event.target.checked && onChange(undefined)} />
+          <span>Indexes</span>
+        </label>
+        <label className="atlRadio">
+          <input
+            type="radio"
+            id="Data streams"
+            checked={value !== undefined}
+            onChange={(event) => event.target.checked && onChange({ timestamp_field: { name: '@timestamp' } })}
+          />
+          <span>Data streams</span>
+        </label>
+      </div>
+      {value !== undefined && (
+        <>
+          <div className="ismSpacer ismSpacer--l" />
+          <FormRow title="Time field" small>
+            <TextField
+              compact
+              value={value.timestamp_field?.name ?? ''}
+              onChange={(name) => onChange(name ? { timestamp_field: { name } } : {})}
+            />
+          </FormRow>
+        </>
+      )}
+    </>
+  );
+}
+
+/** The template's name, type, patterns, priority and way of being defined, as the plugin's panel */
+function DefineTemplate({
+  item,
+  onChange,
+  isEdit,
+  showErrors,
+}: {
+  item: TemplateItem;
+  onChange: (changes: Partial<TemplateItem>) => void;
+  isEdit: boolean;
+  showErrors: boolean;
+}) {
+  // As the plugin's form, a field is checked as soon as it changes, and all of them when submitting
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const shown = (name: string) => showErrors || Boolean(touched[name]);
+  const touch = (name: string, changes: Partial<TemplateItem>) => {
+    setTouched((before) => ({ ...before, [name]: true }));
+    onChange(changes);
+  };
+  const flow = item._meta?.flow ?? 'simple';
+  const patterns = item.index_patterns ?? [];
+  const nameError = TEMPLATE_NAMING_PATTERN.test(item.name ?? '') ? undefined : 'Invalid template name.';
+  const patternsError = patterns.length === 0 ? 'Index patterns must be defined' : undefined;
+  const priority = shown('priority') ? priorityError(item.priority) : undefined;
+  const card = (id: string, value: 'simple' | 'components', title: string, text: string) => (
+    <label className={cx('ismFlowCard', flow === value && 'ismFlowCard--checked')}>
+      <span className="ismFlowCard__side">
+        <input
+          type="radio"
+          id={id}
+          checked={flow === value}
+          onChange={() => onChange({ _meta: { ...item._meta, flow: value } })}
+        />
+      </span>
+      <span className="ismFlowCard__body">
+        <h4 className="ismFlowCard__title">{title}</h4>
+        <span className="ismFlowCard__text">{text}</span>
+      </span>
+    </label>
+  );
+  return (
+    <Panel>
+      <h2 className="ismPanelTitle">Template settings</h2>
+      <hr className="ismRule" />
+      <div className="ismSpacer ismSpacer--s" />
+      {!isEdit && (
+        <>
+          <FormRow
+            title="Template name"
+            testId="form-row-name"
+            help={<div>Template name cannot be changed after the template is created.</div>}
+            error={shown('name') ? nameError : undefined}
+          >
+            <TextField
+              compact
+              value={item.name ?? ''}
+              onChange={(name) => touch('name', { name })}
+              invalid={shown('name') && Boolean(nameError)}
+            />
+          </FormRow>
+          <FormRow help={<div>{TEMPLATE_NAMING_MESSAGE}</div>} />
+          <div className="ismSpacer ismSpacer--l" />
+        </>
+      )}
+      <FormRow title="Template type" across={isEdit} testId="form-row-data_stream">
+        <TemplateType value={item.data_stream} onChange={(data_stream) => onChange({ data_stream })} />
+      </FormRow>
+      <div className="ismSpacer ismSpacer--l" />
+      <FormRow
+        title="Index patterns"
+        across={isEdit}
+        testId="form-row-index_patterns"
+        help="Specify the index patterns or wildcards. Add a comma to separate each value. Settings in this template will be applied to indexes with names matching index patterns or wildcards."
+        error={shown('index_patterns') ? patternsError : undefined}
+      >
+        <ComboBox
+          compact
+          options={patterns.map((pattern) => ({ value: pattern, label: pattern }))}
+          selected={patterns}
+          onChange={(next) =>
+            touch('index_patterns', {
+              index_patterns: [
+                ...new Set(next.flatMap((value) => value.split(',')).map((value) => value.trim()).filter(Boolean)),
+              ],
+            })
+          }
+          allowCustom
+          delimiter=","
+          placeholder="Select index patterns or input wildcards"
+          invalid={shown('index_patterns') && Boolean(patternsError)}
+        />
+      </FormRow>
+      <div className="ismSpacer ismSpacer--l" />
+      {patterns.some((pattern) => matchesAny('.kibana', [pattern])) && (
+        <>
+          <FormRow>
+            <CallOut tone="warning" title="Index patterns may contain system indexes">
+              This template may apply to new system indexes and may affect your ability to access OpenSearch. We
+              recommend narrowing your index patterns.
+            </CallOut>
+          </FormRow>
+          <div className="ismSpacer ismSpacer--l" />
+        </>
+      )}
+      <FormRow
+        title="Priority"
+        across={isEdit}
+        testId="form-row-priority"
+        help="Specify the priority of this template. If the index name matches more than one template, the template with the highest priority will be applied to the index."
+        error={priority}
+      >
+        <NumberField
+          compact
+          value={item.priority === undefined || item.priority === '' ? undefined : Number(item.priority)}
+          onChange={(next) => touch('priority', { priority: next })}
+          invalid={Boolean(priority)}
+        />
+      </FormRow>
+      <div className="ismSpacer ismSpacer--l" />
+      <FormRow fullWidth title="Choose a method to define your templates" testId="form-row-_meta.flow">
+        <div className="ismFlowCards">
+          {card(
+            'checkboxForIndexTemplateFlowSimple',
+            'simple',
+            'Simple template',
+            'Define an index template with index aliases, settings, and mappings.'
+          )}
+          {card(
+            'checkboxForIndexTemplateFlowComponents',
+            'components',
+            'Component template',
+            'Define an index template by associating component templates containing index configurations.'
+          )}
+        </div>
+      </FormRow>
+    </Panel>
+  );
+}
+
 /** The component templates an index template is composed of, in the order that decides which of them wins */
-function Components({ item, onChange }: { item: TemplateItem; onChange: (composed: string[]) => void }) {
+function ComposedOf({ item, onChange }: { item: TemplateItem; onChange: (composed: string[]) => void }) {
   const [all, setAll] = useState<RemoteComponent[]>([]);
   const [choosing, setChoosing] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -282,71 +469,91 @@ function Components({ item, onChange }: { item: TemplateItem; onChange: (compose
   };
 
   return (
-    <Panel>
-      <h2 className="ismPanel__heading">Component template</h2>
-      <div className="ismLabeled__help">
-        Define an index template by combining component templates containing index configurations. Associate existing
-        component templates or create one. You can arrange the priority of the component templates by dragging them.
-        The component template placed on bottom has the highest priority. <ExternalLink href={COMPONENT_DOCS} />
-      </div>
-      <hr className="ismRule" />
+    <ContentPanel
+      title={
+        <FormRow
+          fullWidth
+          label={<div className="ismPanelTitle">Component template</div>}
+          help={
+            <>
+              Define an index template by combining component templates containing index configurations. Associate
+              existing component templates or create one. You can arrange the priority of the component templates by
+              dragging them. The component template placed on bottom has the highest priority.{' '}
+              <ExternalLink href={COMPONENT_DOCS} />
+            </>
+          }
+        />
+      }
+    >
       {composed.length > 0 && all.length > 0 ? (
-        <div className="ismDraggables" data-test-subj="composableTemplatesDropArea">
+        <div data-test-subj="droppable">
           {composed.map((name, index) => {
             const found = all.find((component) => component.name === name);
             if (!found) return <div key={name} />;
             return (
               <div
                 key={name}
-                className={cx('ismComponent', dragged === index && 'ismComponent--dragged')}
-                draggable
-                onDragStart={() => setDragged(index)}
-                onDragEnd={() => setDragged(undefined)}
+                className={cx('ismComposed', dragged === index && 'ismComposed--dragged')}
+                data-test-subj="draggable"
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={() => drop(index)}
               >
-                <span className="ismComponent__grab" aria-label="Drag Handle">
-                  <Icon name="grab" />
-                </span>
-                <span>{name}</span>
-                <PartBadges template={found.component_template.template} />
-                <span className="atlGrow" />
-                <span className="ismField__delete">
-                  <IconButton icon="trash" label="delete" onClick={() => onChange(composed.filter((_, at) => at !== index))} />
-                </span>
-                <IconButton
-                  icon="inspect"
-                  label="see detail"
-                  onClick={() => window.open(to(`${ROUTES.CREATE_COMPOSABLE_TEMPLATE}/${name}`))}
-                />
+                <div className="ismComposed__panel">
+                  <div className="ismComposed__what">
+                    <div
+                      className="ismComposed__grab"
+                      aria-label="Drag Handle"
+                      draggable
+                      onDragStart={() => setDragged(index)}
+                      onDragEnd={() => setDragged(undefined)}
+                    >
+                      <Icon name="grab" />
+                    </div>
+                    <span className="ismComposed__name">{name}</span>
+                    <div className="ismComposed__badges">
+                      <TypeBadges template={found.component_template.template} />
+                    </div>
+                  </div>
+                  <div className="ismComposed__buttons">
+                    <IconButton
+                      variant="dangerEmpty"
+                      icon="trash"
+                      label="delete"
+                      onClick={() => onChange(composed.filter((_, at) => at !== index))}
+                    />
+                    <IconButton
+                      variant="empty"
+                      icon="inspect"
+                      label="see detail"
+                      onClick={() => window.open(to(`${ROUTES.CREATE_COMPOSABLE_TEMPLATE}/${name}`))}
+                    />
+                  </div>
+                </div>
               </div>
             );
           })}
         </div>
       ) : (
-        <p className="ismMappings__none">No component templates associated</p>
+        <div className="ismTextM">No component templates associated</div>
       )}
-      <div className="atlRow" style={{ gap: 'var(--space-5)', marginTop: 'var(--space-4)' }}>
-        <Button size="s" onClick={() => setChoosing(true)}>
-          Associate component templates
-        </Button>
-        <Button size="s" onClick={() => setCreating(true)}>
-          Create component template
-        </Button>
+      <div className="ismSpacer ismSpacer--l" />
+      <div className="ismComposedButtons">
+        <Button onClick={() => setChoosing(true)}>Associate component templates</Button>
+        <Button onClick={() => setCreating(true)}>Create component template</Button>
       </div>
       {choosing && (
         <Modal
           title="Associate component templates"
-          wide
+          className="ismAssociateModal"
           onClose={() => setChoosing(false)}
           footer={
             <>
-              <Button variant="empty" size="s" onClick={() => setChoosing(false)}>
+              <Button variant="empty" onClick={() => setChoosing(false)} testId="Associate component templates-cancel">
                 Cancel
               </Button>
               <Button
                 variant="primary"
-                size="s"
+                testId="Associate component templates-confirm"
                 onClick={() => {
                   onChange([...composed, ...chosen]);
                   setChosen([]);
@@ -358,44 +565,61 @@ function Components({ item, onChange }: { item: TemplateItem; onChange: (compose
             </>
           }
         >
-          <div className="atlRow" style={{ gap: 'var(--space-2)', marginBottom: 'var(--space-2)' }}>
-            <div className="atlGrow">
-              <SearchField compact value={search} onChange={setSearch} placeholder="Search" />
+          {/* The theme's selectable list: its search and the plugin's filter of types, then the
+              list 480 px high, a tick before each name chosen and the names already used greyed */}
+          <div className="ismPicker">
+            <div className="ismPicker__top">
+              <div className="atlGrow">
+                <SearchField value={search} onChange={setSearch} placeholder="Search" className="ismPicker__search" />
+              </div>
+              <FilterBox own name="Types" options={TYPE_FILTERS} selected={types} onChange={setTypes} />
             </div>
-            <FilterButton name="Types" options={PARTS.map((value) => ({ value }))} selected={types} onChange={setTypes} />
-          </div>
-          <ul className="ismSelectable">
-            {options.map((component) => {
-              const used = composed.includes(component.name);
-              return (
-                <li key={component.name}>
-                  <Checkbox
-                    checked={used || chosen.includes(component.name)}
-                    disabled={used}
-                    onChange={(checked) =>
-                      setChosen(checked ? [...chosen, component.name] : chosen.filter((name) => name !== component.name))
+            <ul className="ismPicker__list" aria-multiselectable="true" role="listbox">
+              {options.map((component) => {
+                const used = composed.includes(component.name);
+                const on = used || chosen.includes(component.name);
+                return (
+                  <li
+                    key={component.name}
+                    role="option"
+                    aria-selected={on}
+                    aria-disabled={used}
+                    tabIndex={used ? -1 : 0}
+                    className={cx('ismPicker__item', used && 'ismPicker__item--disabled')}
+                    onClick={() =>
+                      !used &&
+                      setChosen(on ? chosen.filter((name) => name !== component.name) : [...chosen, component.name])
                     }
-                    label={component.name}
-                  />
-                  <span className="atlGrow" />
-                  <PartBadges template={component.component_template.template} />
-                </li>
-              );
-            })}
-          </ul>
+                    onKeyDown={(event) => {
+                      if (event.key !== 'Enter' && event.key !== ' ') return;
+                      event.preventDefault();
+                      event.currentTarget.click();
+                    }}
+                  >
+                    <Icon name={on ? 'check' : 'empty'} className="ismPicker__check" />
+                    <span className="ismPicker__text">
+                      <span className="ismPicker__name">{component.name}</span>
+                      <TypeBadges template={component.component_template.template} />
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         </Modal>
       )}
       {creating && (
         <Modal
           title="Create component template"
           wide
+          className="ismCreateComponentModal"
           onClose={() => setCreating(false)}
           footer={
             <>
-              <Button variant="empty" size="s" onClick={() => setCreating(false)}>
+              <Button variant="empty" onClick={() => setCreating(false)} testId="Create component template-cancel">
                 Cancel
               </Button>
-              <Button variant="primary" size="s" onClick={() => created.current?.submit()}>
+              <Button variant="primary" onClick={() => created.current?.submit()} testId="Create component template-confirm">
                 Create
               </Button>
             </>
@@ -412,144 +636,7 @@ function Components({ item, onChange }: { item: TemplateItem; onChange: (compose
           />
         </Modal>
       )}
-    </Panel>
-  );
-}
-
-function TemplateSettings({
-  item,
-  onChange,
-  isEdit,
-  showErrors,
-}: {
-  item: TemplateItem;
-  onChange: (changes: Partial<TemplateItem>) => void;
-  isEdit: boolean;
-  showErrors: boolean;
-}) {
-  const flow = item._meta?.flow ?? 'simple';
-  const patterns = item.index_patterns ?? [];
-  const nameError = TEMPLATE_NAMING_PATTERN.test(item.name ?? '') ? undefined : 'Invalid template name.';
-  const patternsError = patterns.length === 0 ? 'Index patterns must be defined' : undefined;
-  const card = (id: string, value: 'simple' | 'components', title: string, text: string) => (
-    <label className={cx('ismCard', flow === value && 'ismCard--selected')}>
-      <span className="ismCard__side">
-        <span className="atlRadio">
-          <input
-            type="radio"
-            id={id}
-            name="template-flow"
-            checked={flow === value}
-            onChange={() => onChange({ _meta: { ...item._meta, flow: value } })}
-          />
-        </span>
-      </span>
-      <span className="ismCard__body">
-        <span className="ismCard__title">{title}</span>
-        <span className="ismCard__text">{text}</span>
-      </span>
-    </label>
-  );
-  return (
-    <Panel>
-      <h2 className="ismPanel__heading">Template settings</h2>
-      <hr className="ismRule" />
-      <div className="ismForm">
-        {!isEdit && (
-          <Labeled
-            title="Template name"
-            testId="form-row-name"
-            help="Template name cannot be changed after the template is created."
-            error={showErrors ? nameError : undefined}
-          >
-            <TextField compact value={item.name ?? ''} onChange={(name) => onChange({ name })} invalid={showErrors && Boolean(nameError)} />
-            <div className="ismLabeled__help">{TEMPLATE_NAMING_MESSAGE}</div>
-          </Labeled>
-        )}
-        <Labeled title="Template type" across={isEdit} testId="form-row-data_stream">
-          <div className="atlStack" style={{ gap: 'var(--space-2)' }}>
-            <label className="atlRadio">
-              <input type="radio" id="Indexes" checked={item.data_stream === undefined} onChange={() => onChange({ data_stream: undefined })} />
-              <span>Indexes</span>
-            </label>
-            <label className="atlRadio">
-              <input
-                type="radio"
-                id="Data streams"
-                checked={item.data_stream !== undefined}
-                onChange={() => onChange({ data_stream: { timestamp_field: { name: '@timestamp' } } })}
-              />
-              <span>Data streams</span>
-            </label>
-          </div>
-          {item.data_stream !== undefined && (
-            <div className="ismSub">
-              <div className="ismField__label">Time field</div>
-              <TextField
-                compact
-                value={item.data_stream.timestamp_field?.name ?? ''}
-                onChange={(name) => onChange({ data_stream: name ? { timestamp_field: { name } } : {} })}
-              />
-            </div>
-          )}
-        </Labeled>
-        <Labeled
-          title="Index patterns"
-          across={isEdit}
-          testId="form-row-index_patterns"
-          help="Specify the index patterns or wildcards. Add a comma to separate each value. Settings in this template will be applied to indexes with names matching index patterns or wildcards."
-          error={showErrors ? patternsError : undefined}
-        >
-          <ComboBox
-            compact
-            options={patterns.map((pattern) => ({ value: pattern, label: pattern }))}
-            selected={patterns}
-            onChange={(next) =>
-              onChange({ index_patterns: [...new Set(next.flatMap((value) => value.split(',')).map((value) => value.trim()).filter(Boolean))] })
-            }
-            allowCustom
-            placeholder="Select index patterns or input wildcards"
-            invalid={showErrors && Boolean(patternsError)}
-          />
-        </Labeled>
-        {patterns.some((pattern) => matchesAny('.kibana', [pattern])) && (
-          <CallOut tone="warning" title="Index patterns may contain system indexes">
-            This template may apply to new system indexes and may affect your ability to access OpenSearch. We recommend
-            narrowing your index patterns.
-          </CallOut>
-        )}
-        <Labeled
-          title="Priority"
-          across={isEdit}
-          testId="form-row-priority"
-          help="Specify the priority of this template. If the index name matches more than one template, the template with the highest priority will be applied to the index."
-          error={showErrors ? priorityError(item.priority) : undefined}
-        >
-          <NumberField
-            compact
-            value={item.priority === undefined || item.priority === '' ? undefined : Number(item.priority)}
-            onChange={(priority) => onChange({ priority })}
-          />
-        </Labeled>
-        <div className="ismLabeled" data-test-subj="form-row-_meta.flow">
-          <div className="ismLabeled__title">Choose a method to define your templates</div>
-          <div className="ismCards">
-            {card(
-              'checkboxForIndexTemplateFlowSimple',
-              'simple',
-              'Simple template',
-              'Define an index template with index aliases, settings, and mappings.'
-            )}
-            {card(
-              'checkboxForIndexTemplateFlowComponents',
-              'components',
-              'Component template',
-              'Define an index template by associating component templates containing index configurations.'
-            )}
-          </div>
-        </div>
-      </div>
-    </Panel>
+    </ContentPanel>
   );
 }
 
@@ -572,6 +659,11 @@ async function simulate(item: TemplateItem): Promise<TemplateItem | undefined> {
   );
 }
 
+const TEMPLATE_TABS = [
+  { id: 'summary', label: 'Summary', testId: 'TemplateDetailTab-summary' },
+  { id: 'CONFIG', label: 'Configuration', testId: 'TemplateDetailTab-CONFIG' },
+];
+
 export function TemplateDetail({ name }: { name: string }) {
   const isEdit = name !== '';
   useBreadcrumbs([
@@ -583,13 +675,12 @@ export function TemplateDetail({ name }: { name: string }) {
   const [item, setItem] = useState<TemplateItem>(() => presetTemplate(hashParams.values));
   const [old, setOld] = useState<TemplateItem>();
   const [simulated, setSimulated] = useState<TemplateItem>();
-  const [tab, setTab] = useState<'summary' | 'CONFIG'>('summary');
+  const [tab, setTab] = useState<string>('summary');
   const [preview, setPreview] = useState(false);
   const [json, setJson] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [open, setOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     const answer = await ism.request<{ index_templates?: Array<{ name: string; index_template: IndexTemplate }> }>(
@@ -618,8 +709,9 @@ export function TemplateDetail({ name }: { name: string }) {
       if ('data_stream' in changes && changes.data_stream === undefined) delete next.data_stream;
       return next;
     });
-  const flow = item._meta?.flow ?? 'simple';
   const readOnly = isEdit && tab === 'summary';
+  const components = (item._meta?.flow ?? 'simple') === 'components';
+  const accordion = !readOnly && components;
   const count = isEdit && tab === 'CONFIG' ? countChanges(comparableTemplate(old), comparableTemplate(item)) : 0;
 
   const submit = async (): Promise<boolean> => {
@@ -639,114 +731,121 @@ export function TemplateDetail({ name }: { name: string }) {
     }
   };
   const previewButton = (
-    <Button variant="ghost" size="s" onClick={showPreview} testId="CreateIndexTemplatePreviewButton">
+    <Button
+      variant="ghost"
+      className="ismChangesBar__outline"
+      onClick={() => void showPreview()}
+      testId="CreateIndexTemplatePreviewButton"
+    >
       Preview template
     </Button>
   );
   if (isEdit && !old) return null;
 
-  const definition = (
-    <Definition
-      body={readOnly ? (simulated?.template ?? {}) : item.template}
-      onChange={(template) => change({ template })}
-      readOnly={readOnly}
-      across={isEdit}
-      showErrors={submitted}
-    />
-  );
-  const overriding = !readOnly && flow === 'components';
-
   return (
-    <div className="ismPage ismPage--form">
-      <div className="ismPageHeader ismPageHeader--center">
-        <div>
-          <h1 className="ismPageTitle" title={isEdit ? name : undefined}>
-            {isEdit ? name : 'Create template'}
+    <div className="ismFormPage">
+      {isEdit ? (
+        <div className="ismPageTitleRow">
+          <h1 className="ismTextTitle" title={item.name}>
+            {name}
           </h1>
-          {!isEdit && (
-            <div className="ismLabeled__help">
-              Index templates let you initialize new indexes with predefined mappings and settings.{' '}
-              <ExternalLink href={TEMPLATE_DOCS} />
-            </div>
-          )}
-        </div>
-        {isEdit && (
-          <div className="atlRow" style={{ gap: 'var(--space-5)' }}>
-            <Button size="s" onClick={() => setJson(true)}>
-              View JSON
-            </Button>
-            <Button size="s" variant="danger" onClick={() => setDeleting(true)}>
+          <div className="ismPageTitleRow__buttons">
+            <Button onClick={() => setJson(true)}>View JSON</Button>
+            <Button variant="danger" onClick={() => setDeleting(true)}>
               Delete
             </Button>
           </div>
-        )}
-      </div>
-      {isEdit && (
-        <Panel>
-          <h2 className="ismPanel__heading">Overview</h2>
-          <hr className="ismRule" />
-          <Overview item={item} />
-        </Panel>
-      )}
-      {isEdit && (
-        <div className="atlTabs" role="tablist">
-          {(
-            [
-              ['summary', 'Summary'],
-              ['CONFIG', 'Configuration'],
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              className="atlTab"
-              aria-selected={tab === id}
-              onClick={() => setTab(id)}
-              data-test-subj={`TemplateDetailTab-${id}`}
-            >
-              {label}
-            </button>
-          ))}
         </div>
-      )}
-      {!readOnly && <TemplateSettings item={item} onChange={change} isEdit={isEdit} showErrors={submitted} />}
-      {overriding && <Components item={item} onChange={(composed_of) => change({ composed_of })} />}
-      {overriding ? (
-        <Panel>
-          <button type="button" className="ismOverride" aria-expanded={open} onClick={() => setOpen(!open)}>
-            <Icon name={open ? 'chevronDown' : 'chevronRight'} />
-            <span>
-              <span className="ismPanel__heading">Override template definition</span>
-              <span className="ismLabeled__help">
-                Provide additional configurations such as index aliases, settings, and mappings. Configurations defined
-                in this section will take precedent if they overlap with the associated component templates.
-              </span>
-            </span>
-          </button>
-          {open && (
-            <>
-              <hr className="ismRule" />
-              {definition}
-            </>
-          )}
-        </Panel>
       ) : (
-        <Panel>
-          <h2 className="ismPanel__heading">{readOnly ? 'Preview template' : 'Template definition'}</h2>
-          <hr className="ismRule" />
-          {definition}
-        </Panel>
+        <>
+          <h1 className="ismTextTitle">Create template</h1>
+          <FormRow
+            fullWidth
+            help={
+              <div>
+                Index templates let you initialize new indexes with predefined mappings and settings.{' '}
+                <ExternalLink href={TEMPLATE_DOCS} />
+              </div>
+            }
+          />
+        </>
+      )}
+      <div className="ismSpacer ismSpacer--l" />
+      {isEdit && (
+        <>
+          <TitledPanel title="Overview">
+            <div className="ismSpacer ismSpacer--s" />
+            <OverviewItems item={item} />
+          </TitledPanel>
+          <div className="ismSpacer ismSpacer--l" />
+          <Tabs size="s" tabs={TEMPLATE_TABS} selected={tab} onSelect={setTab} />
+          <div className="ismSpacer ismSpacer--m" />
+        </>
+      )}
+      {!readOnly && (
+        <>
+          <DefineTemplate item={item} onChange={change} isEdit={isEdit} showErrors={submitted} />
+          <div className="ismSpacer ismSpacer--l" />
+        </>
+      )}
+      {!readOnly && components && (
+        <>
+          <ComposedOf item={item} onChange={(composed_of) => change({ composed_of })} />
+          <div className="ismSpacer ismSpacer--l" />
+        </>
+      )}
+      <ContentPanel
+        noExtraPadding
+        accordion={accordion}
+        title={
+          <h2 className="ismPanelTitle">
+            {readOnly ? 'Preview template' : components ? 'Override template definition' : 'Template definition'}
+          </h2>
+        }
+        subTitleText={
+          accordion
+            ? 'Provide additional configurations such as index aliases, settings, and mappings. Configurations defined in this section will take precedent if they overlap with the associated component templates.'
+            : undefined
+        }
+      >
+        <div className="ismSpacer ismSpacer--s" />
+        <TemplateParts
+          body={readOnly ? (simulated?.template ?? {}) : item.template}
+          onChange={(template) => change({ template })}
+          readOnly={readOnly}
+          across={isEdit}
+          showErrors={submitted}
+        />
+        <div className="ismSpacer ismSpacer--l" />
+      </ContentPanel>
+      {preview && simulated && (
+        <Modal
+          title="Preview template"
+          wide
+          onClose={() => setPreview(false)}
+          footer={
+            <Button variant="primary" onClick={() => setPreview(false)} testId="Preview template-ok">
+              Close
+            </Button>
+          }
+        >
+          <h3 className="ismCustomRow__title">Template settings</h3>
+          <div className="ismSpacer ismSpacer--l" />
+          <div className="ismSpacer ismSpacer--s" />
+          <OverviewItems item={simulated} columns={3} />
+          <div className="ismSpacer ismSpacer--l" />
+          <div className="ismSpacer ismSpacer--l" />
+          <TemplateParts body={simulated.template} onChange={nothing} readOnly showErrors={false} columns={3} />
+        </Modal>
       )}
       {!isEdit && (
-        <div className="ismDarkBar">
-          <Button variant="ghost" size="s" icon="cross" onClick={() => go(ROUTES.TEMPLATES)} testId="CreateIndexTemplateCancelButton">
+        <PageBottomBar>
+          <Button variant="ghost" icon="cross" onClick={() => go(ROUTES.TEMPLATES)} testId="CreateIndexTemplateCancelButton">
             Cancel
           </Button>
           {previewButton}
           <Button
             variant="primary"
-            size="s"
             loading={busy}
             testId="CreateIndexTemplateCreateButton"
             onClick={async () => {
@@ -758,12 +857,11 @@ export function TemplateDetail({ name }: { name: string }) {
           >
             Create template
           </Button>
-        </div>
+        </PageBottomBar>
       )}
       {count > 0 && (
-        <UnsavedBar
+        <UnsavedChangesBar
           count={count}
-          busy={busy}
           testId="updateTemplateButton"
           cancelTestId="CancelUpdateTemplateButton"
           extra={previewButton}
@@ -776,29 +874,11 @@ export function TemplateDetail({ name }: { name: string }) {
           }}
         />
       )}
-      {preview && simulated && (
-        <Modal
-          title="Preview template"
-          wide
-          onClose={() => setPreview(false)}
-          footer={
-            <Button variant="primary" size="s" onClick={() => setPreview(false)}>
-              Close
-            </Button>
-          }
-        >
-          <div className="ismDefinition">
-            <h3 className="ismDefinition__title">Template settings</h3>
-            <Overview item={simulated} columns={3} />
-            <Definition body={simulated.template} onChange={() => undefined} readOnly showErrors={false} columns={3} />
-          </div>
-        </Modal>
-      )}
       {json && (
-        <JSONModal
+        <JsonShowModal
           title={item.name ?? ''}
+          large
           json={{ ...item, template: remoteTemplate(item).template }}
-          indent={2}
           testId="templateJSONDetailModal"
           onClose={() => setJson(false)}
         />
@@ -812,44 +892,38 @@ export function TemplateDetail({ name }: { name: string }) {
 
 const newComponent = (): ComponentItem => ({ template: {} });
 
-function PartPanel({
+/**
+ * One part a component template may give, as the plugin's panel of it: its title, what it is for,
+ * the switch that puts it in the template, and, when on, its fields. In the dialog of an index
+ * template's page the panel is the theme's ghost: no frame and no rule.
+ */
+function ComponentPart({
   title,
-  help,
   on,
   onToggle,
-  embedded,
+  ghost,
+  wrapSwitch = true,
   children,
 }: {
-  title: string;
-  help?: ReactNode;
+  title: ReactNode;
   on: boolean;
   onToggle: (on: boolean) => void;
-  embedded?: boolean;
+  ghost?: boolean;
+  /** The plugin puts the switch of two of the parts in a block of its own */
+  wrapSwitch?: boolean;
   children: ReactNode;
 }) {
-  const content = (
-    <>
-      <div className="ismPageHeader">
-        <div>
-          <h2 className="ismPanel__heading">{title}</h2>
-          {help}
-        </div>
-        <Switch checked={on} onChange={onToggle} label="Use configuration" />
-      </div>
-      {on && (
-        <>
-          <hr className="ismRule" />
-          {children}
-        </>
-      )}
-    </>
+  const toggle = <Switch compressed checked={on} onChange={onToggle} label="Use configuration" />;
+  return (
+    <ContentPanel ghost={ghost} noExtraPadding title={title} actions={wrapSwitch ? <div>{toggle}</div> : toggle}>
+      {on ? children : null}
+    </ContentPanel>
   );
-  return embedded ? <div className="ismPart">{content}</div> : <Panel>{content}</Panel>;
 }
 
 interface ComponentFormProps {
   name?: string;
-  /** Inside a dialog: no title, no panels and no buttons of its own */
+  /** Inside the dialog of an index template's page: no title, no panels and no buttons of its own */
   embedded?: boolean;
   onCreated?: (name: string) => void;
 }
@@ -862,6 +936,7 @@ const ComponentForm = forwardRef<{ submit: () => void }, ComponentFormProps>(fun
   const [item, setItem] = useState<ComponentItem>(newComponent);
   const [old, setOld] = useState<ComponentItem>();
   const [taken, setTaken] = useState<string>();
+  const [nameTouched, setNameTouched] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [json, setJson] = useState(false);
@@ -943,20 +1018,33 @@ const ComponentForm = forwardRef<{ submit: () => void }, ComponentFormProps>(fun
   useImperativeHandle(ref, () => ({ submit: () => void create() }));
   if (isEdit && !old) return null;
 
+  // As the plugin's form, a name is checked as soon as it is typed
+  const nameShown = submitted || nameTouched || Boolean(taken);
   const define = (
-    <div className="ismForm">
+    <>
       {!isEdit && (
-        <Labeled
-          title="Name"
-          testId="form-row-name"
-          help="Name cannot be changed after the component template is created."
-          error={submitted || taken ? nameError : undefined}
-        >
-          <TextField compact value={item.name ?? ''} onChange={(next) => change({ name: next })} invalid={(submitted || Boolean(taken)) && Boolean(nameError)} />
-          <div className="ismLabeled__help">{TEMPLATE_NAMING_MESSAGE}</div>
-        </Labeled>
+        <>
+          <FormRow
+            title="Name"
+            testId="form-row-name"
+            help={<div>Name cannot be changed after the component template is created.</div>}
+            error={nameShown ? nameError : undefined}
+          >
+            <TextField
+              compact
+              value={item.name ?? ''}
+              onChange={(next) => {
+                setNameTouched(true);
+                change({ name: next });
+              }}
+              invalid={nameShown && Boolean(nameError)}
+            />
+          </FormRow>
+          <FormRow help={<div>{TEMPLATE_NAMING_MESSAGE}</div>} />
+          <div className="ismSpacer ismSpacer--l" />
+        </>
       )}
-      <Labeled
+      <FormRow
         title={
           <>
             Description - <i>optional</i>
@@ -971,111 +1059,160 @@ const ComponentForm = forwardRef<{ submit: () => void }, ComponentFormProps>(fun
           value={item._meta?.description ?? ''}
           onChange={(description) => change({ _meta: { ...item._meta, description } })}
         />
-      </Labeled>
-    </div>
+      </FormRow>
+    </>
   );
 
-  return (
-    <div className={embedded ? 'ismEmbedded' : 'ismPage ismPage--form'}>
-      {!embedded && (
-        <div className="ismPageHeader ismPageHeader--center">
-          <div>
-            <h1 className="ismPageTitle" title={isEdit ? name : undefined}>
-              {isEdit ? name : 'Create component template'}
-            </h1>
-            {!isEdit && (
-              <div className="ismLabeled__help">
-                {COMPONENT_TEXT} <ExternalLink href={COMPONENT_DOCS} />
-              </div>
-            )}
-          </div>
-          {isEdit && (
-            <div className="atlRow" style={{ gap: 'var(--space-5)' }}>
-              <Button size="s" onClick={() => setJson(true)} testId="viewJSONButton">
-                View JSON
-              </Button>
-              <Button
-                size="s"
-                variant="danger"
-                testId="deleteAction"
-                onClick={async () => {
-                  setUsers((await loadIndexTemplates()).filter((template) => template.composed_of?.includes(name)));
-                  setDeleting(true);
-                }}
-              >
-                Delete
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
-      {embedded ? (
-        define
-      ) : (
-        <Panel>
-          <h2 className="ismPanel__heading">Define component template</h2>
-          <hr className="ismRule" />
-          {define}
-        </Panel>
-      )}
-      <PartPanel
-        title="Index alias"
-        embedded={embedded}
+  const parts = (
+    <>
+      <ComponentPart
+        ghost={embedded}
         on={Boolean(item.includes?.aliases)}
         onToggle={(on) => include('aliases', on)}
-        help={
-          <div className="ismLabeled__help">
-            Allow the new indexes to be referenced by existing aliases or specify a new alias.
-          </div>
+        title={
+          <FormRow
+            fullWidth
+            label={<h2 className="ismPanelTitle">Index alias</h2>}
+            help="Allow the new indexes to be referenced by existing aliases or specify a new alias."
+          />
         }
       >
-        <AliasPart
-          body={item.template}
-          onChange={(template) => change({ template })}
+        <div className="ismSpacer ismSpacer--s" />
+        <FormRow
+          fullWidth
+          narrow
           across={isEdit}
+          title="Index alias"
+          help={<div>Select existing aliases or specify a new alias.</div>}
+          testId="form-row-template.aliases"
           error={submitted ? errors.aliases : undefined}
-        />
-      </PartPanel>
-      <PartPanel
-        title="Index settings"
-        embedded={embedded}
+        >
+          <AliasSelect
+            value={item.template.aliases}
+            onChange={(aliases) => change({ template: { ...item.template, aliases } })}
+            invalid={submitted && Boolean(errors.aliases)}
+          />
+        </FormRow>
+        <div className="ismSpacer ismSpacer--s" />
+      </ComponentPart>
+      <div className="ismSpacer ismSpacer--l" />
+      <ComponentPart
+        ghost={embedded}
         on={Boolean(item.includes?.settings)}
         onToggle={(on) => include('settings', on)}
+        title={<h2 className="ismPanelTitle">Index settings</h2>}
       >
-        <SettingsPart
-          body={item.template}
-          onChange={(template) => change({ template })}
-          across={isEdit}
+        <div className="ismSpacer ismSpacer--s" />
+        <SettingsFields
+          value={item.template.settings}
+          onChange={(settings) => change({ template: { ...item.template, settings } })}
           errors={submitted ? errors.settings : {}}
+          forTemplate
+          forComponent
+          across={isEdit}
         />
-      </PartPanel>
-      <PartPanel
-        title="Index mapping"
-        embedded={embedded}
+        <div className="ismSpacer ismSpacer--l" />
+      </ComponentPart>
+      <div className="ismSpacer ismSpacer--l" />
+      <ComponentPart
+        ghost={embedded}
+        wrapSwitch={false}
         on={Boolean(item.includes?.mappings)}
         onToggle={(on) => include('mappings', on)}
-        help={<MappingsHelp />}
+        title={
+          <>
+            <h2 className="ismPanelTitle">Index mapping</h2>
+            <FormRow
+              fullWidth
+              helpAt="bottom"
+              help={
+                <div>
+                  Define how documents and their fields are stored and indexed. <ExternalLink href={MAPPINGS_DOCS} />
+                </div>
+              }
+            />
+          </>
+        }
       >
-        <MappingEditor
-          value={item.template.mappings}
-          onChange={(mappings) => change({ template: { ...item.template, mappings } })}
-          showErrors={submitted}
-        />
-      </PartPanel>
-      {!isEdit && !embedded && (
-        <div className="ismButtons">
-          <Button variant="empty" size="s" onClick={() => go(ROUTES.COMPOSABLE_TEMPLATES)} testId="CreateComposableTemplateCancelButton">
-            Cancel
-          </Button>
-          <Button variant="primary" size="s" loading={busy} onClick={create} testId="CreateComposableTemplateCreateButton">
-            Create component template
-          </Button>
+        <div className="ismSpacer ismSpacer--l" />
+        <FormRow fullWidth>
+          <MappingEditor
+            value={item.template.mappings}
+            onChange={(mappings) => change({ template: { ...item.template, mappings } })}
+            showErrors={submitted}
+          />
+        </FormRow>
+        <div className="ismSpacer ismSpacer--l" />
+      </ComponentPart>
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <div>
+        {define}
+        <div className="ismSpacer ismSpacer--l" />
+        {parts}
+      </div>
+    );
+  }
+
+  return (
+    <div className="ismFormPage">
+      {isEdit ? (
+        <div className="ismPageTitleRow">
+          <h1 className="ismTextTitle" title={name}>
+            {name}
+          </h1>
+          <div className="ismPageTitleRow__buttons">
+            <Button onClick={() => setJson(true)}>View JSON</Button>
+            <Button
+              variant="danger"
+              testId="deleteAction"
+              onClick={async () => {
+                setUsers((await loadIndexTemplates()).filter((template) => template.composed_of?.includes(name)));
+                setDeleting(true);
+              }}
+            >
+              Delete
+            </Button>
+          </div>
         </div>
+      ) : (
+        <>
+          <h1 className="ismTextTitle">Create component template</h1>
+          <FormRow
+            fullWidth
+            help={
+              <div>
+                {COMPONENT_TEXT} <ExternalLink href={COMPONENT_DOCS} />
+              </div>
+            }
+          />
+        </>
+      )}
+      <div className="ismSpacer ismSpacer--l" />
+      <TitledPanel title="Define component template" grouped>
+        {define}
+      </TitledPanel>
+      <div className="ismSpacer ismSpacer--l" />
+      {parts}
+      {!isEdit && (
+        <>
+          <div className="ismSpacer ismSpacer--l" />
+          <div className="ismEndButtons">
+            <Button variant="empty" onClick={() => go(ROUTES.COMPOSABLE_TEMPLATES)} testId="CreateComposableTemplateCancelButton">
+              Cancel
+            </Button>
+            <Button variant="primary" loading={busy} onClick={create} testId="CreateComposableTemplateCreateButton">
+              Create component template
+            </Button>
+          </div>
+        </>
       )}
       {count > 0 && (
-        <UnsavedBar
+        <UnsavedChangesBar
           count={count}
-          busy={busy}
           testId="updateTemplateButton"
           onCancel={() => old && setItem(copy(old))}
           onSave={async () => {
@@ -1087,21 +1224,20 @@ const ComponentForm = forwardRef<{ submit: () => void }, ComponentFormProps>(fun
         />
       )}
       {json && (
-        <JSONModal
+        <JsonShowModal
           title={item.name ?? ''}
           json={(() => {
             const { includes: _includes, ...others } = item;
             return { ...others, template: remoteComponent({ ...item, includes: { aliases: true, settings: true, mappings: true } }).template };
           })()}
-          indent={2}
           testId="templateJSONDetailModal"
           onClose={() => setJson(false)}
         />
       )}
       {deleting && (
         <DeleteComponentModal
-          row={{ name, associated: users.map((template) => template.name) }}
-          templates={users}
+          name={name}
+          users={users.map((template) => template.name)}
           onClose={() => setDeleting(false)}
           onDelete={() => go(ROUTES.COMPOSABLE_TEMPLATES)}
         />

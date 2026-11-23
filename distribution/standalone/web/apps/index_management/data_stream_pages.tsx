@@ -6,24 +6,14 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { Badge, Button, CallOut, Health, Panel, cx } from '../../components/basic';
+import { Badge, Button, CallOut, Health, cx } from '../../components/basic';
 import { Icon } from '../../components/icon';
 import { Popover } from '../../components/overlay';
 import { useBreadcrumbs } from '../../shell/state';
-import {
-  ExternalLink,
-  IndexHealth,
-  JSONModal,
-  Labeled,
-  LocalTable,
-  capital,
-  go,
-  ism,
-  to,
-  toasts,
-  type TableColumn,
-} from './common';
+import { ExternalLink, JSONModal, LocalTable, go, ism, to, toasts, type TableColumn } from './common';
+import { FactGrid, TitledPanel } from './content_panel';
 import { DATA_STREAM_DOCS, DataStreamsActions, HEALTH_TIPS, HEALTH_TONES, type DataStream } from './data_streams';
+import { FormRow } from './form_row';
 import { MappingEditor, SettingsFields } from './index_form';
 import {
   dataStreamNameErrors,
@@ -35,9 +25,10 @@ import {
 } from './index_model';
 import type { IndexRow } from './indices';
 import { CRUMBS, INDEX_MANAGEMENT_PATH, ROUTES } from './routes';
-import { Facts, MappingsHelp } from './template_pages';
 
 const nothing = () => undefined;
+
+const MAPPINGS_DOCS = 'https://opensearch.org/docs/latest/opensearch/mappings/';
 
 // --- Creating one -----------------------------------------------------------------------------------------
 
@@ -66,10 +57,10 @@ function NameField({
       open={open}
       onClose={() => setOpen(false)}
       matchWidth
-      anchorStyle={{ display: 'flex', width: '100%' }}
+      anchorClassName="ismNameField"
       button={
         <div
-          className={cx('atlField', 'atlCombo', 'atlCombo--s', invalid && 'atlField--invalid')}
+          className={cx('atlField', 'atlCombo', 'atlCombo--s', 'atlCombo--single', 'atlCombo--clearable', invalid && 'atlField--invalid')}
           onMouseDown={(event) => {
             if (event.target !== input.current) {
               event.preventDefault();
@@ -114,7 +105,9 @@ function NameField({
               <Icon name="cross" />
             </button>
           )}
-          <Icon name="chevronDown" className="atlCombo__caret" />
+          <span className="atlCombo__caret" data-test-subj="comboBoxToggleListButton">
+            <Icon name="chevronDown" />
+          </span>
         </div>
       }
     >
@@ -198,95 +191,118 @@ export function CreateDataStream() {
 
   const body = matched ? inheritedBody(matched) : undefined;
   return (
-    <div className="ismPage ismPage--form">
-      <div className="ismPageHeader ismPageHeader--center">
-        <div>
-          <h1 className="ismPageTitle">Create data stream</h1>
-          <div className="ismLabeled__help">
+    <div className="ismFormPage">
+      <h1 className="ismTextTitle">Create data stream</h1>
+      <FormRow
+        fullWidth
+        help={
+          <div>
             A data stream is composed of multiple backing indexes. Search requests are routed to all the backing
             indexes, while indexing requests are routed to the latest write index.{' '}
             <ExternalLink href={DATA_STREAM_DOCS} />
           </div>
-        </div>
-      </div>
+        }
+      />
+      <div className="ismSpacer ismSpacer--l" />
       {!loading && templates.length === 0 && (
-        <CallOut tone="warning" title="No data stream templates created">
-          <p>
+        <>
+          <CallOut tone="warning" title="No data stream templates created">
             To create a data stream, you must first define its mappings and settings by creating a data stream
             template.
-          </p>
-          <Button size="s" onClick={() => go(ROUTES.CREATE_TEMPLATE, { values: JSON.stringify({ data_stream: {} }) })}>
-            Create template
-          </Button>
-        </CallOut>
+            <div className="ismSpacer ismSpacer--s" />
+            <div>
+              <Button onClick={() => go(ROUTES.CREATE_TEMPLATE, { values: JSON.stringify({ data_stream: {} }) })}>
+                Create template
+              </Button>
+            </div>
+          </CallOut>
+          <div className="ismSpacer ismSpacer--l" />
+        </>
       )}
-      <Panel>
-        <h2 className="ismPanel__heading">Define data stream</h2>
-        <hr className="ismRule" />
-        <div className="ismForm ismForm--wideHelp">
-          <Labeled
-            title="Data stream name"
-            testId="form-row-name"
-            help={
-              <>
-                Enter a data stream name. It must match an index pattern from a data stream template.{' '}
-                <ExternalLink href={to(ROUTES.TEMPLATES)}>Manage templates.</ExternalLink>
-              </>
-            }
-            error={errors.length > 0 ? errors.map((error) => <div key={error}>{error}</div>) : undefined}
-          >
-            <NameField
-              name={name}
-              templates={templates}
-              invalid={errors.length > 0}
-              onName={(next) => {
-                setName(next);
-                if (next === '') setMatched(undefined);
-              }}
-              onChoose={(template) => {
-                const next = nameForTemplate(name, template);
-                setName(next);
-                settle(next);
-              }}
-              onLeave={() => settle(name)}
-            />
-          </Labeled>
-          <Labeled title="Matching template">
+      <TitledPanel title="Define data stream" grouped>
+        <FormRow
+          title="Data stream name"
+          fullWidth
+          testId="form-row-name"
+          help={
+            <>
+              Enter a data stream name. It must match an index pattern from a data stream template.{' '}
+              <ExternalLink href={to(ROUTES.TEMPLATES)}>Manage templates.</ExternalLink>
+            </>
+          }
+          error={errors.length > 0 ? errors.map((error) => <div key={error}>{error}</div>) : undefined}
+        >
+          <NameField
+            name={name}
+            templates={templates}
+            invalid={errors.length > 0}
+            onName={(next) => {
+              setName(next);
+              if (next === '') setMatched(undefined);
+            }}
+            onChoose={(template) => {
+              const next = nameForTemplate(name, template);
+              setName(next);
+              settle(next);
+            }}
+            onLeave={() => settle(name)}
+          />
+        </FormRow>
+        <div className="ismSpacer ismSpacer--l" />
+        <FormRow title="Matching template">
+          <div className="ismTextS">
             {matched ? (
               <a href={`#${ROUTES.CREATE_TEMPLATE}/${matched.name}`}>{matched.name}</a>
             ) : (
-              <p className="ismMappings__none">No index template matched</p>
+              <p>No index template matched</p>
             )}
-          </Labeled>
-        </div>
-      </Panel>
-      {body && (
-        <Panel>
-          <h2 className="ismPanel__heading ismPanel__heading--l">Inherited settings from template</h2>
-          <hr className="ismRule" />
-          <div className="ismDefinition">
-            <div>
-              <h3 className="ismDefinition__title">Index alias</h3>
-              <div className="ismLabeled__help">
-                Allow the new indexes to be referenced by existing aliases or specify a new alias.
-              </div>
-            </div>
-            <Facts items={[['Alias names', Object.keys(body.aliases ?? {}).join(',')]]} />
-            <h3 className="ismDefinition__title">Index settings</h3>
-            <SettingsFields value={body.settings} onChange={nothing} readOnly forTemplate across={false} />
-            <div>
-              <h3 className="ismDefinition__title">Index mapping</h3>
-              <MappingsHelp />
-            </div>
-            <MappingEditor value={body.mappings} onChange={nothing} readOnly />
           </div>
-        </Panel>
+        </FormRow>
+      </TitledPanel>
+      {body && (
+        <>
+          <div className="ismSpacer ismSpacer--l" />
+          <TitledPanel title="Inherited settings from template" large grouped>
+            <FormRow
+              title="Index alias"
+              fullWidth
+              help="Allow the new indexes to be referenced by existing aliases or specify a new alias."
+            />
+            <div className="ismSpacer ismSpacer--s" />
+            <FactGrid items={[['Alias names', Object.keys(body.aliases ?? {}).join(',') || '-']]} />
+            <div className="ismSpacer ismSpacer--l" />
+            <h3 className="ismCustomRow__title">Index settings</h3>
+            <div className="ismSpacer ismSpacer--s" />
+            <SettingsFields
+              value={body.settings}
+              onChange={nothing}
+              readOnly
+              forTemplate
+              forDataStream
+              across={false}
+            />
+            <div className="ismSpacer ismSpacer--l" />
+            <FormRow
+              title="Index mapping"
+              fullWidth
+              helpAt="bottom"
+              help={
+                <div>
+                  Define how documents and their fields are stored and indexed. <ExternalLink href={MAPPINGS_DOCS} />
+                </div>
+              }
+            />
+            <div className="ismSpacer ismSpacer--s" />
+            <MappingEditor value={body.mappings} onChange={nothing} readOnly />
+          </TitledPanel>
+        </>
       )}
-      <div className="ismButtons">
-        <Button variant="empty" size="s" onClick={() => go(ROUTES.DATA_STREAMS)} testId="CreateDataStreamCancelButton">
+      <div className="ismSpacer ismSpacer--l" />
+      <div className="ismEndButtons">
+        <Button variant="empty" onClick={() => go(ROUTES.DATA_STREAMS)} testId="CreateDataStreamCancelButton">
           Cancel
         </Button>
-        <Button variant="primary" size="s" loading={busy} onClick={create} testId="CreateDataStreamCreateButton">
+        <Button variant="primary" loading={busy} onClick={create} testId="CreateDataStreamCreateButton">
           Create data stream
         </Button>
       </div>
@@ -345,6 +361,8 @@ export function DataStreamDetail({ name }: { name: string }) {
   const writing = backing[backing.length - 1]?.index_name;
   const health = (stream.status || '').toLowerCase();
 
+  // The plugin's columns, all but the first of a width, cut with an ellipsis but the name and the
+  // writing index; none is sortable, as the plugin's table is given no sorting
   const columns: Array<TableColumn<IndexRow>> = [
     {
       field: 'index',
@@ -352,60 +370,79 @@ export function DataStreamDetail({ name }: { name: string }) {
       width: '250px',
       render: (row) => <a href={`#${ROUTES.INDEX_DETAIL}/${row.index}`}>{row.index}</a>,
     },
-    { field: 'health', name: 'Health', render: (row) => <IndexHealth health={row.health} status={row.status} /> },
-    { field: 'managed', name: 'Managed by policy', render: (row) => orDash(row.managed) },
+    {
+      field: 'health',
+      name: 'Health',
+      truncate: true,
+      render: (row) => (
+        <span className="ismCapitalize">
+          <Health tone={row.health ? HEALTH_TONES[row.health] : undefined}>{row.health || row.status}</Health>
+        </span>
+      ),
+    },
+    { field: 'managed', name: 'Managed by policy', truncate: true, render: (row) => orDash(row.managed) },
     {
       field: 'status',
       name: 'Status',
+      truncate: true,
       render: (row) => <span className="ismCapital">{row.extraStatus || row.status}</span>,
     },
+    // The plugin names this column by the replicas' field too; a field names one column here
     { field: 'writing', name: 'Writing index', render: (row) => (row.index === writing ? 'Yes' : 'No') },
-    { field: 'store.size', name: 'Total size', align: 'right', render: (row) => orDash(row['store.size']) },
+    {
+      field: 'store.size',
+      name: 'Total size',
+      align: 'right',
+      truncate: true,
+      render: (row) => orDash(row['store.size']),
+    },
     {
       field: 'pri.store.size',
       name: 'Size of primaries',
       align: 'right',
+      truncate: true,
       render: (row) => orDash(row['pri.store.size']),
     },
     {
       field: 'docs.count',
       name: 'Total documents',
       align: 'right',
+      truncate: true,
       render: (row) => <span title={row['docs.count']}>{row['docs.count'] || '-'}</span>,
     },
     {
       field: 'docs.deleted',
       name: 'Deleted documents',
       align: 'right',
+      truncate: true,
       render: (row) => <span title={row['docs.deleted']}>{row['docs.deleted'] || '-'}</span>,
     },
-    { field: 'pri', name: 'Primaries', align: 'right', render: (row) => row.pri },
-    { field: 'rep', name: 'Replicas', align: 'right', render: (row) => row.rep },
+    { field: 'pri', name: 'Primaries', align: 'right', truncate: true, render: (row) => row.pri },
+    { field: 'rep', name: 'Replicas', align: 'right', truncate: true, render: (row) => row.rep },
   ];
 
   return (
-    <div className="ismPage ismPage--form">
-      <div className="ismPageHeader ismPageHeader--center">
-        <h1 className="ismPageTitle" title={name}>
+    <div className="ismFormPage">
+      <div className="ismPageTitleRow">
+        <h1 className="ismTextTitle" title={name}>
           {name}
         </h1>
-        <div className="atlRow" style={{ gap: 'var(--space-5)' }}>
-          <Button size="s" onClick={() => setJson(true)}>
-            View JSON
-          </Button>
+        <div className="ismPageTitleRow__buttons">
+          <Button onClick={() => setJson(true)}>View JSON</Button>
           <DataStreamsActions selected={[stream]} onDelete={() => go(ROUTES.DATA_STREAMS)} />
         </div>
       </div>
-      <Panel>
-        <h2 className="ismPanel__heading">Data stream details</h2>
-        <hr className="ismRule" />
-        <Facts
+      <div className="ismSpacer ismSpacer--l" />
+      <TitledPanel title="Data stream details" grouped>
+        <FactGrid
           items={[
             ['Name', stream.name],
             [
               'Status',
-              <span key="status" title={HEALTH_TIPS[health]}>
-                <Health tone={HEALTH_TONES[health]}>{capital(health)}</Health>
+              <span key="status" className="ismFactGrid__tip" title={HEALTH_TIPS[health]}>
+                <span className="ismCapitalize">
+                  <Health tone={stream.status ? HEALTH_TONES[health] : undefined}>{health}</Health>
+                </span>
               </span>,
             ],
             [
@@ -415,19 +452,18 @@ export function DataStreamDetail({ name }: { name: string }) {
               </a>,
             ],
             ['Backing indexes', backing.length],
-            ['Timefield', stream.timestamp_field?.name],
+            ['Timefield', stream.timestamp_field?.name || ''],
           ]}
         />
-      </Panel>
-      <Panel>
-        <h2 className="ismPanel__heading">Backing indexes</h2>
-        <div className="ismLabeled__help">
-          A data stream is composed of backing indexes. Search requests are routed to all backing indexes, while
-          indexing requests are routed to the write backing index.
-        </div>
-        <hr className="ismRule" />
-        <LocalTable columns={columns} rows={indexes} rowId={(row) => row.index} paged={false} />
-      </Panel>
+      </TitledPanel>
+      <div className="ismSpacer ismSpacer--l" />
+      <TitledPanel
+        title="Backing indexes"
+        grouped
+        subtitle="A data stream is composed of backing indexes. Search requests are routed to all backing indexes, while indexing requests are routed to the write backing index."
+      >
+        <LocalTable columns={columns} rows={indexes} rowId={(row) => row.index} paged={false} fixed caption />
+      </TitledPanel>
       {json && (
         <JSONModal
           title={name}
