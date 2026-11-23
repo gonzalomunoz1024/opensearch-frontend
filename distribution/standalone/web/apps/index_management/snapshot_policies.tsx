@@ -11,7 +11,6 @@ import { MenuButton } from '../../components/overlay';
 import { navigateHash, useLocation } from '../../router';
 import { useBreadcrumbs } from '../../shell/state';
 import {
-  DeleteModal,
   ExternalLink,
   LocalTable,
   Table,
@@ -40,7 +39,13 @@ import {
   type PolicyMetadata,
   type SMPolicy,
 } from './snapshot_model';
-import { Facts, ListPanel, PolicyPanel, SNAPSHOT_DOCS } from './snapshot_parts';
+import {
+  DeletePolicyDialog,
+  Facts,
+  ListPanel,
+  PolicyPanel,
+  SNAPSHOT_DOCS,
+} from './snapshot_parts';
 
 const policyPath = (id: string) => `smPolicies/${encodeURIComponent(id)}`;
 
@@ -49,23 +54,6 @@ async function switchPolicy(policyId: string, on: boolean): Promise<void> {
   const answer = await ism.post(`${policyPath(policyId)}/${on ? '_start' : '_stop'}`);
   if (answer.ok) toasts.success(`"${policyId}" successfully ${on ? 'started' : 'stopped'}!`);
   else toasts.danger(`Could not ${on ? 'start' : 'stop'} policy "${policyId}" :  ${answer.error}`);
-}
-
-function DeletePolicyModal({
-  policyIds,
-  onClose,
-  onDelete,
-}: {
-  policyIds: string;
-  onClose: () => void;
-  onDelete: () => void | Promise<void>;
-}) {
-  return (
-    <DeleteModal title="Delete policy" onClose={onClose} onDelete={onDelete}>
-      Delete "<strong>{policyIds}</strong>" permanently? Indices will no longer be managed using
-      this policy.
-    </DeleteModal>
-  );
 }
 
 // --- The list ------------------------------------------------------------------------------------------------
@@ -310,10 +298,10 @@ export function SnapshotPolicies() {
         />
       </ListPanel>
       {deleting && (
-        <DeletePolicyModal
+        <DeletePolicyDialog
           policyIds={selected.map((policy) => policy.name).join(', ')}
-          onClose={() => setDeleting(false)}
-          onDelete={remove}
+          onCancel={() => setDeleting(false)}
+          onDelete={() => void remove()}
         />
       )}
     </>
@@ -565,7 +553,11 @@ export function SnapshotPolicyDetails() {
       </PolicyPanel>
 
       {deleting && (
-        <DeletePolicyModal policyIds={id} onClose={() => setDeleting(false)} onDelete={remove} />
+        <DeletePolicyDialog
+          policyIds={id}
+          onCancel={() => setDeleting(false)}
+          onDelete={() => void remove()}
+        />
       )}
       {info && (
         <InfoModal title=" " onClose={() => setInfo(undefined)}>

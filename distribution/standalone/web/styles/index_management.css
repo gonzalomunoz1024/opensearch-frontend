@@ -2603,6 +2603,50 @@
   min-width: 112px;
 }
 
+/* The plugin's dialogs that ask before deleting (OUI's confirmation modal): as wide as their words,
+   from 400 px up to 768 px; a large title; text in lines of 21 px with a line's space under a
+   paragraph; the theme's buttons 40 px high, the one that deletes inside a clear border */
+.atlModal.ismConfirm {
+  width: auto;
+  min-width: min(400px, 100%);
+  max-width: min(768px, 100%);
+}
+
+.ismConfirm .atlModal__title {
+  font-size: 22px;
+  line-height: 28px;
+  letter-spacing: -0.021em;
+}
+
+.ismConfirm__body {
+  font-size: var(--font-size-s);
+  line-height: 1.5;
+}
+
+.ismConfirm__body p {
+  margin: 0 0 1.5em;
+}
+
+.ismConfirm__body strong {
+  font-weight: var(--font-weight-semibold);
+}
+
+.ismConfirm .atlModal__footer > .atlButton {
+  height: 40px;
+  line-height: 1.5;
+}
+
+.ismConfirm .atlModal__footer > .atlButton--dangerFill {
+  border: 1px solid transparent;
+}
+
+/* The keyboard's ring stands 2 px off the plugin's buttons */
+.ismConfirm .atlModal__footer > .atlButton:focus-visible,
+.ismListPanel__actions .atlButton:focus-visible,
+.ismFlyoutFooter > .atlButton:focus-visible {
+  outline-offset: 2px;
+}
+
 /* A form of Snapshot Management is laid out as the plugin's: its parts one under the other, with
    the plugin's spacers between them */
 .ismSnapshotForm {

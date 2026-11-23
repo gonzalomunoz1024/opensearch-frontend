@@ -11,9 +11,9 @@ import { flushSync } from 'react-dom';
 import { Accordion, Button, CallOut, cx } from '../../components/basic';
 import { CodeEditor, type CodeEditorHandle } from '../../components/code_editor';
 import { ComboBox, type ComboOption } from '../../components/combo_box';
-import { Checkbox, NumberField, Select, TextField } from '../../components/form';
+import { Checkbox, FormRow, NumberField, Select, TextField } from '../../components/form';
 import { Icon } from '../../components/icon';
-import { Flyout, MenuButton, Popover, type MenuItem } from '../../components/overlay';
+import { Flyout, MenuButton, Modal, Popover, Portal, type MenuItem } from '../../components/overlay';
 import { ExternalLink, ism, toasts } from './common';
 import { loadNames } from './job_parts';
 import {
@@ -401,6 +401,161 @@ export function FlyoutFooter({
         {action}
       </Button>
     </div>
+  );
+}
+
+/**
+ * The plugin's dialog that asks before something is deleted: OUI's confirmation modal inside a mask
+ * the plugin adds around it, so the page behind is dimmed and blurred twice. It is as wide as its
+ * words, from 400 up to 768 px, under a large title, with the theme's tall buttons. As OUI's, it
+ * gives the confirm button the focus whenever it is drawn and the button can be pressed (so the
+ * focus leaves the field the moment "delete" is complete); until then the dialog itself has it.
+ */
+export function ConfirmDialog({
+  title,
+  confirmLabel,
+  disabled,
+  onCancel,
+  onConfirm,
+  children,
+}: {
+  title: string;
+  confirmLabel: string;
+  disabled?: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+  children: ReactNode;
+}) {
+  const body = useRef<HTMLDivElement>(null);
+  const opening = useRef(true);
+  // After every drawing, once the dialog has put the focus where it puts it (its first field)
+  useEffect(() => {
+    const dialog = body.current?.closest<HTMLElement>('[role="dialog"]');
+    const confirm = dialog?.querySelector<HTMLButtonElement>(
+      '[data-test-subj="confirmModalConfirmButton"]'
+    );
+    if (confirm && !confirm.disabled) confirm.focus();
+    else if (opening.current) dialog?.focus();
+    opening.current = false;
+  });
+  return (
+    <>
+      {/* The plugin's own mask; the dialog brings the other */}
+      <Portal>
+        <div className="atlScrim" aria-hidden="true" />
+      </Portal>
+      <Modal
+        title={<span data-test-subj="confirmModalTitleText">{title}</span>}
+        onClose={onCancel}
+        className="ismConfirm"
+        footer={
+          <>
+            <Button variant="empty" onClick={onCancel} testId="confirmModalCancelButton">
+              Cancel
+            </Button>
+            <Button
+              variant="dangerFill"
+              disabled={disabled}
+              onClick={onConfirm}
+              testId="confirmModalConfirmButton"
+            >
+              {confirmLabel}
+            </Button>
+          </>
+        }
+      >
+        <div ref={body} className="ismConfirm__body" data-test-subj="confirmModalBodyText">
+          {children}
+        </div>
+      </Modal>
+    </>
+  );
+}
+
+/** The field a deletion waits for, as the plugin's: "delete" typed in it */
+function DeleteWord({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <FormRow help={'To confirm deletion, type "delete".'}>
+      <TextField
+        value={value}
+        onChange={onChange}
+        placeholder="delete"
+        compact
+        testId="deleteTextField"
+        aria-label="delete"
+      />
+    </FormRow>
+  );
+}
+
+/**
+ * Deletes repositories or snapshots, as the plugin's dialog for them: what goes, and what goes with
+ * it; with `confirm`, only once "delete" is typed. It closes as soon as it is confirmed, and the
+ * deletions are told one by one in the corner.
+ */
+export function DeleteDialog({
+  type,
+  ids,
+  warning,
+  confirm,
+  onCancel,
+  onDelete,
+}: {
+  type: 'repository' | 'snapshot';
+  ids: string;
+  warning?: string;
+  confirm?: boolean;
+  onCancel: () => void;
+  onDelete: () => void;
+}) {
+  const [word, setWord] = useState(confirm ? '' : 'delete');
+  return (
+    <ConfirmDialog
+      title={`Delete ${type}`}
+      confirmLabel={`Delete ${type}`}
+      disabled={word !== 'delete'}
+      onCancel={onCancel}
+      onConfirm={() => {
+        onDelete();
+        onCancel();
+      }}
+    >
+      <p>
+        Delete "<strong>{ids}</strong>" permanently? {warning}
+      </p>
+      <Spacer size="s" />
+      {confirm && <DeleteWord value={word} onChange={setWord} />}
+    </ConfirmDialog>
+  );
+}
+
+/**
+ * Deletes snapshot policies, as the plugin's dialog for policies: once "delete" is typed; it stays
+ * open until the page that opened it closes it
+ */
+export function DeletePolicyDialog({
+  policyIds,
+  onCancel,
+  onDelete,
+}: {
+  policyIds: string;
+  onCancel: () => void;
+  onDelete: () => void;
+}) {
+  const [word, setWord] = useState('');
+  return (
+    <ConfirmDialog
+      title="Delete policy"
+      confirmLabel="Delete policy"
+      disabled={word !== 'delete'}
+      onCancel={onCancel}
+      onConfirm={onDelete}
+    >
+      Delete "<strong>{policyIds}</strong>" permanently? Indices will no longer be managed using this
+      policy.
+      <Spacer size="s" />
+      <DeleteWord value={word} onChange={setWord} />
+    </ConfirmDialog>
   );
 }
 
