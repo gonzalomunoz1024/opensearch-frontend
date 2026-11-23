@@ -165,6 +165,54 @@ describe('the request, as the original writes it', () => {
     const significant = dsl(bucket('significant_terms', { field: 'extension', size: 3, include: 'win.*', exclude: 'win 7' }));
     assert.deepEqual(significant, { significant_terms: { field: 'extension', size: 3, exclude: 'win 7', include: 'win.*' } });
   });
+
+  it('merges the JSON input as the original: key by key and item by item all the way down, a null taking a key away', () => {
+    const bounded = dsl(histogram({ interval: 1000, min_doc_count: true, has_extended_bounds: true, extended_bounds: { min: 0, max: 30000 }, json: '{"extended_bounds": {"max": 40000}}' }));
+    assert.deepEqual((bounded.histogram as Record<string, unknown>).extended_bounds, { min: 0, max: 40000 });
+    const terms = dsl(bucket('terms', { field: 'extension', size: 5, order: 'desc', orderBy: '1', json: '{"size": null, "shard_size": 9}' })).terms as Record<string, unknown>;
+    assert.equal('size' in terms, false);
+    assert.equal(terms.shard_size, 9);
+    const percentiles: AggConfig = { id: '1', enabled: true, type: 'percentiles', schema: 'metric', params: { field: 'bytes', percents: [5, 95], json: '{"percents": [1]}' } };
+    assert.deepEqual(buildAggsDsl([percentiles], context)['1'], { percentiles: { field: 'bytes', percents: [1, 95], keyed: false } });
+  });
+
+  it('writes the JSON input of every aggregation it asks for: one that orders terms, and one inside another', () => {
+    // What the original sent for these, measured on the reference
+    const average: AggConfig = { id: '1', enabled: true, type: 'avg', schema: 'metric', params: { field: 'bytes', json: '{"missing": 0}' } };
+    const ordered = buildAggsDsl([average, bucket('terms', { field: 'extension', size: 3, order: 'desc', orderBy: '1' })], context)['2'] as Record<string, unknown>;
+    assert.deepEqual(ordered.aggs, { '1': { avg: { field: 'bytes', missing: 0 } } });
+
+    const nested = buildAggsDsl(
+      [
+        count,
+        {
+          id: '3',
+          enabled: true,
+          type: 'max_bucket',
+          schema: 'metric',
+          params: {
+            customBucket: { id: '3-bucket', enabled: true, type: 'terms', schema: 'bucketAgg', params: { field: 'extension', size: 2, order: 'asc', orderBy: '_key', json: '{"shard_size": 7}' } },
+            customMetric: { id: '3-metric', enabled: true, type: 'max', schema: 'metricAgg', params: { field: 'bytes', json: '{"missing": 1}' } },
+          },
+        },
+        bucket('terms', { field: 'extension', size: 3, order: 'desc', orderBy: 'custom', orderAgg: { id: '2-orderAgg', enabled: true, type: 'sum', schema: 'orderAgg', params: { field: 'bytes', json: '{"missing": 2}' } } }),
+      ],
+      context
+    )['2'] as { aggs: Record<string, unknown> };
+    assert.deepEqual(nested.aggs['3-bucket'], { terms: { field: 'extension', size: 2, order: { _key: 'asc' }, shard_size: 7 }, aggs: { '3-metric': { max: { field: 'bytes', missing: 1 } } } });
+    assert.deepEqual(nested.aggs['2-orderAgg'], { sum: { field: 'bytes', missing: 2 } });
+
+    const derivative: AggConfig = {
+      id: '3',
+      enabled: true,
+      type: 'derivative',
+      schema: 'metric',
+      params: { metricAgg: 'custom', customMetric: { id: '3-metric', enabled: true, type: 'avg', schema: 'metricAgg', params: { field: 'bytes', json: '{"missing": 3}' } }, json: '{"gap_policy": "insert_zeros"}' },
+    };
+    const parent = buildAggsDsl([count, derivative, histogram({ interval: 1000 })], context)['2'] as { aggs: Record<string, unknown> };
+    assert.deepEqual(parent.aggs['3'], { derivative: { buckets_path: '3-metric', gap_policy: 'insert_zeros' } });
+    assert.deepEqual(parent.aggs['3-metric'], { avg: { field: 'bytes', missing: 3 } });
+  });
 });
 
 describe('the buckets of ranges, IP ranges and filters, in the order they are asked', () => {

@@ -411,8 +411,8 @@ function metricDsl(agg: AggConfig, context: AggContext, all: AggConfig[]): Dsl {
     if (!bucket) return {};
     const bucketId = `${agg.id}-bucket`;
     const metricId = `${agg.id}-metric`;
-    const inner = metric && metric.type !== 'count' ? metricDsl({ ...metric, id: metricId }, context, all) : {};
-    const clause = bucketClause({ ...bucket, id: bucketId }, context);
+    const inner = metric && metric.type !== 'count' ? metricWithJson({ ...metric, id: metricId }, context, all) : {};
+    const clause = withJson(bucket, bucketClause({ ...bucket, id: bucketId }, context));
     // Its terms in the order asked for, as the original writes the bucket like any other
     const under: Dsl = { ...inner };
     if (bucket.type === 'terms') orderTerms({ ...bucket, id: bucketId }, clause.terms as Dsl, under, context, all);
@@ -437,7 +437,7 @@ function metricDsl(agg: AggConfig, context: AggContext, all: AggConfig[]): Dsl {
       if (!metric || metric.type === 'count') path = '_count';
       else {
         path = `${agg.id}-metric`;
-        Object.assign(out, metricDsl({ ...metric, id: path }, context, all));
+        Object.assign(out, metricWithJson({ ...metric, id: path }, context, all));
       }
     } else {
       const other = all.find((candidate) => candidate.id === target);
@@ -621,7 +621,38 @@ function withJson(agg: AggConfig, clause: Dsl): Dsl {
   if (extra === null || typeof extra !== 'object' || Array.isArray(extra)) return clause;
   const [type] = Object.keys(clause);
   if (!type || clause[type] === null || typeof clause[type] !== 'object') return clause;
-  return { ...clause, [type]: { ...(clause[type] as Dsl), ...(extra as Dsl) } };
+  return { ...clause, [type]: combine(clause[type], extra) as Dsl };
+}
+
+/**
+ * Two values merged as the original's `filteredCombine` merges the JSON input into a clause: an
+ * object key by key and a list item by item, all the way down; a null takes a key away
+ */
+function combine(written: unknown, typed: unknown): unknown {
+  const plain = (value: unknown): value is Dsl => value !== null && typeof value === 'object' && !Array.isArray(value);
+  if (plain(written) && plain(typed)) {
+    const out: Dsl = {};
+    for (const key of new Set([...Object.keys(written), ...Object.keys(typed)])) {
+      const value = combine(written[key], typed[key]);
+      if (value !== undefined) out[key] = value;
+    }
+    return out;
+  }
+  if (Array.isArray(written) && Array.isArray(typed)) {
+    return Array.from({ length: Math.max(written.length, typed.length) }, (_, index) => combine(written[index], typed[index]));
+  }
+  if (typed === null) return undefined;
+  return typed !== undefined ? typed : written;
+}
+
+/**
+ * A metric's clauses with its JSON input merged into its own, as the original writes each
+ * aggregation it asks for: one that orders terms, or one inside a pipeline, too
+ */
+function metricWithJson(agg: AggConfig, context: AggContext, all: AggConfig[]): Dsl {
+  const own = metricDsl(agg, context, all);
+  if (own[agg.id]) own[agg.id] = withJson(agg, own[agg.id] as Dsl);
+  return own;
 }
 
 /** The ranges of a range aggregation, as they are asked */
@@ -679,9 +710,7 @@ export function buildAggsDsl(aggs: AggConfig[], context: AggContext, options: Bu
     for (const metric of metrics) {
       // A derivative has nothing to derive from outside a histogram
       if (PARENT_PIPELINES.has(metric.type) && !insideHistogram) continue;
-      const own = metricDsl(metric, context, metrics);
-      if (own[metric.id]) own[metric.id] = withJson(metric, own[metric.id] as Dsl);
-      Object.assign(out, own);
+      Object.assign(out, metricWithJson(metric, context, metrics));
     }
     return out;
   };
@@ -733,13 +762,13 @@ function orderTerms(agg: AggConfig, terms: Dsl, own: Dsl, context: AggContext, m
     const orderAgg = agg.params?.orderAgg as AggConfig | undefined;
     if (orderAgg && orderAgg.type !== 'count') {
       const id = orderAgg.id ?? `${agg.id}-orderAgg`;
-      Object.assign(own, metricDsl({ ...orderAgg, id }, context, metrics));
+      Object.assign(own, metricWithJson({ ...orderAgg, id }, context, metrics));
       terms.order = { [orderPath(orderAgg, id)]: direction };
     }
   } else {
     const metric = metrics.find((candidate) => candidate.id === orderBy);
     if (metric && metric.type !== 'count' && !SIBLING_PIPELINES.has(metric.type) && !PARENT_PIPELINES.has(metric.type)) {
-      Object.assign(own, metricDsl(metric, context, metrics));
+      Object.assign(own, metricWithJson(metric, context, metrics));
       terms.order = { [orderPath(metric, metric.id)]: direction };
     }
   }
