@@ -283,10 +283,29 @@ body.dshDragging {
   border-bottom: 1.8px solid var(--color-text-secondary);
 }
 
+/*
+ * A saved search's table scrolls in its own area, as the original's, so its header stays at the
+ * top of the panel and a new search starts again at the top. The original's flex group gives it
+ * 2px on every side and takes 2px back at the top and the sides, which leaves 4px under it. Its
+ * scroll area reaches the 12px under the last pager, and both the group and the area fade 7.5px
+ * at their left and right edges (the group's edges are 2px outside the area's).
+ */
 .dshSearch {
+  display: flex;
   flex: 1 1 auto;
+  flex-direction: column;
   min-height: 0;
+  margin-bottom: 4px;
+  overflow: hidden;
+  mask-image: linear-gradient(to right, rgb(0 0 0 / 34%), #000 5.5px, #000 calc(100% - 5.5px), rgb(0 0 0 / 34%));
+}
+
+.dshSearch > .dscTable {
+  flex: 1 1 0;
+  min-height: 0;
+  padding-bottom: 12px;
   overflow: auto;
+  mask-image: linear-gradient(to right, rgb(0 0 0 / 10%), #000 7.5px, #000 calc(100% - 7.5px), rgb(0 0 0 / 10%));
 }
 
 /* The options of the top menu, in a popover under their button */

@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, EmptyPrompt, Link, Loading } from '../../components/basic';
 import { ConfirmModal, ContextMenu, Flyout, Popover } from '../../components/overlay';
 import type { TimeRange } from '../../lib/dates';
-import { mergeFilters } from '../../lib/query';
+import { uniqueFilters } from '../../lib/query';
 import { parseSearchSource } from '../../lib/search_source';
 import type { Filter, IndexPattern, Query } from '../../lib/types';
 import { appUrl, decodeState, encodeQueryValue, encodeState } from '../../lib/url';
@@ -398,10 +398,15 @@ function DashboardPage({ savedId }: { savedId?: string }) {
     },
     [global.filters, appFilters, setGlobal, writeApp]
   );
+  // Added as the original's filter manager adds them: after the others, a filter that asks what
+  // one there asks taking its place (or, for a pinned one, changing it where it is). A
+  // visualization's filters are pinned when filters:pinnedByDefault asks; a saved search's stay
+  // the dashboard's own, as the original's search embeddable marks them
   const addFilters = useCallback(
-    (added: Filter[]) => {
-      const pinned = services.uiSettings.get('filters:pinnedByDefault', false);
-      setFilters(mergeFilters(filters, pinned ? added.map((filter) => ({ ...filter, $state: { store: 'globalState' as const } })) : added));
+    (added: Filter[], asGiven = false) => {
+      const pinned = !asGiven && services.uiSettings.get('filters:pinnedByDefault', false);
+      const incoming = pinned ? added.map((filter) => ({ ...filter, $state: { store: 'globalState' as const } })) : added;
+      setFilters(uniqueFilters([...filters, ...incoming]));
     },
     [filters, setFilters]
   );

@@ -10,6 +10,7 @@ import {
   dashboardFromSavedObject,
   dashboardToSavedObject,
   emptyDashboard,
+  existingFilter,
   findPlace,
   moveItem,
   newPanelIndex,
@@ -25,11 +26,14 @@ import {
   sizedCells,
   sizingStep,
   startSizing,
+  takenAgain,
   timeAsSaved,
   type Dashboard,
   type GridItem,
   type PanelState,
 } from '../../web/apps/dashboard/model';
+import { existsFilter, phraseFilter, uniqueFilters } from '../../web/lib/query';
+import type { Filter } from '../../web/lib/types';
 import { makeTurns, waitTurn } from '../../web/vis/turns';
 
 const at = (items: GridItem[], id: string) => {
@@ -469,5 +473,46 @@ describe('the turns charts take to draw', () => {
     await waitTurn(turns.get('next'), 30);
     assert.ok(Date.now() - started >= 25);
     await waitTurn(undefined);
+  });
+});
+
+describe('the filters a saved search panel makes', () => {
+  const currency = phraseFilter({ name: 'currency' }, 'EUR', 'ecommerce');
+  const notFemale: Filter = { ...phraseFilter({ name: 'customer_gender' }, 'FEMALE', 'ecommerce') };
+  notFemale.meta = { ...notFemale.meta, negate: true };
+  const named = existsFilter({ name: 'customer_first_name' }, 'ecommerce');
+  const keys = (filters: Filter[]) => filters.map((filter) => `${filter.meta.negate ? '-' : ''}${filter.meta.key}`);
+
+  it("finds the dashboard's filter for the same value, as the original's getExistingFilter", () => {
+    assert.equal(existingFilter([notFemale, currency], 'currency', 'EUR', false), currency);
+    assert.equal(existingFilter([notFemale, currency], 'customer_gender', 'FEMALE', false), notFemale);
+    assert.equal(existingFilter([currency], 'currency', 'USD', false), undefined);
+    // The filter on a field being there is found only for that button
+    assert.equal(existingFilter([named], 'customer_first_name', 'customer_first_name', true), named);
+    assert.equal(existingFilter([named], 'customer_first_name', 'customer_first_name', false), undefined);
+    assert.equal(existingFilter([currency], 'currency', 'currency', true), undefined);
+  });
+
+  it('takes such a filter again turned on and negated as asked, its keys where they were', () => {
+    const off: Filter = { ...currency, meta: { ...currency.meta, disabled: true } };
+    const again = takenAgain(off, true);
+    assert.equal(again.meta.disabled, false);
+    assert.equal(again.meta.negate, true);
+    assert.deepEqual(again.$state, { store: 'appState' });
+    assert.deepEqual(Object.keys(again), Object.keys(off));
+    assert.deepEqual(Object.keys(again.meta), Object.keys(off.meta));
+  });
+
+  it("moves a value filtered out after it was filtered for to the end, as the original's filter manager", () => {
+    // The reference, filtering out EUR after EUR, female left out and a first name asked for
+    const added = uniqueFilters([currency, notFemale, named, takenAgain(currency, true)]);
+    assert.deepEqual(keys(added), ['-customer_gender', 'customer_first_name', '-currency']);
+  });
+
+  it('changes a pinned filter where it is when the panel asks the same', () => {
+    const pinned: Filter = { ...currency, $state: { store: 'globalState' } };
+    const added = uniqueFilters([pinned, notFemale, takenAgain(currency, true)]);
+    assert.deepEqual(keys(added), ['-currency', '-customer_gender']);
+    assert.deepEqual(added[0].$state, { store: 'globalState' });
   });
 });

@@ -10,7 +10,7 @@ import { Tooltip, type ContextMenuItem } from '../../components/overlay';
 import type { Table } from '../../lib/aggs';
 import { resolveTimeRange, type TimeRange } from '../../lib/dates';
 import type { RawHit } from '../../lib/docs';
-import { phraseFilter } from '../../lib/query';
+import { existsFilter } from '../../lib/query';
 import { parseSearchSource } from '../../lib/search_source';
 import type { Filter, IndexPattern, Query } from '../../lib/types';
 import { visFromSavedObject, visType, type UiState, type Vis, type VisualizationAttributes } from '../../lib/vis';
@@ -18,12 +18,13 @@ import { services } from '../../services';
 import { errorMessage } from '../../services/http';
 import type { SavedObject } from '../../services/saved_objects';
 import { searchFailure, totalOf, type RequestRecord } from '../../services/search';
+import { isPinned } from '../../shell/filter_bar';
 import type { VisInput } from '../../vis/request';
 import type { VisFailure } from '../../vis/types';
 import type { Turn } from '../../vis/turns';
 import type { VegaDebugValues } from '../../vis/vega/debug_view';
 import { Visualization, takesTurn } from '../../vis/visualization';
-import { DocTable, type SortPair } from '../discover/doc_table';
+import { DocTable, toggledColumns, type SortPair } from '../discover/doc_table';
 import {
   VIS_BUILDER_TYPE,
   schemaProblem,
@@ -33,9 +34,10 @@ import {
   type VisBuilderAttributes,
 } from '../vis_builder/model';
 import { DocDetails } from '../discover/doc_viewer';
+import { valueFilter } from '../discover/filters';
 import { buildDiscoverRequest } from '../discover/search';
 import { normalizeSort } from '../discover/sort';
-import type { PanelState } from './model';
+import { existingFilter, takenAgain, type PanelState } from './model';
 import { EDIT_NAMES, PanelMenu, type PanelAction } from './panel_menu';
 
 export interface LoadedObject {
@@ -78,6 +80,7 @@ function SearchPanel({
   /** What was changed on the panel: its own columns and sort, over the saved search's */
   config: Record<string, unknown>;
   onConfig?: (config: Record<string, unknown>) => void;
+  /** Takes the filters its buttons make, which go into the dashboard's own filters */
   onFilter?: (filters: Filter[]) => void;
   onData?: (data: PanelData) => void;
   /** Takes a failed search, and nothing once one succeeds: the panel's "Error" badge */
@@ -105,7 +108,13 @@ function SearchPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [JSON.stringify(config.sort), object.attributes.sort]
   );
-  const write = (changes: { columns?: string[]; sort?: SortPair[] }) => onConfig?.({ ...config, ...changes });
+  // Into the panel's own config, the keys in the order the original's embeddable writes them
+  const write = (changes: { sort?: SortPair[]; columns?: string[] }) => onConfig?.({ ...config, ...changes });
+  // As the original's: what is left, or the whole document when nothing is, and no sort on it
+  const removeColumn = (name: string) => {
+    const kept = columns.filter((column) => column !== name);
+    write({ sort: sort.filter(([field]) => field !== name), columns: kept.length > 0 ? kept : ['_source'] });
+  };
 
   useEffect(() => {
     let live = true;
@@ -177,6 +186,28 @@ function SearchPanel({
   // Nothing is drawn until the first search has finished
   if (!indexPattern || !found) return null;
   if (found.hits === 0) return <ChartMessage>No results found</ChartMessage>;
+  // The field as the index pattern has it, as the original's generateFilters takes it
+  const fieldOf = (name: string) => indexPattern.fields.find((candidate) => candidate.name === name) ?? { name };
+  const ownFilters = input.filters.filter((filter) => !isPinned(filter));
+  // As the original's search embeddable: a filter for each value of a list, in the dashboard's
+  // own filters; one the dashboard has for that value is taken again, turned on, as asked
+  const filterFor = onFilter
+    ? (name: string, value: unknown, negate: boolean) => {
+        const values = Array.isArray(value) ? value : [value];
+        onFilter(
+          values.map((item) => {
+            const existing = existingFilter(ownFilters, name, item, false);
+            return existing ? takenAgain(existing, negate) : valueFilter(fieldOf(name), item, negate, indexPattern.id, false);
+          })
+        );
+      }
+    : undefined;
+  const filterExists = onFilter
+    ? (name: string) => {
+        const existing = existingFilter(ownFilters, name, name, true);
+        onFilter([existing ? takenAgain(existing, false) : existsFilter(fieldOf(name), indexPattern.id)]);
+      }
+    : undefined;
   return (
     <div className="dshSearch" data-test-subj="embeddedSavedSearchDocTable">
       <DocTable
@@ -188,9 +219,7 @@ function SearchPanel({
         paged
         hits={found.hits}
         onSort={(next) => write({ sort: next })}
-        onRemoveColumn={(name) =>
-          write({ columns: columns.filter((column) => column !== name), sort: sort.filter(([field]) => field !== name) })
-        }
+        onRemoveColumn={removeColumn}
         onMoveColumn={(name, by) => {
           const from = columns.indexOf(name);
           const to = from + by;
@@ -200,18 +229,23 @@ function SearchPanel({
           next.splice(to, 0, name);
           write({ columns: next });
         }}
-        onFilter={
-          onFilter
-            ? (name, value, negate) => {
-                // The field as the index pattern has it, as the original's generateFilters takes it
-                const field = indexPattern.fields.find((candidate) => candidate.name === name) ?? { name };
-                const filter = phraseFilter(field, value, indexPattern.id);
-                filter.meta.negate = negate;
-                onFilter([filter]);
-              }
-            : undefined
-        }
-        details={(hit) => <DocDetails hit={hit} indexPattern={indexPattern} basePath="/app/discover" />}
+        onFilter={filterFor}
+        details={(hit, drawn) => (
+          <DocDetails
+            hit={hit}
+            indexPattern={indexPattern}
+            basePath="/app/discover"
+            appFilters={ownFilters}
+            actions={{
+              columns: drawn,
+              // As the original's: a column drawn is taken out (the time column the table adds of
+              // itself stays, and its sort goes), another is added
+              onToggleColumn: (name) => (drawn.includes(name) ? removeColumn(name) : write({ columns: toggledColumns(columns, name) })),
+              onFilter: filterFor,
+              onFilterExists: filterExists,
+            }}
+          />
+        )}
       />
     </div>
   );
@@ -230,7 +264,8 @@ export interface DashboardPanelProps {
   onResizeStart?: (event: ReactPointerEvent, panelIndex: string) => void;
   onAction: (action: PanelAction, panelIndex: string) => void;
   onConfig: (panelIndex: string, config: Record<string, unknown>) => void;
-  onFilter: (filters: Filter[]) => void;
+  /** `asGiven` for a saved search's filters, which stay in the dashboard's own filters */
+  onFilter: (filters: Filter[], asGiven?: boolean) => void;
   onFiltersChange: (filters: Filter[]) => void;
   onTimeChange: (range: TimeRange) => void;
   onData: (panelIndex: string, data: PanelData) => void;
@@ -391,7 +426,7 @@ export const DashboardPanel = memo(function DashboardPanel({
         tick={tick}
         config={panel.embeddableConfig}
         onConfig={(next) => onConfig(id, next)}
-        onFilter={onFilter}
+        onFilter={(filters) => onFilter(filters, true)}
         onData={reportData}
         onError={setFailure}
       />
@@ -412,40 +447,40 @@ export const DashboardPanel = memo(function DashboardPanel({
   const items: ContextMenuItem[] = labDisabled
     ? []
     : [
-    ...(editing && usable && editTo
-      ? [{ id: 'edit', label: `Edit ${EDIT_NAMES[panel.type] ?? panel.type}`, icon: 'pencil' as const, to: editTo, testId: 'embeddablePanelAction-editPanel' }]
-      : []),
-    ...(editing && usable
-      ? [{ id: 'clone', label: 'Clone panel', icon: 'copy' as const, onClick: () => onAction('clone', id), testId: 'embeddablePanelAction-clonePanel' }]
-      : []),
-    ...(editing
-      ? [
-          {
-            id: 'rename',
-            label: 'Edit panel title',
-            icon: 'pencil' as const,
-            onClick: () => onAction('rename', id),
-            testId: 'embeddablePanelAction-ACTION_CUSTOMIZE_PANEL',
-          },
-        ]
-      : []),
-    ...(inspectable
-      ? [{ id: 'inspect', label: 'Inspect', icon: 'inspect' as const, onClick: () => onAction('inspect', id), testId: 'embeddablePanelAction-openInspector' }]
-      : []),
-    {
-      id: 'expand',
-      label: expanded ? 'Minimize' : 'Maximize panel',
-      icon: expanded ? 'collapse' : 'expand',
-      onClick: () => onAction('expand', id),
-      testId: 'embeddablePanelAction-togglePanel',
-    },
-    ...(editing
-      ? [
-          { id: 'replace', label: 'Replace panel', icon: 'refresh' as const, onClick: () => onAction('replace', id), testId: 'embeddablePanelAction-replacePanel' },
-          { id: 'remove', label: 'Delete from dashboard', icon: 'trash' as const, onClick: () => onAction('remove', id), testId: 'embeddablePanelAction-deletePanel' },
-        ]
-      : []),
-  ];
+        ...(editing && usable && editTo
+          ? [{ id: 'edit', label: `Edit ${EDIT_NAMES[panel.type] ?? panel.type}`, icon: 'pencil' as const, to: editTo, testId: 'embeddablePanelAction-editPanel' }]
+          : []),
+        ...(editing && usable
+          ? [{ id: 'clone', label: 'Clone panel', icon: 'copy' as const, onClick: () => onAction('clone', id), testId: 'embeddablePanelAction-clonePanel' }]
+          : []),
+        ...(editing
+          ? [
+              {
+                id: 'rename',
+                label: 'Edit panel title',
+                icon: 'pencil' as const,
+                onClick: () => onAction('rename', id),
+                testId: 'embeddablePanelAction-ACTION_CUSTOMIZE_PANEL',
+              },
+            ]
+          : []),
+        ...(inspectable
+          ? [{ id: 'inspect', label: 'Inspect', icon: 'inspect' as const, onClick: () => onAction('inspect', id), testId: 'embeddablePanelAction-openInspector' }]
+          : []),
+        {
+          id: 'expand',
+          label: expanded ? 'Minimize' : 'Maximize panel',
+          icon: expanded ? 'collapse' : 'expand',
+          onClick: () => onAction('expand', id),
+          testId: 'embeddablePanelAction-togglePanel',
+        },
+        ...(editing
+          ? [
+              { id: 'replace', label: 'Replace panel', icon: 'refresh' as const, onClick: () => onAction('replace', id), testId: 'embeddablePanelAction-replacePanel' },
+              { id: 'remove', label: 'Delete from dashboard', icon: 'trash' as const, onClick: () => onAction('remove', id), testId: 'embeddablePanelAction-deletePanel' },
+            ]
+          : []),
+      ];
 
   return (
     <section

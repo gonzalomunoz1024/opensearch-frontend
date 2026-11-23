@@ -582,3 +582,31 @@ export function placeBeside(items: GridItem[], besideId: string): { place: { x: 
     moved: items.map((item) => (shifted.has(item.i) ? { ...item, y: item.y + shift } : item)),
   };
 }
+
+// --- The filters a saved search panel makes ------------------------------------------------------
+
+/**
+ * The original's getExistingFilter: the dashboard's own filter on this value of a field (a phrase,
+ * scripted or not), or, for `presence`, on the field being there
+ */
+export function existingFilter(filters: Filter[], name: string, value: unknown, presence: boolean): Filter | undefined {
+  return filters.find((filter) => {
+    if (presence) return (filter.exists as { field?: unknown } | undefined)?.field === value;
+    const phrase = (filter.query as { match_phrase?: Record<string, unknown> } | undefined)?.match_phrase;
+    if (phrase) {
+      const [field] = Object.keys(phrase);
+      const given = field === undefined ? undefined : phrase[field];
+      const asked = given !== null && typeof given === 'object' ? (given as { query?: unknown }).query : given;
+      return field === name && asked === value;
+    }
+    const script = (filter.script as { script?: { params?: { value?: unknown } } } | undefined)?.script;
+    return Boolean(script) && filter.meta?.field === name && script?.params?.value === value;
+  });
+}
+
+/** A filter the dashboard has, taken again by a button: turned on, negated as asked */
+export const takenAgain = (filter: Filter, negate: boolean): Filter => ({
+  ...filter,
+  meta: { ...filter.meta, disabled: false, negate },
+  $state: { store: 'appState' },
+});
