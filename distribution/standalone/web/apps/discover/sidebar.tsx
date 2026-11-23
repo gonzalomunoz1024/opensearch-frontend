@@ -139,6 +139,13 @@ export function fieldSummary(rows: RawHit[], indexPattern: IndexPattern, field: 
   return { total: rows.length, exists, buckets };
 }
 
+/**
+ * The text of one of a field's top values: an empty string stays empty, as the original's text
+ * format keeps it (its details then say "Empty string"), where a missing value is a dash
+ */
+export const bucketText = (value: unknown, format: (value: unknown) => { text: string }) =>
+  value === '' ? '' : format(value).text;
+
 /** Whether the original offers to visualize a field from its summary */
 export function isVisualizable(field: Field): boolean {
   return field.aggregatable && field.name !== '_id' && !['geo_point', 'geo_shape', 'unknown', 'conflict'].includes(field.type);
@@ -181,7 +188,7 @@ function FieldDetails({
           summary.buckets.length > 0 && (
             <div className="dscFieldDetails__buckets" data-test-subj="fieldVisualizeBucketContainer">
               {summary.buckets.map((bucket, index) => {
-                const display = format(bucket.value).text;
+                const display = bucketText(bucket.value, format);
                 const value = String(bucket.value);
                 return (
                   <div key={index} className="dscFieldBucket">

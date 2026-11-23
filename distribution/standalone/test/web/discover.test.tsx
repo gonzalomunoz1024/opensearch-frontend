@@ -31,6 +31,7 @@ import {
 import { pageCountOf, pagerArrows, pagerItems, pagerSummary, rowsOfPage } from '../../web/apps/discover/pager';
 import {
   NO_FILTER,
+  bucketText,
   fieldSummary,
   groupFields,
   isVisualizable,
@@ -308,6 +309,13 @@ describe('the fields beside the documents', () => {
 });
 
 describe('the values of a field in the documents on screen', () => {
+  it('keeps an empty string empty, so that its details say "Empty string", and formats the rest', () => {
+    const format = (value: unknown) => ({ text: value === null || value === undefined || value === '' ? '-' : `<${String(value)}>` });
+    assert.equal(bucketText('', format), '');
+    assert.equal(bucketText('gz', format), '<gz>');
+    assert.equal(bucketText(null, format), '-');
+  });
+
   const pattern = patternOf([field('tag', 'string'), field('place', 'geo_point'), field('user', 'string')]);
 
   it('counts the values of every document, as shares of the documents that have the field', () => {
