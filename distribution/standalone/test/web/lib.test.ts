@@ -142,6 +142,31 @@ describe('numbers', () => {
     })(503);
     assert.equal(coloured.background, '#f00');
   });
+
+  it('makes no link a browser would run as a script', () => {
+    const url = createFormatter({ id: 'url' });
+    const raw = createFormatter({ id: 'url', params: { urlTemplate: '{{rawValue}}', labelTemplate: 'open' } });
+    // A browser drops tabs and line ends inside an address, and control characters and spaces around it
+    for (const value of [
+      'java\tscript:alert(1)',
+      'java\nscript:alert(1)',
+      'jav\r\nascript:alert(1)',
+      '\u0001javascript:alert(1)',
+      ' \u0000\u001f javascript:alert(1)',
+      'JaVaScRiPt:alert(1)',
+      'vbscript:x',
+      'data:text/html,<script>alert(1)</script>',
+    ]) {
+      assert.equal(url(value).href, undefined, JSON.stringify(value));
+      assert.equal(raw(value).href, undefined, JSON.stringify(value));
+      assert.equal(createFormatter({ id: 'url', params: { type: 'img' } })(value).image, undefined, JSON.stringify(value));
+    }
+    // What is no scheme stays a link
+    assert.equal(url(' https://x.test/a ').href, 'https://x.test/a');
+    assert.equal(raw(' https://x.test/a\tb ').href, 'https://x.test/ab');
+    assert.equal(raw('a/b:c').href, 'a/b:c');
+    assert.equal(raw('#/doc?x=java\tscript:1').href, '#/doc?x=javascript:1');
+  });
 });
 
 const pattern: IndexPattern = {

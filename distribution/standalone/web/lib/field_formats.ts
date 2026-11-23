@@ -303,9 +303,12 @@ export function urlParts(params: Record<string, unknown>, value: unknown): { url
   return { url, label };
 }
 
-// Only links a page may safely open: a relative address, or http, https or mailto
+// Only links a page may safely open: a relative address, or http, https or mailto. The address is
+// read as a browser reads it, without the spaces and control characters around it and the tabs and
+// line ends inside it, so that none of them hides a scheme such as `java<tab>script:`
 function safeUrl(url: string): string | undefined {
-  const trimmed = url.trim();
+  // eslint-disable-next-line no-control-regex
+  const trimmed = url.replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, '').replace(/[\t\n\r]/g, '');
   if (/^(https?:|mailto:)/i.test(trimmed)) return trimmed;
   if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return undefined;
   return trimmed;
