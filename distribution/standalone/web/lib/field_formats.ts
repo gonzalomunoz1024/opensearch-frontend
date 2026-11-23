@@ -336,7 +336,8 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
     }
     case 'date': {
       const pattern = typeof params.pattern === 'string' && params.pattern ? params.pattern : settings.dateFormat;
-      const zone = typeof params.timezone === 'string' && params.timezone ? params.timezone : settings.timeZone;
+      // In the zone of the settings, as the original's date formats write whatever timezone they name
+      const zone = settings.timeZone;
       return (value) => {
         const date = toDate(value);
         return text(date ? formatDate(date, pattern, zone) : stringify(value));
@@ -348,7 +349,7 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
         typeof params.pattern === 'string' && params.pattern
           ? params.pattern
           : settings.dateNanosFormat || DEFAULT_DATE_NANOS_FORMAT;
-      const zone = typeof params.timezone === 'string' && params.timezone ? params.timezone : settings.timeZone;
+      const zone = settings.timeZone;
       return (value) => {
         const date = toDate(value);
         if (!date) return text(stringify(value));

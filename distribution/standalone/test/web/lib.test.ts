@@ -289,6 +289,13 @@ describe('numbers', () => {
     assert.deepEqual([link.text, link.href], ['http://example.com/', 'http://example.com/']);
     assert.equal(createFormatter({ id: 'string' })(null).text, '-');
   });
+
+  it("writes dates in the zone of the settings, as the original's formats do whatever zone they name", () => {
+    const settings = { ...DEFAULT_FORMAT_SETTINGS, timeZone: 'UTC' };
+    const params = { pattern: 'YYYY-MM-DD HH:mm', timezone: 'America/New_York' };
+    assert.equal(createFormatter({ id: 'date', params }, settings)(0).text, '1970-01-01 00:00');
+    assert.equal(createFormatter({ id: 'date_nanos', params }, settings)('1970-01-01T00:00:00.000Z').text, '1970-01-01 00:00');
+  });
 });
 
 const pattern: IndexPattern = {
