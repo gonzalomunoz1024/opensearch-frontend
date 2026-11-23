@@ -92,9 +92,13 @@ export function markdownToHtml(text: string, options: MarkdownOptions = {}): str
   return typeof text === 'string' && text !== '' ? parserFor(Boolean(options.openLinksInNewTab)).render(text) : '';
 }
 
-export function Markdown({ text, openLinksInNewTab, className }: { text: string; openLinksInNewTab?: boolean; className?: string }) {
+/**
+ * The original's Markdown component: its HTML set in a div. `testId` is the `data-test-subj` the
+ * original's callers give that div (the Markdown visualization's "markdownBody").
+ */
+export function Markdown({ text, openLinksInNewTab, className, testId }: { text: string; openLinksInNewTab?: boolean; className?: string; testId?: string }) {
   const html = useMemo(() => markdownToHtml(text, { openLinksInNewTab }), [text, openLinksInNewTab]);
-  return <div className={`atlMarkdown${className ? ` ${className}` : ''}`} dangerouslySetInnerHTML={{ __html: html }} />;
+  return <div className={`atlMarkdown${className ? ` ${className}` : ''}`} data-test-subj={testId} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 // --- The custom banner ------------------------------------------------------------------------------
