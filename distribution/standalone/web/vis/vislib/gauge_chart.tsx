@@ -64,11 +64,10 @@ interface GaugeCanvasProps extends Pick<GaugeChartProps, 'config' | 'colorOf' | 
   opacityOf: (label: string) => number | undefined;
   onUnhighlight: () => void;
   onTooltip: (state: TooltipState | undefined) => void;
-  onLeave: () => void;
 }
 
 /** The gauges of a chart in its room */
-function GaugeCanvas({ config, series, title, colorOf, addTooltip, opacityOf, onUnhighlight, onTooltip, onLeave }: GaugeCanvasProps) {
+function GaugeCanvas({ config, series, title, colorOf, addTooltip, opacityOf, onUnhighlight, onTooltip }: GaugeCanvasProps) {
   const [chartRef, size] = useSize<HTMLDivElement>();
 
   const drawn = useMemo(() => {
@@ -91,7 +90,7 @@ function GaugeCanvas({ config, series, title, colorOf, addTooltip, opacityOf, on
 
   const outline = config.outline ? 'visGauge__meter--outline' : undefined;
   return (
-    <div className="chart" ref={chartRef} style={{ textAlign: 'center', overflowY: 'auto' }} onMouseLeave={onLeave}>
+    <div className="chart" ref={chartRef} style={{ textAlign: 'center', overflowY: 'auto' }}>
       {drawn?.gauges.map((gauge, index) => {
         const item = series[index];
         return (
@@ -168,6 +167,7 @@ export function GaugeChart({ config, charts, rows, labels, colorOf, addTooltip, 
     if (hover.label !== undefined) return hover.label === label ? 1 : dimming;
     return hover.touched ? 1 : undefined;
   };
+  // The tooltip keeps its side over all the charts of a split, until the pointer leaves the wrapper
   const onLeave = useCallback(() => (placement.current = undefined), []);
 
   const canvases = charts.map((chart, index) => (
@@ -181,7 +181,6 @@ export function GaugeChart({ config, charts, rows, labels, colorOf, addTooltip, 
       opacityOf={opacityOf}
       onUnhighlight={unhighlight}
       onTooltip={setTooltip}
-      onLeave={onLeave}
     />
   ));
 
@@ -189,7 +188,7 @@ export function GaugeChart({ config, charts, rows, labels, colorOf, addTooltip, 
   return (
     <div className={`visLib${legendPosition ? ` visLib--legend-${legendPosition}` : ''}`} data-test-subj="visLib">
       <div className="visLib__chart">
-        <div className="visWrapper" ref={wrapperRef} data-test-subj="visChart">
+        <div className="visWrapper" ref={wrapperRef} data-test-subj="visChart" onMouseLeave={onLeave}>
           <div className="visAxis__splitTitles--y" />
           <div className="visWrapper__column">
             {rows === undefined ? <div className="visWrapper__chart">{canvases}</div> : <SplitCharts rows={rows}>{canvases}</SplitCharts>}

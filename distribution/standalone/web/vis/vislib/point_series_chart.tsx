@@ -821,10 +821,7 @@ export function PointSeriesChart({ model, colorOf, offsetAt, dimming, legend, on
           className="chart"
           style={{ left: chart.x, top: chart.y, width: chart.width, height: chart.height }}
           onMouseMove={(event) => showTip(event)}
-          onMouseLeave={() => {
-            setTooltip(undefined);
-            placement.current = undefined;
-          }}
+          onMouseLeave={() => setTooltip(undefined)}
         >
           <svg focusable="false" width={chart.width} height={chart.height}>
             <rect x={0} y={0} width={chart.width} height={chart.height} fill="transparent" className="background" />
@@ -883,7 +880,8 @@ export function PointSeriesChart({ model, colorOf, offsetAt, dimming, legend, on
   return (
     <div className={`visLib${legendPosition ? ` visLib--legend-${legendPosition}` : ''}`} data-test-subj="visLib">
       <div className="visLib__chart">
-        <div className="visWrapper" ref={wrapperRef} data-test-subj="visChart">
+        {/* The tooltip keeps its side until the pointer leaves the wrapper, its axes too */}
+        <div className="visWrapper" ref={wrapperRef} data-test-subj="visChart" onMouseLeave={() => (placement.current = undefined)}>
           {body}
         </div>
       </div>

@@ -21,7 +21,7 @@ import {
 } from '../../web/vis/vislib/point_series_data';
 import { layoutPointSeries } from '../../web/vis/vislib/point_series_layout';
 import { keptPieLabels } from '../../web/vis/vislib/pie_chart';
-import { splitTitleText } from '../../web/vis/vislib/split';
+import { cutSplitTitle, splitTitleText, splitTitleTooltip } from '../../web/vis/vislib/split';
 import {
   buildSlices,
   convertToPercentage,
@@ -687,6 +687,22 @@ describe('the buckets of a chart', () => {
     assert.equal(splitTitleText('abcdefghij', 200, measure), 'abcdefghij');
     assert.equal(splitTitleText('abcdefghij', 100, measure), 'abcd...');
     assert.equal(splitTitleText('abcdefghij', 20, measure), '...');
+  });
+
+  it('show the whole of a title that was cut in the tooltip, and nothing for one that fits', () => {
+    const measure = (text: string) => text.length * 10;
+    assert.deepEqual(cutSplitTitle('abcdefghij', 200, measure), { text: 'abcdefghij', cut: false });
+    assert.deepEqual(cutSplitTitle('abcdefghij', 100, measure), { text: 'abcd...', cut: true });
+    // Nine tenths of its room: a title of exactly that length is left whole
+    assert.equal(cutSplitTitle('abcdefghi', 100, measure).cut, false);
+    assert.deepEqual(cutSplitTitle('abcdefghij', 20, measure), { text: '...', cut: true });
+    // A line of plain text where the pointer is, no rows
+    assert.deepEqual(splitTitleTooltip('CN: geo.dest: Descending', 37, 873), {
+      clientX: 37,
+      clientY: 873,
+      text: 'CN: geo.dest: Descending',
+      details: [],
+    });
   });
 
   it('filter out the terms beside the "Other" bucket, those of the rows it was clicked in', () => {

@@ -106,7 +106,6 @@ interface PieCanvasProps extends Pick<PieChartProps, 'isDonut' | 'labels' | 'add
   opacityOf: (label: string) => number | undefined;
   onHighlight: (label: string | undefined) => void;
   onTooltip: (state: TooltipState | undefined) => void;
-  onLeave: () => void;
   onSliceClick?: (slice: PieSlice, chart: number) => void;
   /**
    * In a split: told whether this pie lacks room. A pie without room there draws no message of
@@ -127,7 +126,6 @@ function PieCanvas({
   opacityOf,
   onHighlight,
   onTooltip,
-  onLeave,
   onSliceClick,
   onRoom,
 }: PieCanvasProps) {
@@ -264,7 +262,7 @@ function PieCanvas({
     );
   }
   return (
-    <div className="chart" ref={chartRef} onMouseLeave={onLeave}>
+    <div className="chart" ref={chartRef}>
       {body}
     </div>
   );
@@ -296,6 +294,7 @@ export function PieChart({ charts, rows, names, isDonut, labels, addTooltip, col
       return next;
     });
   }, []);
+  // The tooltip keeps its side over all the pies of a split, until the pointer leaves the wrapper
   const onLeave = useCallback(() => (placement.current = undefined), []);
 
   const canvases = charts.map((chart, index) => (
@@ -311,7 +310,6 @@ export function PieChart({ charts, rows, names, isDonut, labels, addTooltip, col
       opacityOf={opacityOf}
       onHighlight={highlight}
       onTooltip={setTooltip}
-      onLeave={onLeave}
       onSliceClick={onSliceClick}
       onRoom={split ? onRoom : undefined}
     />
@@ -323,11 +321,11 @@ export function PieChart({ charts, rows, names, isDonut, labels, addTooltip, col
   return (
     <div className={`visLib${legendPosition ? ` visLib--legend-${legendPosition}` : ''}`} data-test-subj="visLib">
       <div className="visLib__chart">
-        <div className={`visWrapper${failed ? ' visWrapper--failed' : ''}`} ref={wrapperRef} data-test-subj="visChart">
-          {split && rows && <SplitTitles rows labels={titles} />}
+        <div className={`visWrapper${failed ? ' visWrapper--failed' : ''}`} ref={wrapperRef} data-test-subj="visChart" onMouseLeave={onLeave}>
+          {split && rows && <SplitTitles rows labels={titles} onTooltip={setTooltip} />}
           <div className="visWrapper__column">
             {split ? <SplitCharts rows={Boolean(rows)}>{canvases}</SplitCharts> : <div className="visWrapper__chart">{canvases}</div>}
-            {split && !rows && <SplitTitles rows={false} labels={titles} />}
+            {split && !rows && <SplitTitles rows={false} labels={titles} onTooltip={setTooltip} />}
           </div>
           {failed && (
             <div className="visError visError--split" role="alert">
