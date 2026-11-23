@@ -16,6 +16,7 @@ import { services } from '../../services';
 import type { SavedObject } from '../../services/saved_objects';
 import { TablePagination } from '../../shell/listing';
 import { VIS_BUILDER_TYPE } from '../vis_builder/model';
+import { finderName } from './model';
 
 export interface PanelFinderType {
   type: string;
@@ -210,14 +211,14 @@ export function PanelFinder({
         <ul className="dshFinder__list" data-test-subj="savedObjectFinderItemList">
           {shown.slice(page * perPage, page * perPage + perPage).map((item) => {
             const title = item.attributes.title ?? '';
-            const name = `${title} (${types.find((type) => type.type === item.type)?.name ?? item.type})`;
+            const name = finderName(item, types);
             return (
               <li key={`${item.type}:${item.id}`}>
                 <button
                   type="button"
                   className="dshFinder__item"
                   title={name}
-                  onClick={() => onChoose(item, title)}
+                  onClick={() => onChoose(item, name)}
                   data-test-subj={`savedObjectTitle${title.split(' ').join('-')}`}
                 >
                   <Icon name={iconOf(item, types)} />

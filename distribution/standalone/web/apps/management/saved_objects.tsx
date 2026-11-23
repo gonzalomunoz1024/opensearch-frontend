@@ -20,6 +20,7 @@ import {
   BasicTable,
   Callout,
   MANAGEMENT_CRUMB,
+  OBJECTS_CRUMB,
   errorText,
   Check,
   IMPORT_ICON,
@@ -75,7 +76,7 @@ export function SavedObjectsSection({ rest }: { rest: string[] }) {
 }
 
 function ObjectsTablePage() {
-  useBreadcrumbs([MANAGEMENT_CRUMB, { text: 'Saved objects' }]);
+  useBreadcrumbs([MANAGEMENT_CRUMB, OBJECTS_CRUMB]);
   const [allowedTypes, setAllowedTypes] = useState<string[]>();
   useEffect(() => {
     let live = true;

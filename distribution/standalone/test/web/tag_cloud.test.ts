@@ -380,6 +380,20 @@ describe('the words of a table', () => {
     );
   });
 
+  it('writes an empty term by the format of its field, as a static lookup writes its value for unknown keys', () => {
+    const lookup = { id: 'static_lookup', params: { lookupEntries: [{ key: 'css', value: 'Style sheet' }], unknownKeyValue: 'other' } };
+    const known: AggContext = { indexPattern: { ...logs, fieldFormatMap: { request: lookup } } };
+    const whole = tabify([count, requests], { aggregations: { '2': { buckets: [{ key: '', doc_count: 9 }, { key: 'css', doc_count: 8 }] } } }, known);
+    const made = cloudTags(whole, whole.columns[0], whole.columns[1], formatValue);
+    assert.deepEqual(
+      made?.tags.map((tag) => [tag.displayText, tag.rawText]),
+      [
+        ['other', ''],
+        ['Style sheet', 'css'],
+      ]
+    );
+  });
+
   it('keeps the first 200 words and says that it left the others out', () => {
     const keys = Array.from({ length: 250 }, (_, index) => `word ${index}`);
     const whole = table(keys);

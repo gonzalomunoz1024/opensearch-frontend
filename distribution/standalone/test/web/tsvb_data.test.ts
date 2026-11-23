@@ -2,7 +2,8 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { metricAggs, metricBackground, metricRule, seriesLines, termLabel, timeAxisPattern, tooManyBuckets, topNRows, type ColorRule, type TimeBucket, type TsvbMetric, type TsvbSeries, type TsvbSeriesData } from '../../web/vis/tsvb/data';
+import { createServices, services, type BootData } from '../../web/services';
+import { fetchTsvb, MathScriptError, metricAggs, metricBackground, metricRule, seriesLines, termLabel, timeAxisPattern, tooManyBuckets, topNRows, type ColorRule, type TimeBucket, type TsvbMetric, type TsvbSeries, type TsvbSeriesData } from '../../web/vis/tsvb/data';
 import { convertSeriesToVars } from '../../web/vis/tsvb/markdown_vars';
 
 const HOUR = 3600000;
@@ -118,6 +119,33 @@ describe('the lines a split of a TSVB series draws', () => {
   });
 });
 
+describe('what a TSVB series works out from its metrics', () => {
+  it('takes a positive rate over a bucket when it has no unit of its own, and over its unit otherwise', () => {
+    const answer = [bucket(0, { 'r-max': { value: 100 } }), bucket(1, { 'r-max': { value: 160 } }), bucket(2, { 'r-max': { value: 40 } })];
+    const rate = (unit: string) => seriesLines(seriesOf({ id: 'r', type: 'positive_rate', field: 'bytes', unit }), answer, HOUR)[0].points;
+    assert.deepEqual(rate(''), [[0, null], [HOUR, 60], [2 * HOUR, 0]]);
+    assert.deepEqual(rate('1m'), [[0, null], [HOUR, 1], [2 * HOUR, 0]]);
+  });
+
+  const answer = [bucket(0, { s: { value: 10 } }), bucket(1, { s: { value: null } }), bucket(2, { s: { value: 30 } })];
+  const math = (script: string, variables = [{ id: 'v', name: 'x', field: 's' }], table = false) =>
+    seriesLines(seriesOf({ id: 's', type: 'avg', field: 'bytes' }, { id: 'm', type: 'math', script, variables }), answer, HOUR, table)[0].points.map(([, value]) => value);
+
+  it('gives Math the values of each variable under its name in params._all', () => {
+    assert.deepEqual(math('params.x / sum(params._all.x.values)'), [0.25, null, 0.75]);
+  });
+
+  it('gives Math no value where a variable has none, and none at all without variables', () => {
+    assert.deepEqual(math('max(params.x, 0)'), [10, null, 30]);
+    assert.deepEqual(math('1 + 1', []), [null, null, null]);
+  });
+
+  it('fails the panel on a Math script it cannot work out, but not a table, which the product never works out', () => {
+    assert.throws(() => math('params.x +'), MathScriptError);
+    assert.deepEqual(math('params.x +', undefined, true), [null, null, null]);
+  });
+});
+
 /** A part of a series as the panels get it, its last value given */
 const part = (id: string, last: number, label = id.split(':')[1] ?? id): TsvbSeriesData => ({
   id,
@@ -169,6 +197,63 @@ describe('the parts of a TSVB series as the panels show them', () => {
     assert.equal(metricBackground({ background_color: '#000000' }, { series: [part('a', 3)] }), undefined);
     // With no series, the rules are met by 0
     assert.equal(metricBackground({ background_color_rules: [{ ...rules[0], operator: 'lte', value: 0 }] }, { series: [] }), 'rgba(51,51,51,1)');
+  });
+});
+
+describe('the buckets a TSVB panel asks OpenSearch for', () => {
+  it('follow the calendar for one unit of its own interval, as the product asks for them, and are fixed otherwise', async () => {
+    createServices({ basePath: '', version: '3.9.0', name: 'test', settings: {}, settingsDefaults: {}, settingsOverrides: {} } as unknown as BootData);
+    const asked: Array<Record<string, unknown>> = [];
+    const { indexPatterns, search } = services;
+    const [list, ask] = [indexPatterns.list, search.search];
+    indexPatterns.list = async () => [];
+    search.search = async (_index, body) => {
+      asked.push(body);
+      return { hits: { total: 0, hits: [] } };
+    };
+    // Three weeks: an automatic interval of a few hours
+    const time = { from: '2026-11-02T00:00:00.000Z', to: '2026-11-23T00:00:00.000Z' };
+    const histogramOf = async (interval: string) => {
+      asked.length = 0;
+      await fetchTsvb({ id: 'p', type: 'timeseries', index_pattern: 'logs', time_field: 'timestamp', interval, series: [{ id: 's', metrics: [{ id: 'm', type: 'count' }] }] }, { time, filters: [] });
+      const { calendar_interval, fixed_interval } = (asked[0].aggs as { s: { aggs: { timeseries: { date_histogram: Record<string, unknown> } } } }).s.aggs.timeseries.date_histogram;
+      return { calendar_interval, fixed_interval };
+    };
+    try {
+      assert.deepEqual(await histogramOf('1w'), { calendar_interval: '1w', fixed_interval: undefined });
+      assert.deepEqual(await histogramOf('1d'), { calendar_interval: '1d', fixed_interval: undefined });
+      assert.deepEqual(await histogramOf('>=1d'), { calendar_interval: '1d', fixed_interval: undefined });
+      assert.deepEqual(await histogramOf('2d'), { calendar_interval: undefined, fixed_interval: '172800000ms' });
+      assert.deepEqual(await histogramOf('12h'), { calendar_interval: undefined, fixed_interval: '43200000ms' });
+      assert.equal((await histogramOf('auto')).calendar_interval, undefined);
+      assert.equal((await histogramOf('>=1m')).calendar_interval, undefined);
+    } finally {
+      indexPatterns.list = list;
+      search.search = ask;
+    }
+  });
+
+  it('drop the last of them, even when it is the only one, as the product does', async () => {
+    createServices({ basePath: '', version: '3.9.0', name: 'test', settings: {}, settingsDefaults: {}, settingsOverrides: {} } as unknown as BootData);
+    const { indexPatterns, search } = services;
+    const [list, ask] = [indexPatterns.list, search.search];
+    let buckets: TimeBucket[] = [];
+    indexPatterns.list = async () => [];
+    search.search = async () => ({ hits: { total: 0, hits: [] }, aggregations: { s: { doc_count: buckets.length, timeseries: { buckets } } } });
+    const time = { from: '2026-11-16T00:00:00.000Z', to: '2026-11-23T00:00:00.000Z' };
+    const dataOf = async (drop: number) =>
+      (await fetchTsvb({ id: 'p', type: 'timeseries', index_pattern: 'logs', time_field: 'timestamp', interval: '30d', drop_last_bucket: drop, series: [{ id: 's', metrics: [{ id: 'm', type: 'count' }] }] }, { time, filters: [] }))
+        .series[0].data;
+    try {
+      buckets = [bucket(0, {}), bucket(1, {})];
+      assert.deepEqual(await dataOf(1), [[0, 1]]);
+      buckets = [bucket(0, {})];
+      assert.deepEqual(await dataOf(1), []);
+      assert.deepEqual(await dataOf(0), [[0, 1]]);
+    } finally {
+      indexPatterns.list = list;
+      search.search = ask;
+    }
   });
 });
 

@@ -83,8 +83,8 @@ export interface PointSeriesOptions {
 
 const keyText = (key: unknown): string => (key !== null && typeof key === 'object' ? JSON.stringify(key) : String(key));
 
-/** A bucket's key as its column writes it; an empty text stays empty, as the original's string format leaves it */
-export const keyLabel = (column: TableColumn, key: unknown): string => (key === '' ? '' : column.format(key));
+/** A bucket's key as its column writes it: an empty text too, which the string format leaves empty and a static lookup names */
+export const keyLabel = (column: TableColumn, key: unknown): string => column.format(key);
 
 const numberOrNull = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) ? value : null;
