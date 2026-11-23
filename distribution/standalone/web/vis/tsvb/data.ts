@@ -978,7 +978,8 @@ async function planFor(params: TsvbParams, series: TsvbSeries | undefined, input
 
 function finish(points: TsvbPoint[], plan: Plan, shift: number): TsvbPoint[] {
   let data = points.map(([time, ...values]): TsvbPoint => [time + shift, ...values]);
-  if (plan.dropLast && data.length > 1) data = data.slice(0, -1);
+  // Even an only bucket, as the product drops it
+  if (plan.dropLast) data = data.slice(0, -1);
   return data;
 }
 

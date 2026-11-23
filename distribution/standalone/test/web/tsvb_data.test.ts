@@ -232,6 +232,29 @@ describe('the buckets a TSVB panel asks OpenSearch for', () => {
       search.search = ask;
     }
   });
+
+  it('drop the last of them, even when it is the only one, as the product does', async () => {
+    createServices({ basePath: '', version: '3.9.0', name: 'test', settings: {}, settingsDefaults: {}, settingsOverrides: {} } as unknown as BootData);
+    const { indexPatterns, search } = services;
+    const [list, ask] = [indexPatterns.list, search.search];
+    let buckets: TimeBucket[] = [];
+    indexPatterns.list = async () => [];
+    search.search = async () => ({ hits: { total: 0, hits: [] }, aggregations: { s: { doc_count: buckets.length, timeseries: { buckets } } } });
+    const time = { from: '2026-11-16T00:00:00.000Z', to: '2026-11-23T00:00:00.000Z' };
+    const dataOf = async (drop: number) =>
+      (await fetchTsvb({ id: 'p', type: 'timeseries', index_pattern: 'logs', time_field: 'timestamp', interval: '30d', drop_last_bucket: drop, series: [{ id: 's', metrics: [{ id: 'm', type: 'count' }] }] }, { time, filters: [] }))
+        .series[0].data;
+    try {
+      buckets = [bucket(0, {}), bucket(1, {})];
+      assert.deepEqual(await dataOf(1), [[0, 1]]);
+      buckets = [bucket(0, {})];
+      assert.deepEqual(await dataOf(1), []);
+      assert.deepEqual(await dataOf(0), [[0, 1]]);
+    } finally {
+      indexPatterns.list = list;
+      search.search = ask;
+    }
+  });
 });
 
 describe('the panels the product does not ask for, as their interval makes too many buckets', () => {
