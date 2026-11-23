@@ -32,8 +32,8 @@ export const DEFAULT_DATE_NANOS_FORMAT = 'MMM D, YYYY @ HH:mm:ss.SSSSSSSSS';
  */
 export function formatDateNanos(raw: string, date: Date, pattern: string, timeZone?: string): string {
   const fraction = /S+/.exec(pattern)?.[0] ?? '';
-  if (fraction.length <= 3) return formatDate(date, withLongFractions(pattern, date), timeZone);
-  const shown = formatDate(date, withLongFractions(pattern.replace(fraction, `[${fraction}]`), date), timeZone);
+  if (fraction.length <= 3) return formatDate(date, pattern, timeZone);
+  const shown = formatDate(date, pattern.replace(fraction, `[${fraction}]`), timeZone);
   // The original's substr(20, length - 21): the digits between the dot and the zone's Z
   const nanos = raw
     .slice(20, 20 + Math.max(0, raw.length - 21))
@@ -72,7 +72,8 @@ export type Formatter = (value: unknown) => Formatted;
 
 export const MISSING = '-';
 
-const isMissing = (value: unknown) => value === null || value === undefined || value === '';
+// An empty text is a value, which each format writes as the original's does: mostly as nothing
+const isMissing = (value: unknown) => value === null || value === undefined;
 
 function toNumber(value: unknown): number | undefined {
   if (typeof value === 'number') return value;
@@ -203,15 +204,6 @@ const DURATION_OUTPUTS: Record<string, string> = {
 /** A parameter as a format reads it: an empty text or null is the default */
 const param = (value: unknown, fallback: unknown) => (value || value === false || value === 0 ? value : fallback);
 
-/** moment writes a run of four to nine S as the milliseconds followed by zeros */
-function withLongFractions(pattern: string, date: Date): string {
-  return pattern.replace(/\[[^\]]*\]|S{4,9}/g, (token) =>
-    token.startsWith('[')
-      ? token
-      : `[${String(date.getUTCMilliseconds() * 10 ** (token.length - 3)).padStart(token.length, '0')}]`
-  );
-}
-
 const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
 /** Base64 read as Node's Buffer reads it: other characters left out, the bytes read as UTF-8 */
@@ -336,16 +328,19 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
         // The ends of an open range, as the original's numeral formats write them
         if (value === Infinity) return text('+∞');
         if (value === -Infinity) return text('-∞');
-        const number = toNumber(value);
-        return text(number === undefined ? stringify(value) : formatNumber(number, pattern));
+        // Anything else is read as parseFloat reads it, and what is then no number is written as
+        // nothing, as the original's numeral formats do: "3.14abc" is 3.14, "n/a", true and NaN ""
+        const number = typeof value === 'number' ? value : parseFloat(String(value));
+        return text(Number.isNaN(number) ? '' : formatNumber(number, pattern));
       };
     }
     case 'date': {
       const pattern = typeof params.pattern === 'string' && params.pattern ? params.pattern : settings.dateFormat;
-      const zone = typeof params.timezone === 'string' && params.timezone ? params.timezone : settings.timeZone;
+      // In the zone of the settings, as the original's date formats write whatever timezone they name
+      const zone = settings.timeZone;
       return (value) => {
         const date = toDate(value);
-        return text(date ? formatDate(date, withLongFractions(pattern, date), zone) : stringify(value));
+        return text(date ? formatDate(date, pattern, zone) : stringify(value));
       };
     }
     case 'date_nanos': {
@@ -354,11 +349,11 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
         typeof params.pattern === 'string' && params.pattern
           ? params.pattern
           : settings.dateNanosFormat || DEFAULT_DATE_NANOS_FORMAT;
-      const zone = typeof params.timezone === 'string' && params.timezone ? params.timezone : settings.timeZone;
+      const zone = settings.timeZone;
       return (value) => {
         const date = toDate(value);
         if (!date) return text(stringify(value));
-        if (typeof value !== 'string') return text(formatDate(date, withLongFractions(settings.dateFormat, date), zone));
+        if (typeof value !== 'string') return text(formatDate(date, settings.dateFormat, zone));
         return text(formatDateNanos(value, date, pattern, zone));
       };
     }
@@ -501,18 +496,19 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
 
 /** The formatter of a format. A list of values is written value by value, joined by commas. */
 export function createFormatter(spec: FieldFormatSpec | undefined, settings = DEFAULT_FORMAT_SETTINGS): Formatter {
-  const one = single(spec ?? { id: 'string' }, settings);
-  return (value) => {
-    if (isMissing(value)) return { text: MISSING };
-    if (Array.isArray(value)) {
-      if (value.length === 1) return one(value[0]);
-      const parts = value.map((item) => one(item));
-      // As the original joins a list: a line to each value when one of them takes several
-      const separator = parts.some((part) => part.text.includes('\n')) ? ',\n' : ', ';
-      return { ...parts[0], text: parts.map((part) => part.text).join(separator), href: undefined, image: undefined };
-    }
-    return one(value);
+  const format = single(spec ?? { id: 'string' }, settings);
+  // No value, alone or in a list, is a dash whatever the format, as the original's lists write it
+  const one = (value: unknown): Formatted => (isMissing(value) ? { text: MISSING } : format(value));
+  // As the original writes a list: each value, a list in it value by value too
+  const write = (value: unknown): Formatted => {
+    if (!Array.isArray(value)) return one(value);
+    if (value.length === 1) return write(value[0]);
+    const parts = value.map(write);
+    // As the original joins a list: a line to each value when one of them takes several
+    const separator = parts.some((part) => part.text.includes('\n')) ? ',\n' : ', ';
+    return { ...parts[0], text: parts.map((part) => part.text).join(separator), href: undefined, image: undefined };
   };
+  return write;
 }
 
 export function formatSpecOf(
@@ -527,26 +523,34 @@ export function formatSpecOf(
   return byEsType ?? (field ? map[field.type] : undefined) ?? map._default_ ?? { id: 'string' };
 }
 
-const formatterCache = new WeakMap<object, Map<string, Formatter>>();
+const formatterCache = new WeakMap<object, WeakMap<FormatSettings, Map<string, Formatter>>>();
 
-/** The formatter of a field of an index pattern, made once per pattern and settings */
+/**
+ * The formatter of a field of an index pattern, made once per pattern and settings: the page's
+ * settings are a new object once one of them changes, so a changed default pattern or type map is
+ * followed without a reload, as the original's formats read the settings at each value
+ */
 export function fieldFormatter(
   indexPattern: IndexPattern | undefined,
   fieldName: string,
   settings = DEFAULT_FORMAT_SETTINGS
 ): Formatter {
   const owner = indexPattern ?? settings;
-  let byField = formatterCache.get(owner);
+  let bySettings = formatterCache.get(owner);
+  if (!bySettings) {
+    bySettings = new WeakMap();
+    formatterCache.set(owner, bySettings);
+  }
+  let byField = bySettings.get(settings);
   if (!byField) {
     byField = new Map();
-    formatterCache.set(owner, byField);
+    bySettings.set(settings, byField);
   }
-  const key = `${fieldName}\u0000${settings.dateFormat}\u0000${settings.timeZone ?? ''}`;
-  let formatter = byField.get(key);
+  let formatter = byField.get(fieldName);
   if (!formatter) {
     const field = indexPattern?.fields.find((candidate) => candidate.name === fieldName);
     formatter = createFormatter(formatSpecOf(field, indexPattern, settings), settings);
-    byField.set(key, formatter);
+    byField.set(fieldName, formatter);
   }
   return formatter;
 }

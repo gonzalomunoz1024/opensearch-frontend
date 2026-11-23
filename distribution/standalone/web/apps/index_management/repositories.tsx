@@ -10,7 +10,7 @@ import { Button } from '../../components/basic';
 import { SearchField } from '../../components/form';
 import { searchItems } from '../../lib/search_syntax';
 import { useBreadcrumbs } from '../../shell/state';
-import { DeleteModal, LocalTable, ism, toasts, type TableColumn } from './common';
+import { LocalTable, ism, toasts, type TableColumn } from './common';
 import { CRUMBS } from './routes';
 import {
   distinct,
@@ -20,7 +20,13 @@ import {
   withFieldValues,
   type Repository,
 } from './snapshot_model';
-import { CreateRepositoryFlyout, FilterGroup, GroupFilter, ListPanel } from './snapshot_parts';
+import {
+  CreateRepositoryFlyout,
+  DeleteDialog,
+  FilterGroup,
+  GroupFilter,
+  ListPanel,
+} from './snapshot_parts';
 
 const COLUMNS: Array<TableColumn<Repository>> = [
   {
@@ -75,15 +81,14 @@ export function Repositories() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The dialog has closed already, as the plugin's: each deletion is told as it is done
   const remove = async () => {
     for (const repository of selected) {
       const answer = await ism.delete(`_repositores/${encodeURIComponent(repository.id)}`);
       if (answer.ok) toasts.success(`Deleted repository ${repository.id}.`);
       else toasts.danger(answer.error || 'There was a problem deleting the repository.');
     }
-    if (!here.current) return;
-    setDialog(undefined);
-    await load();
+    if (here.current) await load();
   };
 
   const filter = (types: string[]) => {
@@ -165,14 +170,14 @@ export function Repositories() {
         />
       )}
       {dialog === 'delete' && (
-        <DeleteModal
-          title="Delete repository"
-          onClose={() => setDialog(undefined)}
-          onDelete={remove}
-        >
-          Delete "<strong>{selected.map((row) => row.id).join(', ')}</strong>" permanently?{' '}
-          {snapshotCountsWarning(selected)}
-        </DeleteModal>
+        <DeleteDialog
+          type="repository"
+          ids={selected.map((row) => row.id).join(', ')}
+          warning={snapshotCountsWarning(selected)}
+          confirm
+          onCancel={() => setDialog(undefined)}
+          onDelete={() => void remove()}
+        />
       )}
     </>
   );

@@ -8,6 +8,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { Accordion, Button, IconButton } from '../../components/basic';
 import { Checkbox, NumberField, Select, TextArea, TextField } from '../../components/form';
+import { Icon } from '../../components/icon';
 import { useLocation } from '../../router';
 import { useBreadcrumbs } from '../../shell/state';
 import { ExternalLink, go, ism, toasts } from './common';
@@ -355,9 +356,11 @@ export function CreateSnapshotPolicy({ isEdit }: { isEdit: boolean }) {
                   </div>
                   <Spacer size="m" />
                   <p className="ismSnapshotPolicy__text">Deletion frequency</p>
-                  <span className="ismSnapshotPolicy__note">
-                    Configure when to check retention conditions and delete snapshots.
-                  </span>
+                  <div className="ismSnapshotPolicy__noteLine">
+                    <span className="ismSnapshotPolicy__note">
+                      Configure when to check retention conditions and delete snapshots.
+                    </span>
+                  </div>
                   <Spacer size="s" />
                   <Checkbox
                     checked={!form.deletionSchedule}
@@ -427,13 +430,16 @@ export function CreateSnapshotPolicy({ isEdit }: { isEdit: boolean }) {
                     onClick={() => void loadChannels()}
                     testId="channel-notification-refresh"
                   />
-                  <Button
-                    icon="external"
-                    iconSide="right"
-                    onClick={() => window.open('/app/notifications-dashboards#/channels')}
+                  {/* A link, as the plugin's, that opens the channels in a new tab */}
+                  <a
+                    className="atlButton"
+                    href="notifications-dashboards#/channels"
+                    target="_blank"
+                    rel="noopener noreferrer"
                   >
                     Manage channels
-                  </Button>
+                    <Icon name="external" />
+                  </a>
                 </div>
               </Field>
             </>

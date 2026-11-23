@@ -418,11 +418,15 @@ function metricDsl(agg: AggConfig, context: AggContext, all: AggConfig[]): Dsl {
     if (!bucket) return {};
     const bucketId = `${agg.id}-bucket`;
     const metricId = `${agg.id}-metric`;
-    const inner = metric && metric.type !== 'count' ? metricDsl({ ...metric, id: metricId }, context, all) : {};
+    const inner = metric && metric.type !== 'count' ? metricWithJson({ ...metric, id: metricId }, context, all) : {};
+    const clause = withJson(bucket, bucketClause({ ...bucket, id: bucketId }, context));
+    // Its terms in the order asked for, as the original writes the bucket like any other
+    const under: Dsl = { ...inner };
+    if (bucket.type === 'terms') orderTerms({ ...bucket, id: bucketId }, clause.terms as Dsl, under, context, all);
     return {
       [bucketId]: {
-        ...bucketClause({ ...bucket, id: bucketId }, context),
-        ...(Object.keys(inner).length ? { aggs: inner } : {}),
+        ...clause,
+        ...(Object.keys(under).length ? { aggs: under } : {}),
       },
       [agg.id]: {
         [agg.type]: {
@@ -440,7 +444,7 @@ function metricDsl(agg: AggConfig, context: AggContext, all: AggConfig[]): Dsl {
       if (!metric || metric.type === 'count') path = '_count';
       else {
         path = `${agg.id}-metric`;
-        Object.assign(out, metricDsl({ ...metric, id: path }, context, all));
+        Object.assign(out, metricWithJson({ ...metric, id: path }, context, all));
       }
     } else {
       const other = all.find((candidate) => candidate.id === target);
@@ -563,16 +567,15 @@ function bucketClause(agg: AggConfig, context: AggContext): Dsl {
       const scripted = fieldOf(agg, context);
       if (field.script && scripted) clause.value_type = scripted.type === 'number' ? 'float' : scripted.type;
       if (agg.params?.missingBucket) clause.missing = MISSING_KEY;
-      const include = agg.params?.include;
-      const exclude = agg.params?.exclude;
-      if (typeof include === 'string' && include !== '') clause.include = include;
-      if (typeof exclude === 'string' && exclude !== '') clause.exclude = exclude;
+      includeExclude(agg, context, clause);
       return { terms: clause };
     }
     case 'significant_terms': {
       // An empty size is not asked: OpenSearch's own applies
       const size = agg.params?.size;
-      return { significant_terms: { ...field, ...(size ? { size } : {}) } };
+      const clause: Dsl = { ...field, ...(size ? { size } : {}) };
+      includeExclude(agg, context, clause);
+      return { significant_terms: clause };
     }
     case 'filters': {
       const filters: Record<string, Dsl> = {};
@@ -593,6 +596,25 @@ function bucketClause(agg: AggConfig, context: AggContext): Dsl {
 
 export const MISSING_KEY = '__missing__';
 
+/**
+ * The values a terms or significant terms aggregation keeps or leaves out, as the original's
+ * `migrateIncludeExcludeFormat` writes them: the numbers of a list on a number field, a pattern on
+ * a text field (or the pattern of an older saved object), and nothing on any other field
+ */
+function includeExclude(agg: AggConfig, context: AggContext, clause: Dsl): void {
+  const type = fieldOf(agg, context)?.type;
+  for (const name of ['exclude', 'include']) {
+    const value = agg.params?.[name];
+    if (Array.isArray(value) && value.length > 0 && type === 'number') {
+      const numbers = value.filter((item): item is number => Number.isFinite(item));
+      if (numbers.length) clause[name] = numbers;
+    } else if (value !== null && typeof value === 'object') {
+      const pattern = (value as { pattern?: unknown }).pattern;
+      if (pattern !== undefined) clause[name] = pattern;
+    } else if (value && type === 'string') clause[name] = value;
+  }
+}
+
 /** A clause with what someone wrote under "JSON input" merged into it */
 function withJson(agg: AggConfig, clause: Dsl): Dsl {
   const json = agg.params?.json;
@@ -606,7 +628,38 @@ function withJson(agg: AggConfig, clause: Dsl): Dsl {
   if (extra === null || typeof extra !== 'object' || Array.isArray(extra)) return clause;
   const [type] = Object.keys(clause);
   if (!type || clause[type] === null || typeof clause[type] !== 'object') return clause;
-  return { ...clause, [type]: { ...(clause[type] as Dsl), ...(extra as Dsl) } };
+  return { ...clause, [type]: combine(clause[type], extra) as Dsl };
+}
+
+/**
+ * Two values merged as the original's `filteredCombine` merges the JSON input into a clause: an
+ * object key by key and a list item by item, all the way down; a null takes a key away
+ */
+function combine(written: unknown, typed: unknown): unknown {
+  const plain = (value: unknown): value is Dsl => value !== null && typeof value === 'object' && !Array.isArray(value);
+  if (plain(written) && plain(typed)) {
+    const out: Dsl = {};
+    for (const key of new Set([...Object.keys(written), ...Object.keys(typed)])) {
+      const value = combine(written[key], typed[key]);
+      if (value !== undefined) out[key] = value;
+    }
+    return out;
+  }
+  if (Array.isArray(written) && Array.isArray(typed)) {
+    return Array.from({ length: Math.max(written.length, typed.length) }, (_, index) => combine(written[index], typed[index]));
+  }
+  if (typed === null) return undefined;
+  return typed !== undefined ? typed : written;
+}
+
+/**
+ * A metric's clauses with its JSON input merged into its own, as the original writes each
+ * aggregation it asks for: one that orders terms, or one inside a pipeline, too
+ */
+function metricWithJson(agg: AggConfig, context: AggContext, all: AggConfig[]): Dsl {
+  const own = metricDsl(agg, context, all);
+  if (own[agg.id]) own[agg.id] = withJson(agg, own[agg.id] as Dsl);
+  return own;
 }
 
 /** The ranges of a range aggregation, as they are asked */
@@ -664,9 +717,7 @@ export function buildAggsDsl(aggs: AggConfig[], context: AggContext, options: Bu
     for (const metric of metrics) {
       // A derivative has nothing to derive from outside a histogram
       if (PARENT_PIPELINES.has(metric.type) && !insideHistogram) continue;
-      const own = metricDsl(metric, context, metrics);
-      if (own[metric.id]) own[metric.id] = withJson(metric, own[metric.id] as Dsl);
-      Object.assign(out, own);
+      Object.assign(out, metricWithJson(metric, context, metrics));
     }
     return out;
   };
@@ -680,26 +731,7 @@ export function buildAggsDsl(aggs: AggConfig[], context: AggContext, options: Bu
     if (options.metricsAtAllLevels && level < buckets.length - 1) Object.assign(own, metricsDsl(isHistogram));
     const clause = withJson(agg, bucketClause(agg, context));
 
-    if (agg.type === 'terms') {
-      const terms = clause.terms as Dsl;
-      const direction = param<string>(agg, 'order', 'desc');
-      const orderBy = param<string>(agg, 'orderBy', '_count');
-      if (orderBy === '_key' || orderBy === '_term') terms.order = { _key: direction };
-      else if (orderBy === 'custom') {
-        const orderAgg = agg.params?.orderAgg as AggConfig | undefined;
-        if (orderAgg && orderAgg.type !== 'count') {
-          const id = orderAgg.id ?? `${agg.id}-orderAgg`;
-          Object.assign(own, metricDsl({ ...orderAgg, id }, context, metrics));
-          terms.order = { [orderPath(orderAgg, id)]: direction };
-        }
-      } else {
-        const metric = metrics.find((candidate) => candidate.id === orderBy);
-        if (metric && metric.type !== 'count' && !SIBLING_PIPELINES.has(metric.type) && !PARENT_PIPELINES.has(metric.type)) {
-          Object.assign(own, metricDsl(metric, context, metrics));
-          terms.order = { [orderPath(metric, metric.id)]: direction };
-        }
-      }
-    }
+    if (agg.type === 'terms') orderTerms(agg, clause.terms as Dsl, own, context, metrics);
     if (agg.type === 'geohash_grid' && agg.params?.useGeocentroid !== false) {
       own[geoCentroidId(aggs)] = { geo_centroid: { field: fieldNameOf(agg) } };
     }
@@ -722,6 +754,31 @@ function withGeoCollar(agg: AggConfig, dsl: Dsl): Dsl {
   if (agg.params?.isFilteredByCollar === false || !field) return dsl;
   const box = (agg.params?.boundingBox as Dsl | null | undefined) || DEFAULT_GEO_BOUNDING_BOX;
   return { filter_agg: { filter: { geo_bounding_box: { ignore_unmapped: true, [field]: box } }, aggs: dsl } };
+}
+
+/**
+ * The order of a terms aggregation's buckets, as the original's orderAgg writes it: by key, by a
+ * custom metric or by a metric of the chart, the metric then asked for under the terms (`own`).
+ * The bucket of a sibling pipeline is ordered the same way.
+ */
+function orderTerms(agg: AggConfig, terms: Dsl, own: Dsl, context: AggContext, metrics: AggConfig[]): void {
+  const direction = param<string>(agg, 'order', 'desc');
+  const orderBy = param<string>(agg, 'orderBy', '_count');
+  if (orderBy === '_key' || orderBy === '_term') terms.order = { _key: direction };
+  else if (orderBy === 'custom') {
+    const orderAgg = agg.params?.orderAgg as AggConfig | undefined;
+    if (orderAgg && orderAgg.type !== 'count') {
+      const id = orderAgg.id ?? `${agg.id}-orderAgg`;
+      Object.assign(own, metricWithJson({ ...orderAgg, id }, context, metrics));
+      terms.order = { [orderPath(orderAgg, id)]: direction };
+    }
+  } else {
+    const metric = metrics.find((candidate) => candidate.id === orderBy);
+    if (metric && metric.type !== 'count' && !SIBLING_PIPELINES.has(metric.type) && !PARENT_PIPELINES.has(metric.type)) {
+      Object.assign(own, metricWithJson(metric, context, metrics));
+      terms.order = { [orderPath(metric, metric.id)]: direction };
+    }
+  }
 }
 
 function orderPath(metric: AggConfig, id: string): string {
@@ -1151,7 +1208,7 @@ export function bucketFilter(column: TableColumn, key: unknown, context: AggCont
   const { agg } = column;
   const indexId = context.indexPattern?.id;
   const field = filterFieldOf(column, context);
-  // The field's format: it writes the ends into a scripted field's range, and the names above
+  // The field's format: it writes the names above
   const format = formatterFor(agg, context);
   switch (agg.type) {
     case 'terms':
@@ -1164,7 +1221,7 @@ export function bucketFilter(column: TableColumn, key: unknown, context: AggCont
       }
       if (key === OTHER_KEY) {
         if (!cell || agg.type !== 'terms' || !agg.params?.otherBucket) return undefined;
-        const filter = phrasesFilter(field, otherBucketTerms(column, cell), indexId, format);
+        const filter = phrasesFilter(field, otherBucketTerms(column, cell), indexId);
         filter.meta.negate = true;
         return filter;
       }
@@ -1181,20 +1238,19 @@ export function bucketFilter(column: TableColumn, key: unknown, context: AggCont
           lt: new Date(end).toISOString(),
           format: 'strict_date_optional_time',
         },
-        indexId,
-        format
+        indexId
       );
     }
     case 'histogram':
       if (!field || typeof key !== 'number') return undefined;
-      return rangeFilter(field, { gte: key, lt: key + (column.interval ?? 1) }, indexId, format, format(key));
+      return rangeFilter(field, { gte: key, lt: key + (column.interval ?? 1) }, indexId, format(key));
     case 'range': {
       if (!field) return undefined;
       const range = key as RangeKey;
       // An end the range leaves open is infinite, as the original's RangeKey has it
       const gte = range.gte ?? -Infinity;
       const lt = range.lt ?? Infinity;
-      return rangeFilter(field, { gte, lt }, indexId, format, `≥ ${format(gte)} and < ${format(lt)}`);
+      return rangeFilter(field, { gte, lt }, indexId, `≥ ${format(gte)} and < ${format(lt)}`);
     }
     case 'ip_range': {
       if (!field) return undefined;
@@ -1202,9 +1258,9 @@ export function bucketFilter(column: TableColumn, key: unknown, context: AggCont
       // A mask is all its addresses, the last one included; the ends of a range as they are
       if (param<string>(agg, 'ipRangeType', 'fromTo') === 'mask') {
         const mask = cidrRange(String(range.label ?? ''));
-        return mask ? rangeFilter(field, { gte: mask.from, lte: mask.to }, indexId, format) : undefined;
+        return mask ? rangeFilter(field, { gte: mask.from, lte: mask.to }, indexId) : undefined;
       }
-      return rangeFilter(field, { gte: range.gte || -Infinity, lte: range.lt || Infinity }, indexId, format);
+      return rangeFilter(field, { gte: range.gte || -Infinity, lte: range.lt || Infinity }, indexId);
     }
     case 'date_range': {
       if (!field) return undefined;
@@ -1213,7 +1269,7 @@ export function bucketFilter(column: TableColumn, key: unknown, context: AggCont
       if (range.gte) params.gte = new Date(range.gte).toISOString();
       if (range.lt) params.lt = new Date(range.lt).toISOString();
       if (range.gte && range.lt) params.format = 'strict_date_optional_time';
-      return rangeFilter(field, params, indexId, format);
+      return rangeFilter(field, params, indexId);
     }
     case 'filters': {
       const query = column.filterQueries?.[String(key)];
@@ -1239,7 +1295,7 @@ export function brushFilter(column: TableColumn, from: number, to: number, conte
   const range: RangeParams = isDate
     ? { gte: new Date(from).toISOString(), lt: new Date(to).toISOString(), format: 'strict_date_optional_time' }
     : { gte: from, lt: to };
-  return rangeFilter(field, range, context.indexPattern?.id, formatterFor(column.agg, context));
+  return rangeFilter(field, range, context.indexPattern?.id);
 }
 
 // --- The bucket of everything else ----------------------------------------------------------------
