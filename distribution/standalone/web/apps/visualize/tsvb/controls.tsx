@@ -292,6 +292,7 @@ export function TvbColorPicker({ name, value, onChange, disableTrash }: { name: 
       <ColorPicker
         color={color}
         showAlpha
+        fromSwatch
         label={label}
         onChange={(text, output) => {
           setColor(text);

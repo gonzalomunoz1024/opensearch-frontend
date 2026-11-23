@@ -111,6 +111,11 @@ export interface ColorPickerProps {
   /** What the swatch that opens it says to a screen reader */
   label?: string;
   testId?: string;
+  /**
+   * Opens as EuiColorPicker opens from a `button`, as TSVB's picker does: a panel with an arrow
+   * hung from the swatch where the component library hangs it, its text field focused
+   */
+  fromSwatch?: boolean;
 }
 
 /**
@@ -127,15 +132,15 @@ const underSwatch = (anchor: DOMRect, panel: { width: number; height: number }) 
   );
 
 /** A swatch that opens a colour picker, its field first and in focus */
-export function ColorPicker({ color, onChange, showAlpha, swatches = SWATCHES, label, testId }: ColorPickerProps) {
+export function ColorPicker({ color, onChange, showAlpha, swatches = SWATCHES, label, testId, fromSwatch }: ColorPickerProps) {
   const [open, setOpen] = useState(false);
   return (
     <Popover
       open={open}
       onClose={() => setOpen(false)}
-      placeAt={underSwatch}
-      className="atlColorPicker__popover"
-      anchorClassName="atlColorPicker__anchor"
+      placeAt={fromSwatch ? underSwatch : undefined}
+      className={fromSwatch ? 'atlColorPicker__popover' : undefined}
+      anchorClassName={fromSwatch ? 'atlColorPicker__anchor' : undefined}
       button={
         <button
           type="button"
@@ -147,7 +152,14 @@ export function ColorPicker({ color, onChange, showAlpha, swatches = SWATCHES, l
         />
       }
     >
-      <ColorPickerPanel color={color} onChange={onChange} showAlpha={showAlpha} swatches={swatches} focusInput onPicked={() => setOpen(false)} />
+      <ColorPickerPanel
+        color={color}
+        onChange={onChange}
+        showAlpha={showAlpha}
+        swatches={swatches}
+        focusInput={fromSwatch}
+        onPicked={() => setOpen(false)}
+      />
     </Popover>
   );
 }

@@ -330,6 +330,47 @@
   min-height: 24px;
 }
 
+/* As the product's radio, 3 px under the top of its line: a circle in the border's colour, filled
+   with the accent and a dot of the surface's colour when chosen, ringed while it has the focus,
+   and all grey while disabled, its dot darker */
+.tvbYesNo .atlRadio input {
+  flex: none;
+  align-self: flex-start;
+  width: 16px;
+  height: 16px;
+  margin: 3px 0 0;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  appearance: none;
+  background: var(--color-surface) no-repeat center;
+  transition:
+    background-color var(--duration-fast) ease-in,
+    border-color var(--duration-fast) ease-in;
+}
+
+.tvbYesNo .atlRadio input:checked {
+  border-color: var(--color-accent);
+  background-color: var(--color-accent);
+  background-image: radial-gradient(circle, var(--color-surface) 2.5px, transparent 3px);
+}
+
+.tvbYesNo .atlRadio input:focus {
+  border-color: var(--color-accent);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
+}
+
+.tvbYesNo .atlRadio input:disabled {
+  border-color: var(--color-border);
+  background-color: var(--color-border);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.tvbYesNo .atlRadio input:disabled:checked {
+  background-image: radial-gradient(circle, color-mix(in srgb, var(--color-text-tertiary) 70%, black) 2.5px, transparent 3px);
+}
+
 .tvbYesNo--disabled {
   color: var(--color-text-tertiary);
   cursor: not-allowed;
