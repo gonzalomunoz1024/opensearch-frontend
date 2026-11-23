@@ -46,6 +46,43 @@ export function canDock(width: number): boolean {
   return isAtLeast(width, 'l');
 }
 
+/** How the navigation is shown: not at all, over the page behind a mask, or beside the page */
+export type NavMode = 'hidden' | 'overlay' | 'docked';
+
+/**
+ * How the original shows its navigation (EuiCollapsibleNav with the legacy header's state): docked
+ * for as long as it is locked and the window is wide enough to dock, whatever the menu button
+ * says; else over the page while the menu button has it open. Unlocking a navigation the button
+ * had opened leaves it open over the page; one the button had not opened goes away.
+ */
+export function navMode(state: {
+  /** It is set to dock: what the original keeps under its key */
+  locked: boolean;
+  /** The menu button has it open */
+  open: boolean;
+  /** The window is wide enough to dock in (see `canDock`) */
+  canDock: boolean;
+}): NavMode {
+  if (state.locked && state.canDock) return 'docked';
+  return state.open ? 'overlay' : 'hidden';
+}
+
+/** A click the browser handles itself (a new tab, a download), or one already handled */
+export function isModifiedClick(event: {
+  metaKey: boolean;
+  altKey: boolean;
+  ctrlKey: boolean;
+  shiftKey: boolean;
+  defaultPrevented: boolean;
+}): boolean {
+  return event.metaKey || event.altKey || event.ctrlKey || event.shiftKey || event.defaultPrevented;
+}
+
+/** Whether a path of this product is under an application's path: the application or a page of it */
+export function isUnderPath(pathname: string, base: string): boolean {
+  return pathname === base || pathname.startsWith(base + '/');
+}
+
 // --- Breadcrumbs ---------------------------------------------------------------------------------
 
 /** How many crumbs EuiBreadcrumbs shows at each breakpoint, its `responsive` default */
