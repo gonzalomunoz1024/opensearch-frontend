@@ -249,8 +249,15 @@ export function Field({
           </span>
         )}
       </div>
-      {/* As the plugin's label: words go into its small light span, anything else stands as it is */}
-      {typeof help === 'string' && help ? <span className="ismSnapField__help">{help}</span> : help}
+      {/* As the plugin's label: words go into its small light span, set on lines of the page's
+          font outside any text block; anything else stands as it is */}
+      {typeof help === 'string' && help ? (
+        <div className="ismSnapField__helpLine">
+          <span className="ismSnapField__help">{help}</span>
+        </div>
+      ) : (
+        help
+      )}
       <Spacer size="s" />
       <div className="ismSnapField__body">{children}</div>
       {error && <div className="ismSnapField__error">{error}</div>}
@@ -951,6 +958,7 @@ export function TimeSelect({
         <TextField
           icon="clock"
           compact
+          className="ismTimeField"
           value={text}
           disabled={disabled}
           aria-label="Start time"

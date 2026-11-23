@@ -401,21 +401,13 @@ export function SnapshotPolicyDetails() {
   const creation = policy.creation?.schedule?.cron;
   const deletion = policy.deletion;
   const deletionCron = deletion?.schedule?.cron;
+  // The plugin marks the times sortable, but its table is given no sorting, so none of its headers
+  // sorts
   const activityColumns: Array<TableColumn<Activity>> = [
     { field: 'activityType', name: 'Activity type', render: (row) => row.activityType },
     { field: 'status', name: 'Status', render: (row) => row.status },
-    {
-      field: 'start_time',
-      name: 'Time started',
-      sortable: true,
-      render: (row) => renderTime(row.start_time),
-    },
-    {
-      field: 'end_time',
-      name: 'Time completed',
-      sortable: true,
-      render: (row) => renderTime(row.end_time),
-    },
+    { field: 'start_time', name: 'Time started', render: (row) => renderTime(row.start_time) },
+    { field: 'end_time', name: 'Time completed', render: (row) => renderTime(row.end_time) },
     {
       field: 'info',
       name: 'Info',

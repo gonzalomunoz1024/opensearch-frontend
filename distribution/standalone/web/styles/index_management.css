@@ -2576,6 +2576,13 @@
   width: min(600px, 100vw);
 }
 
+/* Its mask, where it has one (restoring), as the plugin's: under the header, and the page behind it
+   blurred as well as dimmed */
+.atlFlyoutMask:has(+ .ismSnapshotFlyout) {
+  top: var(--header-height);
+  backdrop-filter: blur(4px);
+}
+
 .ismSnapshotFlyout .atlFlyout__header,
 .ismSnapshotFlyout .atlFlyout__body {
   padding: var(--space-6);
@@ -2598,9 +2605,10 @@
   border: 1px solid transparent;
 }
 
-/* The button that acts is never narrower than the plugin's */
+/* The button that acts is never narrower than the plugin's, and has its clear 1 px border */
 .ismFlyoutFooter > .atlButton--primary {
   min-width: 112px;
+  border: 1px solid transparent;
 }
 
 /* The plugin's dialogs that ask before deleting (OUI's confirmation modal): as wide as their words,
@@ -2643,6 +2651,11 @@
 /* The keyboard's ring stands 2 px off the plugin's buttons */
 .ismConfirm .atlModal__footer > .atlButton:focus-visible,
 .ismListPanel__actions .atlButton:focus-visible,
+.ismSnapshotPolicyPage__actions .atlButton:focus-visible,
+.ismPolicyPanel__header .atlButton:focus-visible,
+.ismSnapshotPolicy__channels > .atlButton:focus-visible,
+.ismSnapshotForm__repository > .atlButton:focus-visible,
+.ismSnapshotPolicyPage__footer > .atlButton:focus-visible,
 .ismFlyoutFooter > .atlButton:focus-visible {
   outline-offset: 2px;
 }
@@ -2695,12 +2708,17 @@
   line-height: 1.5;
 }
 
-/* What a field means, in a line of 14 px as the plugin's span is set outside any text block */
+/* What a field means: the plugin's small light span, set outside any text block, so on lines as
+   high as the page's 14 px font (the words sit 1 px lower in them than in a line of their own) */
+.ismSnapField__helpLine,
+.ismSnapshotPolicy__noteLine {
+  font-size: var(--font-size-s);
+  line-height: 1;
+}
+
 .ismSnapField__help {
-  display: block;
   font-size: var(--font-size-xs);
   font-weight: 200;
-  line-height: 14px;
 }
 
 /* What a part of a form is for, where the plugin says more than a few words: its small subdued
@@ -2886,6 +2904,13 @@
 .ismSnapField__body > .atlSelect {
   width: 100%;
   max-width: 400px;
+}
+
+/* A text area as OUI's compressed one: its words 8 px in from the edge of its ring, three lines
+   high, and the 2 px under it that its line leaves */
+.ismSnapField__body > textarea.atlField {
+  margin-bottom: 2px;
+  padding: 7px;
 }
 
 .ismSnapField__error {
@@ -3085,14 +3110,19 @@
   gap: var(--space-6);
 }
 
-/* Its buttons, as the plugin's small buttons: at least 112 px wide, the icon 8 px from the words,
-   and a clear 1 px border round them (the danger button keeps its own) */
-.ismListPanel__actions .atlButton {
+/* Its buttons, those over a policy's page and the one beside a panel's title, as the plugin's
+   small buttons: at least 112 px wide, the icon 8 px from the words, and a clear 1 px border round
+   them (the danger button keeps its own) */
+.ismListPanel__actions .atlButton,
+.ismSnapshotPolicyPage__actions .atlButton,
+.ismPolicyPanel__header .atlButton {
   min-width: 112px;
   gap: var(--space-2);
 }
 
-.ismListPanel__actions .atlButton:not(.atlButton--danger) {
+.ismListPanel__actions .atlButton:not(.atlButton--danger),
+.ismSnapshotPolicyPage__actions .atlButton:not(.atlButton--danger),
+.ismPolicyPanel__header .atlButton:not(.atlButton--danger) {
   border: 1px solid transparent;
 }
 
@@ -3119,10 +3149,53 @@
   margin-bottom: 0;
 }
 
-/* The columns share the width as the plugin's table does: what no column claims, in equal parts */
+/* The search box as OUI's: the magnifier 8 px in from its edge, the words 32 px */
+.ismListPanel .ismSearchRow .atlFieldGroup {
+  padding-left: calc(var(--space-2) - 1px);
+}
+
+.ismListPanel .ismSearchRow .atlFieldGroup > input {
+  padding-left: var(--space-2);
+}
+
+/* The columns share the width as the plugin's table does: what no column claims, in equal parts;
+   and its figures are of one width, as in OUI's tables */
 .ismListPanel .atlTable,
 .ismPolicyPanel .atlTable {
   table-layout: fixed;
+  font-feature-settings: 'calt' 1, 'kern' 1, 'liga' 1, 'tnum' 1;
+}
+
+/* OUI's table keeps a caption for screen readers over its header, 1 px high */
+.ismListPanel .ismTable__scroll,
+.ismPolicyPanel .ismTable__scroll {
+  padding-top: 1px;
+}
+
+/* A tick box stands in the middle of its row as a block, as OUI's, and does not sit on the line of
+   the words (which made the rows 3 px higher) */
+.ismListPanel .atlTable__check .atlCheckbox {
+  display: flex;
+}
+
+/* A link that is a button, as OUI's: on a line of the font's own height, its figures as the font
+   draws them */
+.ismListPanel .atlTable .atlLinkButton,
+.ismPolicyPanel .atlTable .atlLinkButton {
+  font-feature-settings: normal;
+  line-height: normal;
+}
+
+/* OUI lays out what a cell holds in a flex box, which stands in the middle of the row: a link that
+   is a button and a status with its dot are blocks so, and not set on the line of the words (where
+   they made a row 2 px higher) */
+.ismListPanel .atlTable td > .atlLinkButton,
+.ismPolicyPanel .atlTable td > .atlLinkButton {
+  display: block;
+}
+
+.ismListPanel .atlTable td > .atlHealth {
+  display: flex;
 }
 
 .ismListPanel .atlTable .atlLinkButton {
@@ -3283,6 +3356,21 @@
   width: 100%;
 }
 
+/* The time of day as the plugin's date picker: its clock 16 px, 12 px in from the edge, and the
+   time 32 px in */
+.ismTimeField.atlFieldGroup {
+  padding-left: calc(var(--space-3) - 1px);
+}
+
+.ismTimeField.atlFieldGroup > .atlIcon {
+  width: 16px;
+  height: 16px;
+}
+
+.ismTimeField.atlFieldGroup > input {
+  padding-left: 0;
+}
+
 .ismTimeList {
   max-height: 200px;
   overflow-y: auto;
@@ -3318,13 +3406,11 @@
   max-width: none;
 }
 
-/* "Configure when to check…": the plugin's span, grey in its own words, in a line of 14 px */
+/* "Configure when to check…": the plugin's span, grey in its own words, on a line of 14 px */
 .ismSnapshotPolicy__note {
-  display: block;
   color: grey;
   font-size: var(--font-size-xs);
   font-weight: 200;
-  line-height: 14px;
 }
 
 /* The channel, its refresh and the channels' page, 8 px apart on the plugin's 600 px less the
@@ -3344,6 +3430,19 @@
 
 .ismSnapshotPolicy__channels > .atlButton {
   flex: none;
+}
+
+/* The buttons beside a field and at the foot of the page, as the plugin's small buttons: the icon
+   8 px from the words, a clear 1 px border round them, the one that acts at least 112 px wide */
+.ismSnapshotPolicy__channels > .atlButton,
+.ismSnapshotForm__repository > .atlButton,
+.ismSnapshotPolicyPage__footer > .atlButton {
+  gap: var(--space-2);
+  border: 1px solid transparent;
+}
+
+.ismSnapshotPolicyPage__footer > .atlButton--primary {
+  min-width: 112px;
 }
 
 /* The refresh is the plugin's button with only an icon in it, not a square icon button */
@@ -3441,9 +3540,11 @@
   background: var(--color-border-light);
 }
 
+/* Three to a row as OUI's grid of thirds: each 33.3 % of the grid and its outer gutters, less a
+   gutter (so the third column starts a little to the left of a true third) */
 .ismPolicyFacts {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(3, calc((100% + var(--space-6)) * 0.333 - var(--space-6)));
   gap: var(--space-6);
   margin: 0;
   line-height: 1.5;
