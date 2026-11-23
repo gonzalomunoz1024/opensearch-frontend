@@ -359,6 +359,7 @@ function LegacyNotification({
         value={json}
         onChange={onChange}
         height={300}
+        cursorAtEnd
         testId={inAction ? 'create-policy-action-legacy-notification' : 'create-policy-legacy-notification'}
       />
     </>

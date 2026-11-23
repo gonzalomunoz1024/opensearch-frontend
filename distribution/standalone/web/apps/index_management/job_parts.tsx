@@ -163,19 +163,25 @@ export function FormButtons({ children }: { children: ReactNode }) {
 /**
  * JSON in an editor drawn as the plugin's code editor: the light theme of Ace the plugin picks,
  * with its grey gutter, or its dark one in the dark theme, and the line of the cursor on a band.
+ * The cursor starts where the plugin's editor leaves it: at the start of a text that arrives after
+ * the editor is drawn, at the end of one it is drawn with (`cursorAtEnd`).
  */
 export function AceJsonEditor({
   value,
   onChange,
   height,
   testId,
+  cursorAtEnd,
 }: {
   value: string;
   onChange?: (value: string) => void;
   height: number;
   testId?: string;
+  cursorAtEnd?: boolean;
 }) {
-  const [cursor, setCursor] = useState<[number, number]>([0, 0]);
+  const [cursor, setCursor] = useState<[number, number]>(() =>
+    cursorAtEnd ? [value.length, value.length] : [0, 0]
+  );
   const active = aceActiveLine(value, cursor[0], cursor[1]);
   return (
     <CodeEditor
