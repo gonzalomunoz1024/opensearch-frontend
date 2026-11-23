@@ -411,9 +411,36 @@
 }
 
 /* As the original's field, as wide as its row: it gives way to the language button and its padding
-   alone when the row is narrow */
+   alone when the row is narrow. As there, the text is a box of its own over the light frame, from
+   the frame's top left corner to a pixel before the language button, and the focus rings it and not
+   the frame; no line parts it from the button */
 .tvbQueryBar .shlQuery textarea {
+  align-self: flex-start;
   width: 100%;
+  /* 29 px while it is left and 30 px while it has the focus, as the original sizes it */
+  height: 29px;
+  margin: -1px 1px 0 -1px;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
+  box-shadow: inset 0 0 0 1px var(--color-border-light);
+}
+
+.tvbQueryBar .shlQuery:not(.atlField--invalid):focus-within {
+  border-color: var(--color-border-light);
+  box-shadow: none;
+}
+
+.tvbQueryBar .shlQuery:not(.atlField--invalid) textarea:focus {
+  height: 30px;
+  box-shadow:
+    inset 0 0 0 1px var(--color-accent),
+    0 0 0 2px var(--color-focus-ring);
+}
+
+/* Its word on a line 21 px tall, as the original's empty button */
+.tvbQueryBar .shlQuery__language {
+  border-left-color: transparent;
+  line-height: 21px;
 }
 
 /* --- Colours ----------------------------------------------------------------------------------------- */
