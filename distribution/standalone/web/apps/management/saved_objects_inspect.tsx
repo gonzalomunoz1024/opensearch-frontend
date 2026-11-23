@@ -15,7 +15,7 @@ import { services } from '../../services';
 import type { SavedObject } from '../../services/saved_objects';
 import { useBreadcrumbs } from '../../shell/state';
 import { OBJECT_SERVICES, createFieldList, savedAttributes, tokenizeFieldJson, type ObjectField, type ObjectService } from './saved_objects_lib';
-import { Callout, MANAGEMENT_CRUMB, OBJECTS_ROOT, SmallSwitch, errorText } from './saved_objects_parts';
+import { Callout, MANAGEMENT_CRUMB, OBJECTS_CRUMB, OBJECTS_ROOT, SmallSwitch, errorText } from './saved_objects_parts';
 
 type StoredObject = SavedObject<Record<string, unknown>>;
 
@@ -65,7 +65,7 @@ export function InspectPage({ serviceName, id }: { serviceName: string; id: stri
   const [object, setObject] = useState<StoredObject>();
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  useBreadcrumbs([MANAGEMENT_CRUMB, { text: 'Saved objects', to: OBJECTS_ROOT }, { text: `Edit ${type}` }]);
+  useBreadcrumbs([MANAGEMENT_CRUMB, OBJECTS_CRUMB, { text: `Edit ${type}` }]);
 
   useEffect(() => {
     if (!service) return undefined;
