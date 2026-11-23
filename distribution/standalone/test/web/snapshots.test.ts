@@ -64,6 +64,11 @@ import {
 } from '../../web/apps/index_management/snapshot_model';
 import { CronSchedule, IndicesRepositoryInput } from '../../web/apps/index_management/snapshot_parts';
 import { policyChannel } from '../../web/apps/index_management/snapshot_policies';
+import {
+  RestoreActivities,
+  askRestore,
+  toastFailure,
+} from '../../web/apps/index_management/snapshots';
 import { createServices, services, type BootData } from '../../web/services';
 
 describe('the words of Snapshot Management', () => {
@@ -661,4 +666,97 @@ describe('the combo boxes of Snapshot Management', () => {
       assert.equal(/atlCombo--s\b/.test(markup), false);
     }
   });
+});
+
+describe('the failures and the restores of the list of snapshots', () => {
+  // The routes of the server, answering every request with the answer given, and when each was
+  // asked; the toasts' waits are kept, not run
+  const withAnswer = async (
+    answer: unknown,
+    run: (asked: Array<{ url: string; at: number }>, waits: number[]) => Promise<void>
+  ) => {
+    const asked: Array<{ url: string; at: number }> = [];
+    const waits: number[] = [];
+    const original = globalThis.fetch;
+    const globals = globalThis as { window?: unknown };
+    globals.window = {
+      setTimeout: (_run: unknown, wait: number) => {
+        waits.push(wait);
+        return 0;
+      },
+    };
+    globalThis.fetch = (async (url: string) => {
+      asked.push({ url, at: Date.now() });
+      return new Response(JSON.stringify(answer), { headers: { 'content-type': 'application/json' } });
+    }) as typeof fetch;
+    try {
+      createServices({ basePath: '', settings: {} } as unknown as BootData);
+      await run(asked, waits);
+    } finally {
+      globalThis.fetch = original;
+      delete globals.window;
+    }
+  };
+  const refusal = JSON.stringify({
+    error: {
+      root_cause: [{ type: 'snapshot_missing_exception', reason: '[zz-repo:zz-snap] The snapshot is missing. Look again' }],
+    },
+  });
+
+  it("are toasted as the plugin's addError: kept as long as errors, with the whole answer to see", () =>
+    withAnswer({}, async (_asked, waits) => {
+      toastFailure('There was a problem deleting the snapshot.', refusal);
+      // Taking one, the plugin writes the whole answer
+      toastFailure('There was a problem creating the snapshot.', refusal, refusal);
+      const [deleted, created] = services.toasts.get();
+      assert.equal(deleted.kind, 'critical');
+      assert.equal(deleted.title, 'There was a problem deleting the snapshot.');
+      assert.equal(
+        deleted.text,
+        ' The snapshot is missing. Open browser console & click below for details.'
+      );
+      assert.equal(deleted.error?.message, refusal);
+      assert.equal(created.text, `${refusal} Open browser console & click below for details.`);
+      assert.deepEqual(waits, [300000, 300000]);
+    }));
+
+  it('follows a restore only once OpenSearch took it, counting from before it was asked for', async () => {
+    await withAnswer({ ok: false, error: refusal }, async (asked) => {
+      const refused = await askRestore({ id: 'zz-snap', repository: 'zz-repo' }, { indices: 'a' }, ['a']);
+      assert.deepEqual(refused, { error: refusal });
+      assert.deepEqual(
+        asked.map((one) => one.url),
+        ['/api/ism/_snapshots/zz-snap?repository=zz-repo']
+      );
+    });
+    await withAnswer({ ok: true, response: { accepted: true } }, async (asked) => {
+      const before = Date.now();
+      const taken = await askRestore({ id: 'zz-snap', repository: 'zz-repo' }, {}, ['a', 'b']);
+      assert.ok('restore' in taken);
+      const { restore } = taken as { restore: { startedAt: number } };
+      assert.deepEqual(taken, {
+        restore: { snapshotId: 'zz-snap', startedAt: restore.startedAt, indices: ['a', 'b'] },
+      });
+      assert.ok(restore.startedAt >= before && restore.startedAt <= asked[0].at);
+    });
+  });
+
+  it('shows at once what was last read of a restore when its tab is opened again', () =>
+    withAnswer({}, async () => {
+      const markup = renderToStaticMarkup(
+        createElement(RestoreActivities, {
+          restore: {
+            snapshotId: 'zz-snap',
+            startedAt: 1,
+            indices: ['a', 'b'],
+            progress: { indices: [], startTime: 1, stopTime: 2, stage: 'Completed (100%)' },
+          },
+          onSeen: () => undefined,
+          onFailure: () => undefined,
+        })
+      );
+      assert.match(markup, /Completed \(100%\)/);
+      assert.match(markup, /zz-snap/);
+      assert.match(markup, /2 Indices/);
+    }));
 });

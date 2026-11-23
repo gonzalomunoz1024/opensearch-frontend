@@ -6,7 +6,7 @@
  * aggregated on.
  */
 
-import { notFound } from './http';
+import { HttpError, errorBody } from './http';
 import { OpenSearchError, type OpenSearchClient } from './opensearch';
 
 export interface FieldDescriptor {
@@ -159,6 +159,51 @@ export function readFieldCaps(fields: FieldCaps, metaFields: string[]): FieldDes
   return described.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }
 
+/** A value of a failure, as the legacy client of the original writes it into its message (prettyPrint) */
+function printed(value: unknown, path: unknown[] = []): string {
+  if (typeof value !== 'object') return String(JSON.stringify(value));
+  if (path.includes(value)) return '[circular]';
+  const entries = value === null ? [] : Object.entries(value);
+  return `{ ${entries.map(([name, inner]) => `${name}=${printed(inner, [...path, value])}`).join(' & ')} }`;
+}
+
+/** What OpenSearch said, in the words of the original's legacy client (its StatusCodeError) */
+export function legacyClientMessage(body: unknown, status: number): string {
+  const error = body !== null && typeof body === 'object' ? (body as { error?: unknown }).error : undefined;
+  if (error === null || typeof error !== 'object' || Array.isArray(error)) {
+    return typeof error === 'string' && error !== '' ? error : String(errorBody(status, '').error);
+  }
+  const { root_cause: rootCause, type, reason } = error as { root_cause?: unknown; type?: unknown; reason?: unknown };
+  let message = ([] as unknown[]).concat(rootCause ?? []).reduce<string>((memo, cause) => {
+    const { type: causeType, reason: causeReason, ...extra } = (cause ?? {}) as Record<string, unknown>;
+    let text = `${memo ? `${memo} (and) ` : ''}[${String(causeType)}] ${String(causeReason)}`;
+    if (Object.keys(extra).length > 0) text += `, with ${printed(extra)}`;
+    return text;
+  }, '');
+  if (!message) {
+    if (type) message += `[${String(type)}] `;
+    if (reason) message += String(reason);
+  }
+  return message || String(errorBody(status, '').error);
+}
+
+/**
+ * Why the fields could not be read, as the original's route answers it: 404 for every failure of
+ * OpenSearch, with what the failure was in `attributes`; "No indices match" with the code
+ * no_matching_indices when the pattern names no index
+ */
+function fieldsFailure(error: OpenSearchError, pattern: string): HttpError {
+  const type = (error.body as { error?: { type?: unknown } } | undefined)?.error?.type;
+  if (type === 'index_not_found_exception') {
+    const message = `No indices match pattern "${pattern}"`;
+    return new HttpError(404, message, { ...errorBody(404, message), code: 'no_matching_indices' });
+  }
+  // (The original's message begins with "[object Object]: ", what Boom makes of the error object
+  // it is given as a message: that is left out)
+  const message = legacyClientMessage(error.body, error.status);
+  return new HttpError(404, message, { ...errorBody(error.status, message) });
+}
+
 export async function fieldsForWildcard(
   client: OpenSearchClient,
   pattern: string,
@@ -172,9 +217,7 @@ export async function fieldsForWildcard(
     });
     return readFieldCaps(result.fields ?? {}, metaFields);
   } catch (error) {
-    if (error instanceof OpenSearchError && error.status === 404) {
-      throw notFound(`No indices match pattern "${pattern}"`);
-    }
+    if (error instanceof OpenSearchError) throw fieldsFailure(error, pattern);
     throw error;
   }
 }

@@ -13,12 +13,14 @@ import {
   initialAppState,
   migrateAppState,
   paramsWithDefaults,
+  savedVisState,
   unlinkSavedSearch,
   type VisualizeAppState,
 } from '../../web/apps/visualize/app_state';
 import { newVis } from '../../web/apps/visualize/defaults';
-import { editorHeading } from '../../web/apps/visualize/editor_layout';
+import { editorAggs, editorHeading, hasUnappliedChanges } from '../../web/apps/visualize/editor_layout';
 import { INDEX_PATTERNS_LINK, SavedObjectNotFound, found, loadFailure } from '../../web/apps/visualize/load_failure';
+import { visualizeRoute } from '../../web/apps/visualize/routes';
 import {
   editorStateFor,
   incomingEditorState,
@@ -27,6 +29,7 @@ import {
 } from '../../web/apps/visualize/state_transfer';
 import { LEAVE_TEXT, LEAVE_TITLE, confirmsLeave, returnSwitch, visualizeTopNav } from '../../web/apps/visualize/top_nav';
 import { withBaseMap } from '../../web/apps/visualize/type_setup';
+import type { AggConfig } from '../../web/lib/aggs';
 import type { Filter } from '../../web/lib/types';
 import { encodeState } from '../../web/lib/url';
 import { visFromSavedObject } from '../../web/lib/vis';
@@ -129,6 +132,28 @@ describe('the state the editor writes to the address once a visualization has lo
     assert.deepEqual(initialAppState(defaults, { vis: { ...vis, type: 'line' } }).vis, defaults.vis);
   });
 
+  it('keeps a visualization of the address that names no kind, as the original writes it', () => {
+    const defaults = editorStateDefaults(SAMPLE_PIE, undefined, KUERY);
+    const partial = { params: { isDonut: false } } as unknown as VisualizeAppState['vis'];
+    assert.deepEqual(initialAppState(defaults, { vis: partial }).vis, { params: { isDonut: false } });
+    // Something that is not a visualization at all is not taken
+    assert.deepEqual(initialAppState(defaults, { vis: 'pie' as unknown as VisualizeAppState['vis'] }).vis, defaults.vis);
+  });
+
+  it("saves the kind's settings over their defaults when the address names only some, or none", () => {
+    const applied = { aggs: SAMPLE_PIE.aggs, params: SAMPLE_PIE.params };
+    // A bar chart Discover's "Visualize" opened: `params:()` in the address
+    const fromDiscover = savedVisState({ type: 'histogram', aggs: [], params: {} }, { aggs: [], params: {} }, 'Bars', 'histogram');
+    assert.deepEqual(fromDiscover.params, paramsWithDefaults('histogram', {}));
+    assert.equal(fromDiscover.params.type, 'histogram');
+    assert.equal(fromDiscover.params.legendPosition, 'right');
+    // A pie whose address holds only one of its settings: the others are the kind's defaults
+    const pie = savedVisState({ params: { isDonut: false } }, applied, 'Pie', 'pie');
+    assert.deepEqual(pie, { title: 'Pie', type: 'pie', aggs: SAMPLE_PIE.aggs, params: paramsWithDefaults('pie', { isDonut: false }) });
+    // An address without a visualization: what is applied
+    assert.deepEqual(savedVisState(undefined, applied, 'Pie', 'pie'), { title: 'Pie', type: 'pie', ...applied });
+  });
+
   it("merges a kind's settings over its defaults one key deep, the settings first", () => {
     const params = paramsWithDefaults('pie', { isDonut: false, labels: { show: true } });
     assert.deepEqual(Object.keys(params).slice(0, 2), ['isDonut', 'labels']);
@@ -158,6 +183,73 @@ describe('the state the editor writes to the address once a visualization has lo
     const unlinked = unlinkSavedSearch({ query: KUERY, filters: [own] }, { query: { query: 'response:200', language: 'kuery' }, filters: [parentFilter] });
     assert.deepEqual(unlinked, { query: { query: 'response:200', language: 'kuery' }, filters: [own, parentFilter], linked: false });
     assert.deepEqual(unlinkSavedSearch({ query: KUERY, filters: [own, own] }, {}), { query: KUERY, filters: [own], linked: false });
+  });
+});
+
+describe('the aggregations the editor shows and draws', () => {
+  // What Discover's "Visualize" writes into the address for a field: a few parameters of each
+  const fromDiscover: AggConfig[] = [
+    { id: '1', type: 'count', schema: 'metric', params: {} },
+    { id: '2', type: 'terms', schema: 'segment', params: { field: 'machine.os.keyword', size: 20, orderBy: '1', order: 'desc' } },
+  ];
+
+  it("are the address's, each with the defaults of the parameters it lacks, as the original's AggConfig takes them", () => {
+    const aggs = editorAggs(fromDiscover, SAMPLE_PIE.aggs, true, { queryLanguage: 'kuery' });
+    assert.deepEqual(aggs, [
+      { id: '1', enabled: true, type: 'count', params: {}, schema: 'metric' },
+      {
+        id: '2',
+        enabled: true,
+        type: 'terms',
+        params: {
+          field: 'machine.os.keyword',
+          orderBy: '1',
+          order: 'desc',
+          size: 20,
+          otherBucket: false,
+          otherBucketLabel: 'Other',
+          missingBucket: false,
+          missingBucketLabel: 'Missing',
+        },
+        schema: 'segment',
+      },
+    ]);
+  });
+
+  it('are those that were saved when the address has none, and those of the address for a kind drawn from none', () => {
+    assert.equal(editorAggs(undefined, SAMPLE_PIE.aggs, true, {}), SAMPLE_PIE.aggs);
+    assert.equal(editorAggs(fromDiscover, [], false, {}), fromDiscover);
+  });
+});
+
+describe('the pages of Visualize an address names', () => {
+  it("opens the editor at /create without a kind too, which then fails to load as the original's", () => {
+    assert.deepEqual(visualizeRoute('/create'), { page: 'create' });
+  });
+
+  it('opens the list with the dialog of a new visualization at /new, the editor of a saved one at /edit/<id>, else the list', () => {
+    assert.deepEqual(visualizeRoute('/new'), { page: 'new' });
+    assert.deepEqual(visualizeRoute('/edit/a%20b'), { page: 'edit', id: 'a%20b' });
+    assert.deepEqual(visualizeRoute('/'), { page: 'listing' });
+    assert.deepEqual(visualizeRoute(''), { page: 'listing' });
+  });
+});
+
+describe('the changes Update has not applied', () => {
+  const applied = JSON.stringify({ aggs: [], params: { type: 'pie' } });
+  // What the Data tab fills in by itself as it shows a split chart saved without `row`
+  const filledIn = JSON.stringify({ aggs: [], params: { type: 'pie', row: true } });
+  const changed = JSON.stringify({ aggs: [], params: { type: 'pie', row: false } });
+
+  it('are none while nobody has used the sidebar, whatever its editors filled in by themselves', () => {
+    assert.equal(hasUnappliedChanges(filledIn, undefined), false);
+    assert.equal(hasUnappliedChanges(applied, undefined), false);
+  });
+
+  it('are what changed since someone used it, and none once it is back to what it was then', () => {
+    assert.equal(hasUnappliedChanges(changed, filledIn), true);
+    assert.equal(hasUnappliedChanges(filledIn, filledIn), false);
+    assert.equal(hasUnappliedChanges(undefined, filledIn), false);
   });
 });
 

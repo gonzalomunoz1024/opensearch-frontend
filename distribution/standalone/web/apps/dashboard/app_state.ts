@@ -8,7 +8,15 @@
 import type { TimeRange } from '../../lib/dates';
 import { encodeState } from '../../lib/url';
 import type { Filter, Query, RefreshInterval } from '../../lib/types';
-import { panelsToUrl, type Dashboard, type DashboardOptions, type PanelState } from './model';
+import {
+  dashboardQuery,
+  panelsDiffer,
+  panelsFromUrl,
+  panelsToUrl,
+  type Dashboard,
+  type DashboardOptions,
+  type PanelState,
+} from './model';
 
 export interface UrlAppState {
   description?: string;
@@ -43,7 +51,7 @@ export function fullAppState(
     filters: current.filters ?? saved.filters,
     fullScreenMode: current.fullScreenMode ?? false,
     options: current.options ?? saved.options,
-    query: current.query ?? saved.query ?? defaultQuery,
+    query: current.query === undefined ? saved.query ?? defaultQuery : dashboardQuery(current.query),
     timeRestore: current.timeRestore ?? saved.timeRestore,
     title: current.title ?? saved.title,
     viewMode,
@@ -51,6 +59,15 @@ export function fullAppState(
   if (viewMode === 'edit') state.panels = current.panels ?? panelsToUrl(panels);
   else delete state.panels;
   return state;
+}
+
+/**
+ * The panels an address carries while the dashboard is looked at: the original shows them, as it
+ * shows those of a dashboard edited, and leaves them out of the address (`fullAppState`)
+ */
+export function viewedFromAddress(saved: Pick<Dashboard, 'id'>, current: UrlAppState): PanelState[] | undefined {
+  const viewMode = current.viewMode ?? (saved.id ? 'view' : 'edit');
+  return viewMode === 'view' && current.panels !== undefined ? panelsFromUrl(current.panels) : undefined;
 }
 
 /** Whether two values are the same whatever the order of their keys */
@@ -97,9 +114,50 @@ export function ownTime(
   return own;
 }
 
-/** The query of a saved dashboard, the language as the address names it */
+/**
+ * What the original counts as a change of a dashboard (its `isDirty`, create_dashboard_container.tsx):
+ * its panels, its query and its filters, and its time and refresh interval while it keeps its own
+ */
+export interface ChangeMarks {
+  panels: PanelState[];
+  query: Query;
+  filters: Filter[];
+  time?: TimeRange;
+  refreshInterval?: RefreshInterval;
+}
+
+/** Whether a dashboard changed between two moments, by what the original counts as a change */
+export function marksDiffer(a: ChangeMarks, b: ChangeMarks): boolean {
+  return (
+    panelsDiffer(a.panels, b.panels) ||
+    !sameQuery(a.query, b.query) ||
+    !sameState(a.filters, b.filters) ||
+    !sameState(a.time ?? null, b.time ?? null) ||
+    !sameState(a.refreshInterval ?? null, b.refreshInterval ?? null)
+  );
+}
+
+/**
+ * What a dashboard is opened with, a change of which makes it changed: what the page shows as it
+ * opens it, with the dashboard's own time as the page puts it in place (`named`: the `_g` the
+ * page opened with), as the original sets the time before its dashboard starts
+ */
+export function openingMarks(
+  marks: ChangeMarks,
+  dashboard: Pick<Dashboard, 'timeRestore' | 'timeFrom' | 'timeTo' | 'refreshInterval'>,
+  named: { time?: unknown; refreshInterval?: unknown } = {}
+): ChangeMarks {
+  if (!dashboard.timeRestore) return marks;
+  const own = ownTime(dashboard, named);
+  return { ...marks, time: own.time ?? marks.time, refreshInterval: own.refreshInterval ?? marks.refreshInterval };
+}
+
+/**
+ * The query of a saved dashboard, the language as the address names it; a query of OpenSearch's
+ * DSL is the same whatever the order of its keys, as the original's isEqual takes it
+ */
 export function sameQuery(a: Query | undefined, b: Query | undefined): boolean {
-  return (a?.query ?? '') === (b?.query ?? '') && (a?.language ?? '') === (b?.language ?? '');
+  return sameState(a?.query ?? '', b?.query ?? '') && (a?.language ?? '') === (b?.language ?? '');
 }
 
 const COPY = 'copy';

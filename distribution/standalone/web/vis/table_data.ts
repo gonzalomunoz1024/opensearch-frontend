@@ -117,11 +117,11 @@ function metricSpec(agg: AggConfig, context: AggContext, depth = 0): FieldFormat
 }
 
 /**
- * A value as the original's formats write it: by the column's format, but an empty text as
- * nothing, as every one of them writes it (asPrettyString), where the product's shared formats
- * take it for a missing value and write a dash
+ * A value as the original's formats write it: by the column's format, an empty text too, which
+ * most of them write as nothing (asPrettyString), a static lookup as its value for unknown keys
+ * and a URL format by its templates
  */
-export const formatValue = (column: TableColumn, value: unknown): string => (value === '' ? '' : column.format(value));
+export const formatValue = (column: TableColumn, value: unknown): string => column.format(value);
 
 /** The format of a column as the original's dimension carries it */
 export function columnFormatSpec(column: TableColumn, context: AggContext): FieldFormatSpec {
