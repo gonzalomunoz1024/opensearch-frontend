@@ -1177,6 +1177,7 @@ function FiltersParam({ p }: { p: ParamEditorProps }) {
               <div className="vzeFilterQuery">
                 <QueryBar
                   autoFocus={index === filters.length - 1}
+                  appName="vis_default_editor"
                   testId={`visEditorFilterInput_${agg.id}_${index}`}
                   value={typeof query.query === 'string' ? query.query : ''}
                   language={query.language}
