@@ -8,7 +8,7 @@ import { ToastList } from './components/overlay';
 import { navigate, useLocation } from './router';
 import { services } from './services';
 import { Chrome } from './shell/chrome';
-import { Home, ManagementOverview, Overview } from './apps/home';
+import { Home, ImportSampleData, ManagementOverview, Overview } from './apps/home';
 
 interface Route {
   /** The path of the application, and what else under `/app/` leads to it */
@@ -18,6 +18,7 @@ interface Route {
 
 const routes: Route[] = [
   { paths: ['/app/home'], render: () => <Home /> },
+  { paths: ['/app/import_sample_data'], render: () => <ImportSampleData /> },
   { paths: ['/app/opensearch_dashboards_overview'], render: () => <Overview /> },
   { paths: ['/app/opensearch_management_overview'], render: () => <ManagementOverview /> },
 ];

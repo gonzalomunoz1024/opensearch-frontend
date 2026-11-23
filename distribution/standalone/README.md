@@ -117,8 +117,9 @@ web/       the browser side
   shell/       the page frame, search bar, filter bar, time picker   (shl)
   charts/      SVG charts: axes, scales, legends, tooltips           (cht)
   vis/         one file per kind of visualization, and TSVB          (vis)
-  apps/        home, discover (dsc), dashboard (dsh), visualize (vze; its TSVB editor tvb),
-               management (mgt), dev_tools (dvt), query_workbench (qwb), index_management (ism)
+  apps/        home and its sample data page (hom), discover (dsc), dashboard (dsh),
+               visualize (vze; its TSVB editor tvb), management (mgt), dev_tools (dvt),
+               query_workbench (qwb), index_management (ism)
   lib/         DQL, rison, date math, number and date formats, aggregations, markdown,
                the syntax of a search box
 scripts/   build.mjs (TypeScript compiler and a small bundler), the two registry checks

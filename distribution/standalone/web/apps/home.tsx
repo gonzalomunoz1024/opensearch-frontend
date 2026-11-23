@@ -3,10 +3,11 @@
 /* The first page, and the two overviews: what the product has, one card each. */
 
 import { Icon, type IconName } from '../components/icon';
-import { href } from '../router';
+import { href, useLocation } from '../router';
 import { services } from '../services';
 import { useBreadcrumbs, useRecentlyAccessed } from '../shell/state';
 import '../styles/home.css';
+import { SampleDataPage } from './sample_data';
 
 interface Card {
   title: string;
@@ -91,7 +92,21 @@ function Cards({ cards }: { cards: Card[] }) {
   );
 }
 
+/** The home application: its first page, and the sample data page at `#/tutorial_directory` */
 export function Home() {
+  const { hashPath } = useLocation();
+  if (hashPath === '/tutorial_directory' || hashPath.startsWith('/tutorial_directory/')) {
+    return <SampleDataPage withHomeBreadcrumb />;
+  }
+  return <HomePage />;
+}
+
+/** The sample data page as an application of its own, which other pages link to */
+export function ImportSampleData() {
+  return <SampleDataPage withHomeBreadcrumb={false} />;
+}
+
+function HomePage() {
   useBreadcrumbs([{ text: 'Home' }]);
   const recent = useRecentlyAccessed();
   return (

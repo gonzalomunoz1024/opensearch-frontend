@@ -88,6 +88,16 @@
   color: var(--color-text-tertiary);
 }
 
+/* A crumb before the last is three characters and its room wide at least, as the theme's: a
+   short first one ("Home") keeps that room before the next */
+.shlCrumb:first-child:not(.shlCrumb--last) {
+  min-width: calc(3ch + var(--space-8) + var(--space-3));
+}
+
+.shlCrumb:not(:first-child, .shlCrumb--last) {
+  min-width: calc(3ch + var(--space-8) + var(--space-4));
+}
+
 .shlHeader__actions {
   display: flex;
   align-items: center;
