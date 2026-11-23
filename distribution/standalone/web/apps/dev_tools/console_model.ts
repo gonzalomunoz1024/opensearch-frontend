@@ -491,6 +491,14 @@ export function formatAnswer(
   return value;
 }
 
+/**
+ * What a request that failed shows: its answer, JSON spread over lines as the original's, or that
+ * none came
+ */
+export function failedAnswer(text: string, contentType: string, status: number): string {
+  return text ? formatAnswer(text, contentType) : `Request failed to get to the server (status code: ${status})`;
+}
+
 /** An answer of OpenSearch to one request, as the console keeps it */
 export interface Answer {
   ok: boolean;

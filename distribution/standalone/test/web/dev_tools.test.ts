@@ -11,6 +11,7 @@ import {
   deprecationMessages,
   describePast,
   expandToRequests,
+  failedAnswer,
   formatAnswer,
   insertRequest,
   keyPath,
@@ -232,6 +233,16 @@ describe('answers', () => {
       '#! Deprecation: a "second" one',
     ]);
     assert.ok(formatAnswer('{}', 'application/json', { warnings: header }).startsWith('#! Deprecation: [types removal]'));
+  });
+  it('spread the JSON of a request that failed over lines too', () => {
+    // The original shows the error of OpenSearch as it shows any other answer, not on one line
+    const error = '{"error":{"type":"index_not_found_exception","index":"nope"},"status":404}';
+    assert.equal(
+      failedAnswer(error, 'application/json; charset=UTF-8', 404),
+      '{\n  "error": {\n    "type": "index_not_found_exception",\n    "index": "nope"\n  },\n  "status": 404\n}'
+    );
+    assert.equal(failedAnswer('No handler found', 'text/plain', 400), 'No handler found');
+    assert.equal(failedAnswer('', 'text/plain', 502), 'Request failed to get to the server (status code: 502)');
   });
 });
 

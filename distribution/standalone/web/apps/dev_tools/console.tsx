@@ -20,6 +20,7 @@ import {
   bodyOf,
   describePast,
   expandToRequests,
+  failedAnswer,
   formatAnswer,
   insertRequest,
   lineOf,
@@ -96,7 +97,7 @@ async function send(request: ConsoleRequest, several: boolean, signal: AbortSign
     const ok = status >= 200 && status < 300;
     const timeMs = Date.now() - started;
     if (!ok) {
-      const value = text ? text : `Request failed to get to the server (status code: ${status})`;
+      const value = failedAnswer(text, contentType, status);
       return { ...base, ok, statusCode: status, statusText, contentType: text ? contentType : 'text/plain', timeMs, value: titled(value) };
     }
     const warnings = response.headers.get('warning');
