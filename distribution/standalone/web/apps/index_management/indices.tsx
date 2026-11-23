@@ -14,22 +14,20 @@ import { useBreadcrumbs } from '../../shell/state';
 import {
   ActionModal,
   ActionsMenu,
-  ContentPanel,
   ExternalLink,
   FilterButton,
   IndexHealth,
   Names,
-  PanelButton,
   SearchRow,
   Table,
   TypeToConfirmModal,
   go,
   ism,
-  to,
   toasts,
   useListQuery,
   type TableColumn,
 } from './common';
+import { ContentPanel, ContentPanelActions } from './content_panel';
 import { SYSTEM_INDEX, matchesAny, orDash, searchClauses, withDataStreams } from './model';
 import { addJob, clusterInfo, startedToast } from './job_handlers';
 import { onJobDone, type JobEvent } from './jobs';
@@ -55,15 +53,24 @@ export interface IndexRow {
 
 const ROLLOVER_DOCS = 'https://opensearch.org/docs/latest/im-plugin/ism/policies/#rollover';
 
-/** The name of an index with the button that copies it, leading to its details */
+/**
+ * The name of an index after the button that copies it, leading to its details. As in the plugin,
+ * both flow as words do: a name too long for the rest of the line goes under the button.
+ */
 export function IndexName({ index }: { index: string }) {
   return (
-    <span className="ismIndexName">
-      <IconButton icon="copyClipboard" iconSize="s" label="Copy" size="s" onClick={() => copyText(index)} />
-      <a href={`#/index-detail/${index}`} data-test-subj={`viewIndexDetailButton-${index}`}>
+    <>
+      <span className="ismIndexName__copy">
+        <IconButton icon="copyClipboard" iconSize="s" label="Copy" size="s" onClick={() => copyText(index)} />
+      </span>
+      <a
+        href={`#/index-detail/${index}`}
+        className="ismIndexName__link"
+        data-test-subj={`viewIndexDetailButton-${index}`}
+      >
         {index}
       </a>
-    </span>
+    </>
   );
 }
 
@@ -74,28 +81,39 @@ export function indicesColumns(withDataStream: boolean): Array<TableColumn<Index
       field: 'health',
       name: 'Health',
       sortable: true,
+      truncate: true,
       render: (row) => <IndexHealth health={row.health} status={row.status} />,
     },
     {
       field: 'data_stream',
       name: 'Data stream',
       sortable: true,
+      truncate: true,
       width: '120px',
       render: (row) =>
         row.data_stream ? <a href={`#/create-data-stream/${row.data_stream}`}>{row.data_stream}</a> : '-',
     },
-    { field: 'managed', name: 'Managed by policy', sortable: true, render: (row) => orDash(row.managed) },
+    { field: 'managed', name: 'Managed by policy', sortable: true, truncate: true, render: (row) => orDash(row.managed) },
     {
       field: 'status',
       name: 'Status',
       sortable: true,
+      truncate: true,
       render: (row) => <span className="ismCapital">{row.extraStatus || row.status}</span>,
     },
-    { field: 'store.size', name: 'Total size', sortable: true, align: 'right', render: (row) => orDash(row['store.size']) },
+    {
+      field: 'store.size',
+      name: 'Total size',
+      sortable: true,
+      truncate: true,
+      align: 'right',
+      render: (row) => orDash(row['store.size']),
+    },
     {
       field: 'pri.store.size',
       name: 'Size of primaries',
       sortable: true,
+      truncate: true,
       align: 'right',
       render: (row) => orDash(row['pri.store.size']),
     },
@@ -103,6 +121,7 @@ export function indicesColumns(withDataStream: boolean): Array<TableColumn<Index
       field: 'docs.count',
       name: 'Total documents',
       sortable: true,
+      truncate: true,
       align: 'right',
       render: (row) => <span title={row['docs.count']}>{row['docs.count'] || '-'}</span>,
     },
@@ -110,11 +129,12 @@ export function indicesColumns(withDataStream: boolean): Array<TableColumn<Index
       field: 'docs.deleted',
       name: 'Deleted documents',
       sortable: true,
+      truncate: true,
       align: 'right',
       render: (row) => <span title={row['docs.deleted']}>{row['docs.deleted'] || '-'}</span>,
     },
-    { field: 'pri', name: 'Primaries', sortable: true, align: 'right', render: (row) => row.pri },
-    { field: 'rep', name: 'Replicas', sortable: true, align: 'right', render: (row) => row.rep },
+    { field: 'pri', name: 'Primaries', sortable: true, truncate: true, align: 'right', render: (row) => row.pri },
+    { field: 'rep', name: 'Replicas', sortable: true, truncate: true, align: 'right', render: (row) => row.rep },
   ];
   return withDataStream ? columns : columns.filter((column) => column.field !== 'data_stream');
 }
@@ -354,7 +374,7 @@ export function IndicesActions({
 
   return (
     <>
-      <ActionsMenu items={items} />
+      <ActionsMenu items={items} size="m" />
       {dialog === 'apply' && <ApplyPolicyModal indices={names} onClose={close} />}
       {dialog === 'delete' && (
         <TypeToConfirmModal
@@ -502,16 +522,26 @@ export function Indices() {
   return (
     <ContentPanel
       title="Indexes"
-      count={total}
+      itemCount={total}
+      bodyStyles={{ padding: 'initial' }}
       actions={
-        <>
-          <PanelButton text="Refresh" icon="refresh" onClick={load} />
-          <IndicesActions selected={selected} onChange={load} />
-          <PanelButton text="Create Index" variant="primary" icon="plus" to={to('/create-index')} />
-        </>
+        <ContentPanelActions
+          actions={[
+            { text: 'Refresh', buttonProps: { icon: 'refresh', onClick: () => void load() } },
+            { text: '', children: <IndicesActions selected={selected} onChange={load} /> },
+            {
+              text: 'Create Index',
+              buttonProps: { variant: 'primary', icon: 'plus', onClick: () => go('/create-index') },
+            },
+          ]}
+        />
       }
     >
-      <SearchRow search={query.search} onSearch={(search) => setQuery({ search, from: 0 })}>
+      <SearchRow
+        className="ismIndexControls"
+        search={query.search}
+        onSearch={(search) => setQuery({ search, from: 0 })}
+      >
         {showDataStreams && (
           <FilterButton
             name="Data streams"
@@ -528,7 +558,9 @@ export function Indices() {
           testId="toggleShowDataStreams"
         />
       </SearchRow>
+      <hr className="ismContentPanel__rule" />
       <Table
+        fixed
         columns={columns}
         rows={rows}
         total={total}

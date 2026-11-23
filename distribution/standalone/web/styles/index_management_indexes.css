@@ -1,0 +1,661 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/*
+ * Index Management: the plugin's panel (content_panel.tsx), its tables as the theme lays them out,
+ * and the pages of indexes, data streams, aliases, templates and the index operations. Class
+ * prefix: ism.
+ */
+
+/* --- The plugin's panel: 16 px above and below, its title and rule, what it holds 16 px in --- */
+
+.ismContentPanel {
+  padding: var(--space-4) 0;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.ismContentPanel--flush {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.ismContentPanel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-6);
+  padding: 0 var(--space-4);
+}
+
+.ismContentPanel__header--ghost {
+  padding: 0;
+}
+
+.ismContentPanel__titles {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+/* The theme's heading of a text: 28 px on 34, drawn a little tighter */
+.ismContentPanel__title {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xxl);
+  font-weight: var(--font-weight-semibold);
+  line-height: 34px;
+  letter-spacing: -0.022em;
+}
+
+.ismContentPanel__subtitle {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+.ismContentPanel__actions,
+.ismContentPanel__buttons {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+}
+
+.ismContentPanel__rule {
+  flex: none;
+  width: 100%;
+  height: 1px;
+  margin: var(--space-2) 0;
+  border: 0;
+  background: var(--color-border-light);
+}
+
+.ismContentPanel__rule--none {
+  margin: 0;
+}
+
+.ismContentPanel__body {
+  padding: 0 var(--space-4);
+}
+
+/* --- A table as the theme lays it out: its columns of fixed widths, the others sharing the rest --- */
+
+.ismTable--fixed .atlTable {
+  table-layout: fixed;
+  font-feature-settings: 'calt' 1, 'kern' 1, 'liga' 1, 'tnum' 1;
+}
+
+.ismTable--fixed td {
+  padding: 10px var(--space-3);
+  border-top: 1px solid var(--color-border-light);
+  border-bottom: 0;
+  overflow-wrap: break-word;
+}
+
+.ismTable--fixed td.ismTable__truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ismTable--fixed th .atlTable__sort {
+  max-width: 100%;
+}
+
+.ismTable--fixed th .atlTable__sort > span {
+  min-width: 0;
+}
+
+/* --- Indexes ---------------------------------------------------------------------------------- */
+
+/* The controls above the list: 5 px in from the panel, 24 px apart */
+.ismIndexControls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  padding: 0 5px;
+}
+
+.ismIndexControls > :first-child {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+/* The name of an index after the button that copies it: the name moves under the button when
+   both do not fit on a line, as in the plugin */
+.ismIndexName__copy {
+  display: inline-block;
+  padding-left: var(--space-2);
+}
+
+/* The theme's smallest empty button: 22 px by 24, its icon at its left */
+.ismIndexName__copy .atlButton {
+  width: 22px;
+  height: 24px;
+  justify-content: flex-start;
+  padding: 0 1px;
+}
+
+.ismIndexName__link {
+  display: inline-block;
+  max-width: 100%;
+  line-height: normal;
+  text-align: left;
+  /* The plugin's name is a button, which takes none of the table's figures */
+  font-feature-settings: normal;
+}
+
+/* --- The theme's spacers, titles and descriptions as the plugin's pages put them ------------------ */
+
+.ismSpacer {
+  flex: none;
+  height: var(--space-6);
+}
+
+.ismSpacer--m {
+  height: var(--space-4);
+}
+
+.ismSpacer--s {
+  height: var(--space-2);
+}
+
+/* A page's title: the theme's heading of a text, 28 px on 34 */
+.ismTextTitle {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xxl);
+  font-weight: var(--font-weight-semibold);
+  line-height: 34px;
+  letter-spacing: -0.022em;
+  overflow-wrap: break-word;
+}
+
+/* The theme's small title, a panel's: 17 px on 22 */
+.ismPanelTitle {
+  letter-spacing: -0.022em;
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-l);
+  font-weight: var(--font-weight-semibold);
+  line-height: 22px;
+}
+
+/* --- A page with a form: 50 px in from the plugin's page, its buttons at the right, 8 px apart ---- */
+
+.ismFormPage {
+  padding: 0 50px;
+}
+
+.ismFormButtons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* --- The bar of unsaved changes (bottom_bar.tsx): the theme's bottom bar, held to the bottom ----- */
+
+.ismChangesBar {
+  position: sticky;
+  bottom: 0;
+  z-index: 998;
+  padding: var(--space-4);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: #1c1c1e;
+  color: #ffffff;
+  font-size: var(--font-size-s);
+  animation: ismChangesBarAppear 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes ismChangesBarAppear {
+  0% {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0%);
+  }
+}
+
+.ismChangesBar__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ismChangesBar__text {
+  display: flex;
+  flex: 1 1 0%;
+  align-items: center;
+  min-width: 0;
+  line-height: 16px;
+}
+
+/* How the changes stand: a block 4 px by 16, 8 px before the text */
+.ismChangesBar__block {
+  flex: none;
+  width: 4px;
+  height: 16px;
+  margin-right: var(--space-2);
+  background: var(--color-warning);
+}
+
+.ismChangesBar__block--danger {
+  background: var(--color-critical);
+}
+
+.ismChangesBar .atlButton--ghost {
+  color: #ffffff;
+}
+
+.ismChangesBar .atlButton--ghost:hover,
+.ismChangesBar .atlButton--ghost:focus {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* --- One index ---------------------------------------------------------------------------------- */
+
+.ismIndexDetail__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* What the index is: three to a row, each a third of the panel */
+.ismOverviewList {
+  margin: 0;
+  font-size: var(--font-size-s);
+  line-height: 1.5;
+}
+
+.ismOverviewList__item {
+  display: inline-block;
+  width: 33%;
+  margin-bottom: 20px;
+  vertical-align: top;
+}
+
+.ismOverviewList__item dt {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-m);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+.ismOverviewList__item dd {
+  margin: 0;
+  line-height: 21px;
+}
+
+.ismOverviewList__item ul {
+  margin: 0;
+  padding: 0;
+  list-style: disc inside;
+}
+
+/* The theme's help under a field */
+.ismHelpText {
+  padding-top: var(--space-1);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}
+
+/* --- The plugin's row of a form (form_row.tsx): the theme's compressed form row ------------------- */
+
+.ismFormRow {
+  display: flex;
+  flex-direction: column;
+  max-width: 400px;
+}
+
+.ismFormRow--full {
+  max-width: 100%;
+}
+
+.ismFormRow + .ismFormRow {
+  margin-top: var(--space-4);
+}
+
+.ismFormRow__label {
+  margin-bottom: var(--space-1);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.5;
+}
+
+/* The plugin's title of a field: the theme's heading of a small text, 17 px on 22 */
+.ismFormRow__title,
+.ismDescribed__title {
+  display: block;
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-l);
+  font-weight: var(--font-weight-semibold);
+  line-height: 22px;
+  letter-spacing: -0.022em;
+}
+
+.ismFormRow__field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.ismFormRow__field > .atlField,
+.ismFormRow__field > .atlCombo,
+.ismFormRow__field > .atlCodeEditor,
+.ismFormRow__field > .ismObjectEditor,
+.ismFormRow__field > .ismFormRow__help,
+.ismFormRow__field > div:not([class]) {
+  width: 100%;
+}
+
+.ismFormRow__help,
+.ismFormRow__error {
+  padding-top: var(--space-1);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}
+
+.ismFormRow__help--top {
+  padding-top: 0;
+  padding-bottom: var(--space-1);
+}
+
+.ismFormRow__help p {
+  margin: 0;
+}
+
+/* The theme's link out of the product in a help: its icon 12 px, 4 px after the text */
+.ismHelpText .ismExternal,
+.ismFormRow__help .ismExternal,
+.ismDescribed__help .ismExternal {
+  gap: var(--space-1);
+}
+
+.ismHelpText .ismExternal .atlIcon,
+.ismFormRow__help .ismExternal .atlIcon,
+.ismDescribed__help .ismExternal .atlIcon {
+  width: 12px;
+  height: 12px;
+}
+
+.ismFormRow__error {
+  color: var(--color-critical);
+}
+
+/* A field beside its title and what the title means: the theme's described form group */
+.ismDescribed {
+  display: flex;
+  gap: var(--space-6);
+}
+
+/* 24 px to what follows; 36 px to another group, as the theme's gutters of 12 px add to it */
+.ismDescribed + * {
+  margin-top: var(--space-6);
+}
+
+.ismDescribed + .ismDescribed {
+  margin-top: 36px;
+}
+
+.ismDescribed__text {
+  flex: 1 1 0%;
+  min-width: 0;
+  max-width: 700px;
+}
+
+.ismDescribed__help {
+  padding-top: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  line-height: 1.5;
+}
+
+.ismDescribed__fields {
+  flex: 1 1 0%;
+  min-width: 0;
+  padding-top: 11px;
+}
+
+@media (max-width: 767px) {
+  .ismDescribed {
+    flex-direction: column;
+  }
+
+  .ismDescribed__text {
+    max-width: none;
+  }
+
+  .ismDescribed__fields {
+    padding-top: 0;
+  }
+}
+
+/* A value that cannot be changed: the theme's text */
+.ismReadonlyText {
+  font-size: var(--font-size-s);
+  line-height: 1.5;
+  overflow-wrap: break-word;
+}
+
+/* --- The mappings of an index: the editor's type, then the fields or their JSON ------------------ */
+
+.ismMappingEditor {
+  min-width: 0;
+}
+
+.ismMappingEditor__none {
+  margin: 0;
+}
+
+.ismMappingEditor__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* The fields as the theme's tree: nodes 4 px apart with 4 px inside, an arrow and 8 px, the field;
+   the fields of a field 24 px further in */
+.ismTreeView {
+  margin: 0;
+  padding: 0;
+  font-size: var(--font-size-s);
+  line-height: 1.5;
+  list-style: none;
+}
+
+.ismTreeView--nested {
+  padding-left: var(--space-6);
+}
+
+.ismTreeView__inner {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  max-width: 100%;
+  margin: var(--space-1) 0;
+  padding: var(--space-1) 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  overflow: hidden;
+}
+
+button.ismTreeView__inner {
+  cursor: pointer;
+}
+
+/* The theme's node under the pointer, as its compiled styles give it in each mode */
+.ismTreeView__inner:hover,
+.ismTreeView__inner:active,
+.ismTreeView__inner:focus {
+  background-color: #e8e8e9;
+}
+
+:root.themeDark .ismTreeView__inner:hover,
+:root.themeDark .ismTreeView__inner:active,
+:root.themeDark .ismTreeView__inner:focus {
+  background-color: #69696b;
+}
+
+.ismTreeView__inner:focus {
+  outline: none;
+}
+
+.ismTreeView__inner:focus-visible {
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
+}
+
+.ismTreeView__icon {
+  display: inline-flex;
+  flex: none;
+  margin: -2px var(--space-2) 0 0;
+}
+
+.ismTreeView__label {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A field there is: its parts 8 px apart, on the middle of the line */
+.ismFieldLine > * {
+  margin-right: var(--space-2);
+  vertical-align: middle;
+}
+
+/* The theme's hollow badge */
+.ismHollowBadge {
+  display: inline-block;
+  max-width: 100%;
+  padding: 1px var(--space-2);
+  overflow: hidden;
+  border: 1px solid var(--color-border-light);
+  border-radius: 999px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.ismHollowBadge + .ismHollowBadge {
+  margin-left: var(--space-1);
+}
+
+/* A field that can be changed: its name 300 px wide, its type 100, its actions, 24 px apart */
+.ismFieldRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-6);
+  white-space: normal;
+}
+
+.ismFieldRow__item {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ismFieldRow__item--name {
+  width: 300px;
+}
+
+.ismFieldRow__item--type {
+  width: 100px;
+}
+
+.ismFieldRow__actions {
+  display: flex;
+  align-items: center;
+  height: 32px;
+}
+
+/* The theme's icon buttons of a medium size: 40 px */
+.ismFieldRow__actions .atlButton--icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.ismHoverMenu__anchor {
+  display: inline-flex;
+}
+
+/* An editor of JSON, its message 4 px under it; a red border while what it holds is not JSON */
+.ismObjectEditor {
+  gap: 0;
+}
+
+.ismObjectEditor--broken > .atlCodeEditor {
+  border-color: red;
+}
+
+/* --- The advanced settings: an accordion, its arrow 4 px in, its title 8 px after the arrow ------ */
+
+.ismAccordion__button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-s);
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ismAccordion__button:hover,
+.ismAccordion__button:focus {
+  text-decoration: underline;
+}
+
+.ismAccordion__button:focus {
+  outline: none;
+}
+
+.ismAccordion__button:focus-visible .ismAccordion__icon {
+  color: var(--color-accent);
+}
+
+.ismAccordion__button h3 {
+  margin: 0;
+  font: inherit;
+}
+
+.ismAccordion__icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0 var(--space-2) 0 var(--space-1);
+  transition: transform var(--duration-normal) var(--ease-out-quint);
+}
+
+.ismAccordion__button[aria-expanded='true'] .ismAccordion__icon {
+  transform: rotate(90deg);
+}
+
+.ismAccordion__body {
+  padding-top: var(--space-2);
+}

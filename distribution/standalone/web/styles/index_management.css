@@ -2,72 +2,121 @@
 
 /* Index Management: the menu of its lists beside its pages. Class prefix: ism. */
 
+/* As the plugin's page: a 16 px margin, the menu 200 px wide and 16 px from the page, which has
+   25 px around it (the plugin's own padding) */
 .ismFrame {
   display: flex;
-  align-items: flex-start;
   flex: 1 1 auto;
   min-width: 0;
+  padding: var(--space-4);
+  background: var(--color-surface);
 }
 
 .ismNav {
-  flex: 0 0 216px;
-  position: sticky;
-  top: var(--header-height);
-  padding: var(--space-6) var(--space-4);
+  flex: none;
+  width: 200px;
+  margin-right: var(--space-4);
+  font-size: var(--font-size-s);
+  line-height: 1.5;
 }
 
 .ismNav__group + .ismNav__group {
-  margin-top: var(--space-6);
+  margin-top: var(--space-8);
+}
+
+/* The name of an application, then its lists: as the theme's side navigation, a row of 21 px with
+   2 px above and below, its hover 8 px wider on each side */
+.ismNav__title,
+.ismNav__link {
+  display: block;
+  width: calc(100% + 16px);
+  margin-left: calc(-1 * var(--space-2));
+  padding: 2px var(--space-2);
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ismNav__title {
-  display: block;
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--space-2);
+  padding-top: 0;
+  padding-bottom: 0;
   color: var(--color-text-primary);
   font-size: var(--font-size-m);
   font-weight: var(--font-weight-semibold);
-  text-decoration: none;
+  line-height: 20px;
 }
 
 .ismNav ul {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
+/* A list under another: a line at its left with a tick to each */
 .ismNav ul.ismNav__inner {
-  margin-top: 2px;
-  padding-left: var(--space-4);
+  width: 100%;
+  margin-left: var(--space-2);
 }
 
-.ismNav__link {
-  display: block;
-  padding: var(--space-1) 0;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-s);
-  text-decoration: none;
+.ismNav__inner > li {
+  position: relative;
 }
 
-.ismNav__link:hover {
+.ismNav__inner > li::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  background: var(--color-border-light);
+}
+
+.ismNav__inner > li:last-of-type::after {
+  height: 12px;
+}
+
+.ismNav__inner .ismNav__link {
+  position: relative;
+  width: 100%;
+  margin-left: 0;
+}
+
+.ismNav__inner .ismNav__link::after {
+  content: '';
+  position: absolute;
+  top: 12px;
+  left: 0;
+  width: 4px;
+  height: 1px;
+  background: var(--color-border-light);
+}
+
+.ismNav__link:hover,
+.ismNav__link:focus,
+.ismNav__title:hover,
+.ismNav__title:focus {
   color: var(--color-text-primary);
 }
 
 .ismNav__link--selected,
-.ismNav__link--selected:hover {
+.ismNav__link--selected:hover,
+.ismNav__link--selected:focus {
   color: var(--color-accent);
   font-weight: var(--font-weight-medium);
 }
 
 .ismBody {
-  flex: 1 1 auto;
+  flex: 1 1 100%;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  padding: var(--space-6);
+  padding: 25px;
 }
 
 /* --- The panel around a list or a part of a form ------------------------------------------------ */
@@ -281,17 +330,19 @@
   overflow-wrap: anywhere;
 }
 
-@media (max-width: 900px) {
+/* As the theme's page on a narrow screen: the menu above the page */
+@media (max-width: 767px) {
   .ismFrame {
     flex-direction: column;
-    align-items: stretch;
   }
 
   .ismNav {
-    position: static;
-    flex: none;
+    width: auto;
+    margin: 0 0 var(--space-4);
   }
+}
 
+@media (max-width: 900px) {
   .ismDetails {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
@@ -303,11 +354,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  padding: 0 var(--space-5);
-}
-
-.ismPage--details {
-  padding: 0 var(--space-6);
 }
 
 .ismPage--loading {
