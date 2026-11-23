@@ -926,6 +926,8 @@ const TOOLTIP_DELAYS = { regular: 250, long: 1250 };
 /** The room the original's tooltip keeps from the window's edges, and from its anchor */
 const TOOLTIP_BUFFER = 16;
 const TOOLTIP_OFFSET = 16;
+/** The original's tooltip arrow, which points at the middle of the anchor at least 4 px inside it */
+const TOOLTIP_ARROW = { width: 12, buffer: 4 };
 
 interface Box {
   left: number;
@@ -936,32 +938,82 @@ interface Box {
   height: number;
 }
 
+export type TooltipSide = 'top' | 'right' | 'bottom' | 'left';
+
+const OPPOSITE: Record<TooltipSide, TooltipSide> = { top: 'bottom', right: 'left', bottom: 'top', left: 'right' };
+/** The first of the two other sides the original tries */
+const ACROSS: Record<TooltipSide, TooltipSide> = { top: 'left', right: 'top', bottom: 'left', left: 'top' };
+
+/** How much of a box the window shows inside 16 px of its edges: 0 to 1 */
+function visibleFit(box: { left: number; top: number; width: number; height: number }, viewport: { width: number; height: number }): number {
+  const left = Math.max(box.left, TOOLTIP_BUFFER);
+  const right = Math.min(box.left + box.width, viewport.width - TOOLTIP_BUFFER);
+  const top = Math.max(box.top, TOOLTIP_BUFFER);
+  const bottom = Math.min(box.top + box.height, viewport.height - TOOLTIP_BUFFER);
+  if (left > right || top > bottom) return 0;
+  return ((right - left) * (bottom - top)) / (box.width * box.height);
+}
+
 /**
- * Where a tooltip goes, as the original places it: 16 px from its anchor, on the side asked unless
- * there is no room there, and never nearer than 16 px to an edge of the window
+ * A tooltip on one side of its anchor, as the original computes it: 16 px from it, centred on it
+ * and moved along it towards the side with more room by as much as the other has too little, but
+ * no further than lets its arrow point at the anchor's middle
+ */
+function tooltipOn(
+  side: TooltipSide,
+  target: Box,
+  own: { width: number; height: number },
+  viewport: { width: number; height: number }
+): { left: number; top: number; fit: number } {
+  const vertical = side === 'top' || side === 'bottom';
+  const size = vertical ? own.width : own.height;
+  const anchorStart = vertical ? target.left : target.top;
+  const anchorSize = vertical ? target.width : target.height;
+  const room = {
+    top: target.top - TOOLTIP_BUFFER - (side === 'top' ? TOOLTIP_OFFSET : 0),
+    right: viewport.width - target.right - TOOLTIP_BUFFER - (side === 'right' ? TOOLTIP_OFFSET : 0),
+    bottom: viewport.height - target.bottom - TOOLTIP_BUFFER - (side === 'bottom' ? TOOLTIP_OFFSET : 0),
+    left: target.left - TOOLTIP_BUFFER - (side === 'left' ? TOOLTIP_OFFSET : 0),
+  };
+  const before = vertical ? room.left : room.top;
+  const after = vertical ? room.right : room.bottom;
+  const overflow = (size - anchorSize) / 2;
+  const tightest = Math.min(before, after);
+  let along = anchorStart + anchorSize / 2 - size / 2 + Math.max(0, overflow - tightest) * (before > after ? -1 : 1);
+  const arrow = anchorStart + anchorSize / 2 - TOOLTIP_ARROW.width / 2;
+  if (arrow < along + TOOLTIP_ARROW.buffer) along = arrow - TOOLTIP_ARROW.buffer;
+  else if (arrow + TOOLTIP_ARROW.buffer + TOOLTIP_ARROW.width > along + size) along = arrow + TOOLTIP_ARROW.buffer + TOOLTIP_ARROW.width - size;
+  const away = {
+    top: target.top - TOOLTIP_OFFSET - own.height,
+    bottom: target.bottom + TOOLTIP_OFFSET,
+    left: target.left - TOOLTIP_OFFSET - own.width,
+    right: target.right + TOOLTIP_OFFSET,
+  }[side];
+  const left = vertical ? along : away;
+  const top = vertical ? away : along;
+  return { left, top, fit: visibleFit({ left, top, width: own.width, height: own.height }, viewport) };
+}
+
+/**
+ * Where a tooltip goes, as the original places it: on the side asked, else on the opposite one,
+ * else on one of the other two, the first where the whole of it stays 16 px inside the window, or
+ * where most of it does
  */
 export function placeTooltip(
   target: Box,
   own: { width: number; height: number },
   viewport: { width: number; height: number },
-  position: 'top' | 'bottom' | 'right' = 'top'
-): { left: number; top: number } {
-  if (position === 'right' && target.right + TOOLTIP_OFFSET + own.width <= viewport.width - TOOLTIP_BUFFER) {
-    return {
-      left: target.right + TOOLTIP_OFFSET,
-      top: Math.max(TOOLTIP_BUFFER, target.top + target.height / 2 - own.height / 2),
-    };
+  position: TooltipSide = 'top'
+): { left: number; top: number; side: TooltipSide } {
+  const sides = [position, OPPOSITE[position], ACROSS[position], OPPOSITE[ACROSS[position]]];
+  let best: { left: number; top: number; fit: number; side: TooltipSide } | undefined;
+  for (const side of sides) {
+    const placed = tooltipOn(side, target, own, viewport);
+    if (best === undefined || placed.fit > best.fit) best = { ...placed, side };
+    if (best.fit === 1) break;
   }
-  const left = Math.max(
-    TOOLTIP_BUFFER,
-    Math.min(target.left + target.width / 2 - own.width / 2, viewport.width - own.width - TOOLTIP_BUFFER)
-  );
-  const above = target.top - own.height - TOOLTIP_OFFSET;
-  const below = target.bottom + TOOLTIP_OFFSET;
-  const fitsAbove = above >= TOOLTIP_BUFFER;
-  const fitsBelow = below + own.height <= viewport.height - TOOLTIP_BUFFER;
-  const top = position === 'bottom' ? (fitsBelow || !fitsAbove ? below : above) : fitsAbove ? above : below;
-  return { left, top };
+  const { left, top, side } = best ?? { ...tooltipOn(position, target, own, viewport), side: position };
+  return { left, top, side };
 }
 
 /** What describes an element while its tooltip shows: its own description, then the tooltip */
@@ -988,10 +1040,10 @@ export function Tooltip({
   /** A class for the box of the text */
   className?: string;
   /**
-   * Where it is drawn, as the original's `position`: above its anchor or under it, on the other
-   * side when there is no room, or on its right
+   * Where it is drawn, as the original's `position`: the side of its anchor it goes on when the
+   * window has room for it there, else the opposite side or one of the other two
    */
-  position?: 'top' | 'bottom' | 'right';
+  position?: TooltipSide;
   /** Shown after the original's delay; at once when left out */
   delay?: keyof typeof TOOLTIP_DELAYS;
 }) {
@@ -1003,14 +1055,15 @@ export function Tooltip({
   const id = useId();
   useLayoutEffect(() => {
     if (!shown || !anchor.current || !box.current) return;
-    setPlace(
-      placeTooltip(
-        anchor.current.getBoundingClientRect(),
-        box.current.getBoundingClientRect(),
-        { width: window.innerWidth, height: window.innerHeight },
-        position
-      )
+    // The window as the original measures it: without its scroll bars
+    const { clientWidth, clientHeight } = document.documentElement;
+    const { left, top } = placeTooltip(
+      anchor.current.getBoundingClientRect(),
+      box.current.getBoundingClientRect(),
+      { width: clientWidth || window.innerWidth, height: clientHeight || window.innerHeight },
+      position
     );
+    setPlace({ left, top });
   }, [shown, content, position]);
   // As the original's, what the tooltip is about is described by it while it shows
   const anchored = isValidElement<{ 'aria-describedby'?: string }>(children)

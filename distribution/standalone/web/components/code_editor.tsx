@@ -284,7 +284,8 @@ export function CodeEditor({
       tabIndex={readOnly ? 0 : undefined}
       onScroll={onScroll ? (event) => onScroll(event.currentTarget.scrollTop) : undefined}
       aria-label={readOnly ? ariaLabel : undefined}
-      data-test-subj={readOnly ? testId : undefined}
+      // As the original's: the test id on what holds the text and not on the text itself
+      data-test-subj={testId}
     >
       <div className="atlCodeEditor__body">
         <pre ref={paint} className="atlCodeEditor__paint" aria-hidden={!readOnly}>
@@ -303,7 +304,6 @@ export function CodeEditor({
             autoCapitalize="off"
             autoCorrect="off"
             wrap={wrap ? 'soft' : 'off'}
-            data-test-subj={testId}
             onChange={(event) => onChange?.(event.target.value)}
             onKeyDown={handleKeyDown}
             onPaste={onPaste}

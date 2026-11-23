@@ -312,9 +312,11 @@ svg.atlIcon:not([role="img"]) {
   border-color: var(--color-critical);
 }
 
-/* The theme's compressed field: as tall as the kit's and in the same type, 8 px in from the sides */
+/* The theme's compressed field: as tall as the kit's and in the same type, its text 8 px in from
+   the sides as the original's, whose edge is a 1 px ring drawn inside the field where the kit's is
+   a border */
 .atlField--s {
-  padding: 0 var(--space-2);
+  padding: 0 calc(var(--space-2) - 1px);
 }
 
 textarea.atlField {
@@ -369,10 +371,10 @@ select.atlField {
 }
 
 /* As the original's compressed field with an icon: the icon 8 px in from the outer edge, the text
-   32 px in. The text's room is the kit's least rule, so that a page that places its own icon keeps
-   its own */
+   32 px in, and what ends it (a button, an icon) 8 px in from the other edge. The text's room is the
+   kit's least rule, so that a page that places its own icon keeps its own */
 .atlField--s.atlFieldGroup {
-  padding-left: calc(var(--space-2) - 1px);
+  padding: 0 calc(var(--space-2) - 1px);
 }
 
 :where(.atlField--s.atlFieldGroup > .atlIcon:first-child) + input {
@@ -426,13 +428,96 @@ select.atlField {
   user-select: none;
 }
 
+/* As the original's tick box and radio, drawn by the page and not by the browser: 16 px with a 1 px
+   edge, a square with corners of 5 px or a circle, filled with the accent when chosen, with the
+   original's own tick and dot (white, black in the dark theme: a picture cannot take a variable) */
 .atlCheckbox input,
 .atlRadio input {
+  flex: none;
   width: 16px;
   height: 16px;
   margin: 0;
-  accent-color: var(--color-accent);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  background: var(--color-surface) no-repeat center;
+  appearance: none;
+  transition:
+    background-color var(--duration-fast) ease-in,
+    border-color var(--duration-fast) ease-in;
   cursor: pointer;
+}
+
+.atlRadio input {
+  border-radius: 50%;
+}
+
+.atlCheckbox input:checked,
+.atlCheckbox input:indeterminate,
+.atlRadio input:checked {
+  border-color: var(--color-accent);
+}
+
+.atlCheckbox input:checked,
+.atlRadio input:checked {
+  background-color: var(--color-accent);
+}
+
+.atlCheckbox input:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='8' viewBox='0 0 10 8'%3E%3Cpath d='M.375 2.625L3.375 5.625M3.375 5.625L8.625.375' fill='none' fill-rule='evenodd' stroke='rgb%28255, 255, 255%29' stroke-linecap='round' stroke-width='1.5' transform='translate(.5 1)'/%3E%3C/svg%3E");
+}
+
+.atlRadio input:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='6' viewBox='0 0 6 6'%3E%3Ccircle cx='8' cy='11' r='3' fill='rgb%28255, 255, 255%29' fill-rule='evenodd' transform='translate(-5 -8)'/%3E%3C/svg%3E");
+}
+
+/* Some ticked of those it stands for: a square of 6 px in the accent */
+.atlCheckbox input:indeterminate:not(:checked) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='6' viewBox='0 0 6 6'%3E%3Crect width='6' height='6' rx='1' fill='%23007aff'/%3E%3C/svg%3E");
+}
+
+:root.themeDark .atlCheckbox input:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='8' viewBox='0 0 10 8'%3E%3Cpath d='M.375 2.625L3.375 5.625M3.375 5.625L8.625.375' fill='none' fill-rule='evenodd' stroke='rgb%280, 0, 0%29' stroke-linecap='round' stroke-width='1.5' transform='translate(.5 1)'/%3E%3C/svg%3E");
+}
+
+:root.themeDark .atlRadio input:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='6' viewBox='0 0 6 6'%3E%3Ccircle cx='8' cy='11' r='3' fill='rgb%280, 0, 0%29' fill-rule='evenodd' transform='translate(-5 -8)'/%3E%3C/svg%3E");
+}
+
+:root.themeDark .atlCheckbox input:indeterminate:not(:checked) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='6' viewBox='0 0 6 6'%3E%3Crect width='6' height='6' rx='1' fill='%230a84ff'/%3E%3C/svg%3E");
+}
+
+/* With the focus, from a key or a pointer: the edge in the accent and the original's 3 px ring */
+.atlCheckbox input:focus,
+.atlRadio input:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
+  outline: none;
+}
+
+/* Disabled: filled with the colour of the edge, a chosen one's mark greyed as the original's */
+.atlCheckbox input:disabled,
+.atlRadio input:disabled {
+  border-color: var(--color-border);
+  background-color: var(--color-border);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.atlCheckbox input:disabled:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='8' viewBox='0 0 10 8'%3E%3Cpath d='M.375 2.625L3.375 5.625M3.375 5.625L8.625.375' fill='none' fill-rule='evenodd' stroke='rgb%2894, 94, 98%29' stroke-linecap='round' stroke-width='1.5' transform='translate(.5 1)'/%3E%3C/svg%3E");
+}
+
+.atlRadio input:disabled:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='6' viewBox='0 0 6 6'%3E%3Ccircle cx='8' cy='11' r='3' fill='rgb%2894, 94, 98%29' fill-rule='evenodd' transform='translate(-5 -8)'/%3E%3C/svg%3E");
+}
+
+:root.themeDark .atlCheckbox input:disabled:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='8' viewBox='0 0 10 8'%3E%3Cpath d='M.375 2.625L3.375 5.625M3.375 5.625L8.625.375' fill='none' fill-rule='evenodd' stroke='rgb%28175, 175, 176%29' stroke-linecap='round' stroke-width='1.5' transform='translate(.5 1)'/%3E%3C/svg%3E");
+}
+
+:root.themeDark .atlRadio input:disabled:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='6' viewBox='0 0 6 6'%3E%3Ccircle cx='8' cy='11' r='3' fill='rgb%28175, 175, 176%29' fill-rule='evenodd' transform='translate(-5 -8)'/%3E%3C/svg%3E");
 }
 
 .atlSwitch {
@@ -1041,8 +1126,9 @@ select.atlField {
   line-height: 1;
 }
 
-/* The arrows: round icon buttons in the colour of the text. As the original's, one that leads
-   nowhere (at the first and the last page) is drawn and answers the pointer as the other */
+/* The arrows: round icon buttons in the colour of the text, in the font of the page buttons as the
+   original's. As the original's, one that leads nowhere (at the first and the last page) is drawn
+   and answers the pointer as the other */
 .atlPagination__arrow {
   display: inline-flex;
   align-items: center;
@@ -1054,6 +1140,9 @@ select.atlField {
   border-radius: 50%;
   background: transparent;
   color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 21px;
   cursor: pointer;
 }
 

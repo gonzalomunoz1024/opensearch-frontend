@@ -3,9 +3,11 @@
 /* The kit's shared pieces, drawn as the original's component library draws them. */
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { Button, IconButton } from '../../web/components/basic';
+import { CodeEditor } from '../../web/components/code_editor';
 import { ComboBox } from '../../web/components/combo_box';
 import { Icon, iconDrawing } from '../../web/components/icon';
 import { describedBy, initialModalFocus, placeTooltip } from '../../web/components/overlay';
@@ -27,6 +29,18 @@ function markupOf(element: Parameters<typeof renderToStaticMarkup>[0]): string {
   /* eslint-enable no-console */
 }
 
+/**
+ * What a rule of the kit's style sheet declares, the rule named by all its selectors as written (not
+ * a rule whose list ends with them)
+ */
+function declarationsOf(selectors: string): string {
+  const sheet = readFileSync('web/styles/components.css', 'utf8');
+  let start = sheet.indexOf(`\n${selectors} {`);
+  while (start > 0 && sheet[start - 1] === ',') start = sheet.indexOf(`\n${selectors} {`, start + 1);
+  assert.ok(start >= 0, `${selectors} has a rule`);
+  return sheet.slice(start, sheet.indexOf('}', start));
+}
+
 describe('the buttons', () => {
   it('draws the sizes of the original: its small button, the kit\'s own and the smallest', () => {
     assert.match(renderToStaticMarkup(<Button>Save</Button>), /^<button type="button" class="atlButton">Save<\/button>$/);
@@ -45,6 +59,50 @@ describe('the buttons', () => {
     const titled = renderToStaticMarkup(<IconButton icon="cross" label="Close" title="Close this" />);
     assert.match(titled, / title="Close this"/);
     assert.match(titled, / aria-label="Close"/);
+  });
+
+  it('is a link to an address outside the product, in a new tab that cannot reach this one', () => {
+    assert.equal(
+      renderToStaticMarkup(<Button href="https://example.com/docs" target="_blank">Learn more</Button>),
+      '<a class="atlButton" href="https://example.com/docs" target="_blank" rel="noopener noreferrer">Learn more</a>'
+    );
+    assert.equal(
+      renderToStaticMarkup(<Button href="https://example.com/docs">Learn more</Button>),
+      '<a class="atlButton" href="https://example.com/docs">Learn more</a>'
+    );
+    // A disabled one is a button, as one with a path of the product
+    assert.match(renderToStaticMarkup(<Button href="https://example.com/docs" disabled>Learn more</Button>), /^<button type="button" class="atlButton" disabled="">/);
+  });
+});
+
+describe('the fields and boxes, as the original draws them', () => {
+  it('starts the text of a compressed field 8 px in, as the original, whose edge is drawn inside it', () => {
+    // The kit's edge is a 1 px border, the original's a ring inside the field: 7 px and the border
+    assert.match(declarationsOf('.atlField--s'), /padding: 0 calc\(var\(--space-2\) - 1px\);/);
+    assert.match(declarationsOf('.atlField--s.atlFieldGroup'), /padding: 0 calc\(var\(--space-2\) - 1px\);/);
+  });
+
+  it('draws its tick boxes and radios itself, with the original\'s tick and dot', () => {
+    const own = declarationsOf('.atlCheckbox input,\n.atlRadio input');
+    assert.match(own, /appearance: none;/);
+    assert.match(own, /border: 1px solid var\(--color-border\);/);
+    assert.match(declarationsOf('.atlCheckbox input:checked'), /M\.375 2\.625L3\.375 5\.625M3\.375 5\.625L8\.625\.375/);
+    assert.match(declarationsOf('.atlRadio input:checked'), /circle cx='8' cy='11' r='3'/);
+    assert.match(declarationsOf('.atlCheckbox input:focus,\n.atlRadio input:focus'), /box-shadow: 0 0 0 3px var\(--color-focus-ring\);/);
+  });
+
+  it("puts a code editor's test id on what holds its text, as the original's", () => {
+    for (const readOnly of [false, true]) {
+      const html = markupOf(<CodeEditor value="{}" testId="codeEditorContainer" readOnly={readOnly} />);
+      assert.match(html, /^<div class="atlCodeEditor[^"]*"[^>]* data-test-subj="codeEditorContainer">/);
+      assert.equal(html.split('data-test-subj=').length, 2);
+    }
+  });
+
+  it('sets the arrows of its pages in the font of the page buttons, as the original', () => {
+    const arrow = declarationsOf('.atlPagination__arrow');
+    assert.match(arrow, /font-size: var\(--font-size-s\);/);
+    assert.match(arrow, /font-weight: var\(--font-weight-medium\);/);
   });
 });
 
@@ -154,22 +212,38 @@ describe('the tooltip', () => {
 
   it('stands 16 px over its anchor, centred, or under it when there is no room over it', () => {
     // Discover's "Add field as column", where the original draws it
-    assert.deepEqual(placeTooltip(at(247.8, 259), own, view), { left: 195.8, top: 217 });
-    assert.deepEqual(placeTooltip(at(600, 20), own, view), { left: 548, top: 60 });
-    assert.deepEqual(placeTooltip(at(600, 400), own, view, 'bottom'), { left: 548, top: 440 });
+    assert.deepEqual(placeTooltip(at(247.8, 259), own, view), { left: 195.8, top: 217, side: 'top' });
+    assert.deepEqual(placeTooltip(at(600, 20), own, view), { left: 548, top: 60, side: 'bottom' });
+    assert.deepEqual(placeTooltip(at(600, 400), own, view, 'bottom'), { left: 548, top: 440, side: 'bottom' });
     // Under it only while there is room under it
-    assert.deepEqual(placeTooltip(at(600, 850), own, view, 'bottom'), { left: 548, top: 808 });
+    assert.deepEqual(placeTooltip(at(600, 850), own, view, 'bottom'), { left: 548, top: 808, side: 'top' });
   });
 
   it('keeps 16 px from the edges of the window, as the original', () => {
-    assert.equal(placeTooltip(at(0, 400), own, view).left, 16);
-    assert.equal(placeTooltip(at(1390, 400, 10), own, view).left, 1400 - 128 - 16);
     // There is no room over its anchor when it would come nearer than 16 px to the top
-    assert.equal(placeTooltip(at(600, 57), own, view).top, 97);
-    assert.equal(placeTooltip(at(600, 58), own, view).top, 16);
-    // On the right while it keeps 16 px from that edge, else over its anchor
-    assert.deepEqual(placeTooltip(at(100, 400), own, view, 'right'), { left: 140, top: 399 });
-    assert.equal(placeTooltip(at(1240, 400), own, view, 'right').top, 400 - 26 - 16);
+    assert.deepEqual(placeTooltip(at(600, 57), own, view), { left: 548, top: 97, side: 'bottom' });
+    assert.deepEqual(placeTooltip(at(600, 58), own, view), { left: 548, top: 16, side: 'top' });
+    // Moved along its anchor to keep the room: a wide tooltip near either edge
+    assert.deepEqual(placeTooltip(at(200, 400), { width: 1000, height: 26 }, view), { left: 16, top: 358, side: 'top' });
+    assert.deepEqual(placeTooltip(at(1300, 400), { width: 1000, height: 26 }, view), { left: 384, top: 358, side: 'top' });
+  });
+
+  it("tries the opposite side first, then the other two, as the original's", () => {
+    // On the right while it keeps 16 px from that edge, else on the left
+    assert.deepEqual(placeTooltip(at(100, 400), own, view, 'right'), { left: 140, top: 399, side: 'right' });
+    assert.deepEqual(placeTooltip(at(1240, 400), own, view, 'right'), { left: 1096, top: 399, side: 'left' });
+    // Over an anchor at the left edge its arrow could not point at it: it goes on the anchor's right,
+    // as the original's tag cloud warning does (at 40 there)
+    assert.deepEqual(placeTooltip(at(8, 790, 16, 16), { width: 300, height: 60 }, view), { left: 40, top: 768, side: 'right' });
+    assert.deepEqual(placeTooltip(at(0, 400), own, view), { left: 40, top: 399, side: 'right' });
+    // And at the right edge on the anchor's left
+    assert.deepEqual(placeTooltip(at(1390, 400, 10), own, view), { left: 1246, top: 399, side: 'left' });
+  });
+
+  it('keeps its arrow on its anchor before it keeps 16 px from the edge, where no side has room', () => {
+    // Too wide for either side: over the anchor, 2 px from the edge, its arrow (6 to 18) on the
+    // anchor's middle (12)
+    assert.deepEqual(placeTooltip(at(0, 400), { width: 1380, height: 26 }, view), { left: 2, top: 358, side: 'top' });
   });
 
   it('describes what it is about while it shows, after its own description', () => {

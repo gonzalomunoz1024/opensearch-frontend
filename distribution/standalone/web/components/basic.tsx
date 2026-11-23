@@ -45,6 +45,13 @@ export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement
   loading?: boolean;
   /** A path of this product (`/app/...`): the button is then a link */
   to?: string;
+  /** An address outside the product: the button is then a link to it, as the original's with `href` */
+  href?: string;
+  /**
+   * Where the link opens: `_blank` for a new tab, which, as the original's, does not let the page
+   * it opens reach this one (`rel="noopener noreferrer"`)
+   */
+  target?: '_blank';
   type?: 'button' | 'submit';
   testId?: string;
 }
@@ -58,6 +65,8 @@ export function Button({
   full,
   loading,
   to,
+  href,
+  target,
   type = 'button',
   className,
   children,
@@ -81,9 +90,18 @@ export function Button({
       {iconSide === 'right' && mark}
     </>
   );
-  if (to !== undefined && !rest.disabled) {
+  const link = href ?? (to === undefined ? undefined : toHref(to));
+  if (link !== undefined && !rest.disabled) {
     return (
-      <a className={classes} href={toHref(to)} data-test-subj={testId} title={rest.title} aria-label={rest['aria-label']}>
+      <a
+        className={classes}
+        href={link}
+        target={target}
+        rel={target === '_blank' ? 'noopener noreferrer' : undefined}
+        data-test-subj={testId}
+        title={rest.title}
+        aria-label={rest['aria-label']}
+      >
         {content}
       </a>
     );
