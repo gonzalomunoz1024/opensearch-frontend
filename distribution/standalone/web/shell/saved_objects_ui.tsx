@@ -191,7 +191,6 @@ export function SavedObjectFinder({
             fields: ['title', 'visState', 'description'],
             page: page + 1,
             perPage: pageSize,
-            sortField: search.trim() ? undefined : 'title',
           })
           .then((answer) => {
             if (live) setFound({ total: answer.total, objects: answer.saved_objects });
