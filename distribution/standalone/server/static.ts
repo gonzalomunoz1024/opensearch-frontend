@@ -6,6 +6,7 @@ import type { MapConfig } from '../common/map_config';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import type { IncomingMessage } from 'node:http';
 import { extname, join, normalize, sep } from 'node:path';
+import { fontFaceRules } from './fonts';
 import type { Reply } from './http';
 
 const TYPES: Record<string, string> = {
@@ -17,6 +18,10 @@ const TYPES: Record<string, string> = {
   '.json': 'application/json; charset=utf-8',
   '.txt': 'text/plain; charset=utf-8',
   '.woff2': 'font/woff2',
+  // The web fonts under /ui/fonts, and their licences, as the original sends them
+  '.woff': 'font/woff',
+  '.ttf': 'font/ttf',
+  '.md': 'text/markdown; charset=utf-8',
   '.map': 'application/json; charset=utf-8',
 };
 
@@ -144,6 +149,9 @@ export function renderPage({ basePath, build, title, dark, bootData }: PageOptio
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
 <link rel="icon" type="image/svg+xml" href="${basePath}/favicon.svg">
+<style>
+${fontFaceRules(`${basePath}/ui`)}
+</style>
 <link rel="stylesheet" href="${basePath}/${build.assets.styles}">
 </head>
 <body>
