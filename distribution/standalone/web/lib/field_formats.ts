@@ -32,8 +32,8 @@ export const DEFAULT_DATE_NANOS_FORMAT = 'MMM D, YYYY @ HH:mm:ss.SSSSSSSSS';
  */
 export function formatDateNanos(raw: string, date: Date, pattern: string, timeZone?: string): string {
   const fraction = /S+/.exec(pattern)?.[0] ?? '';
-  if (fraction.length <= 3) return formatDate(date, withLongFractions(pattern, date), timeZone);
-  const shown = formatDate(date, withLongFractions(pattern.replace(fraction, `[${fraction}]`), date), timeZone);
+  if (fraction.length <= 3) return formatDate(date, pattern, timeZone);
+  const shown = formatDate(date, pattern.replace(fraction, `[${fraction}]`), timeZone);
   // The original's substr(20, length - 21): the digits between the dot and the zone's Z
   const nanos = raw
     .slice(20, 20 + Math.max(0, raw.length - 21))
@@ -204,15 +204,6 @@ const DURATION_OUTPUTS: Record<string, string> = {
 /** A parameter as a format reads it: an empty text or null is the default */
 const param = (value: unknown, fallback: unknown) => (value || value === false || value === 0 ? value : fallback);
 
-/** moment writes a run of four to nine S as the milliseconds followed by zeros */
-function withLongFractions(pattern: string, date: Date): string {
-  return pattern.replace(/\[[^\]]*\]|S{4,9}/g, (token) =>
-    token.startsWith('[')
-      ? token
-      : `[${String(date.getUTCMilliseconds() * 10 ** (token.length - 3)).padStart(token.length, '0')}]`
-  );
-}
-
 const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
 /** Base64 read as Node's Buffer reads it: other characters left out, the bytes read as UTF-8 */
@@ -348,7 +339,7 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
       const zone = typeof params.timezone === 'string' && params.timezone ? params.timezone : settings.timeZone;
       return (value) => {
         const date = toDate(value);
-        return text(date ? formatDate(date, withLongFractions(pattern, date), zone) : stringify(value));
+        return text(date ? formatDate(date, pattern, zone) : stringify(value));
       };
     }
     case 'date_nanos': {
@@ -361,7 +352,7 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
       return (value) => {
         const date = toDate(value);
         if (!date) return text(stringify(value));
-        if (typeof value !== 'string') return text(formatDate(date, withLongFractions(settings.dateFormat, date), zone));
+        if (typeof value !== 'string') return text(formatDate(date, settings.dateFormat, zone));
         return text(formatDateNanos(value, date, pattern, zone));
       };
     }

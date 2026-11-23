@@ -92,6 +92,26 @@ describe('dates', () => {
     assert.equal(parseDateMath('now+100y', { now })?.getTime(), new Date(2126, 10, 22, 3, 52, 10, 500).getTime());
   });
 
+  it("writes moment's other tokens and its long formats as its English locale does", () => {
+    // Sunday 22 November 2026, the 326th day, in the 48th week from Sunday and the 47th ISO week
+    const date = new Date(Date.UTC(2026, 10, 22, 13, 7, 5, 9));
+    assert.equal(formatDate(date, 'LLL', 'UTC'), 'November 22, 2026 1:07 PM');
+    assert.equal(formatDate(date, 'LT LTS L LL', 'UTC'), '1:07 PM 1:07:05 PM 11/22/2026 November 22, 2026');
+    assert.equal(formatDate(date, 'l ll lll', 'UTC'), '11/22/2026 Nov 22, 2026 Nov 22, 2026 1:07 PM');
+    assert.equal(formatDate(date, 'LLLL | llll', 'UTC'), 'Sunday, November 22, 2026 1:07 PM | Sun, Nov 22, 2026 1:07 PM');
+    assert.equal(formatDate(date, 'Q Qo DDD DDDo DDDD d do dd e E', 'UTC'), '4 4th 326 326th 326 0 0th Su 0 7');
+    assert.equal(formatDate(date, 'w wo ww W Wo WW gggg GGGG gg GG', 'UTC'), '48 48th 48 47 47th 47 2026 2026 26 26');
+    assert.equal(formatDate(date, 'k kk Hmm hmmss SSSS', 'UTC'), '13 13 1307 10705 0090');
+    assert.equal(formatDate(date, 'Y YYYYYY N NNNN y yo Mo', 'UTC'), '2026 +002026 AD Anno Domini 2026 2026th 11th');
+    assert.equal(formatDate(date, '[LLL] \\Y \\[n', 'UTC'), 'LLL Y [n');
+    assert.equal(formatDate(date, 'Do [Do] \\D \\\\ D', 'UTC'), '22nd Do D  22');
+    // midnight is the 24th hour of k, and a year before the first one is counted backwards
+    assert.equal(formatDate(new Date(Date.UTC(2026, 0, 1)), 'k [W]W', 'UTC'), '24 W1');
+    const bc = new Date(Date.UTC(2000, 0, 1));
+    bc.setUTCFullYear(-43);
+    assert.equal(formatDate(bc, 'YYYY y N', 'UTC'), '-0043 44 BC');
+  });
+
   it('writes dates with the tokens of the date settings', () => {
     const date = new Date(Date.UTC(2026, 10, 22, 1, 37, 55, 7));
     assert.equal(formatDate(date, 'MMM D, YYYY @ HH:mm:ss.SSS', 'UTC'), 'Nov 22, 2026 @ 01:37:55.007');

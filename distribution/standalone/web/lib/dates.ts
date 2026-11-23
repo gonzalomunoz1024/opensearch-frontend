@@ -422,10 +422,74 @@ function ordinal(value: number): string {
   return `${value}${['th', 'st', 'nd', 'rd'][value % 10] ?? 'th'}`;
 }
 
-const TOKENS =
-  /\[([^\]]*)\]|YYYY|YY|MMMM|MMM|MM|M|Do|DD|D|dddd|ddd|HH|H|hh|h|mm|m|ss|s|SSS|SS|S|A|a|ZZ|Z|X|x/g;
+// moment's zeroFill: the digits of a number padded to a length, after its sign or a plus asked for
+function zeroFill(value: number, length: number, forceSign = false): string {
+  const digits = String(Math.abs(value));
+  const sign = value >= 0 ? (forceSign ? '+' : '') : '-';
+  return `${sign}${'0'.repeat(Math.max(0, length - digits.length))}${digits}`;
+}
 
-/** A date written with the tokens of the product's date settings. `[text]` is kept as it is. */
+// The calendar's days, years and weeks as moment counts them
+function calendarDay(year: number, month: number, day: number): Date {
+  const date = new Date(0);
+  date.setUTCFullYear(year, month, day);
+  return date;
+}
+
+const daysInYear = (year: number) => ((year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 ? 366 : 365);
+
+const dayOfYear = (parts: Parts) =>
+  Math.round((calendarDay(parts.year, parts.month, parts.day).getTime() - calendarDay(parts.year, 0, 1).getTime()) / UNIT_MS.d) + 1;
+
+// Where the first week of a year starts: the week from day `dow` (0 is Sunday) that holds the
+// `doy`-th day before the end of its first week, as moment's firstWeekOffset finds it
+function firstWeekOffset(year: number, dow: number, doy: number): number {
+  const fwd = 7 + dow - doy;
+  return -((7 + calendarDay(year, 0, fwd).getUTCDay() - dow) % 7) + fwd - 1;
+}
+
+const weeksInYear = (year: number, dow: number, doy: number) =>
+  (daysInYear(year) - firstWeekOffset(year, dow, doy) + firstWeekOffset(year + 1, dow, doy)) / 7;
+
+function weekOfYear(parts: Parts, dow: number, doy: number): { week: number; year: number } {
+  const week = Math.floor((dayOfYear(parts) - firstWeekOffset(parts.year, dow, doy) - 1) / 7) + 1;
+  if (week < 1) return { week: week + weeksInYear(parts.year - 1, dow, doy), year: parts.year - 1 };
+  const weeks = weeksInYear(parts.year, dow, doy);
+  return week > weeks ? { week: week - weeks, year: parts.year + 1 } : { week, year: parts.year };
+}
+
+// The weeks of moment's English locale start on Sunday, the first one holding 1 January; ISO
+// weeks start on Monday, the first one holding 4 January
+const LOCALE_WEEK = { dow: 0, doy: 6 };
+const ISO_WEEK = { dow: 1, doy: 4 };
+
+// The long date formats of moment's English locale, written out before a format is read; each
+// lower-case one is its upper-case one with the shorter month, day and weekday
+const LONG_DATE_FORMATS: Record<string, string> = {
+  LTS: 'h:mm:ss A',
+  LT: 'h:mm A',
+  L: 'MM/DD/YYYY',
+  LL: 'MMMM D, YYYY',
+  LLL: 'MMMM D, YYYY h:mm A',
+  LLLL: 'dddd, MMMM D, YYYY h:mm A',
+  l: 'M/D/YYYY',
+  ll: 'MMM D, YYYY',
+  lll: 'MMM D, YYYY h:mm A',
+  llll: 'ddd, MMM D, YYYY h:mm A',
+};
+
+const LONG_DATE_TOKENS = /(\[[^[]*\])|(\\)?(LTS|LT|LL?L?L?|l{1,4})/g;
+
+// moment's tokens: a text in brackets, an escaped letter, the longest token at each place, or
+// any other letter, which is written as it is
+const TOKENS =
+  /(\[[^[]*\])|(\\)?([Hh]mm(ss)?|Mo|MM?M?M?|Do|DDDo|DD?D?D?|ddd?d?|do?|w[o|w]?|W[o|W]?|Qo?|N{1,5}|YYYYYY|YYYYY|YYYY|YY|y{2,4}|yo?|gg(ggg?)?|GG(GGG?)?|e|E|a|A|hh?|HH?|kk?|mm?|ss?|S{1,9}|x|X|zz?|ZZ?|.)/g;
+
+/**
+ * A date written with a format of moment's tokens, as the product's date settings and formats
+ * name them, in moment's English locale: `[text]` and an escaped letter are written as they are.
+ * The zone's abbreviation (z, zz) is not known here and is written as the letters.
+ */
 export function formatDate(date: Date, pattern: string, timeZone?: string): string {
   if (Number.isNaN(date.getTime())) return 'Invalid date';
   const parts = partsOf(date, timeZone);
@@ -433,51 +497,140 @@ export function formatDate(date: Date, pattern: string, timeZone?: string): stri
     const minutes = Math.abs(parts.offset);
     return `${parts.offset < 0 ? '-' : '+'}${pad(Math.floor(minutes / 60))}${separator}${pad(minutes % 60)}`;
   };
-  return pattern.replace(TOKENS, (token, literal: string | undefined) => {
-    if (literal !== undefined) return literal;
+  const eraYear = parts.year > 0 ? parts.year : 1 - parts.year;
+  const hour12 = parts.hour % 12 || 12;
+  let expanded = pattern;
+  // moment writes the long formats out again while they name more of them, six times at most
+  for (let round = 0; round < 6; round += 1) {
+    const next = expanded.replace(LONG_DATE_TOKENS, (match) => LONG_DATE_FORMATS[match] ?? match);
+    if (next === expanded) break;
+    expanded = next;
+  }
+  return expanded.replace(TOKENS, (match: string, literal: string | undefined, escaped: string | undefined, token: string) => {
+    if (literal !== undefined) return literal.replace(/^\[|\]$/g, '');
+    // moment drops each backslash it reads, an escaped one too
+    if (escaped !== undefined) return token.replace(/\\/g, '');
+    if (/^S{4,9}$/.test(token)) return zeroFill(parts.ms * 10 ** (token.length - 3), token.length);
     switch (token) {
+      case 'YYYYYY':
+        return zeroFill(parts.year, 6, true);
+      case 'YYYYY':
+        return zeroFill(parts.year, 5);
       case 'YYYY':
-        return String(parts.year);
+        return zeroFill(parts.year, 4);
       case 'YY':
-        return pad(parts.year % 100);
+        return zeroFill(parts.year % 100, 2);
+      case 'Y':
+        return parts.year <= 9999 ? zeroFill(parts.year, 4) : `+${parts.year}`;
+      case 'N':
+      case 'NN':
+      case 'NNN':
+      case 'NNNNN':
+        return parts.year > 0 ? 'AD' : 'BC';
+      case 'NNNN':
+        return parts.year > 0 ? 'Anno Domini' : 'Before Christ';
+      case 'y':
+        return String(eraYear);
+      case 'yo':
+        return ordinal(eraYear);
+      case 'yy':
+      case 'yyy':
+      case 'yyyy':
+        return zeroFill(eraYear, token.length);
+      case 'gg':
+        return zeroFill(weekOfYear(parts, LOCALE_WEEK.dow, LOCALE_WEEK.doy).year % 100, 2);
+      case 'gggg':
+      case 'ggggg':
+        return zeroFill(weekOfYear(parts, LOCALE_WEEK.dow, LOCALE_WEEK.doy).year, token.length);
+      case 'GG':
+        return zeroFill(weekOfYear(parts, ISO_WEEK.dow, ISO_WEEK.doy).year % 100, 2);
+      case 'GGGG':
+      case 'GGGGG':
+        return zeroFill(weekOfYear(parts, ISO_WEEK.dow, ISO_WEEK.doy).year, token.length);
+      case 'Q':
+        return String(Math.floor(parts.month / 3) + 1);
+      case 'Qo':
+        return ordinal(Math.floor(parts.month / 3) + 1);
       case 'MMMM':
         return MONTHS[parts.month];
       case 'MMM':
         return MONTHS[parts.month].slice(0, 3);
       case 'MM':
-        return pad(parts.month + 1);
+        return zeroFill(parts.month + 1, 2);
+      case 'Mo':
+        return ordinal(parts.month + 1);
       case 'M':
         return String(parts.month + 1);
+      case 'w':
+        return String(weekOfYear(parts, LOCALE_WEEK.dow, LOCALE_WEEK.doy).week);
+      case 'wo':
+        return ordinal(weekOfYear(parts, LOCALE_WEEK.dow, LOCALE_WEEK.doy).week);
+      case 'ww':
+        return zeroFill(weekOfYear(parts, LOCALE_WEEK.dow, LOCALE_WEEK.doy).week, 2);
+      case 'W':
+        return String(weekOfYear(parts, ISO_WEEK.dow, ISO_WEEK.doy).week);
+      case 'Wo':
+        return ordinal(weekOfYear(parts, ISO_WEEK.dow, ISO_WEEK.doy).week);
+      case 'WW':
+        return zeroFill(weekOfYear(parts, ISO_WEEK.dow, ISO_WEEK.doy).week, 2);
+      case 'DDDD':
+        return zeroFill(dayOfYear(parts), 3);
+      case 'DDDo':
+        return ordinal(dayOfYear(parts));
+      case 'DDD':
+        return String(dayOfYear(parts));
       case 'Do':
         return ordinal(parts.day);
       case 'DD':
-        return pad(parts.day);
+        return zeroFill(parts.day, 2);
       case 'D':
         return String(parts.day);
       case 'dddd':
         return DAYS[parts.weekday];
       case 'ddd':
         return DAYS[parts.weekday].slice(0, 3);
+      case 'dd':
+        return DAYS[parts.weekday].slice(0, 2);
+      case 'do':
+        return ordinal(parts.weekday);
+      case 'd':
+        return String(parts.weekday);
+      case 'e':
+        return String((parts.weekday - LOCALE_WEEK.dow + 7) % 7);
+      case 'E':
+        return String(parts.weekday || 7);
       case 'HH':
-        return pad(parts.hour);
+        return zeroFill(parts.hour, 2);
       case 'H':
         return String(parts.hour);
       case 'hh':
-        return pad(parts.hour % 12 || 12);
+        return zeroFill(hour12, 2);
       case 'h':
-        return String(parts.hour % 12 || 12);
+        return String(hour12);
+      case 'kk':
+        return zeroFill(parts.hour || 24, 2);
+      case 'k':
+        return String(parts.hour || 24);
+      case 'hmm':
+        return `${hour12}${zeroFill(parts.minute, 2)}`;
+      case 'hmmss':
+        return `${hour12}${zeroFill(parts.minute, 2)}${zeroFill(parts.second, 2)}`;
+      case 'Hmm':
+        return `${parts.hour}${zeroFill(parts.minute, 2)}`;
+      case 'Hmmss':
+        return `${parts.hour}${zeroFill(parts.minute, 2)}${zeroFill(parts.second, 2)}`;
       case 'mm':
-        return pad(parts.minute);
+        return zeroFill(parts.minute, 2);
       case 'm':
         return String(parts.minute);
       case 'ss':
-        return pad(parts.second);
+        return zeroFill(parts.second, 2);
       case 's':
         return String(parts.second);
       case 'SSS':
-        return pad(parts.ms, 3);
+        return zeroFill(parts.ms, 3);
       case 'SS':
-        return pad(Math.floor(parts.ms / 10));
+        return zeroFill(Math.floor(parts.ms / 10), 2);
       case 'S':
         return String(Math.floor(parts.ms / 100));
       case 'A':
@@ -493,7 +646,8 @@ export function formatDate(date: Date, pattern: string, timeZone?: string): stri
       case 'x':
         return String(date.getTime());
       default:
-        return token;
+        // Any other letter as it is, a lone backslash left out, as moment writes them
+        return match.replace(/\\/g, '');
     }
   });
 }
