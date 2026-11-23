@@ -5,17 +5,19 @@
  * panels, titles and spaces of the plugin's pages, and the parts the two kinds of job share.
  */
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Button, Panel, cx } from '../../components/basic';
 import { CodeEditor } from '../../components/code_editor';
 import { SearchField, TextArea, TextField } from '../../components/form';
 import { Icon } from '../../components/icon';
-import { Modal } from '../../components/overlay';
+import { ContextMenu, Modal, Popover, Portal, copyText, type ContextMenuItem } from '../../components/overlay';
 import { Pagination } from '../../components/table';
 import { LocalTable, ism, toasts, type Answer, type TableColumn } from './common';
 import { useSpaced } from './index_select';
+import { JsonBlock } from './json_block';
 import { leadingDebounce } from './jobs';
-import { aceActiveLine, aceJsonTokens } from './policy_model';
+import { ModalButtons, PluginModal } from './plugin_modal';
+import { aceActiveLine, aceEditorTokens, aceGutterWidth, aceLineRange } from './policy_model';
 import { wildcardOption, type FieldItem } from './rollup_model';
 
 // --- The panels and spaces of the plugin's pages ------------------------------------------------------
@@ -35,10 +37,62 @@ export function DocsLink({ href, children = 'Learn more' }: { href: string; chil
   return (
     <a className="ismDocs" href={href} target="_blank" rel="noopener noreferrer">
       {children}
-      <Icon name="external" size="s" className="ismDocs__icon" />
+      <Icon name="external" size="s" className="ismDocs__icon" title="External link" />
       <span className="atlScreenReaderOnly">(opens in a new tab or window)</span>
     </a>
   );
+}
+
+/**
+ * A radio button as the component library draws it: a circle of 16 px at the left of its label, on
+ * a line of 24 px, filled with the accent around a dot when it is chosen. As the original's, only the
+ * circle and the label take a click, and the test id is on what holds them.
+ */
+export function Radio({
+  id,
+  label,
+  checked,
+  onChange,
+  name,
+  disabled,
+  testId,
+}: {
+  id: string;
+  label: ReactNode;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  name?: string;
+  disabled?: boolean;
+  testId?: string;
+}) {
+  return (
+    <div className="ismRadio" data-test-subj={testId}>
+      <input
+        className="ismRadio__input"
+        type="radio"
+        id={id}
+        name={name}
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <label className="ismRadio__label" htmlFor={id}>
+        {label}
+      </label>
+    </div>
+  );
+}
+
+/**
+ * A dialog that opens with the focus on itself, as the component library's does, and not on its
+ * first field: the reference goes on anything the dialog holds.
+ */
+export function useDialogFocus<T extends HTMLElement>() {
+  const inside = useRef<T>(null);
+  useEffect(() => {
+    inside.current?.closest<HTMLElement>('[role="dialog"]')?.focus();
+  }, []);
+  return inside;
 }
 
 /**
@@ -74,13 +128,32 @@ export function ListPanel({
 }
 
 /** The panel of the lists of rollup jobs and transform jobs: the title and the buttons in one row */
-export function JobsPanel({ title, actions, children }: { title: ReactNode; actions: ReactNode; children: ReactNode }) {
+export function JobsPanel({
+  title,
+  titleSize = 'l',
+  actions,
+  children,
+}: {
+  title: ReactNode;
+  /**
+   * 'm': as the list of transform jobs, a smaller title that is a third-level heading, a line
+   * under it, and nothing at the panel's sides, so that the lines and the table reach its edges
+   */
+  titleSize?: 'l' | 'm';
+  actions: ReactNode;
+  children: ReactNode;
+}) {
   return (
-    <section className="atlPanel ismJp">
+    <section className={cx('atlPanel ismJp', titleSize === 'm' && 'ismJp--wide')}>
       <div className="ismJp__header">
-        <h1 className="ismJp__title atlTitleL">{title}</h1>
+        {titleSize === 'm' ? (
+          <h3 className="ismJp__title atlTitleM">{title}</h3>
+        ) : (
+          <h1 className="ismJp__title atlTitleL">{title}</h1>
+        )}
         <div className="ismJp__actions">{actions}</div>
       </div>
+      {titleSize === 'm' && <hr className="ismRuleXs ismJp__rule" />}
       <div>{children}</div>
     </section>
   );
@@ -88,28 +161,35 @@ export function JobsPanel({ title, actions, children }: { title: ReactNode; acti
 
 /**
  * A panel of a form or of a page of details: the title at 17 px, "– optional" after it when the
- * panel may be left empty, a line of what it is for, a line, and what it holds.
+ * panel may be left empty, a line of what it is for, a line, and what it holds. `optional="title"`
+ * sets "– optional" as tight as a title, where the plugin wraps it in one.
  */
 export function TitledPanel({
   title,
   optional,
   description,
   actions,
+  itemTitle,
   children,
   testId,
 }: {
   title: ReactNode;
-  optional?: boolean;
+  optional?: boolean | 'title';
   description?: ReactNode;
   actions?: ReactNode;
+  /**
+   * The title in an item of the plugin's row, as the pages of one job have it: the row's -2 px and
+   * the item's 2 px cancel out, and the title is level with the top of the buttons beside it
+   */
+  itemTitle?: boolean;
   children?: ReactNode;
   testId?: string;
 }) {
   return (
     <section className="atlPanel ismTp" data-test-subj={testId}>
-      <div className={cx('ismTp__header', optional && 'ismTp__header--optional')}>
+      <div className={cx('ismTp__header', optional && 'ismTp__header--optional', itemTitle && 'ismTp__header--item')}>
         <h2 className="atlTitleS ismTp__title">{title}</h2>
-        {optional && <i className="ismTp__optional">– optional</i>}
+        {optional && <i className={cx('ismTp__optional', optional === 'title' && 'ismTp__optional--title')}>– optional</i>}
         {actions && <div className="ismTp__actions">{actions}</div>}
       </div>
       {description && <p className="ismTp__description">{description}</p>}
@@ -155,6 +235,231 @@ export function CustomLabel({
   );
 }
 
+/**
+ * A field as the plugin's compressed form rows lay it out with an `EuiText size="s"` h3 for its
+ * name: the name at 17 px, 4 px over the field, at most 400 px wide, then what is wrong with it and
+ * what it is for, each 4 px under what is above it; two rows 16 px apart.
+ */
+export function PluginRow({
+  title,
+  help,
+  error,
+  children,
+}: {
+  title?: ReactNode;
+  help?: ReactNode;
+  error?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="ismPr">
+      {title && (
+        <div className="ismPr__label">
+          <h3 className="ismPr__title">{title}</h3>
+        </div>
+      )}
+      <div className="ismPr__field">{children}</div>
+      {error && <div className="ismPr__error">{error}</div>}
+      {help && <div className="ismPr__help">{help}</div>}
+    </div>
+  );
+}
+
+/**
+ * A field as the component library's compressed form row with a plain label: the label at 12 px
+ * 4 px over the field, then what is wrong with it and what it is for
+ */
+export function SmallRow({
+  label,
+  help,
+  error,
+  className,
+  children,
+}: {
+  label?: ReactNode;
+  help?: ReactNode;
+  error?: ReactNode;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className={cx('ismSr', Boolean(error) && 'ismSr--invalid', className)}>
+      {label && <label className="ismSr__label">{label}</label>}
+      <div className="ismPr__field">{children}</div>
+      {error && <div className="ismPr__error">{error}</div>}
+      {help && <div className="ismPr__help">{help}</div>}
+    </div>
+  );
+}
+
+/**
+ * What folds away under a row, as the component library's accordion: an arrow that turns down and
+ * a title (a heading at 15 px, or at 17 px when `large`); closed at first
+ */
+export function Fold({
+  title,
+  size,
+  onOpen,
+  keepMounted,
+  children,
+}: {
+  title: string;
+  /** 'l': a heading at 17 px; 'text': ordinary text; left out, a heading at 15 px */
+  size?: 'l' | 'text';
+  /** Called each time it is opened */
+  onOpen?: () => void;
+  /** What it holds is there while it is closed too, as the component library's: it loads what it needs at once */
+  keepMounted?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="ismAcc">
+      <button
+        type="button"
+        className="ismAcc__button"
+        aria-expanded={open}
+        onClick={() => {
+          if (!open) onOpen?.();
+          setOpen(!open);
+        }}
+      >
+        <Icon name="chevronRight" className="ismAcc__arrow" />
+        {size === 'l' ? (
+          <h3 className="ismAcc__title ismAcc__title--l">{title}</h3>
+        ) : size === 'text' ? (
+          <span className="ismAcc__text">{title}</span>
+        ) : (
+          <h4 className="ismAcc__title">{title}</h4>
+        )}
+      </button>
+      {(open || keepMounted) && <div hidden={!open}>{children}</div>}
+    </div>
+  );
+}
+
+/**
+ * The plugin's ConfirmationModal: its title, what it asks in a line, Cancel and the action, as wide
+ * as what it says up to 1000 px. The action is run and the dialog closed at once, as there.
+ */
+export function PluginConfirmationModal({
+  title,
+  bodyMessage,
+  actionMessage,
+  onClose,
+  onAction,
+}: {
+  title: string;
+  bodyMessage: ReactNode;
+  actionMessage: string;
+  onClose: () => void;
+  onAction: () => void | Promise<void>;
+}) {
+  const body = useDialogFocus<HTMLParagraphElement>();
+  return (
+    <PluginModal
+      title={title}
+      onClose={onClose}
+      className="ismWideModal ismMasked"
+      footer={
+        <ModalButtons
+          label={actionMessage}
+          onCancel={onClose}
+          onConfirm={() => {
+            void onAction();
+            onClose();
+          }}
+          cancelTestId="confirmationModalCloseButton"
+          confirmTestId="confirmationModalActionButton"
+        />
+      }
+    >
+      <p ref={body}>{bodyMessage}</p>
+    </PluginModal>
+  );
+}
+
+/**
+ * The "Actions" button of a list of jobs and its small context menu, hung from the button's left
+ * edge as the plugin hangs it: each item after an empty icon, the first one that can be chosen with
+ * the focus.
+ */
+export function JobActionsMenu({
+  items,
+  disabled,
+  plain,
+}: {
+  items: ContextMenuItem[];
+  disabled?: boolean;
+  /** As the page of a transform job: the menu at its usual size, with nothing around it */
+  plain?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  return (
+    <div className="ismActions" data-test-subj="actionPopover">
+      <Popover
+        open={open}
+        onClose={close}
+        position="downLeft"
+        offset={8}
+        className={cx('ismActionsPopover', plain && 'ismActionsPopover--plain')}
+        button={
+          <Button icon="chevronDown" iconSide="right" disabled={disabled} onClick={() => setOpen(!open)} testId="actionButton">
+            Actions
+          </Button>
+        }
+      >
+        <ContextMenu small={!plain} panels={[{ id: 'actions', items }]} onDone={close} />
+      </Popover>
+    </div>
+  );
+}
+
+/**
+ * The plugin's dialog that deletes jobs: the component library's confirmation in a mask of the
+ * plugin's own, as wide as what it says up to 768 px, then a field where "delete" is typed, Cancel
+ * and Delete. It opens with the focus on itself, as Delete cannot take it yet.
+ */
+export function DeleteJobsModal({
+  children,
+  onClose,
+  onDelete,
+}: {
+  children: ReactNode;
+  onClose: () => void;
+  onDelete: () => void | Promise<void>;
+}) {
+  const [typed, setTyped] = useState('');
+  const body = useDialogFocus<HTMLDivElement>();
+  return (
+    <PluginModal
+      title="Delete job(s)"
+      titleTestId="confirmModalTitleText"
+      onClose={onClose}
+      className="ismMasked ismConfirmModal"
+      footer={
+        <>
+          <Button variant="empty" onClick={onClose} testId="confirmModalCancelButton">
+            Cancel
+          </Button>
+          <Button variant="dangerFill" disabled={typed !== 'delete'} onClick={() => void onDelete()} testId="confirmModalConfirmButton">
+            Delete
+          </Button>
+        </>
+      }
+    >
+      <div ref={body} data-test-subj="confirmModalBodyText">
+        <p>{children}</p>
+        <Spacer size="s" />
+        <PluginRow help="To confirm deletion, enter delete in the text field">
+          <TextField compact value={typed} onChange={setTyped} placeholder="delete" testId="deleteTextField" />
+        </PluginRow>
+      </div>
+    </PluginModal>
+  );
+}
+
 /** The buttons under a form, at its right: the one that leaves it and the one that saves it */
 export function FormButtons({ children }: { children: ReactNode }) {
   return <div className="ismFormButtons">{children}</div>;
@@ -165,6 +470,11 @@ export function FormButtons({ children }: { children: ReactNode }) {
  * with its grey gutter, or its dark one in the dark theme, and the line of the cursor on a band.
  * The cursor starts where the plugin's editor leaves it: at the start of a text that arrives after
  * the editor is drawn, at the end of one it is drawn with (`cursorAtEnd`).
+ *
+ * As the plugin's, the Tab key reaches the text through a hint that lies under it and comes over it
+ * while it has the focus: Enter or a click there starts the editing where the cursor was left, and
+ * hides the hint until the text loses the focus. A click on the text itself goes to the text, at
+ * the place clicked. Escape goes back to the hint without closing what the editor is in.
  */
 export function AceJsonEditor({
   value,
@@ -182,25 +492,94 @@ export function AceJsonEditor({
   const [cursor, setCursor] = useState<[number, number]>(() =>
     cursorAtEnd ? [value.length, value.length] : [0, 0]
   );
+  // The hint is put away by the editing it starts, and back once the text loses the focus
+  const [hintActive, setHintActive] = useState(true);
+  const [scrolled, setScrolled] = useState(0);
+  const [lineHeight, setLineHeight] = useState(16);
+  const box = useRef<HTMLDivElement>(null);
+  const hint = useRef<HTMLButtonElement>(null);
+  const area = () => box.current?.querySelector<HTMLTextAreaElement>('textarea');
+  useEffect(() => {
+    // The Tab key stops at the hint, never in the text
+    const text = area();
+    if (text) text.tabIndex = -1;
+    const line = box.current?.querySelector('.atlCodeEditor__line');
+    if (line) setLineHeight(line.getBoundingClientRect().height || 16);
+  }, []);
+  const start = () => {
+    setHintActive(false);
+    const text = area();
+    if (!text) return;
+    text.focus({ preventScroll: true });
+    text.setSelectionRange(Math.min(cursor[0], value.length), Math.min(cursor[1], value.length));
+  };
   const active = aceActiveLine(value, cursor[0], cursor[1]);
+  const gutter = aceGutterWidth(value.split('\n').length, height, lineHeight, scrolled);
+  // The marks to fold blocks, and the box around the bracket that pairs with the one at the cursor
+  const lead = cursor[1];
+  const tokenize = useCallback((text: string) => aceEditorTokens(text, lead), [lead]);
   return (
-    <CodeEditor
-      value={value}
-      onChange={onChange}
-      height={height}
-      tokenize={aceJsonTokens}
-      ariaLabel="Code Editor"
-      testId={testId}
-      className="ismAce"
-      markedLines={active === undefined ? undefined : [active, active]}
-      onCursor={(start, end) => setCursor([start, end])}
-    />
+    <div
+      ref={box}
+      className="ismAceBox"
+      style={{ '--ace-gutter-width': `${gutter}px` } as CSSProperties}
+      onBlur={(event) => {
+        if (event.target instanceof HTMLTextAreaElement) setHintActive(true);
+      }}
+      onClick={(event) => {
+        // As Ace's: a click on a line's number selects the line, a double click there everything
+        const text = area();
+        const left = box.current?.getBoundingClientRect().left ?? 0;
+        if (!text || event.target !== text || event.clientX - left >= gutter) return;
+        const [from, to] = event.detail >= 2 ? [0, value.length] : aceLineRange(value, text.selectionStart);
+        text.setSelectionRange(from, to);
+      }}
+      data-test-subj="codeEditorContainer"
+    >
+      <button
+        ref={hint}
+        type="button"
+        className={cx('ismAceHint', !hintActive && 'ismAceHint--inactive')}
+        onClick={start}
+        onKeyDown={(event) => {
+          if (event.key !== 'Enter') return;
+          event.preventDefault();
+          start();
+        }}
+        data-test-subj="codeEditorHint"
+      >
+        <p>Press Enter to start editing.</p>
+        <p>When you&apos;re done, press Escape to stop editing.</p>
+      </button>
+      <CodeEditor
+        value={value}
+        onChange={onChange}
+        height={height}
+        tokenize={tokenize}
+        ariaLabel="Code Editor"
+        testId={testId}
+        className="ismAce"
+        markedLines={active === undefined ? undefined : [active, active]}
+        onCursor={(from, to) => setCursor([from, to])}
+        onScroll={setScrolled}
+        onKeyDown={(event) => {
+          if (event.key !== 'Escape') return;
+          // The key leaves the text and nothing else hears it
+          event.preventDefault();
+          event.stopPropagation();
+          setHintActive(true);
+          // Once React has shown the hint again
+          setTimeout(() => hint.current?.focus(), 0);
+        }}
+      />
+    </div>
   );
 }
 
 /**
  * The search box over a list, and the pages of the list beside it when there is more than one,
- * as the plugin's list controls have them.
+ * as the plugin's list controls have them. `filters` are the search bar's own filters, 8 px after
+ * the box; `children` come after the search bar, 24 px apart.
  */
 export function ListSearch({
   search,
@@ -210,6 +589,9 @@ export function ListSearch({
   pages = 1,
   onPage,
   paginationTestId,
+  filters,
+  className,
+  ariaLabel = placeholder,
   children,
 }: {
   search: string;
@@ -219,12 +601,51 @@ export function ListSearch({
   pages?: number;
   onPage?: (page: number) => void;
   paginationTestId?: string;
+  filters?: ReactNode;
+  className?: string;
+  /**
+   * What a screen reader calls the box: the component library's search bar says what it does;
+   * `null` names it nothing, as the plugin's boxes that have only a placeholder
+   */
+  ariaLabel?: string | null;
   children?: ReactNode;
 }) {
+  // As the component library's search field, a button clears what is typed and puts the focus back
+  const clear =
+    search === '' ? undefined : (
+      <button
+        type="button"
+        className="ismLs__clear"
+        aria-label="Clear input"
+        onClick={(event) => {
+          event.currentTarget.parentElement?.querySelector('input')?.focus();
+          onSearch('');
+        }}
+      >
+        <Icon name="cross" />
+      </button>
+    );
+  const box = (
+    <SearchField
+      compact
+      value={search}
+      onChange={onSearch}
+      placeholder={placeholder}
+      aria-label={ariaLabel ?? undefined}
+      append={clear}
+    />
+  );
   return (
-    <div className="ismLs">
+    <div className={cx('ismLs', className)}>
       <div className="ismLs__search">
-        <SearchField compact value={search} onChange={onSearch} placeholder={placeholder} aria-label={placeholder} />
+        {filters ? (
+          <div className="ismLs__bar">
+            <div className="ismLs__box">{box}</div>
+            {filters}
+          </div>
+        ) : (
+          box
+        )}
       </div>
       {children}
       {pages > 1 && page !== undefined && onPage && (
@@ -275,25 +696,38 @@ export function useListLoad(load: () => Promise<void> | void, deps: unknown[]) {
   return useCallback(() => debounced.current?.call(), []);
 }
 
-/** The steps of a form at its left: the ones not reached yet are pale */
+/**
+ * The steps of a form at its left, as the plugin's small steps: a numbered circle and a 15 px title
+ * each, a line down to the next one, the steps not reached yet grey, and what a screen reader says
+ * of each number
+ */
 export function Steps({ titles, step }: { titles: string[]; step: number }) {
   return (
-    <ol className="ismSteps">
-      {titles.map((title, at) => (
-        <li
-          key={title}
-          className={cx('ismSteps__step', at + 1 > step && 'ismSteps__step--disabled')}
-          aria-current={at + 1 === step ? 'step' : undefined}
-        >
-          <span className="ismSteps__number">{at + 1}</span>
-          <span className="ismSteps__title">{title}</span>
-        </li>
-      ))}
-    </ol>
+    <div className="ismJobSteps">
+      {titles.map((title, at) => {
+        const disabled = at + 1 > step;
+        return (
+          <div key={title} className={cx('ismJobStep', disabled && 'ismJobStep--disabled')}>
+            <div className="ismJobStep__titleWrapper">
+              <span className="ismJobStep__number">
+                <span className="atlScreenReaderOnly">{disabled ? `Step ${at + 1} is disabled` : `Step ${at + 1}`}</span>
+                <span aria-hidden="true">{at + 1}</span>
+              </span>
+              <h6 className="ismJobStep__title">{title}</h6>
+            </div>
+            <div className="ismJobStep__content" />
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
-/** A form in steps: the steps, the step that is open, and the buttons that move between them */
+/**
+ * A form in steps as the plugin lays it out: padded 5 px and 50 px, the steps at the left as wide as
+ * their titles, the open step beside them under its 28 px title, and the buttons under both at the
+ * right. The steps' panels bring their own spacers.
+ */
 export function Wizard({
   titles,
   headings = titles,
@@ -309,17 +743,172 @@ export function Wizard({
   buttons: ReactNode;
 }) {
   return (
-    <div className="ismPage ismPage--form">
-      <div className="ismWizard">
-        <aside className="ismWizard__steps">
-          <Steps titles={titles} step={step} />
-        </aside>
-        <div className="ismWizard__body">
-          <h1 className="ismPageTitle">{headings[step - 1]}</h1>
-          {children}
+    <div className="ismJobForm">
+      <div className="ismJobWizard">
+        <div className="ismJobWizard__row">
+          <div className="ismJobWizard__steps">
+            <Steps titles={titles} step={step} />
+          </div>
+          <div className="ismJobWizard__body">
+            <h1 className="atlTitleL">{headings[step - 1]}</h1>
+            <Spacer />
+            {children}
+          </div>
         </div>
+        <Spacer />
       </div>
-      <div className="ismButtons">{buttons}</div>
+      <div className="ismJobWizard__buttons">{buttons}</div>
+    </div>
+  );
+}
+
+// --- The page of one job -----------------------------------------------------------------------------
+
+/** The page of one rollup or transform job, padded 5 px and 50 px as the plugin pads it */
+export function JobDetailsPage({ children }: { children: ReactNode }) {
+  return <div className="ismJd">{children}</div>;
+}
+
+/** The page that changes a job, padded 25 px and 50 px, its title at 28 px 24 px over the panels */
+export function JobEditPage({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="ismJobEdit">
+      <h1 className="atlTitleL">{title}</h1>
+      <Spacer />
+      {children}
+    </div>
+  );
+}
+
+/**
+ * The row over a job's details, as the plugin's: its name at 28 px, whether it is enabled, and its
+ * buttons, 10 px in from the panels' edges and 24 px over the first of them
+ */
+export function JobDetailsHeader({ title, health, actions }: { title: string; health?: ReactNode; actions: ReactNode }) {
+  return (
+    <>
+      <div className="ismJdHeader">
+        <h1 className="ismJdHeader__title atlTitleL">{title}</h1>
+        <div className="ismJdHeader__health">{health}</div>
+        <div className="ismJdHeader__actions">{actions}</div>
+      </div>
+      <Spacer />
+    </>
+  );
+}
+
+export interface InfoItem {
+  term: string;
+  value: ReactNode;
+  /** What stands under the term as it is, where the plugin puts it there without a `dd` */
+  bare?: boolean;
+}
+
+/**
+ * Terms over their values in the plugin's grid of three or four columns 24 px apart (an
+ * EuiFlexGrid of EuiText): a long word widens its column, and what no longer fits in the row moves
+ * to the next, as there. `xs` is the smaller text of the time aggregation's terms.
+ */
+export function InfoGrid({ items, columns = 4, size = 's' }: { items: InfoItem[]; columns?: 3 | 4; size?: 's' | 'xs' }) {
+  return (
+    <div className={`ismInfoGrid ismInfoGrid--${columns} ismInfoGrid--${size}`}>
+      {items.map((item, index) => (
+        <div className="ismInfoGrid__item" key={`${item.term}-${index}`}>
+          <dt>{item.term}</dt>
+          {item.bare ? item.value : <dd>{item.value}</dd>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * JSON as the plugin's EuiCodeBlock with `isCopyable` and `overflowHeight={600}` shows it: the
+ * code at 14 px, 16 px in, at most 600 px high, and two round buttons at its top right: full
+ * screen and copy. Full screen covers the window with the code, 32 px in, until Collapse or Escape
+ * (which leaves the dialog under it open).
+ */
+function CopyableJson({ text }: { text: string }) {
+  const [full, setFull] = useState(false);
+  useEffect(() => {
+    if (!full) return undefined;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      setFull(false);
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, [full]);
+  const block = (
+    <div className={cx('ismJobJson', full && 'ismJobJson--full')}>
+      <JsonBlock text={text} />
+      <div className="ismJobJson__controls">
+        <button
+          type="button"
+          className="ismJobJson__control"
+          aria-label={full ? 'Collapse' : 'Expand'}
+          onClick={() => setFull(!full)}
+        >
+          <Icon name={full ? 'fullScreenExit' : 'fullScreen'} />
+        </button>
+        <button type="button" className="ismJobJson__control" aria-label="Copy" onClick={() => copyText(text)}>
+          <Icon name="copyClipboard" />
+        </button>
+      </div>
+    </div>
+  );
+  return full ? (
+    <Portal>
+      <div className="ismJobJsonFull">{block}</div>
+    </Portal>
+  ) : (
+    block
+  );
+}
+
+/**
+ * "View JSON" of a job as the plugin's: its EuiModal in an EuiOverlayMask (two masks), the title
+ * in EuiText s, the code block, and Close
+ */
+export function JobJsonModal({
+  title,
+  json,
+  onClose,
+  small,
+}: {
+  title: string;
+  json: unknown;
+  onClose: () => void;
+  /** As a transform job's: the code at 12 px, in a dialog as wide as it up to 768 px */
+  small?: boolean;
+}) {
+  const body = useDialogFocus<HTMLDivElement>();
+  return (
+    <PluginModal
+      title={title}
+      onClose={onClose}
+      className={small ? 'ismFitModal ismJsonSmall ismMasked' : 'ismWideModal ismMasked'}
+      footer={
+        <Button variant="empty" onClick={onClose}>
+          Close
+        </Button>
+      }
+    >
+      <div ref={body}>
+        <CopyableJson text={JSON.stringify(json, null, 4)} />
+      </div>
+    </PluginModal>
+  );
+}
+
+/** A title of a part of a panel and how many it holds, the number apart, as the plugin sets them */
+export function CountedTitle({ title, count }: { title: string; count: number }) {
+  return (
+    <div className="ismCounted">
+      <h3>{title}</h3>
+      <h3>({count})</h3>
     </div>
   );
 }
@@ -387,6 +976,7 @@ export function ConfigureJob({
   isEdit,
   onChangeName,
   onChangeDescription,
+  transform,
 }: {
   jobId: string;
   jobIdError?: string;
@@ -395,10 +985,17 @@ export function ConfigureJob({
   isEdit?: boolean;
   onChangeName?: (name: string) => void;
   onChangeDescription: (description: string) => void;
+  /**
+   * The transform's panel: its title straight in the panel, and "– optional" a subdued heading
+   * beside "Description", where the rollup's is a small subdued line centred on it
+   */
+  transform?: boolean;
 }) {
   return (
-    <FormPanel title="Job name and description">
-      <FieldRow title="Name" help="Specify a unique, descriptive name." error={jobIdError}>
+    <TitledPanel title="Job name and description" itemTitle={transform}>
+      {/* The page that edits a transform has 8 px more over the name */}
+      {transform && isEdit && <Spacer size="s" />}
+      <PluginRow title="Name" help="Specify a unique, descriptive name." error={jobIdError}>
         <TextField
           compact
           value={jobId}
@@ -407,11 +1004,33 @@ export function ConfigureJob({
           invalid={Boolean(jobIdError)}
           disabled={isEdit}
         />
-      </FieldRow>
-      <FieldRow title="Description" optional>
-        <TextArea value={description} onChange={onChangeDescription} rows={3} testId="description" />
-      </FieldRow>
-    </FormPanel>
+      </PluginRow>
+      <Spacer />
+      <div className={cx('ismOptional', transform && 'ismOptional--heading')}>
+        <h3 className="ismPr__title">Description</h3>
+        {transform ? (
+          <h3 className="ismPr__title ismOptional__text">
+            <i> – optional</i>
+          </h3>
+        ) : (
+          <div className="ismOptional__text">
+            <i> – optional</i>
+          </div>
+        )}
+      </div>
+      <Spacer size="xs" />
+      <div className="ismPr">
+        <div className="ismPr__field ismPr__field--area">
+          <TextArea
+            className="ismJobTextArea"
+            value={description}
+            onChange={onChangeDescription}
+            rows={3}
+            testId="description"
+          />
+        </div>
+      </div>
+    </TitledPanel>
   );
 }
 
@@ -529,15 +1148,14 @@ export function AddFieldsModal({
     <Modal
       title="Add fields"
       onClose={onClose}
-      wide
+      className="ismAddFieldsModal ismMasked"
       footer={
         <>
-          <Button variant="empty" size="s" onClick={onClose} testId={cancelTestId}>
+          <Button variant="empty" onClick={onClose} testId={cancelTestId}>
             Cancel
           </Button>
           <Button
             variant="primary"
-            size="s"
             onClick={() => {
               onClose();
               onAdd(chosen);
@@ -559,6 +1177,7 @@ export function AddFieldsModal({
           onSelect={setChosen}
           selectable={selectable}
           empty={empty}
+          fixed
         />
       </div>
     </Modal>

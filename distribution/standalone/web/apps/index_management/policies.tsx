@@ -33,9 +33,11 @@ import {
   ListEmptyPrompt,
   ListPanel,
   ListSearch,
+  Radio,
   Rule,
   Spacer,
   TitledPanel,
+  useDialogFocus,
   useListLoad,
 } from './job_parts';
 import { DEFAULT_POLICY_JSON, templatesOf, type IsmTemplate, type PolicyDocument } from './policy_model';
@@ -44,7 +46,12 @@ import { CRUMBS, ROUTES } from './routes';
 
 const DOCS = 'https://opensearch.org/docs/im-plugin/ism/index/';
 
-/** Asks whether a policy is to be written with forms or as JSON */
+/**
+ * Asks whether a policy is to be written with forms or as JSON: the plugin's "Configuration method"
+ * dialog, 600 px wide, each way in a panel of its own. Both panels are drawn alike, as the original
+ * draws them: the plugin's rule that tints the chosen one (`.selected-radio-panel`) loses to the
+ * panel's own in every theme, so only the radio says which way is chosen.
+ */
 export function EditorChoiceModal({
   isEdit = false,
   onClose,
@@ -55,34 +62,27 @@ export function EditorChoiceModal({
   onContinue: (visual: boolean) => void;
 }) {
   const [visual, setVisual] = useState(true);
+  const body = useDialogFocus<HTMLDivElement>();
+  // As the plugin's, the two radios are no group: each is told what the other one says
   const choice = (chosen: boolean, id: string, label: string, help: string, testId: string) => (
-    <label className={`ismChoice${visual === chosen ? ' ismChoice--selected' : ''}`}>
-      <span className="atlRadio">
-        <input
-          type="radio"
-          id={id}
-          name="create-policy-editor"
-          checked={visual === chosen}
-          onChange={() => setVisual(chosen)}
-          data-test-subj={testId}
-        />
-        <span>{label}</span>
-      </span>
-      <span className="ismChoice__help">{help}</span>
-    </label>
+    <div className="atlPanel">
+      <Radio id={id} label={label} checked={visual === chosen} onChange={() => setVisual(chosen)} testId={testId} />
+      <div className="ismChoice__help">{help}</div>
+    </div>
   );
   return (
     <Modal
       title="Configuration method"
+      titleSize="l"
+      className="ismChoiceModal ismMasked"
       onClose={onClose}
       footer={
         <>
-          <Button variant="empty" size="s" onClick={onClose} testId="createPolicyModalCancelButton">
+          <Button variant="empty" onClick={onClose} testId="createPolicyModalCancelButton">
             Cancel
           </Button>
           <Button
             variant="primary"
-            size="s"
             onClick={() => {
               onClose();
               onContinue(visual);
@@ -94,7 +94,7 @@ export function EditorChoiceModal({
         </>
       }
     >
-      <div className="ismDialog">
+      <div className="ismChoiceBody" ref={body}>
         <p>
           Choose how you would like to {isEdit ? 'modify' : 'define'} your policy, either using a visual editor or
           writing JSON.
@@ -496,7 +496,7 @@ export function PolicyDetails() {
   if (!document) {
     return (
       <div className="ismLoadingCenter">
-        <Spinner size="l" />
+        <Spinner size="xl" />
       </div>
     );
   }

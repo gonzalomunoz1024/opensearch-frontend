@@ -1,13 +1,17 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
-/* Rollup jobs: the list of them, with what each is doing. */
+/*
+ * Rollup jobs: the list of them, with what each is doing, as the plugin draws it: the title and
+ * its buttons in one row, the search box, a line, and a table laid out on what its cells hold.
+ */
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Button } from '../../components/basic';
 import { Icon } from '../../components/icon';
-import { ActionsMenu, ContentPanel, DeleteModal, SearchRow, Table, go, ism, renderTime, toasts, type TableColumn } from './common';
-import { useListQuery } from './common';
 import { useBreadcrumbs } from '../../shell/state';
+import { Table, go, ism, renderTime, to, toasts, useListQuery, type TableColumn } from './common';
+import { DeleteJobsModal, JobActionsMenu, JobsPanel, ListEmptyPrompt, ListSearch, Rule, useListLoad } from './job_parts';
+import { stillListed } from './policy_model';
 import { rollupStatus, rollupWindow, type JobStatus, type RollupDocument, type RollupMetadata } from './rollup_model';
 import { CRUMBS, ROUTES } from './routes';
 
@@ -15,13 +19,16 @@ export interface RollupRow extends RollupDocument {
   metadata?: RollupMetadata | null;
 }
 
-/** What a job is doing: a mark in the colour of its state and a word, or a dash */
+/**
+ * What a job is doing, as the plugin writes it: a small icon in the colour of its state and the
+ * state in the smallest text, 4 px apart, or a dash
+ */
 export function JobStatusText({ status }: { status: JobStatus | undefined }) {
   if (!status) return <>-</>;
   return (
     <span className={`ismJobStatus ismJobStatus--${status.tone}`}>
       <Icon name={status.icon} />
-      <span>{status.text}</span>
+      <span className="ismJobStatus__text">{status.text}</span>
     </span>
   );
 }
@@ -43,16 +50,10 @@ export function DeleteRollupModal({
   onDelete: () => void | Promise<void>;
 }) {
   return (
-    <DeleteModal
-      title="Delete job(s)"
-      label="Delete"
-      help="To confirm deletion, enter delete in the text field"
-      onClose={onClose}
-      onDelete={onDelete}
-    >
+    <DeleteJobsModal onClose={onClose} onDelete={onDelete}>
       By deleting &quot;<strong>{rollupId}</strong>&quot;, all future scheduled rollup execution will be canceled.
       However, your target index will remain as it is.
-    </DeleteModal>
+    </DeleteJobsModal>
   );
 }
 
@@ -77,36 +78,39 @@ const EMPTY = {
   loading: 'Loading rollup jobs...',
 };
 
-const text = (value: ReactNode) => <span className="atlTruncate">{value}</span>;
+// The plugin's `truncateText`: on one line, which the table makes room for
+const oneLine = (value: ReactNode) => <div className="atlTruncate">{value}</div>;
 
 const COLUMNS: Array<TableColumn<RollupRow>> = [
   {
     field: '_id',
     name: 'Name',
     sortable: true,
-    render: (row) => (
-      <a
-        href={`#${ROUTES.ROLLUP_DETAILS}?id=${encodeURIComponent(row._id)}`}
-        className="ismNoWrap"
-        data-test-subj={`rollupLink_${row._id}`}
-      >
-        {row._id}
-      </a>
-    ),
+    render: (row) =>
+      oneLine(
+        <button
+          type="button"
+          className="atlLinkButton ismTableLink"
+          onClick={() => go(ROUTES.ROLLUP_DETAILS, { id: row._id })}
+          data-test-subj={`rollupLink_${row._id}`}
+        >
+          {row._id}
+        </button>
+      ),
   },
-  { field: 'rollup.source_index', name: 'Source index', sortable: true, render: (row) => text(row.rollup.source_index) },
-  { field: 'rollup.target_index', name: 'Target index', sortable: true, render: (row) => text(row.rollup.target_index) },
+  { field: 'rollup.source_index', name: 'Source index', sortable: true, render: (row) => oneLine(row.rollup.source_index) },
+  { field: 'rollup.target_index', name: 'Target index', sortable: true, render: (row) => oneLine(row.rollup.target_index) },
   {
     field: 'rollup.enabled',
     name: 'Job state',
     sortable: true,
-    render: (row) => (row.rollup.enabled ? 'Enabled' : 'Disabled'),
+    render: (row) => oneLine(row.rollup.enabled ? 'Enabled' : 'Disabled'),
   },
   {
     field: 'rollup.continuous',
     name: 'Continuous',
     sortable: true,
-    render: (row) => (row.rollup.continuous ? 'Yes' : 'No'),
+    render: (row) => oneLine(row.rollup.continuous ? 'Yes' : 'No'),
   },
   {
     field: 'metadata.rollup_metadata.continuous',
@@ -139,106 +143,114 @@ export function Rollups() {
       sortDirection: query.sortDirection,
     });
     if (answer.ok && answer.response) {
-      const found = answer.response.rollups;
-      setRollups(found);
+      const listed = answer.response.rollups;
+      setRollups(listed);
       setTotal(answer.response.totalRollups ?? 0);
-      // What was ticked stays ticked while it is still listed
-      setSelected((before) => found.filter((row) => before.some((was) => was._id === row._id)));
+      setSelected((ticked) => stillListed(ticked, listed, (row) => row._id));
     } else {
       toasts.danger(answer.error || 'There was a problem loading the rollups');
     }
     setLoading(false);
   };
-  useEffect(() => {
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query.from, query.size, query.search, query.sortField, query.sortDirection]);
+  const reload = useListLoad(load, [query.from, query.size, query.search, query.sortField, query.sortDirection]);
 
   // One job after the other, as the plugin does, and the list again when all are done
   const each = async (act: (rollupId: string) => Promise<boolean>) => {
     for (const row of selected) await act(row._id);
-    await load();
+    reload();
+  };
+  // As the plugin's, the dialog closes once a job is deleted, and stays open while none is
+  const remove = async () => {
+    for (const row of selected) if (await deleteRollup(row._id)) setDeleting(false);
+    reload();
   };
 
   const none = selected.length === 0;
   const filtered = query.search !== '';
   return (
-    <ContentPanel
+    <JobsPanel
       title={`Rollup jobs (${rollups.length})`}
       actions={
         <>
-          <Button size="s" icon="refresh" onClick={() => void load()} testId="refreshButton">
+          <Button icon="refresh" onClick={reload} testId="refreshButton">
             Refresh
           </Button>
-          <Button size="s" disabled={none} onClick={() => void each((id) => switchRollup(id, false))} testId="disableButton">
+          <Button disabled={none} onClick={() => void each((id) => switchRollup(id, false))} testId="disableButton">
             Disable
           </Button>
-          <Button size="s" disabled={none} onClick={() => void each((id) => switchRollup(id, true))} testId="enableButton">
+          <Button disabled={none} onClick={() => void each((id) => switchRollup(id, true))} testId="enableButton">
             Enable
           </Button>
-          <ActionsMenu
-            testId="actionButton"
+          <JobActionsMenu
             disabled={none}
             items={[
               {
                 id: 'edit',
+                icon: 'empty',
                 label: 'Edit',
                 testId: 'editButton',
                 disabled: selected.length !== 1,
                 onClick: () => go(ROUTES.EDIT_ROLLUP, { id: selected[0]._id }),
               },
-              { id: 'delete', label: 'Delete', testId: 'deleteButton', danger: true, disabled: none, onClick: () => setDeleting(true) },
+              {
+                id: 'delete',
+                icon: 'empty',
+                label: 'Delete',
+                testId: 'deleteButton',
+                danger: true,
+                disabled: none,
+                onClick: () => setDeleting(true),
+              },
             ]}
           />
-          <Button variant="primary" size="s" icon="plus" onClick={() => go(ROUTES.CREATE_ROLLUP)} testId="createRollupButton">
+          <Button variant="primary" icon="plus" onClick={() => go(ROUTES.CREATE_ROLLUP)} testId="createRollupButton">
             Create rollup job
           </Button>
         </>
       }
     >
-      <SearchRow search={query.search} onSearch={(search) => setQuery({ search, from: 0 })} />
-      <Table
-        columns={COLUMNS}
-        rows={rollups}
-        total={total}
-        query={query}
-        onQuery={setQuery}
-        rowId={(row) => row._id}
-        selected={selected}
-        onSelect={setSelected}
-        loading={loading}
-        empty={
-          <div className="ismEmpty">
-            <p>{loading ? EMPTY.loading : filtered ? EMPTY.filtered : EMPTY.none}</p>
-            {!loading &&
-              (filtered ? (
-                <Button variant="primary" size="s" onClick={() => setQuery({ search: '' })} testId="rollupEmptyPromptRestFilters">
-                  Reset Filters
-                </Button>
-              ) : (
-                <Button
-                  variant="primary"
-                  size="s"
-                  icon="plus"
-                  onClick={() => go(ROUTES.CREATE_ROLLUP)}
-                  testId="emptyPromptCreateRollupButton"
-                >
-                  Create rollup job
-                </Button>
-              ))}
-          </div>
-        }
-      />
+      <ListSearch search={query.search} onSearch={(search) => setQuery({ search, from: 0 })} ariaLabel={null} />
+      <Rule />
+      <div className="ismJobsTable">
+        <Table
+          columns={COLUMNS}
+          rows={rollups}
+          total={total}
+          query={query}
+          onQuery={(changes) => {
+            // As the component library's table, a new sort or page unticks every row
+            setSelected([]);
+            setQuery(changes);
+          }}
+          rowId={(row) => row._id}
+          selected={selected}
+          onSelect={setSelected}
+          empty={
+            <ListEmptyPrompt
+              body={loading ? EMPTY.loading : filtered ? EMPTY.filtered : EMPTY.none}
+              actions={
+                loading ? null : filtered ? (
+                  // The plugin keeps the page it was on
+                  <Button variant="primary" onClick={() => setQuery({ search: '' })} testId="rollupEmptyPromptRestFilters">
+                    Reset Filters
+                  </Button>
+                ) : (
+                  <Button variant="primary" icon="plus" to={to(ROUTES.CREATE_ROLLUP)} testId="emptyPromptCreateRollupButton">
+                    Create rollup job
+                  </Button>
+                )
+              }
+            />
+          }
+        />
+      </div>
       {deleting && (
         <DeleteRollupModal
           rollupId={selected.map((row) => row._id).join(', ')}
           onClose={() => setDeleting(false)}
-          onDelete={async () => {
-            setDeleting(false);
-            await each(deleteRollup);
-          }}
+          onDelete={remove}
         />
       )}
-    </ContentPanel>
+    </JobsPanel>
   );
 }

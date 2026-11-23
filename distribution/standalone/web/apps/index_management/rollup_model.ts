@@ -452,6 +452,12 @@ export interface RollupEdit {
   delayTimeunit: string;
 }
 
+/**
+ * The option of the unit select that a unit is. The plugin compares the job's "Hours" with its
+ * "HOURS" and shows the first option, "Minute(s)", for any job: this shows the job's own unit.
+ */
+export const unitOption = (unit: string) => unit.toUpperCase();
+
 export function editOf(rollup: Rollup): RollupEdit {
   const { interval, cron } = rollup.schedule;
   const delay = Number(rollup.delay);
@@ -459,8 +465,8 @@ export function editOf(rollup: Rollup): RollupEdit {
     description: rollup.description,
     continuousDefinition: cron === undefined ? 'fixed' : 'cron',
     interval: interval === undefined ? 2 : Number(interval.period),
-    // OpenSearch answers "Minutes" for the "MINUTES" it was sent
-    intervalTimeunit: interval === undefined ? 'MINUTES' : String(interval.unit).toUpperCase(),
+    // As OpenSearch spells it ("Hours" for the "HOURS" it was sent), and sent back so until it is changed
+    intervalTimeunit: interval === undefined ? 'MINUTES' : String(interval.unit),
     cronExpression: cron?.expression ?? '',
     cronTimezone: cron?.timezone ?? 'UTC',
     pageSize: rollup.page_size ?? undefined,

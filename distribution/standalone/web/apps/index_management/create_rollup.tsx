@@ -8,12 +8,27 @@
 import { useState } from 'react';
 import { Button, CallOut, IconButton, Panel } from '../../components/basic';
 import { ComboBox } from '../../components/combo_box';
-import { Checkbox, NumberField, RadioGroup, Select, TextArea } from '../../components/form';
+import { Checkbox, NumberField, Select, TextArea } from '../../components/form';
 import { Icon } from '../../components/icon';
 import { MenuButton } from '../../components/overlay';
 import { useBreadcrumbs } from '../../shell/state';
-import { Detail, Details, ExternalLink, PAGE_SIZES, Table, go, ism, toasts, type TableColumn } from './common';
-import { AddFieldsModal, ConfigureJob, FieldRow, FormPanel, Paired, Wizard, nameOptions, useIndexNames } from './job_parts';
+import { PAGE_SIZES, Table, go, ism, toasts, type TableColumn } from './common';
+import {
+  AddFieldsModal,
+  ConfigureJob,
+  CountedTitle,
+  DocsLink,
+  InfoGrid,
+  Paired,
+  PluginRow,
+  Radio,
+  Rule,
+  Spacer,
+  TitledPanel,
+  Wizard,
+  nameOptions,
+  useIndexNames,
+} from './job_parts';
 import {
   CALENDAR_TIMEUNITS,
   DELAY_TIMEUNITS,
@@ -37,6 +52,7 @@ import {
   rollupBody,
   setMetricKind,
   toggleMetric,
+  unitOption,
   type DimensionItem,
   type FieldItem,
   type MetricItem,
@@ -118,17 +134,24 @@ function RollupIndices({
   const { sources, targets, loading, onSearch: spaced } = useIndexNames();
 
   return (
-    <FormPanel title="Indices">
+    <TitledPanel title="Indices">
+      <Spacer size="s" />
       <CallOut tone="warning">
-        You can&apos;t change indices after creating a job. Double-check the source and target index names before
-        proceeding.
+        <p>
+          You can&apos;t change indices after creating a job. Double-check the source and target index names before
+          proceeding.
+        </p>
       </CallOut>
       {(form.dimensions.length > 0 || form.metrics.length > 0) && (
-        <CallOut tone="warning">
-          Note: changing source index will erase all existing definitions about aggregations and metrics.
-        </CallOut>
+        <>
+          <Spacer />
+          <CallOut tone="warning">
+            <p>Note: changing source index will erase all existing definitions about aggregations and metrics.</p>
+          </CallOut>
+        </>
       )}
-      <FieldRow
+      <Spacer size="m" />
+      <PluginRow
         title="Source index"
         error={errors.sourceIndex}
         help="The index pattern on which to performed the rollup job. You can use * as a wildcard."
@@ -146,14 +169,14 @@ function RollupIndices({
           invalid={Boolean(errors.sourceIndex)}
           testId="sourceIndexCombobox"
         />
-      </FieldRow>
-      <FieldRow
+      </PluginRow>
+      <PluginRow
         title="Target index"
         error={errors.targetIndex}
         help={
           <>
             The target index stores rollup results. You can select an existing index or type in a new index name with
-            embedded variables <ExternalLink href={TARGET_DOCS} />
+            embedded variables <DocsLink href={TARGET_DOCS} />
           </>
         }
       >
@@ -171,8 +194,8 @@ function RollupIndices({
           invalid={Boolean(errors.targetIndex)}
           testId="targetIndexCombobox"
         />
-      </FieldRow>
-    </FormPanel>
+      </PluginRow>
+    </TitledPanel>
   );
 }
 
@@ -193,70 +216,77 @@ function TimeAggregation({
 }) {
   const dates = fields.filter((field) => field.type === 'date');
   const fixed = form.intervalType === 'fixed';
+  // As the plugin's panel: the title, a line of help, a rule, then rows 16 px apart
   return (
-    <Panel>
-      <h2 className="ismPanel__heading">Time aggregation </h2>
-      <div className="ismLabeled__help">
+    <section className="atlPanel ismTp">
+      <h2 className="atlTitleS ismTp__title">Time aggregation </h2>
+      <div className="ismPr__help">
         Your source indices must include a timestamp field. The rollup job creates a date histogram for the field you
         specify.
       </div>
-      <div className="ismFormPanel__body">
-        <FieldRow title="Timestamp field" error={error}>
-          <ComboBox
-            compact
-            single
-            placeholder="Select timestamp"
-            options={dates.map((field) => ({ value: field.label, label: field.label }))}
-            selected={form.timestamp ? [form.timestamp] : []}
-            onChange={(chosen) => onChangeTimestamp(chosen[0] ?? '')}
-            invalid={Boolean(error)}
-          />
-        </FieldRow>
-        <FieldRow title="Interval type">
-          <RadioGroup
-            options={[
-              { id: 'fixed', label: 'Fixed' },
-              { id: 'calendar', label: 'Calendar' },
-            ]}
-            value={form.intervalType}
+      <Rule />
+      <Spacer size="s" />
+      <PluginRow title="Timestamp field" error={error}>
+        <ComboBox
+          compact
+          single
+          placeholder="Select timestamp"
+          options={dates.map((field) => ({ value: field.label, label: field.label }))}
+          selected={form.timestamp ? [form.timestamp] : []}
+          onChange={(chosen) => onChangeTimestamp(chosen[0] ?? '')}
+          invalid={Boolean(error)}
+        />
+      </PluginRow>
+      <Spacer size="m" />
+      <PluginRow title="Interval type">
+        <div>
+          <Radio
+            id="fixed"
+            name="intervalType"
+            label="Fixed"
+            checked={fixed}
             // The unit starts again at hours: the two kinds do not offer the same units
-            onChange={(intervalType) => change({ intervalType, timeunit: 'h' })}
+            onChange={() => change({ intervalType: 'fixed', timeunit: 'h' })}
           />
-        </FieldRow>
-        <FieldRow title="Interval" wide>
-          <div className="ismPaired ismPaired--interval">
-            {fixed ? (
-              <NumberField
-                compact
-                min={1}
-                value={form.intervalValue}
-                onChange={(intervalValue) => change({ intervalValue })}
-                aria-label="Interval"
-              />
-            ) : (
-              <span className="ismPlain">Every 1</span>
-            )}
-            <Select
-              compact
-              id="selectTimeunit"
-              options={fixed ? FIXED_TIMEUNITS : CALENDAR_TIMEUNITS}
-              value={form.timeunit}
-              onChange={(timeunit) => change({ timeunit })}
-              aria-label="Interval unit"
-            />
-          </div>
-        </FieldRow>
-        <FieldRow title="Timezone" help={TIMEZONE_HELP}>
-          <Select
+          <Radio
+            id="calendar"
+            name="intervalType"
+            label="Calendar"
+            checked={!fixed}
+            onChange={() => change({ intervalType: 'calendar', timeunit: 'h' })}
+          />
+        </div>
+      </PluginRow>
+      <Spacer size="m" />
+      <h3 className="ismPr__title">Interval</h3>
+      <div className="ismIntervalPair">
+        {fixed ? (
+          <NumberField
             compact
-            id="timezone"
-            options={TIME_ZONES}
-            value={form.timezone}
-            onChange={(timezone) => change({ timezone })}
+            className="ismIntervalPair__number"
+            min={1}
+            value={form.intervalValue}
+            onChange={(intervalValue) => change({ intervalValue })}
+            aria-label="Interval"
           />
-        </FieldRow>
+        ) : (
+          <dd className="ismIntervalPair__every">Every 1</dd>
+        )}
+        <Select
+          compact
+          id="selectTimeunit"
+          className="ismIntervalPair__unit"
+          options={fixed ? FIXED_TIMEUNITS : CALENDAR_TIMEUNITS}
+          value={form.timeunit}
+          onChange={(timeunit) => change({ timeunit })}
+          aria-label="Interval unit"
+        />
       </div>
-    </Panel>
+      <Spacer size="m" />
+      <PluginRow title="Timezone" help={TIMEZONE_HELP}>
+        <Select compact id="timezone" options={TIME_ZONES} value={form.timezone} onChange={(timezone) => change({ timezone })} />
+      </PluginRow>
+    </section>
   );
 }
 
@@ -328,38 +358,43 @@ function AdvancedAggregation({ form, fields, change }: { form: RollupForm; field
       name: '',
       render: (row) => (
         <span className="ismMoves">
-          {row.sequence !== 1 && (
-            <button
-              type="button"
-              className="atlLinkButton"
-              onClick={() => set(moveDimension(dimensions, row.field.label, -1))}
-              data-test-subj={`moveUp-${row.field.label}`}
-            >
-              Move up
-            </button>
-          )}
-          {row.sequence !== dimensions.length && (
-            <button
-              type="button"
-              className="atlLinkButton"
-              onClick={() => set(moveDimension(dimensions, row.field.label, 1))}
-              data-test-subj={`moveDown-${row.field.label}`}
-            >
-              Move down
-            </button>
-          )}
+          <span>
+            {row.sequence !== 1 && (
+              <button
+                type="button"
+                className="atlLinkButton"
+                onClick={() => set(moveDimension(dimensions, row.field.label, -1))}
+                data-test-subj={`moveUp-${row.field.label}`}
+              >
+                Move up
+              </button>
+            )}
+          </span>
+          <span>
+            {row.sequence !== dimensions.length && (
+              <button
+                type="button"
+                className="atlLinkButton"
+                onClick={() => set(moveDimension(dimensions, row.field.label, 1))}
+                data-test-subj={`moveDown-${row.field.label}`}
+              >
+                Move down
+              </button>
+            )}
+          </span>
         </span>
       ),
     },
     {
       field: 'actions',
       name: 'Actions',
-      align: 'right',
+      align: 'center',
       render: (row) => (
         <IconButton
           icon="crossInACircleFilled"
           label="Delete"
           size="s"
+          className="ismRowDelete"
           onClick={() => set(removeDimension(dimensions, row.field.label))}
           testId={`delete-${row.field.label}`}
         />
@@ -368,48 +403,61 @@ function AdvancedAggregation({ form, fields, change }: { form: RollupForm; field
   ];
 
   return (
-    <Panel>
-      <div className="ismFormPanel__header ismFormPanel__header--top">
-        <div className="atlGrow">
-          <h2 className="ismPanel__heading">
-            Additional aggregation ({dimensions.length}) <i>– optional</i>
-          </h2>
-          <div className="ismLabeled__help">
-            The sequence of fields may influence rollup performance. <ExternalLink href={DOCS} />
+    <section className="atlPanel ismTp">
+      <div className="ismAggHead">
+        <div className="ismAggHead__text">
+          <div className="ismAggTitle">
+            <h2 className="atlTitleS">Additional aggregation ({dimensions.length}) </h2>
+            <h2 className="atlTitleS">
+              {' '}
+              <i>– optional</i>{' '}
+            </h2>
+          </div>
+          <div className="ismPr__help">
+            The sequence of fields may influence rollup performance. <DocsLink href={DOCS} />
           </div>
           {dimensions.length > 0 && (
-            <div className="ismFormPanel__note">
+            <div>
               <CallOut>
-                The order of fields impacts rollup performance. Aggregating by smaller buckets and then by larger
-                buckets is faster than the opposite. For example, if you are rolling up flight data for five airlines
-                with 100 destinations, aggregating by airline and then by destination is faster than aggregating by
-                destination first.
+                <p>
+                  The order of fields impacts rollup performance. Aggregating by smaller buckets and then by larger
+                  buckets is faster than the opposite. For example, if you are rolling up flight data for five airlines
+                  with 100 destinations, aggregating by airline and then by destination is faster than aggregating by
+                  destination first.
+                </p>
               </CallOut>
+              <Spacer size="s" />
             </div>
           )}
         </div>
-        <Button size="s" onClick={() => setAdding(true)} testId="addFieldsAggregation">
-          Add fields
-        </Button>
+        <div className="ismAggHead__button">
+          <Button onClick={() => setAdding(true)} testId="addFieldsAggregation">
+            Add fields
+          </Button>
+        </div>
       </div>
-      <hr className="ismRule" />
-      <Table
-        columns={columns}
-        rows={page.shown}
-        total={dimensions.length}
-        query={page.query}
-        onQuery={page.onQuery}
-        rowId={(row) => String(row.sequence)}
-        pageSizes={PAGE_SIZES}
-        empty={
-          <div className="ismEmpty">
-            <p>No fields added for aggregations</p>
-            <Button size="s" onClick={() => setAdding(true)} testId="addFieldsAggregationEmpty">
-              Add fields
-            </Button>
-          </div>
-        }
-      />
+      <Spacer size="s" />
+      <Rule />
+      <div className="ismAggTable ismAggTable--padded">
+        <Table
+          columns={columns}
+          rows={page.shown}
+          total={dimensions.length}
+          query={page.query}
+          onQuery={page.onQuery}
+          rowId={(row) => String(row.sequence)}
+          pageSizes={PAGE_SIZES}
+          empty={
+            <>
+              <p>No fields added for aggregations</p>
+              <Button onClick={() => setAdding(true)} testId="addFieldsAggregationEmpty">
+                Add fields
+              </Button>
+            </>
+          }
+        />
+      </div>
+      <Spacer size="s" />
       {adding && (
         <AddFieldsModal
           fields={fields}
@@ -421,7 +469,7 @@ function AdvancedAggregation({ form, fields, change }: { form: RollupForm; field
           addTestId="addFieldsAggregationAdd"
         />
       )}
-    </Panel>
+    </section>
   );
 }
 
@@ -445,6 +493,7 @@ function MetricsCalculation({
   const box = (kind: MetricKind | 'all', name: string, testId: string): TableColumn<MetricItem> => ({
     field: kind,
     name,
+    align: 'center',
     render: (row) => (
       <Checkbox
         checked={row[kind]}
@@ -466,6 +515,7 @@ function MetricsCalculation({
           icon="crossInACircleFilled"
           label="Delete"
           size="s"
+          className="ismRowDelete"
           onClick={() => set(metrics.filter((metric) => metric !== row))}
           testId={`delete-${row.source_field.label}`}
         />
@@ -483,7 +533,7 @@ function MetricsCalculation({
         onClick: () => set(setMetricKind(metrics, kind, on)),
       }))}
       button={(toggle) => (
-        <Button size="s" icon="chevronDown" iconSide="right" disabled={none} onClick={toggle}>
+        <Button icon="chevronDown" iconSide="right" disabled={none} onClick={toggle}>
           {on ? 'Enable all' : 'Disable all'}
         </Button>
       )}
@@ -491,48 +541,57 @@ function MetricsCalculation({
   );
 
   return (
-    <Panel>
-      <div className="ismFormPanel__header ismFormPanel__header--top">
-        <div className="atlGrow">
-          <h2 className="ismPanel__heading">
-            Additional metrics ({metrics.length}) <i>– optional</i>
+    <section className="atlPanel ismTp">
+      <div className="ismMetHead">
+        <div className="ismAggTitle">
+          <h2 className="atlTitleS">Additional metrics ({metrics.length}) </h2>
+          <h2 className="atlTitleS">
+            <i> – optional </i>
           </h2>
-          <div className="ismLabeled__help ismFormPanel__help">
-            You can aggregate additional fields from the source index into the target index. Rollup supports the terms
-            aggregation (for all field types) and histogram aggregation (for numeric fields).
-          </div>
         </div>
-        <div className="ismPanel__actions">
+        <div className="ismMetHead__buttons">
           {all(false)}
           {all(true)}
-          <Button size="s" onClick={() => setAdding(true)} testId="addFieldsMetric">
+          <Button onClick={() => setAdding(true)} testId="addFieldsMetric">
             Add fields
           </Button>
         </div>
       </div>
-      <hr className="ismRule" />
-      {error && (
-        <div className="ismFormPanel__note">
-          <CallOut tone="critical">{error}</CallOut>
+      <div className="ismPr__help ismMetHelp">
+        You can aggregate additional fields from the source index into the target index. Rollup supports the terms
+        aggregation (for all field types) and histogram aggregation (for numeric fields).
+      </div>
+      <Rule />
+      <div className="ismMetBody">
+        {error && (
+          <>
+            <CallOut tone="critical">
+              <p>{error}</p>
+            </CallOut>
+            <Spacer />
+          </>
+        )}
+        <div className="ismAggTable">
+          <Table
+            columns={columns}
+            rows={page.shown}
+            total={metrics.length}
+            query={page.query}
+            onQuery={page.onQuery}
+            rowId={(row) => row.source_field.label}
+            pageSizes={PAGE_SIZES}
+            empty={
+              <>
+                <p>No fields added for metrics</p>
+                <Button onClick={() => setAdding(true)} testId="addFieldsMetricEmpty">
+                  Add fields
+                </Button>
+              </>
+            }
+          />
         </div>
-      )}
-      <Table
-        columns={columns}
-        rows={page.shown}
-        total={metrics.length}
-        query={page.query}
-        onQuery={page.onQuery}
-        rowId={(row) => row.source_field.label}
-        pageSizes={PAGE_SIZES}
-        empty={
-          <div className="ismEmpty">
-            <p>No fields added for metrics</p>
-            <Button size="s" onClick={() => setAdding(true)} testId="addFieldsMetricEmpty">
-              Add fields
-            </Button>
-          </div>
-        }
-      />
+        <Spacer size="s" />
+      </div>
       {adding && (
         <AddFieldsModal
           fields={fields}
@@ -544,7 +603,7 @@ function MetricsCalculation({
           addTestId="addFieldsMetricAdd"
         />
       )}
-    </Panel>
+    </section>
   );
 }
 
@@ -578,29 +637,44 @@ export function Schedule({
   change: (changes: Partial<ScheduleValues>) => void;
   onChangeInterval: (interval: number | undefined) => void;
 }) {
+  // As the plugin's: rows 16 px apart, the interval and the delay a title over a number of 200 px
+  // and its unit beside it, the delay's help under both
   return (
-    <FormPanel title="Schedule">
+    <TitledPanel title="Schedule">
       {!isEdit && (
-        <Checkbox
-          checked={values.enabled}
-          onChange={(enabled) => change({ enabled })}
-          label="Enable job by default"
-          testId="jobEnabledByDefault"
-        />
-      )}
-      {!isEdit && (
-        <FieldRow title="Continuous" minor>
-          <RadioGroup
-            options={[
-              { id: 'no', label: 'No' },
-              { id: 'yes', label: 'Yes' },
-            ]}
-            value={values.continuous ? 'yes' : 'no'}
-            onChange={(id) => change({ continuous: id === 'yes' })}
+        <div className="ismCheckRow">
+          <Checkbox
+            checked={values.enabled}
+            onChange={(enabled) => change({ enabled })}
+            label="Enable job by default"
+            testId="jobEnabledByDefault"
           />
-        </FieldRow>
+        </div>
       )}
-      <FieldRow title="Rollup execution frequency">
+      {!isEdit && (
+        <>
+          <PluginRow title="Continuous">
+            <div>
+              <Radio
+                id="no"
+                name="continuousJob"
+                label="No"
+                checked={!values.continuous}
+                onChange={() => change({ continuous: false })}
+              />
+              <Radio
+                id="yes"
+                name="continuousJob"
+                label="Yes"
+                checked={values.continuous}
+                onChange={() => change({ continuous: true })}
+              />
+            </div>
+          </PluginRow>
+          <Spacer size="m" />
+        </>
+      )}
+      <PluginRow title="Rollup execution frequency">
         <Select
           compact
           id="continuousDefinition"
@@ -611,39 +685,47 @@ export function Schedule({
           value={values.continuousDefinition}
           onChange={(definition) => change({ continuousDefinition: definition === 'cron' ? 'cron' : 'fixed' })}
         />
-      </FieldRow>
+      </PluginRow>
+      <Spacer size="m" />
       {values.continuousDefinition === 'fixed' ? (
-        <FieldRow title="Rollup interval" error={intervalError}>
+        <>
+          <h3 className="ismPr__title">Rollup interval</h3>
           <Paired>
-            <NumberField
-              compact
-              value={values.interval}
-              onChange={onChangeInterval}
-              invalid={Boolean(intervalError)}
-              aria-label="Rollup interval"
-            />
+            <div className="ismPaired__row">
+              <NumberField
+                compact
+                value={values.interval}
+                onChange={onChangeInterval}
+                invalid={Boolean(intervalError)}
+                aria-label="Rollup interval"
+              />
+              {intervalError && <div className="ismPr__error">{intervalError}</div>}
+            </div>
             <Select
               compact
               id="selectIntervalTimeunit"
               className={values.interval === undefined || values.interval <= 0 ? 'atlField--invalid' : undefined}
               options={SCHEDULE_TIMEUNITS}
-              value={values.intervalTimeunit}
+              value={unitOption(values.intervalTimeunit)}
               onChange={(intervalTimeunit) => change({ intervalTimeunit })}
               aria-label="Rollup interval unit"
             />
           </Paired>
-        </FieldRow>
+        </>
       ) : (
         <>
-          <FieldRow title="Define by cron expression">
-            <TextArea
-              value={values.cronExpression}
-              onChange={(cronExpression) => change({ cronExpression })}
-              rows={3}
-              aria-label="Cron expression"
-            />
-          </FieldRow>
-          <FieldRow title="Timezone" help={TIMEZONE_HELP}>
+          <PluginRow title="Define by cron expression">
+            <div className="ismPr__field--area">
+              <TextArea
+                className="ismJobTextArea"
+                value={values.cronExpression}
+                onChange={(cronExpression) => change({ cronExpression })}
+                rows={3}
+                aria-label="Cron expression"
+              />
+            </div>
+          </PluginRow>
+          <PluginRow title="Timezone" help={TIMEZONE_HELP}>
             <Select
               compact
               id="timezone"
@@ -651,10 +733,11 @@ export function Schedule({
               value={values.cronTimezone}
               onChange={(cronTimezone) => change({ cronTimezone })}
             />
-          </FieldRow>
+          </PluginRow>
         </>
       )}
-      <FieldRow
+      <Spacer size="m" />
+      <PluginRow
         title="Page per execution"
         help="The number of pages every execution processes. A larger number means faster execution and higher costs on memory."
       >
@@ -666,30 +749,31 @@ export function Schedule({
           onChange={(pageSize) => change({ pageSize })}
           aria-label="Page per execution"
         />
-      </FieldRow>
-      <FieldRow
-        title="Execution delay"
-        optional
-        help="The amount of time the job waits for data ingestion to accommodate any necessary processing time."
-      >
-        <Paired>
-          <NumberField
-            compact
-            value={values.delayTime}
-            onChange={(delayTime) => change({ delayTime })}
-            aria-label="Execution delay"
-          />
-          <Select
-            compact
-            id="selectTimeunit"
-            options={DELAY_TIMEUNITS}
-            value={values.delayTimeunit}
-            onChange={(delayTimeunit) => change({ delayTimeunit })}
-            aria-label="Execution delay unit"
-          />
-        </Paired>
-      </FieldRow>
-    </FormPanel>
+      </PluginRow>
+      <Spacer size="m" />
+      <h3 className="ismPr__title">
+        Execution delay<i> – optional</i>
+      </h3>
+      <Paired>
+        <NumberField
+          compact
+          value={values.delayTime}
+          onChange={(delayTime) => change({ delayTime })}
+          aria-label="Execution delay"
+        />
+        <Select
+          compact
+          id="selectTimeunit"
+          options={DELAY_TIMEUNITS}
+          value={values.delayTimeunit}
+          onChange={(delayTimeunit) => change({ delayTimeunit })}
+          aria-label="Execution delay unit"
+        />
+      </Paired>
+      <div className="ismPr__help ismPr__help--block">
+        The amount of time the job waits for data ingestion to accommodate any necessary processing time.
+      </div>
+    </TitledPanel>
   );
 }
 
@@ -710,32 +794,56 @@ const TYPED_AGGREGATION_COLUMNS: Array<TableColumn<DimensionItem>> = [
 const METRIC_COLUMNS: Array<TableColumn<MetricItem>> = [
   { field: 'source_field', name: 'Field Name', render: (row) => row.source_field.label },
   ...METRIC_KINDS.map(
-    (kind): TableColumn<MetricItem> => ({ field: kind, name: METRIC_NAMES[kind], render: (row) => ticked(row[kind]) })
+    (kind): TableColumn<MetricItem> => ({
+      field: kind,
+      name: METRIC_NAMES[kind],
+      align: 'center',
+      render: (row) => ticked(row[kind]),
+    })
   ),
 ];
 
-/** The aggregations after the date histogram and the metrics of a job, each in a table */
+/** What the plugin writes where a job has no field of a kind: the smallest text, in a `dd` */
+const NoFields = ({ children }: { children: string }) => (
+  <div className="ismInfoGrid--xs">
+    <dd>{children}</dd>
+  </div>
+);
+
+/**
+ * The aggregations after the date histogram and the metrics of a job, each under its title and
+ * number in a table in a panel, 8 px apart, as the plugin's details and review draw them
+ */
 export function AggregationTables({
   dimensions,
   metrics,
-  withTypes,
+  review,
 }: {
   dimensions: DimensionItem[];
   metrics: MetricItem[];
-  /** In the form the types of the fields are known; a job read back does not tell them */
-  withTypes?: boolean;
+  /**
+   * In the form's review the types of the fields are known (a job read back does not tell them),
+   * and the title of the aggregations holds their number
+   */
+  review?: boolean;
 }) {
   const dimensionPage = usePage(dimensions, 'sequence');
   const metricPage = usePage(metrics, 'sequence');
   return (
     <>
-      <h3 className="ismRow__title">Additional aggregations ({dimensions.length})</h3>
-      {dimensions.length === 0 ? (
-        <div className="ismLabeled__help">No fields added for aggregation</div>
+      {review ? (
+        <div className="ismCounted">
+          <h3>Additional aggregations ({dimensions.length})</h3>
+        </div>
       ) : (
-        <Panel>
+        <CountedTitle title="Additional aggregations" count={dimensions.length} />
+      )}
+      {dimensions.length === 0 ? (
+        <NoFields>No fields added for aggregation</NoFields>
+      ) : (
+        <Panel className="ismAggPanel">
           <Table
-            columns={withTypes ? TYPED_AGGREGATION_COLUMNS : AGGREGATION_COLUMNS}
+            columns={review ? TYPED_AGGREGATION_COLUMNS : AGGREGATION_COLUMNS}
             rows={dimensionPage.shown}
             total={dimensions.length}
             query={dimensionPage.query}
@@ -745,11 +853,12 @@ export function AggregationTables({
           />
         </Panel>
       )}
-      <h3 className="ismRow__title">Additional metrics ({metrics.length})</h3>
+      <Spacer size="s" />
+      <CountedTitle title="Additional metrics" count={metrics.length} />
       {metrics.length === 0 ? (
-        <div className="ismLabeled__help">No fields added for metrics</div>
+        <NoFields>No fields added for metrics</NoFields>
       ) : (
-        <Panel>
+        <Panel className="ismAggPanel">
           <Table
             columns={METRIC_COLUMNS}
             rows={metricPage.shown}
@@ -767,49 +876,74 @@ export function AggregationTables({
 
 function Review({ form, onChangeStep }: { form: RollupForm; onChangeStep: (step: number) => void }) {
   const edit = (step: number) => (
-    <Button size="s" onClick={() => onChangeStep(step)} testId="EditButton">
+    <Button onClick={() => onChangeStep(step)} testId="EditButton">
       Edit
     </Button>
   );
   const delay = form.delayTime;
+  // As the plugin's: each part a panel with its title beside Edit, its values in a grid 8 px under the rule
   return (
     <>
-      <FormPanel title="Job name and indexes" actions={edit(1)}>
-        <Details columns={3}>
-          <Detail name="Name">{form.rollupId}</Detail>
-          <Detail name="Source Index">{form.sourceIndex}</Detail>
-          <Detail name="Target index">{form.targetIndex}</Detail>
-          <Detail name="Description">{form.description === '' ? '-' : form.description}</Detail>
-        </Details>
-      </FormPanel>
-      <FormPanel title="Aggregation and metrics settings" actions={edit(2)}>
-        <h3 className="ismRow__title">Time aggregation</h3>
-        <div className="ismSmallDetails">
-          <Details columns={3}>
-            <Detail name="Timestamp field">{form.timestamp}</Detail>
-            <Detail name="Interval">
-              {form.intervalType === 'calendar' ? '1' : `${form.intervalValue ?? NaN}`} {parseTimeunit(form.timeunit)}
-            </Detail>
-            <Detail name="Timezone">{form.timezone}</Detail>
-          </Details>
-        </div>
-        <AggregationTables dimensions={form.dimensions} metrics={form.metrics} withTypes />
-      </FormPanel>
-      <FormPanel title="Schedule" actions={edit(3)}>
-        <Details columns={4}>
-          <Detail name="Enabled by default">{form.enabled ? 'Yes' : 'No'}</Detail>
-          <Detail name="Schedule">
-            {form.continuousDefinition === 'fixed'
-              ? intervalScheduleText(form.continuous, form.interval, form.intervalTimeunit)
-              : cronScheduleText(form.continuous, form.cronExpression)}
-          </Detail>
-          <Detail name="Pages per execution">{form.pageSize}</Detail>
-          <Detail name="Execution delay">
-            {delay === undefined || delay === 0 ? '-' : `${delay} ${parseTimeunit(form.delayTimeunit)}`}
-          </Detail>
-        </Details>
-      </FormPanel>
-      <CallOut tone="warning">{NO_CHANGE_LATER}</CallOut>
+      <TitledPanel title="Job name and indexes" itemTitle actions={edit(1)}>
+        <Spacer size="s" />
+        <InfoGrid
+          columns={3}
+          items={[
+            { term: 'Name', value: form.rollupId },
+            { term: 'Source Index', value: form.sourceIndex },
+            { term: 'Target index', value: form.targetIndex },
+            { term: 'Description', value: form.description === '' ? '-' : form.description },
+          ]}
+        />
+        <Spacer size="s" />
+      </TitledPanel>
+      <Spacer />
+      <TitledPanel title="Aggregation and metrics settings" itemTitle actions={edit(2)}>
+        <Spacer size="xs" />
+        <h3 className="ismPr__title">Time aggregation</h3>
+        <Spacer size="s" />
+        <InfoGrid
+          columns={3}
+          size="xs"
+          items={[
+            { term: 'Timestamp field', value: form.timestamp },
+            {
+              term: 'Interval',
+              value: `${form.intervalType === 'calendar' ? '1' : `${form.intervalValue ?? NaN}`} ${parseTimeunit(form.timeunit)}`,
+            },
+            { term: 'Timezone', value: form.timezone },
+          ]}
+        />
+        <Spacer size="m" />
+        <AggregationTables dimensions={form.dimensions} metrics={form.metrics} review />
+        <Spacer size="s" />
+      </TitledPanel>
+      <Spacer />
+      <TitledPanel title="Schedule" itemTitle actions={edit(3)}>
+        <Spacer size="s" />
+        <InfoGrid
+          items={[
+            { term: 'Enabled by default', value: form.enabled ? 'Yes' : 'No' },
+            {
+              term: 'Schedule',
+              value:
+                form.continuousDefinition === 'fixed'
+                  ? intervalScheduleText(form.continuous, form.interval, form.intervalTimeunit)
+                  : cronScheduleText(form.continuous, form.cronExpression),
+            },
+            { term: 'Pages per execution', value: form.pageSize },
+            {
+              term: 'Execution delay',
+              value: delay === undefined || delay === 0 ? '-' : `${delay} ${parseTimeunit(form.delayTimeunit)}`,
+            },
+          ]}
+        />
+        <Spacer size="s" />
+      </TitledPanel>
+      <Spacer />
+      <CallOut tone="warning">
+        <p>{NO_CHANGE_LATER}</p>
+      </CallOut>
     </>
   );
 }
@@ -872,20 +1006,21 @@ export function CreateRollup() {
       step={step}
       buttons={
         <>
-          <Button variant="empty" size="s" onClick={() => go(ROUTES.ROLLUPS)} testId="createRollupCancelButton">
+          {/* The plugin's small buttons, 32 px tall in the theme as the kit's default ones */}
+          <Button variant="empty" onClick={() => go(ROUTES.ROLLUPS)} testId="createRollupCancelButton">
             Cancel
           </Button>
           {step !== 1 && (
-            <Button size="s" onClick={() => setStep(step - 1)} testId="createRollupPreviousButton">
+            <Button onClick={() => setStep(step - 1)} testId="createRollupPreviousButton">
               Previous
             </Button>
           )}
           {step === 4 ? (
-            <Button variant="primary" size="s" loading={busy} onClick={() => void submit()} testId="createRollupSubmitButton">
+            <Button variant="primary" loading={busy} onClick={() => void submit()} testId="createRollupSubmitButton">
               Create
             </Button>
           ) : (
-            <Button variant="primary" size="s" onClick={next} testId="createRollupNextButton">
+            <Button variant="primary" onClick={next} testId="createRollupNextButton">
               Next
             </Button>
           )}
@@ -904,6 +1039,7 @@ export function CreateRollup() {
             }}
             onChangeDescription={(description) => change({ description })}
           />
+          <Spacer />
           <RollupIndices
             form={form}
             errors={errors}
@@ -932,21 +1068,30 @@ export function CreateRollup() {
               judge({ timestamp: timestamp ? undefined : 'Timestamp is required.' });
             }}
           />
+          <Spacer />
           <AdvancedAggregation form={form} fields={fields} change={change} />
+          <Spacer />
           <MetricsCalculation form={form} fields={fields} error={errors.metric} change={change} />
-          <CallOut tone="warning">{NO_CHANGE_LATER}</CallOut>
+          <Spacer />
+          <CallOut tone="warning">
+            <p>{NO_CHANGE_LATER}</p>
+          </CallOut>
         </>
       )}
       {step === 3 && (
-        <Schedule
-          values={form}
-          intervalError={errors.interval}
-          change={change}
-          onChangeInterval={(interval) => {
-            change({ interval });
-            judge({ interval: interval === undefined ? INTERVAL_REQUIRED : undefined });
-          }}
-        />
+        <>
+          {/* As the plugin's, this step has a second spacer under its title */}
+          <Spacer />
+          <Schedule
+            values={form}
+            intervalError={errors.interval}
+            change={change}
+            onChangeInterval={(interval) => {
+              change({ interval });
+              judge({ interval: interval === undefined ? INTERVAL_REQUIRED : undefined });
+            }}
+          />
+        </>
       )}
       {step === 4 && <Review form={form} onChangeStep={setStep} />}
     </Wizard>

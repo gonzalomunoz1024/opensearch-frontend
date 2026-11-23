@@ -293,7 +293,7 @@ export interface TableColumn<Row> {
   name: string;
   sortable?: boolean;
   width?: string;
-  align?: 'right';
+  align?: 'right' | 'center';
   render: (row: Row) => ReactNode;
   /** What a table sorted in the browser sorts by; the field of the row when left out */
   value?: (row: Row) => unknown;
@@ -363,9 +363,9 @@ export function Table<Row>({
             <tr>
               {onSelect && (
                 <th className="atlTable__check">
+                  {/* As the component library's table, ticked or not: never half ticked */}
                   <Checkbox
                     checked={allTicked}
-                    indeterminate={!allTicked && tickable.some((row) => ids.has(rowId(row)))}
                     disabled={tickable.length === 0}
                     onChange={(checked) => onSelect(checked ? tickable : [])}
                     testId="checkboxSelectAll"
@@ -373,10 +373,11 @@ export function Table<Row>({
                 </th>
               )}
               {columns.map((column, index) => {
-                const sorted = query.sortField === column.field;
+                // Two columns may show one field, as the plugin's Job Status shows the index's
+                const sorted = Boolean(column.sortable) && query.sortField === column.field;
                 return (
                   <th
-                    key={column.field}
+                    key={`${column.field}-${index}`}
                     className={column.align === 'right' ? 'ismTable__right' : undefined}
                     style={{ width: column.width, textAlign: column.align }}
                     data-test-subj={`tableHeaderCell_${column.field}_${index}`}
@@ -426,9 +427,9 @@ export function Table<Row>({
                       />
                     </td>
                   )}
-                  {columns.map((column) => (
+                  {columns.map((column, index) => (
                     <td
-                      key={column.field}
+                      key={`${column.field}-${index}`}
                       style={{ textAlign: column.align }}
                       className={fixed && column.truncate ? 'ismTable__truncate' : undefined}
                     >
