@@ -102,9 +102,9 @@ export function splitParts(table: Table): SplitPart[] | undefined {
     const key = keyText(row[split.id]);
     let group = groups.get(key);
     if (!group) {
-      // As vislib titles a chart: by its bucket as the format writes it, an empty text as nothing
+      // As vislib titles a chart: by its bucket as the format writes it, an empty text too
       const value = row[split.id];
-      group = { label: `${value === '' ? '' : split.format(value)}: ${split.name}`, key: value, first: row, rows: [] };
+      group = { label: `${split.format(value)}: ${split.name}`, key: value, first: row, rows: [] };
       groups.set(key, group);
     }
     group.rows.push(row);

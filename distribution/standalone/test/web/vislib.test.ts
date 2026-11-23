@@ -259,7 +259,8 @@ const columnOf = (id: string, name: string, agg: AggConfig, extra: Partial<Table
   kind: agg.schema === 'metric' ? 'metric' : 'bucket',
   agg,
   schema: agg.schema,
-  format: (value) => (value === '' ? '-' : String(value)),
+  // As the string format writes a value, an empty one as nothing
+  format: (value) => String(value),
   ...extra,
 });
 
@@ -286,6 +287,30 @@ describe('the series of a chart', () => {
     );
     assert.equal(data.xLabel, 'timestamp per day');
     assert.equal(data.yLabel, 'Count');
+  });
+
+  it('write an empty term with the format of its column, as vislib formats every key', () => {
+    // A static lookup writes its text for the values it does not list, an empty one too
+    const lookup = (value: unknown) => (value === 'css' ? 'Stylesheet' : 'other');
+    const byGroup = buildPointSeries(
+      [x, { ...group, format: lookup }, count],
+      [
+        { 'col-0-2': 0, 'col-1-3': 'css', 'col-2-1': 3 },
+        { 'col-0-2': 0, 'col-1-3': '', 'col-2-1': 1 },
+      ]
+    );
+    assert.deepEqual(
+      byGroup.series.map((series) => series.label),
+      ['Stylesheet', 'other']
+    );
+    const terms = columnOf('col-0-4', 'extension', aggOf('4', 'terms', 'segment'), { format: lookup });
+    const byTerm = buildPointSeries([terms, count], [{ 'col-0-4': '', 'col-2-1': 1 }]);
+    assert.equal(byTerm.xFormat(''), 'other');
+    const pie = buildSlices({ columns: [terms, count], rows: [{ 'col-0-4': '', 'col-2-1': 1 }] });
+    assert.deepEqual(
+      pie.children.map((slice) => slice.name),
+      ['other']
+    );
   });
 
   it('name each measure apart when there are several', () => {
@@ -890,6 +915,13 @@ describe('the buckets of a chart', () => {
     assert.deepEqual(
       parts.map((part) => part.label),
       [': extension.keyword']
+    );
+    // as the format writes it: a static lookup names the values it does not list, an empty one too
+    const lookup = { ...split, format: (value: unknown) => (value === 'css' ? 'Stylesheet' : 'other') };
+    const named = splitTables({ columns: [lookup, count], rows: [{ 'col-0-4': '', 'col-1-1': 1 }] });
+    assert.deepEqual(
+      named.map((part) => part.label),
+      ['other: extension.keyword']
     );
   });
 
