@@ -780,65 +780,117 @@ select.atlField {
 
 /* --- Tables -------------------------------------------------------------------------------- */
 
+/* As the theme's table: a quiet header on the secondary surface, a hairline above each row, the
+   secondary surface under the pointer, and 10 px by 12 around what a cell holds */
 .atlTable {
   width: 100%;
   border-collapse: collapse;
   font-size: var(--font-size-s);
+  line-height: 1.5;
+}
+
+/* The original's tables lay their columns out fixed: those without a width share what is left */
+.atlTable--fixed {
+  table-layout: fixed;
 }
 
 .atlTable th {
-  padding: var(--space-2) var(--space-3);
-  border-bottom: 1px solid var(--color-border-light);
+  padding: 10px var(--space-3);
+  background: var(--color-surface-secondary);
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
+  line-height: 18px;
   text-align: left;
   white-space: nowrap;
+  vertical-align: middle;
 }
 
 .atlTable td {
-  padding: var(--space-2) var(--space-3);
-  border-bottom: 1px solid var(--color-border-light);
+  padding: 10px var(--space-3);
+  border-top: 1px solid var(--color-border-light);
   vertical-align: middle;
 }
 
 .atlTable tbody tr:hover {
-  background: var(--color-surface-tertiary);
+  background: var(--color-surface-secondary);
 }
 
-.atlTable tbody tr:last-child td {
-  border-bottom: 0;
+.atlTable tbody tr.atlTable__row--selected {
+  background: var(--color-accent-callout-fill);
 }
 
+/* The header's button is the whole cell, as the original's */
 .atlTable__sort {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: var(--space-1);
-  padding: 0;
+  width: calc(100% + 2 * var(--space-3));
+  margin: -10px calc(-1 * var(--space-3));
+  padding: 10px var(--space-3);
   border: 0;
   background: none;
   color: inherit;
   font: inherit;
+  text-align: inherit;
   cursor: pointer;
 }
 
-.atlTable__sort:hover {
+.atlTable__sort:hover,
+.atlTable__sort:focus {
   color: var(--color-text-primary);
+}
+
+.atlTable__headerText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* As the theme's sorted column of a table: its arrow in the accent colour */
 .atlTable__sort--sorted > .atlIcon {
+  flex: none;
   color: var(--color-accent);
 }
 
-.atlTable__check {
+/* The tick of a row: a column 32 px wide, the box 12 px in. The cell keeps its line under it, as
+   the original's does, which shows under the last row. */
+.atlTable .atlTable__check {
   width: 32px;
+  padding-right: var(--space-1);
 }
 
-.atlTable__actions {
-  width: 1%;
-  white-space: nowrap;
+.atlTable td.atlTable__check {
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.atlTable .atlTable__actions {
   text-align: right;
+}
+
+/* What can be done with a row is faint until the pointer is over the row, as the original's */
+.atlTable__row--actions td.atlTable__actions > * {
+  opacity: 0.7;
+  filter: grayscale(100%);
+  transition:
+    opacity var(--duration-normal) var(--ease-out-quint),
+    filter var(--duration-normal) var(--ease-out-quint);
+}
+
+.atlTable__row--actions:hover td.atlTable__actions > *,
+.atlTable__row--actions td.atlTable__actions > *:focus-within {
+  opacity: 1;
+  filter: none;
+}
+
+.atlTable td.atlTable__empty {
+  text-align: center;
+}
+
+/* A compact table keeps the kit's own look: the tables of visualizations, which the original
+   does not draw as its table */
+.atlTable--compact {
+  line-height: inherit;
 }
 
 .atlTable--compact th,
@@ -847,55 +899,140 @@ select.atlField {
   font-size: var(--font-size-xs);
 }
 
+.atlTable--compact th {
+  border-bottom: 1px solid var(--color-border-light);
+  background: none;
+  font-weight: var(--font-weight-semibold);
+  line-height: inherit;
+}
+
+.atlTable--compact td {
+  border-top: 0;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.atlTable--compact tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.atlTable--compact tbody tr:hover {
+  background: var(--color-surface-tertiary);
+}
+
+.atlTable--compact .atlTable__sort {
+  display: inline-flex;
+  width: auto;
+  margin: 0;
+  padding: 0;
+}
+
 .atlTableWrap {
   overflow-x: auto;
 }
 
+/* The pages of a table, 16 px under it: "Rows per page" on the left, the pages on the right */
 .atlPagination {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-1);
+  gap: var(--space-6);
+  margin-top: var(--space-4);
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
+}
+
+/* As the original's: an empty button of extra small size in the colour of the text */
+.atlPagination__size {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 24px;
+  padding: 0 var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 21px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.atlPagination__size:hover,
+.atlPagination__size:focus {
+  background: color-mix(in srgb, var(--color-text-primary) var(--tint-opacity), transparent);
+}
+
+.atlPagination__total {
+  white-space: nowrap;
 }
 
 .atlPagination__pages {
   display: flex;
   align-items: center;
-  gap: 2px;
 }
 
-.atlPagination__page {
-  min-width: 24px;
+.atlPagination__list {
+  display: flex;
+  align-items: baseline;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The arrows: round icon buttons in the colour of the text, at the first and the last page too */
+.atlPagination__arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
   height: 24px;
-  padding: 0 6px;
-  border: 0;
-  border-radius: 6px;
-  background: none;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-primary);
   cursor: pointer;
 }
 
-.atlPagination__page:hover:not(:disabled) {
-  background: var(--color-hover);
+.atlPagination__arrow:hover:not(:disabled),
+.atlPagination__arrow:focus:not(:disabled) {
+  background: color-mix(in srgb, var(--color-text-primary) var(--tint-opacity), transparent);
+}
+
+.atlPagination__arrow:disabled {
+  cursor: not-allowed;
+}
+
+.atlPagination__page {
+  height: 32px;
+  padding: 0 var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+.atlPagination__page:hover,
+.atlPagination__page:focus {
+  color: var(--color-text-primary);
 }
 
 .atlPagination__page[aria-current="true"] {
-  color: var(--color-accent);
-  font-weight: var(--font-weight-semibold);
-}
-
-.atlPagination__page:disabled {
-  color: var(--color-text-tertiary);
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
   cursor: default;
 }
 
-/* The arrows in the colour of the text, at the first and the last page too, as the original's */
-.atlPagination__page > .atlIcon {
-  color: var(--color-text-primary);
+.atlPagination__skip {
+  height: 24px;
+  padding: 6px var(--space-2) 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-s);
 }
 
 /* --- What floats: popovers, menus, dialogs, flyouts, toasts ---------------------------------- */
@@ -910,6 +1047,11 @@ select.atlField {
   overflow: auto;
   border-radius: var(--radius-md);
   animation: atlPop var(--duration-fast) var(--ease-out-quint);
+}
+
+/* A panel that holds the focus itself, having nothing else that takes it, shows no ring, as the original's */
+.atlPopover:focus {
+  outline: none;
 }
 
 .atlPopover--padded {
@@ -977,10 +1119,13 @@ select.atlField {
   background: var(--color-border-light);
 }
 
-/* A popover placed as the original's: its panel as the theme draws one, opaque, without padding */
+/* A popover placed as the original's: its panel as the theme draws one, opaque, without padding,
+   and not cutting what is in it, as the original's: the ring of an item's focus is drawn outside
+   it, and its first item, when it has the focus, fills the corners */
 .atlPopover--placed {
   min-width: 0;
   max-height: none;
+  overflow: visible;
   border-radius: var(--radius-lg);
   background-color: var(--color-surface);
   backdrop-filter: none;
@@ -1043,6 +1188,12 @@ select.atlField {
   background: var(--color-surface-secondary);
   outline: none;
   text-decoration: none;
+}
+
+/* The keyboard's focus has the theme's ring as well, standing off the item, as the original's */
+.atlContextMenu__item:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 .atlContextMenu__item:disabled {
@@ -1276,6 +1427,11 @@ select.atlField {
   animation: atlSlide var(--duration-normal) var(--ease-out-quint);
 }
 
+/* The flyout takes the focus itself only when nothing in it can: no ring, as the original's */
+.atlFlyout:focus {
+  outline: none;
+}
+
 .atlFlyoutMask {
   position: fixed;
   inset: 0;
@@ -1339,12 +1495,18 @@ select.atlField {
   animation: atlRise var(--duration-normal) var(--ease-out-quint);
 }
 
+/* 24 px clear of the close button, as the original's */
 .atlToast__header {
   display: flex;
   align-items: flex-start;
   gap: var(--space-2);
   padding-top: 1px;
-  padding-right: var(--space-5);
+  padding-right: var(--space-6);
+}
+
+/* A plain message: its title alone, from the top of the padding */
+.atlToast--plain .atlToast__header {
+  padding-top: 0;
 }
 
 .atlToast__header > .atlIcon {
