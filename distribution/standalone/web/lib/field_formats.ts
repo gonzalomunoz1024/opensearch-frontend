@@ -6,7 +6,7 @@
  * same saved settings.
  */
 
-import { DEFAULT_DATE_FORMAT, UNIT_MS, formatDate } from './dates';
+import { DEFAULT_DATE_FORMAT, UNIT_MS, formatDate, type ScaledDateRules } from './dates';
 import { formatNumber } from './numeral';
 import type { Field, FieldFormatSpec, IndexPattern } from './types';
 
@@ -18,6 +18,24 @@ export interface FormatSettings {
   percentPattern: string;
   /** The setting format:defaultTypeMap: the format of a kind of field that was given none */
   defaultTypeMap: Record<string, FieldFormatSpec>;
+  /** The setting dateFormat:scaled: the format of a date bucket by its interval */
+  scaledDateRules?: ScaledDateRules;
+  /** The setting dateNanosFormat: the format of a date_nanos field */
+  dateNanosFormat?: string;
+}
+
+export const DEFAULT_DATE_NANOS_FORMAT = 'MMM D, YYYY @ HH:mm:ss.SSSSSSSSS';
+
+/**
+ * A date_nanos value as the original writes it: past three digits, the fraction of the second is
+ * the one in the text OpenSearch sent ("2020-05-18T20:45:05.957000123Z"), which a date cannot hold
+ */
+export function formatDateNanos(raw: string, date: Date, pattern: string, timeZone?: string): string {
+  const fraction = /S+/.exec(pattern)?.[0] ?? '';
+  if (fraction.length <= 3) return formatDate(date, pattern, timeZone);
+  const shown = formatDate(date, pattern.replace(fraction, `[${fraction}]`), timeZone);
+  const nanos = raw.substring(20, raw.length - 1).padEnd(9, '0').substring(0, fraction.length);
+  return shown.replace(fraction, nanos);
 }
 
 export const DEFAULT_FORMAT_SETTINGS: FormatSettings = {
@@ -145,13 +163,26 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
         return text(number === undefined ? stringify(value) : formatNumber(number, pattern));
       };
     }
-    case 'date':
-    case 'date_nanos': {
+    case 'date': {
       const pattern = typeof params.pattern === 'string' && params.pattern ? params.pattern : settings.dateFormat;
       const zone = typeof params.timezone === 'string' && params.timezone ? params.timezone : settings.timeZone;
       return (value) => {
         const date = toDate(value);
         return text(date ? formatDate(date, pattern, zone) : stringify(value));
+      };
+    }
+    case 'date_nanos': {
+      // The setting dateNanosFormat; a number, as an aggregation answers, in the date format
+      const pattern =
+        typeof params.pattern === 'string' && params.pattern
+          ? params.pattern
+          : settings.dateNanosFormat || DEFAULT_DATE_NANOS_FORMAT;
+      const zone = typeof params.timezone === 'string' && params.timezone ? params.timezone : settings.timeZone;
+      return (value) => {
+        const date = toDate(value);
+        if (!date) return text(stringify(value));
+        if (typeof value !== 'string') return text(formatDate(date, settings.dateFormat, zone));
+        return text(formatDateNanos(value, date, pattern, zone));
       };
     }
     case 'relative_date':

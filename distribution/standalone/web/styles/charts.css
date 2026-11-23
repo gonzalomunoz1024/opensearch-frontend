@@ -86,8 +86,9 @@
   pointer-events: none;
 }
 
+/* The other series while one is hovered: the setting visualization:dimmingOpacity, 0.5 by default */
 .chtDim {
-  opacity: 0.25;
+  opacity: var(--cht-dim-opacity, 0.5);
 }
 
 .chtMark {

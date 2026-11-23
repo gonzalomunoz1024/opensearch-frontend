@@ -828,7 +828,7 @@ function bucketColumn(agg: AggConfig, context: AggContext, id: string): TableCol
   switch (agg.type) {
     case 'date_histogram': {
       const interval = dateInterval(agg, context);
-      const pattern = scaledDateFormat(interval.ms);
+      const pattern = scaledDateFormat(interval.ms, settings.scaledDateRules, settings.dateFormat);
       return {
         ...base,
         interval: interval.ms,
