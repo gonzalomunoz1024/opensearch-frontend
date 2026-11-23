@@ -85,6 +85,7 @@ function Collapsed({ items }: { items: Item[] }) {
       <HeaderPopover
         className="shlCrumb shlCrumb--collapsed"
         anchorPosition="downCenter"
+        inText
         open={open}
         onClose={() => setOpen(false)}
         button={

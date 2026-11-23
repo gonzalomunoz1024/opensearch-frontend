@@ -50,7 +50,7 @@ describe('the trail of the header, drawn', () => {
   it('folds the crumbs a narrow window has no room for into a "…" before the last', () => {
     const crumbs = [{ text: 'Index Management', to: '/a' }, { text: 'Indexes', to: '/b' }, { text: 'logs-1' }];
     const narrow = renderToStaticMarkup(<HeaderBreadcrumbs breadcrumbs={crumbs} limit={1} />);
-    assert.match(narrow, /^<nav[^>]*><div class="shlCrumbWrapper shlCrumbWrapper--collapsed"><div class="shlHeaderPopoverAnchor shlCrumb shlCrumb--collapsed"><button type="button" class="shlCrumb__more" aria-label="Show collapsed breadcrumbs" title="Show collapsed breadcrumbs">… <svg/);
+    assert.match(narrow, /^<nav[^>]*><div class="shlCrumbWrapper shlCrumbWrapper--collapsed"><div class="shlHeaderPopoverAnchor shlCrumb shlCrumb--collapsed"><span class="shlHeaderPopover__anchor" style="display:inline-block;min-width:0"><button type="button" class="shlCrumb__more" aria-label="Show collapsed breadcrumbs" title="Show collapsed breadcrumbs">… <svg/);
     // Closed, the "…" holds nothing; the last crumb keeps the subject of its place in the trail
     assert.equal(count(narrow, 'Index Management'), 0);
     assert.equal(count(narrow, 'Indexes'), 0);

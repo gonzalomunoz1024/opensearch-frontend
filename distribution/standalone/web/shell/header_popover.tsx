@@ -19,6 +19,8 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { cx } from '../components/basic';
+import { Popover } from '../components/overlay';
 import {
   placeHeaderPopover,
   placeHeaderTooltip,
@@ -27,8 +29,8 @@ import {
   type PopoverPosition,
 } from './chrome_layout';
 
-function boxOf(element: Element): Box {
-  const rect = element.getBoundingClientRect();
+function boxOf(element: Element | DOMRect): Box {
+  const rect = element instanceof Element ? element.getBoundingClientRect() : element;
   return {
     top: rect.top,
     right: rect.right,
@@ -39,17 +41,9 @@ function boxOf(element: Element): Box {
   };
 }
 
-const TABBABLE =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-/** What the Tab key stops at inside an element, in the order of the page */
-export function tabbablesIn(root: HTMLElement): HTMLElement[] {
-  return [...root.querySelectorAll<HTMLElement>(TABBABLE)].filter(
-    (element) => element.getClientRects().length > 0
-  );
-}
-
-const classes = (...names: Array<string | false | undefined>) => names.filter(Boolean).join(' ');
+// The kit's span around a button that stands in a line of text: as the original's anchor, a box
+// as high as the line
+const IN_TEXT: CSSProperties = { display: 'inline-block' };
 
 export interface HeaderPopoverProps {
   /** What opens it */
@@ -60,6 +54,8 @@ export interface HeaderPopoverProps {
   anchorPosition: 'downRight' | 'downCenter';
   /** The panel's padding: the original's `s`, 8 pixels, or `m`, 16 */
   padding?: 's' | 'm';
+  /** The button stands in a line of text, as the "…" of the trail: it hangs from the line's box */
+  inText?: boolean;
   id?: string;
   className?: string;
   testId?: string;
@@ -67,9 +63,10 @@ export interface HeaderPopoverProps {
 }
 
 /**
- * A popover as the original's EuiPopover that owns the focus: a dialog hung from its button,
- * which takes the focus when it opens and keeps the Tab key inside, and which Escape, a press
- * outside or its button closes. Escape gives the focus back to what had it.
+ * A popover of the header: the kit's, which takes the focus when it opens, keeps the Tab key
+ * inside and closes on Escape, a press outside or its button, hung where the original's EuiPopover
+ * hangs a panel with an arrow. It keeps the side it opened on for as long as the window keeps its
+ * size, as the original's does while only its content changes.
  */
 export function HeaderPopover({
   button,
@@ -77,142 +74,51 @@ export function HeaderPopover({
   onClose,
   anchorPosition,
   padding = 'm',
+  inText,
   id,
   className,
   testId,
   children,
 }: HeaderPopoverProps) {
-  const anchor = useRef<HTMLDivElement>(null);
-  const panel = useRef<HTMLDivElement>(null);
-  const describedBy = useId();
-  const [place, setPlace] = useState<Required<Omit<HeaderPlacement, 'right'>>>();
-  // The side it opened on, which it keeps while its content changes
-  const side = useRef<PopoverPosition | undefined>(undefined);
-  const focusBefore = useRef<Element | null>(null);
-  const close = useRef(onClose);
-  close.current = onClose;
+  const content = useRef<HTMLDivElement>(null);
+  const kept = useRef<{ side: PopoverPosition; width: number; height: number } | undefined>(undefined);
 
-  const position = useCallback(
-    (keepSide: boolean) => {
-      if (!anchor.current || !panel.current) return;
-      const size = panel.current.getBoundingClientRect();
-      const next = placeHeaderPopover({
-        anchor: boxOf(anchor.current),
-        popover: { width: size.width, height: size.height },
+  useEffect(() => {
+    if (!open) kept.current = undefined;
+  }, [open]);
+
+  const placeAt = useCallback(
+    (anchor: DOMRect, rounded: { width: number; height: number }) => {
+      // The panel's size to the fraction of a pixel, as the original measures it
+      const panel = content.current?.parentElement?.getBoundingClientRect();
+      const viewport = { width: window.innerWidth, height: window.innerHeight };
+      const before = kept.current;
+      const at = placeHeaderPopover({
+        anchor: boxOf(anchor),
+        popover: panel ? { width: panel.width, height: panel.height } : rounded,
         anchorPosition,
-        keep: keepSide ? side.current : undefined,
-        viewport: { width: window.innerWidth, height: window.innerHeight },
+        keep: before && before.width === viewport.width && before.height === viewport.height ? before.side : undefined,
+        viewport,
       });
-      side.current = next.position;
-      setPlace((previous) =>
-        previous &&
-        previous.position === next.position &&
-        previous.top === next.top &&
-        previous.left === next.left
-          ? previous
-          : next
-      );
+      kept.current = { side: at.position, ...viewport };
+      return { top: at.top, left: at.left, side: at.position };
     },
     [anchorPosition]
   );
 
-  useLayoutEffect(() => {
-    if (!open) {
-      side.current = undefined;
-      setPlace(undefined);
-      return undefined;
-    }
-    position(false);
-    const onResize = () => position(false);
-    const observer = new ResizeObserver(() => position(true));
-    if (panel.current) observer.observe(panel.current);
-    window.addEventListener('resize', onResize);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', onResize);
-    };
-  }, [open, position]);
-
-  // The focus goes to the first thing in the panel that takes it, once the panel is in its place
-  const placed = place !== undefined;
-  useEffect(() => {
-    if (!open || !placed || !panel.current) return;
-    if (panel.current.contains(document.activeElement)) return;
-    focusBefore.current = document.activeElement;
-    (tabbablesIn(panel.current)[0] ?? panel.current).focus();
-  }, [open, placed]);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const onDown = (event: MouseEvent) => {
-      const target = event.target as Node | null;
-      if (!target || anchor.current?.contains(target) || panel.current?.contains(target)) return;
-      // The focus goes where the press puts it
-      close.current();
-    };
-    const onKey = (event: KeyboardEvent) => {
-      const own = panel.current;
-      if (!own) return;
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        event.stopPropagation();
-        close.current();
-        const before = focusBefore.current;
-        const back =
-          before instanceof HTMLElement && before !== document.body && before.isConnected
-            ? before
-            : anchor.current?.querySelector<HTMLElement>('button, a[href]');
-        back?.focus();
-        return;
-      }
-      if (event.key !== 'Tab') return;
-      // The panel itself is a stop, before what it holds
-      const inside = tabbablesIn(own);
-      const stops = [own, ...inside];
-      const at = stops.indexOf(document.activeElement as HTMLElement);
-      const step = event.shiftKey ? -1 : 1;
-      const next =
-        at === -1
-          ? (inside[event.shiftKey ? inside.length - 1 : 0] ?? own)
-          : stops[(at + step + stops.length) % stops.length];
-      event.preventDefault();
-      next.focus();
-    };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey, true);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey, true);
-    };
-  }, [open]);
-
-  const style: CSSProperties = place
-    ? { top: place.top, left: place.left }
-    : { top: 0, left: 0, visibility: 'hidden' };
-
   return (
-    <div ref={anchor} id={id} className={classes('shlHeaderPopoverAnchor', className)} data-test-subj={testId}>
-      {button}
-      {open &&
-        createPortal(
-          <div
-            ref={panel}
-            className={classes('shlHeaderPopover', `shlHeaderPopover--${padding}`)}
-            data-side={place?.position}
-            role="dialog"
-            aria-modal="true"
-            aria-live="off"
-            aria-describedby={describedBy}
-            tabIndex={0}
-            style={style}
-          >
-            <p id={describedBy} className="atlScreenReaderOnly">
-              You are in a dialog. To close this dialog, hit escape.
-            </p>
-            <div>{children}</div>
-          </div>,
-          document.body
-        )}
+    <div id={id} className={cx('shlHeaderPopoverAnchor', className)} data-test-subj={testId}>
+      <Popover
+        button={button}
+        open={open}
+        onClose={onClose}
+        placeAt={placeAt}
+        className={`shlHeaderPopover shlHeaderPopover--${padding}`}
+        anchorClassName="shlHeaderPopover__anchor"
+        anchorStyle={inText ? IN_TEXT : undefined}
+      >
+        <div ref={content}>{children}</div>
+      </Popover>
     </div>
   );
 }
@@ -231,7 +137,8 @@ export interface HeaderTooltipProps {
 /**
  * A tooltip as the original's EuiToolTip: shown a while after the pointer or the focus came to
  * its anchor, gone when either leaves, and gone at the first move of the pointer when it was the
- * Tab key that brought it
+ * Tab key that brought it. It is placed as the original places it, 16 pixels from the edges of
+ * the window, which the kit's tooltip is not.
  */
 export function HeaderTooltip({ content, position = 'top', delay = 'regular', children }: HeaderTooltipProps) {
   const anchor = useRef<HTMLSpanElement>(null);
