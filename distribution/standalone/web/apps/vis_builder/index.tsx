@@ -18,21 +18,22 @@ import {
   useState,
   type KeyboardEvent,
   type PointerEvent,
+  type ReactNode,
 } from 'react';
 import { Spinner, cx } from '../../components/basic';
 import { SearchField } from '../../components/form';
 import { Icon } from '../../components/icon';
-import { Popover } from '../../components/overlay';
+import { Popover, Tooltip } from '../../components/overlay';
 import { resolveTimeRange, type TimeRange } from '../../lib/dates';
 import type { RawHit } from '../../lib/docs';
 import { buildQuery, mergeFilters, sameFilter, timeRangeFilter } from '../../lib/query';
 import type { Filter, IndexPattern, Query } from '../../lib/types';
 import { appUrl, buildHash, encodeState } from '../../lib/url';
-import { getLocation, navigate, setHashParams, useLocation, useUrlState } from '../../router';
+import { getLocation, href, locationState, navigate, setHashParams, useLocation, useUrlState } from '../../router';
 import { services } from '../../services';
 import { HttpFetchError, errorMessage } from '../../services/http';
 import { patternName } from '../../services/index_patterns';
-import { TopNav } from '../../shell/chrome';
+import { TopNav, type TopNavItem } from '../../shell/chrome';
 import { splitFilters } from '../../shell/filter_bar';
 import { defaultQueryLanguage } from '../../shell/query_bar';
 import { pageFiltersOf, savedQueryGlobalParam, type SavedQueryChange } from '../../shell/saved_query';
@@ -44,14 +45,20 @@ import { documentFields, sortClause } from '../discover/search';
 import { DataTab } from './data_tab';
 import {
   afterChange,
+  handedBack,
+  incomingEditorState,
+  lastAddressIn,
   newAppState,
   openedState,
+  originAddress,
+  originatingAppOf,
   readAppState,
   saveDisabledReason,
   urlAppState,
   withIndexPattern,
   withStatus,
   type AppState,
+  type IncomingEditorState,
 } from './editor_state';
 import {
   VIS_BUILDER_APP,
@@ -62,6 +69,7 @@ import {
   type SavedVisBuilder,
   type VisBuilderAttributes,
 } from './model';
+import { OriginSaveModal } from './save_modal';
 import { StylePanel } from './style_panel';
 import { Workspace } from './workspace';
 
@@ -91,6 +99,30 @@ function writeApp(state: AppState) {
 
 const readApp = () => readAppState(getLocation().hashParams._a);
 
+/** What the application that sent someone here left in the entry of the history */
+const incoming = () => incomingEditorState(locationState<unknown>());
+
+/** The history of the tab, where the browser lists it (its Navigation API) */
+interface TabHistory {
+  entries?: () => Array<{ url?: string | null }>;
+  currentEntry?: { index?: number } | null;
+}
+
+/** The address an application was last at in this tab, where the browser tells */
+function lastAddressOf(app: string): string | undefined {
+  const history = (window as { navigation?: TabHistory }).navigation;
+  const entries = history?.entries?.();
+  const at = history?.currentEntry?.index;
+  if (!entries || typeof at !== 'number') return undefined;
+  return lastAddressIn(
+    entries.map((entry) => entry.url),
+    at,
+    app,
+    window.location.origin,
+    href('')
+  );
+}
+
 function VisBuilderPage({ savedId }: { savedId?: string }) {
   const location = useLocation();
   const [global, setGlobal] = useGlobalState();
@@ -104,6 +136,14 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
   const [opened, setOpened] = useState<string | null | undefined>(null);
   const [saving, setSaving] = useState(false);
   const [tick, setTick] = useState(0);
+  // What the application that sent someone here handed over. The entry of the history the page
+  // was opened in carries it, those the page adds as its query or its time changes do not: it is
+  // kept from when it was last seen.
+  const sentFrom = useRef<IncomingEditorState>({});
+  useEffect(() => {
+    const now = incoming();
+    if (now.originatingApp) sentFrom.current = now;
+  }, [location]);
 
   const app = useMemo(() => readAppState(location.hashParams._a), [location.hashParams._a]);
 
@@ -120,7 +160,9 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
       // The query and the filters are in the address from the start
       if (getLocation().hashParams._q === undefined) setQueryState({}, { replace: true });
       if (!savedId) {
-        const state = readApp() ?? newAppState(await services.indexPatterns.defaultId().catch(() => undefined));
+        // A page just arrived at keeps the application it was sent from, as there; a state in the
+        // address says so itself
+        const state = readApp() ?? newAppState(await services.indexPatterns.defaultId().catch(() => undefined), incoming().originatingApp);
         if (!live) return;
         setSaved(undefined);
         writeApp(withStatus(state, 'clean'));
@@ -131,7 +173,7 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
         const loaded = visBuilderFromSavedObject(await services.savedObjects.get<VisBuilderAttributes>(VIS_BUILDER_TYPE, savedId));
         if (!live) return;
         setSaved(loaded);
-        writeApp(openedState(readApp(), loaded));
+        writeApp(openedState(readApp(), loaded, incoming().originatingApp));
         // What it was saved with becomes the page's query and filters, but for those pinned already
         const pinned = pinnedFilters.current;
         setQueryState(
@@ -265,8 +307,10 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
   }, [savedId, title]);
 
   const reason = app ? saveDisabledReason(app) : 'The canvas is empty. Add some aggregations before saving.';
+  // The application a panel was sent from: a dashboard, to go back to once it is saved
+  const originatingApp = app ? originatingAppOf(app) : undefined;
 
-  const save = async ({ title: newTitle, description, asNew }: SaveResult) => {
+  const save = async ({ title: newTitle, description, asNew, returnToOrigin }: SaveResult & { returnToOrigin?: boolean }) => {
     const current = readApp();
     if (!current) return;
     const { attributes, references } = visBuilderToSavedObject(
@@ -280,6 +324,16 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
         references,
       });
       services.toasts.success(`Saved '${newTitle}'`);
+      if (originatingApp && returnToOrigin) {
+        // Back where it came from, as there: what is new there is handed over to become a panel
+        const from = sentFrom.current;
+        const newlyCreated = !savedId || asNew;
+        navigate(originAddress(originatingApp, from, lastAddressOf(originatingApp)), {
+          force: true,
+          state: handedBack(VIS_BUILDER_TYPE, stored.id, newlyCreated, from),
+        });
+        return;
+      }
       setSaving(false);
       setSaved(visBuilderFromSavedObject(stored));
       writeApp({ ...current, metadata: { editor: { state: 'clean' }, isMigrated: false } });
@@ -325,22 +379,38 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
     );
   }
 
+  // As the original's: once saved and opened from another application, saving is "Save as" and
+  // beside it "Save and return" saves over it and goes back; both say why they cannot be pressed
+  const fromOrigin = Boolean(savedId && originatingApp);
+  const withReason = (button: ReactNode) => (reason ? <Tooltip content={reason} position="bottom">{button}</Tooltip> : button);
+  const navItems: TopNavItem[] = [
+    {
+      id: 'save',
+      label: fromOrigin ? 'Save as' : 'Save',
+      icon: fromOrigin ? undefined : 'save',
+      emphasize: !savedId,
+      disabled: Boolean(reason),
+      onClick: () => setSaving(true),
+      testId: 'visBuilderSaveButton',
+      wrap: withReason,
+    },
+  ];
+  if (fromOrigin) {
+    navItems.push({
+      id: 'saveAndReturn',
+      label: 'Save and return',
+      icon: 'checkInCircleFilled',
+      emphasize: true,
+      disabled: Boolean(reason),
+      onClick: () => void save({ title, description: saved?.description ?? '', asNew: false, returnToOrigin: true }),
+      testId: 'visBuilderSaveAndReturnButton',
+      wrap: withReason,
+    });
+  }
+
   return (
     <div className="vbdPage" data-test-subj="visBuilderPage">
-      <TopNav
-        items={[
-          {
-            id: 'save',
-            label: 'Save',
-            icon: 'save',
-            emphasize: !savedId,
-            disabled: Boolean(reason),
-            title: reason,
-            onClick: () => setSaving(true),
-            testId: 'visBuilderSaveButton',
-          },
-        ]}
-      />
+      <TopNav items={navItems} />
       <div className="vbdTop">
         <SearchBar
           indexPatterns={indexPattern ? [indexPattern] : []}
@@ -393,18 +463,29 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
           </div>
         </div>
       </div>
-      {saving && (
-        <SaveModal
-          objectType="visualization"
-          savedObjectType={VIS_BUILDER_TYPE}
-          title={title}
-          description={saved?.description}
-          showDescription
-          existing={Boolean(savedId)}
-          onSave={save}
-          onClose={() => setSaving(false)}
-        />
-      )}
+      {saving &&
+        (originatingApp ? (
+          <OriginSaveModal
+            savedObjectType={VIS_BUILDER_TYPE}
+            savedId={savedId}
+            title={title}
+            description={saved?.description}
+            originatingApp={originatingApp}
+            onSave={save}
+            onClose={() => setSaving(false)}
+          />
+        ) : (
+          <SaveModal
+            objectType="visualization"
+            savedObjectType={VIS_BUILDER_TYPE}
+            title={title}
+            description={saved?.description}
+            showDescription
+            existing={Boolean(savedId)}
+            onSave={save}
+            onClose={() => setSaving(false)}
+          />
+        ))}
     </div>
   );
 }
