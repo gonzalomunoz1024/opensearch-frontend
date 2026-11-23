@@ -260,6 +260,11 @@ export interface QueryBarProps {
   onFocusChange?: (focused: boolean) => void;
   /** A short list, as under a filter of a visualization's buckets */
   size?: 's' | 'l';
+  /**
+   * The page the bar is named for, in its labels and in the key of its recent searches, as the
+   * original's `appName`: TSVB's field is the "VisEditor". The page of the address when not given.
+   */
+  appName?: string;
 }
 
 export function QueryBar({
@@ -275,6 +280,7 @@ export function QueryBar({
   testId = 'queryInput',
   onFocusChange,
   size,
+  appName: givenAppName,
 }: QueryBarProps) {
   const area = useRef<HTMLTextAreaElement>(null);
   const wrap = useRef<HTMLDivElement>(null);
@@ -285,7 +291,7 @@ export function QueryBar({
   const [limit, setLimit] = useState(PAGE);
   const [rect, setRect] = useState<DOMRect>();
   const pendingSelection = useRef<[number, number] | undefined>(undefined);
-  const appName = currentAppName();
+  const appName = givenAppName ?? currentAppName();
 
   const updateRect = useCallback(() => {
     if (wrap.current) setRect(wrap.current.getBoundingClientRect());

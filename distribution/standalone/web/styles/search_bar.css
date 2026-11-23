@@ -25,9 +25,11 @@
   line-height: var(--font-size-s);
 }
 
+/* A block, as the original's: the text box out of focus is then as tall as its line (its 100% is
+   of a box of no set height) */
 .shlQuery__combobox {
   position: relative;
-  display: flex;
+  display: block;
   flex: 1 1 0;
   min-width: 0;
 }
@@ -41,14 +43,15 @@
 
 /*
  * The text box keeps the field's own look, its hairline included, and lies one pixel up and left
- * over the group's, as the original's does. Out of focus it is one line whose ends fade; with the
- * focus it wraps, and the bar makes it as tall as its text.
+ * over the group's, as the original's does. Out of focus it is one line whose ends fade, as tall
+ * as its line; with the focus it wraps, and the bar makes it as tall as its text, from the 30 px
+ * the original's sheet gives it.
  */
 .shlQuery__textarea {
   z-index: 2000;
   width: 100%;
   max-width: 100%;
-  height: 29px;
+  height: 30px;
   margin: 0;
   padding: var(--space-1) var(--space-2);
   border: 0;
@@ -84,7 +87,9 @@
   white-space: nowrap;
 }
 
+/* Only while it is valid, as in the original: an invalid one out of focus keeps its 30 px */
 .shlQuery__textarea:not(:focus):not([aria-invalid="true"]) {
+  height: 100%;
   mask-image: linear-gradient(
     rgb(255 0 0 / 10%) 0%,
     rgb(255 0 0) 7.5px,
