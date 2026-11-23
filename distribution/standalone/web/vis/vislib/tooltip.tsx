@@ -3,10 +3,11 @@
 /*
  * The tooltip of the classic charts (vislib's Tooltip and positionTooltip): a dark box fixed to
  * the window, 10 pixels right of and below the pointer; it goes to the other side when it would
- * run out of the chart or the window, and keeps the side it took while the pointer stays on the
- * chart, so that it does not jump between neighbouring marks. Its content is a table of a label
- * and a value per row, the label column narrowed so that the values have room; for a pie, the
- * slice and those it is inside, a row each of field, bucket and measure.
+ * run out of the chart's wrapper or the window, and keeps the side it took while the pointer stays
+ * in the wrapper, over all the charts of a split, so that it does not jump between neighbouring
+ * marks. Its content is a table of a label and a value per row, the label column narrowed so that
+ * the values have room; for a pie, the slice and those it is inside, a row each of field, bucket
+ * and measure; for the title of a chart of a split that was cut short, the whole title.
  */
 
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
@@ -30,6 +31,8 @@ export interface TooltipState {
   clientY: number;
   /** The message of the zones the time range does not fully cover, above the details */
   header?: string;
+  /** A line of plain text: the whole of a chart's title that was cut short */
+  text?: string;
   details: TooltipDetail[];
   /** For a pie: the slice pointed at and those it is inside, the outermost first */
   branch?: TooltipBranchRow[];
@@ -136,7 +139,7 @@ export function VislibTooltip({
   state?: TooltipState;
   /** The chart's wrapper, which the tooltip keeps inside */
   container: () => HTMLElement | null;
-  /** The side taken last, kept while the pointer stays on the chart */
+  /** The side taken last, kept while the pointer stays in the chart's wrapper */
   placement: { current?: Placement };
 }) {
   const box = useRef<HTMLDivElement>(null);
@@ -195,6 +198,7 @@ export function VislibTooltip({
       </p>
     );
   }
+  if (state.text !== undefined) content.push(<p key="text">{state.text}</p>);
   const labelStyle = style?.labelWidth !== undefined ? { maxWidth: style.labelWidth } : undefined;
   if (state.branch?.length) {
     content.push(

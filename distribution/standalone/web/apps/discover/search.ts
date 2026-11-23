@@ -3,12 +3,12 @@
 /* The request Discover sends: the documents, newest first, and how many fall in each stretch of time. */
 
 import { buildAggsDsl, type AggConfig } from '../../lib/aggs';
-import type { AbsoluteRange } from '../../lib/dates';
+import { resolveTimeRange, type AbsoluteRange, type TimeRange } from '../../lib/dates';
 import { HIGHLIGHT_POST, HIGHLIGHT_PRE } from '../../lib/docs';
 import { buildQuery, timeRangeFilter } from '../../lib/query';
 import type { Filter, IndexPattern, Query } from '../../lib/types';
 import { services } from '../../services';
-import type { SortPair } from './doc_table';
+import { isSortable, type SortPair } from './doc_table';
 
 export const HISTOGRAM_AGG_ID = '2';
 
@@ -77,27 +77,49 @@ export function allFields(include = services.uiSettings.get<boolean>('search:inc
   return include ? { fields: ['*'] } : {};
 }
 
-export function sortClause(indexPattern: IndexPattern, sort: SortPair[]): Array<Record<string, unknown>> {
-  const options = services.uiSettings.get<Record<string, unknown>>('sort:options', { unmapped_type: 'boolean' });
-  const pairs = sort.length
+/**
+ * The sort of a search, as the original's getSortForSearchSource and normalizeSortRequest make
+ * it: the chosen fields that can be sorted on (any other is left out), or else the time field or
+ * the score in the order of discover:sort:defaultOrder; a scripted field by its script; and the
+ * options of sort:options, without the unmapped_type on the score, which OpenSearch refuses there
+ */
+export function sortClause(
+  indexPattern: IndexPattern,
+  sort: SortPair[],
+  options = services.uiSettings.get<Record<string, unknown>>('sort:options', { unmapped_type: 'boolean' }),
+  defaultOrder = services.uiSettings.get<string>('discover:sort:defaultOrder', 'desc')
+): Array<Record<string, unknown>> {
+  const fieldOf = (name: string) => indexPattern.fields.find((candidate) => candidate.name === name);
+  const timeField = indexPattern.timeFieldName;
+  const pairs: SortPair[] = sort.length
     ? sort
-    : indexPattern.timeFieldName
-      ? [[indexPattern.timeFieldName, services.uiSettings.get<string>('discover:sort:defaultOrder', 'desc')] as SortPair]
-      : [];
-  if (pairs.length === 0) return [{ _score: { order: 'desc' } }];
-  return pairs.map(([name, direction]) => {
-    const field = indexPattern.fields.find((candidate) => candidate.name === name);
-    if (field?.scripted && field.script) {
-      return {
-        _script: {
-          script: { source: field.script, lang: field.lang ?? 'painless' },
-          type: field.type === 'number' ? 'number' : 'string',
-          order: direction,
-        },
-      };
-    }
-    return { [name]: { order: direction, ...options } };
-  });
+    : [[timeField && isSortable(fieldOf(timeField), timeField) ? timeField : '_score', defaultOrder === 'asc' ? 'asc' : 'desc']];
+  const { unmapped_type: _unmapped, ...scoreOptions } = options;
+  return pairs
+    .filter(([name]) => isSortable(fieldOf(name), name))
+    .map(([name, direction]) => {
+      const field = fieldOf(name);
+      if (field?.scripted && field.script) {
+        return {
+          _script: {
+            script: { source: field.script, lang: field.lang ?? 'painless' },
+            type: field.type === 'number' ? 'number' : 'string',
+            order: direction,
+          },
+        };
+      }
+      return { [name]: { order: direction, ...(name === '_score' ? scoreOptions : options) } };
+    });
+}
+
+/**
+ * The time range Discover searches a pattern in: none for a pattern without a time field; for one
+ * with a time field, the range of the time picker, or `null` when that cannot be read, which the
+ * original's Discover does not search in at all (it says the time range is invalid)
+ */
+export function searchTimeRange(indexPattern: IndexPattern, time: TimeRange, weekStart?: number): AbsoluteRange | null | undefined {
+  if (!indexPattern.timeFieldName) return undefined;
+  return resolveTimeRange(time, { weekStart }) ?? null;
 }
 
 export function buildDiscoverRequest(request: DiscoverRequest): Record<string, unknown> {

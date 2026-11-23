@@ -30,16 +30,137 @@ export const UNIT_NAMES: Record<TimeUnit, [string, string]> = {
   y: ['year', 'years'],
 };
 
-export function addUnits(date: Date, amount: number, unit: TimeUnit): Date {
-  const result = new Date(date.getTime());
+let clockZone: string | undefined;
+
+/**
+ * The zone on whose clock date math counts ("now/d" is the start of the day there): the one the
+ * setting dateFormat:tz names, or the browser's own when it names none, or one the browser does
+ * not know. The services set it when the settings load and when they change, as OpenSearch
+ * Dashboards makes the zone of that setting the default of its dates.
+ */
+export function setDefaultTimeZone(timeZone: string | undefined): void {
+  clockZone = undefined;
+  if (!timeZone || timeZone === 'Browser') return;
+  try {
+    timeZoneOffset(0, timeZone);
+    clockZone = timeZone;
+  } catch {
+    // no zone of that name: the clock of the browser
+  }
+}
+
+// The minutes east of UTC a moment made on the clock of a named zone is counted with there. The
+// original keeps the offset it found the moment by, which after a move into an hour the clocks
+// skip is not the zone's own at that moment, and counts on from it
+const countedWith = new WeakMap<Date, number>();
+
+/**
+ * A moment moved on the clock of a named zone. The clock is a date whose UTC fields are what the
+ * zone shows. After the move the moment is found as the original's moment-timezone finds it, by
+ * the offset the zone has where the new reading falls under the offset the moment had, so that a
+ * reading the clocks of the zone skip or show twice gives the moment the original gives.
+ */
+function onClock(date: Date, timeZone: string, move: (clock: Date) => void): Date {
+  if (Number.isNaN(date.getTime())) return new Date(Number.NaN);
+  const offset = countedWith.get(date) ?? timeZoneOffset(date.getTime(), timeZone);
+  const clock = new Date(date.getTime() + offset * UNIT_MS.m);
+  move(clock);
+  const under = new Date(clock.getTime() - offset * UNIT_MS.m);
+  // Further than a date reaches: no date, as on the clock of the browser
+  if (Number.isNaN(under.getTime())) return under;
+  const found = timeZoneOffset(under.getTime(), timeZone);
+  const moved = new Date(clock.getTime() - found * UNIT_MS.m);
+  countedWith.set(moved, found);
+  return moved;
+}
+
+function addOnClock(clock: Date, amount: number, unit: TimeUnit): void {
   switch (unit) {
     case 'y':
-      result.setFullYear(result.getFullYear() + amount);
+    case 'M': {
+      const month = clock.getUTCMonth() + (unit === 'y' ? amount * 12 : amount);
+      const last = new Date(clock.getTime());
+      last.setUTCMonth(month + 1, 0);
+      clock.setUTCMonth(month, Math.min(clock.getUTCDate(), last.getUTCDate()));
       break;
+    }
+    case 'w':
+      clock.setUTCDate(clock.getUTCDate() + amount * 7);
+      break;
+    case 'd':
+      clock.setUTCDate(clock.getUTCDate() + amount);
+      break;
+    default:
+      clock.setTime(clock.getTime() + amount * UNIT_MS[unit]);
+  }
+}
+
+function startOnClock(clock: Date, unit: TimeUnit, weekStart: number): void {
+  switch (unit) {
+    case 'y':
+      clock.setUTCMonth(0, 1);
+      clock.setUTCHours(0, 0, 0, 0);
+      break;
+    case 'M':
+      clock.setUTCDate(1);
+      clock.setUTCHours(0, 0, 0, 0);
+      break;
+    case 'w':
+      clock.setUTCDate(clock.getUTCDate() - ((clock.getUTCDay() - weekStart + 7) % 7));
+      clock.setUTCHours(0, 0, 0, 0);
+      break;
+    case 'd':
+      clock.setUTCHours(0, 0, 0, 0);
+      break;
+    case 'h':
+      clock.setUTCMinutes(0, 0, 0);
+      break;
+    case 'm':
+      clock.setUTCSeconds(0, 0);
+      break;
+    case 's':
+      clock.setUTCMilliseconds(0);
+      break;
+    default:
+  }
+}
+
+// A date and a time that name no zone
+const CLOCK_READING = /^(\d{4}|[+-]\d{6})-\d{2}(-\d{2})?[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/;
+
+/**
+ * The moment the clock of a named zone shows a date and time. A reading that clock shows twice is
+ * its first pass, and one it skips is counted on from before the change, as the original reads them.
+ */
+function readOnClock(text: string, timeZone: string): Date | undefined {
+  const reading = Date.parse(`${text}Z`);
+  // Not within two days of the first and the last date there are: the days before and after count
+  if (!(Math.abs(reading) < 8.64e15 - 2 * UNIT_MS.d)) return undefined;
+  const before = timeZoneOffset(reading - UNIT_MS.d, timeZone);
+  if (timeZoneOffset(reading - before * UNIT_MS.m, timeZone) === before) {
+    return new Date(reading - before * UNIT_MS.m);
+  }
+  const after = timeZoneOffset(reading + UNIT_MS.d, timeZone);
+  const fits = timeZoneOffset(reading - after * UNIT_MS.m, timeZone) === after;
+  return new Date(reading - (fits ? after : before) * UNIT_MS.m);
+}
+
+export function addUnits(date: Date, amount: number, unit: TimeUnit): Date {
+  const result = new Date(date.getTime());
+  // Nothing to add leaves the moment alone: setting the date it has would move a moment in the
+  // hour that repeats when clocks go back to the first pass of that hour
+  if (amount === 0) return result;
+  // Days and longer are counted on the clock: that of the zone the settings name, when they do
+  if (clockZone && UNIT_MS[unit] >= UNIT_MS.d) {
+    return onClock(date, clockZone, (clock) => addOnClock(clock, amount, unit));
+  }
+  switch (unit) {
+    // A year is twelve months, as the original counts it: a year from 29 February is 28 February
+    case 'y':
     case 'M': {
       const day = result.getDate();
       result.setDate(1);
-      result.setMonth(result.getMonth() + amount);
+      result.setMonth(result.getMonth() + (unit === 'y' ? amount * 12 : amount));
       const last = new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate();
       result.setDate(Math.min(day, last));
       break;
@@ -58,6 +179,7 @@ export function addUnits(date: Date, amount: number, unit: TimeUnit): Date {
 
 /** The first moment of the unit the date falls in; `weekStart` is 0 for Sunday */
 export function startOf(date: Date, unit: TimeUnit, weekStart = 0): Date {
+  if (clockZone) return onClock(date, clockZone, (clock) => startOnClock(clock, unit, weekStart));
   const result = new Date(date.getTime());
   switch (unit) {
     case 'y':
@@ -76,14 +198,15 @@ export function startOf(date: Date, unit: TimeUnit, weekStart = 0): Date {
       result.setHours(0, 0, 0, 0);
       break;
     case 'h':
-      result.setMinutes(0, 0, 0);
-      break;
     case 'm':
-      result.setSeconds(0, 0);
+    case 's': {
+      // Counted from the moment by the clock's offset then, as the original does: setting the
+      // minutes of a moment in the hour that repeats when clocks go back lands in its first pass
+      const size = UNIT_MS[unit];
+      const local = result.getTime() - result.getTimezoneOffset() * 60000;
+      result.setTime(result.getTime() - (((local % size) + size) % size));
       break;
-    case 's':
-      result.setMilliseconds(0);
-      break;
+    }
     default:
   }
   return result;
@@ -91,6 +214,14 @@ export function startOf(date: Date, unit: TimeUnit, weekStart = 0): Date {
 
 export function endOf(date: Date, unit: TimeUnit, weekStart = 0): Date {
   if (unit === 'ms') return new Date(date.getTime());
+  if (clockZone) {
+    // In one move, as the original makes it: the last reading before the next unit starts
+    return onClock(date, clockZone, (clock) => {
+      startOnClock(clock, unit, weekStart);
+      addOnClock(clock, 1, unit);
+      clock.setTime(clock.getTime() - 1);
+    });
+  }
   return new Date(addUnits(startOf(date, unit, weekStart), 1, unit).getTime() - 1);
 }
 
@@ -118,9 +249,14 @@ export function parseDateMath(text: string, options: DateMathOptions = {}): Date
     const split = input.indexOf('||');
     const base = split === -1 ? input : input.slice(0, split);
     math = split === -1 ? '' : input.slice(split + 2);
-    const parsed = /^\d+$/.test(base) ? new Date(Number(base)) : new Date(base);
+    // A date without a time is the start of that day on the clock, as the original reads it;
+    // JavaScript alone reads it as midnight UTC
+    const dated = /^(\d{4}|[+-]\d{6})-\d{2}(-\d{2})?$/.test(base) ? `${base}T00:00` : base;
+    const parsed = /^\d+$/.test(base) ? new Date(Number(base)) : new Date(dated);
     if (Number.isNaN(parsed.getTime())) return undefined;
-    date = parsed;
+    // The clock is that of the zone the settings name, when they do and the text names none
+    const zoned = clockZone && CLOCK_READING.test(dated) ? readOnClock(dated, clockZone) : undefined;
+    date = zoned ?? parsed;
   }
 
   let rest = math;
@@ -135,9 +271,12 @@ export function parseDateMath(text: string, options: DateMathOptions = {}): Date
     const rounding = /^\/(ms|[smhdwMy])/.exec(rest);
     if (rounding) {
       const unit = rounding[1] as TimeUnit;
-      date = options.roundUp
-        ? endOf(date, unit, options.weekStart)
-        : startOf(date, unit, options.weekStart);
+      // (to the millisecond there is nothing to round)
+      if (unit !== 'ms') {
+        date = options.roundUp
+          ? endOf(date, unit, options.weekStart)
+          : startOf(date, unit, options.weekStart);
+      }
       rest = rest.slice(rounding[0].length);
       continue;
     }
@@ -236,6 +375,7 @@ function partsOf(date: Date, timeZone?: string): Parts {
     format = new Intl.DateTimeFormat('en-US', {
       timeZone,
       hourCycle: 'h23',
+      era: 'short',
       year: 'numeric',
       month: 'numeric',
       day: 'numeric',
@@ -247,11 +387,17 @@ function partsOf(date: Date, timeZone?: string): Parts {
   }
   const fields: Record<string, number> = {};
   for (const part of format.formatToParts(date)) {
-    if (part.type !== 'literal') fields[part.type] = Number(part.value);
+    if (part.type === 'era') fields.era = part.value === 'BC' ? 1 : 0;
+    else if (part.type !== 'literal') fields[part.type] = Number(part.value);
   }
-  const asUtc = Date.UTC(fields.year, fields.month - 1, fields.day, fields.hour, fields.minute, fields.second);
+  // The years before the year 1 are counted backwards from it; and Date.UTC would read the years
+  // 0 to 99 as 1900 to 1999, so the year is set on its own
+  const year = fields.era ? 1 - fields.year : fields.year;
+  const asUtc = new Date(
+    Date.UTC(2000, fields.month - 1, fields.day, fields.hour, fields.minute, fields.second)
+  ).setUTCFullYear(year);
   return {
-    year: fields.year,
+    year,
     month: fields.month - 1,
     day: fields.day,
     weekday: new Date(asUtc).getUTCDay(),
@@ -276,10 +422,89 @@ function ordinal(value: number): string {
   return `${value}${['th', 'st', 'nd', 'rd'][value % 10] ?? 'th'}`;
 }
 
-const TOKENS =
-  /\[([^\]]*)\]|YYYY|YY|MMMM|MMM|MM|M|Do|DD|D|dddd|ddd|HH|H|hh|h|mm|m|ss|s|SSS|SS|S|A|a|ZZ|Z|X|x/g;
+// moment's zeroFill: the digits of a number padded to a length, after its sign or a plus asked for
+function zeroFill(value: number, length: number, forceSign = false): string {
+  const digits = String(Math.abs(value));
+  const sign = value >= 0 ? (forceSign ? '+' : '') : '-';
+  return `${sign}${'0'.repeat(Math.max(0, length - digits.length))}${digits}`;
+}
 
-/** A date written with the tokens of the product's date settings. `[text]` is kept as it is. */
+// The calendar's days, years and weeks as moment counts them
+function calendarDay(year: number, month: number, day: number): Date {
+  const date = new Date(0);
+  date.setUTCFullYear(year, month, day);
+  return date;
+}
+
+const daysInYear = (year: number) => ((year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 ? 366 : 365);
+
+const dayOfYear = (parts: Parts) =>
+  Math.round((calendarDay(parts.year, parts.month, parts.day).getTime() - calendarDay(parts.year, 0, 1).getTime()) / UNIT_MS.d) + 1;
+
+// Where the first week of a year starts: the week from day `dow` (0 is Sunday) that holds the
+// `doy`-th day before the end of its first week, as moment's firstWeekOffset finds it
+function firstWeekOffset(year: number, dow: number, doy: number): number {
+  const fwd = 7 + dow - doy;
+  return -((7 + calendarDay(year, 0, fwd).getUTCDay() - dow) % 7) + fwd - 1;
+}
+
+const weeksInYear = (year: number, dow: number, doy: number) =>
+  (daysInYear(year) - firstWeekOffset(year, dow, doy) + firstWeekOffset(year + 1, dow, doy)) / 7;
+
+function weekOfYear(parts: Parts, dow: number, doy: number): { week: number; year: number } {
+  const week = Math.floor((dayOfYear(parts) - firstWeekOffset(parts.year, dow, doy) - 1) / 7) + 1;
+  if (week < 1) return { week: week + weeksInYear(parts.year - 1, dow, doy), year: parts.year - 1 };
+  const weeks = weeksInYear(parts.year, dow, doy);
+  return week > weeks ? { week: week - weeks, year: parts.year + 1 } : { week, year: parts.year };
+}
+
+// The weeks of moment's English locale start on Sunday, the first one holding 1 January; ISO
+// weeks start on Monday, the first one holding 4 January
+const LOCALE_WEEK = { dow: 0, doy: 6 };
+const ISO_WEEK = { dow: 1, doy: 4 };
+
+// The long date formats of moment's English locale, written out before a format is read; each
+// lower-case one is its upper-case one with the shorter month, day and weekday
+const LONG_DATE_FORMATS: Record<string, string> = {
+  LTS: 'h:mm:ss A',
+  LT: 'h:mm A',
+  L: 'MM/DD/YYYY',
+  LL: 'MMMM D, YYYY',
+  LLL: 'MMMM D, YYYY h:mm A',
+  LLLL: 'dddd, MMMM D, YYYY h:mm A',
+  l: 'M/D/YYYY',
+  ll: 'MMM D, YYYY',
+  lll: 'MMM D, YYYY h:mm A',
+  llll: 'ddd, MMM D, YYYY h:mm A',
+};
+
+const LONG_DATE_TOKENS = /(\[[^[]*\])|(\\)?(LTS|LT|LL?L?L?|l{1,4})/g;
+
+const zoneNames = new Map<string, Intl.DateTimeFormat>();
+
+/** The short name of a zone at a moment ("EST"); none for the browser's own, as moment gives none */
+function zoneAbbreviation(date: Date, timeZone?: string): string {
+  if (!timeZone || timeZone === 'Browser') return '';
+  if (timeZone === 'UTC') return 'UTC';
+  let format = zoneNames.get(timeZone);
+  if (!format) {
+    format = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'short' });
+    zoneNames.set(timeZone, format);
+  }
+  return format.formatToParts(date).find((part) => part.type === 'timeZoneName')?.value ?? '';
+}
+
+// moment's tokens: a text in brackets, an escaped letter, the longest token at each place, or
+// any other letter, which is written as it is
+const TOKENS =
+  /(\[[^[]*\])|(\\)?([Hh]mm(ss)?|Mo|MM?M?M?|Do|DDDo|DD?D?D?|ddd?d?|do?|w[o|w]?|W[o|W]?|Qo?|N{1,5}|YYYYYY|YYYYY|YYYY|YY|y{2,4}|yo?|gg(ggg?)?|GG(GGG?)?|e|E|a|A|hh?|HH?|kk?|mm?|ss?|S{1,9}|x|X|zz?|ZZ?|.)/g;
+
+/**
+ * A date written with a format of moment's tokens, as the product's date settings and formats
+ * name them, in moment's English locale: `[text]` and an escaped letter are written as they are.
+ * The zone's abbreviation (z, zz) is the browser's short name of the zone, which is moment's in UTC
+ * and the US zones; there is none for the browser's own zone, as moment gives none.
+ */
 export function formatDate(date: Date, pattern: string, timeZone?: string): string {
   if (Number.isNaN(date.getTime())) return 'Invalid date';
   const parts = partsOf(date, timeZone);
@@ -287,51 +512,140 @@ export function formatDate(date: Date, pattern: string, timeZone?: string): stri
     const minutes = Math.abs(parts.offset);
     return `${parts.offset < 0 ? '-' : '+'}${pad(Math.floor(minutes / 60))}${separator}${pad(minutes % 60)}`;
   };
-  return pattern.replace(TOKENS, (token, literal: string | undefined) => {
-    if (literal !== undefined) return literal;
+  const eraYear = parts.year > 0 ? parts.year : 1 - parts.year;
+  const hour12 = parts.hour % 12 || 12;
+  let expanded = pattern;
+  // moment writes the long formats out again while they name more of them, six times at most
+  for (let round = 0; round < 6; round += 1) {
+    const next = expanded.replace(LONG_DATE_TOKENS, (match) => LONG_DATE_FORMATS[match] ?? match);
+    if (next === expanded) break;
+    expanded = next;
+  }
+  return expanded.replace(TOKENS, (match: string, literal: string | undefined, escaped: string | undefined, token: string) => {
+    if (literal !== undefined) return literal.replace(/^\[|\]$/g, '');
+    // moment drops each backslash it reads, an escaped one too
+    if (escaped !== undefined) return token.replace(/\\/g, '');
+    if (/^S{4,9}$/.test(token)) return zeroFill(parts.ms * 10 ** (token.length - 3), token.length);
     switch (token) {
+      case 'YYYYYY':
+        return zeroFill(parts.year, 6, true);
+      case 'YYYYY':
+        return zeroFill(parts.year, 5);
       case 'YYYY':
-        return String(parts.year);
+        return zeroFill(parts.year, 4);
       case 'YY':
-        return pad(parts.year % 100);
+        return zeroFill(parts.year % 100, 2);
+      case 'Y':
+        return parts.year <= 9999 ? zeroFill(parts.year, 4) : `+${parts.year}`;
+      case 'N':
+      case 'NN':
+      case 'NNN':
+      case 'NNNNN':
+        return parts.year > 0 ? 'AD' : 'BC';
+      case 'NNNN':
+        return parts.year > 0 ? 'Anno Domini' : 'Before Christ';
+      case 'y':
+        return String(eraYear);
+      case 'yo':
+        return ordinal(eraYear);
+      case 'yy':
+      case 'yyy':
+      case 'yyyy':
+        return zeroFill(eraYear, token.length);
+      case 'gg':
+        return zeroFill(weekOfYear(parts, LOCALE_WEEK.dow, LOCALE_WEEK.doy).year % 100, 2);
+      case 'gggg':
+      case 'ggggg':
+        return zeroFill(weekOfYear(parts, LOCALE_WEEK.dow, LOCALE_WEEK.doy).year, token.length);
+      case 'GG':
+        return zeroFill(weekOfYear(parts, ISO_WEEK.dow, ISO_WEEK.doy).year % 100, 2);
+      case 'GGGG':
+      case 'GGGGG':
+        return zeroFill(weekOfYear(parts, ISO_WEEK.dow, ISO_WEEK.doy).year, token.length);
+      case 'Q':
+        return String(Math.floor(parts.month / 3) + 1);
+      case 'Qo':
+        return ordinal(Math.floor(parts.month / 3) + 1);
       case 'MMMM':
         return MONTHS[parts.month];
       case 'MMM':
         return MONTHS[parts.month].slice(0, 3);
       case 'MM':
-        return pad(parts.month + 1);
+        return zeroFill(parts.month + 1, 2);
+      case 'Mo':
+        return ordinal(parts.month + 1);
       case 'M':
         return String(parts.month + 1);
+      case 'w':
+        return String(weekOfYear(parts, LOCALE_WEEK.dow, LOCALE_WEEK.doy).week);
+      case 'wo':
+        return ordinal(weekOfYear(parts, LOCALE_WEEK.dow, LOCALE_WEEK.doy).week);
+      case 'ww':
+        return zeroFill(weekOfYear(parts, LOCALE_WEEK.dow, LOCALE_WEEK.doy).week, 2);
+      case 'W':
+        return String(weekOfYear(parts, ISO_WEEK.dow, ISO_WEEK.doy).week);
+      case 'Wo':
+        return ordinal(weekOfYear(parts, ISO_WEEK.dow, ISO_WEEK.doy).week);
+      case 'WW':
+        return zeroFill(weekOfYear(parts, ISO_WEEK.dow, ISO_WEEK.doy).week, 2);
+      case 'DDDD':
+        return zeroFill(dayOfYear(parts), 3);
+      case 'DDDo':
+        return ordinal(dayOfYear(parts));
+      case 'DDD':
+        return String(dayOfYear(parts));
       case 'Do':
         return ordinal(parts.day);
       case 'DD':
-        return pad(parts.day);
+        return zeroFill(parts.day, 2);
       case 'D':
         return String(parts.day);
       case 'dddd':
         return DAYS[parts.weekday];
       case 'ddd':
         return DAYS[parts.weekday].slice(0, 3);
+      case 'dd':
+        return DAYS[parts.weekday].slice(0, 2);
+      case 'do':
+        return ordinal(parts.weekday);
+      case 'd':
+        return String(parts.weekday);
+      case 'e':
+        return String((parts.weekday - LOCALE_WEEK.dow + 7) % 7);
+      case 'E':
+        return String(parts.weekday || 7);
       case 'HH':
-        return pad(parts.hour);
+        return zeroFill(parts.hour, 2);
       case 'H':
         return String(parts.hour);
       case 'hh':
-        return pad(parts.hour % 12 || 12);
+        return zeroFill(hour12, 2);
       case 'h':
-        return String(parts.hour % 12 || 12);
+        return String(hour12);
+      case 'kk':
+        return zeroFill(parts.hour || 24, 2);
+      case 'k':
+        return String(parts.hour || 24);
+      case 'hmm':
+        return `${hour12}${zeroFill(parts.minute, 2)}`;
+      case 'hmmss':
+        return `${hour12}${zeroFill(parts.minute, 2)}${zeroFill(parts.second, 2)}`;
+      case 'Hmm':
+        return `${parts.hour}${zeroFill(parts.minute, 2)}`;
+      case 'Hmmss':
+        return `${parts.hour}${zeroFill(parts.minute, 2)}${zeroFill(parts.second, 2)}`;
       case 'mm':
-        return pad(parts.minute);
+        return zeroFill(parts.minute, 2);
       case 'm':
         return String(parts.minute);
       case 'ss':
-        return pad(parts.second);
+        return zeroFill(parts.second, 2);
       case 's':
         return String(parts.second);
       case 'SSS':
-        return pad(parts.ms, 3);
+        return zeroFill(parts.ms, 3);
       case 'SS':
-        return pad(Math.floor(parts.ms / 10));
+        return zeroFill(Math.floor(parts.ms / 10), 2);
       case 'S':
         return String(Math.floor(parts.ms / 100));
       case 'A':
@@ -342,12 +656,16 @@ export function formatDate(date: Date, pattern: string, timeZone?: string): stri
         return offset(':');
       case 'ZZ':
         return offset('');
+      case 'z':
+      case 'zz':
+        return zoneAbbreviation(date, timeZone);
       case 'X':
         return String(Math.floor(date.getTime() / 1000));
       case 'x':
         return String(date.getTime());
       default:
-        return token;
+        // Any other letter as it is, a lone backslash left out, as moment writes them
+        return match.replace(/\\/g, '');
     }
   });
 }

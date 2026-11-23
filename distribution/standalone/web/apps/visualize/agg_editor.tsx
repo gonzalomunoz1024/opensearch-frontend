@@ -26,10 +26,13 @@ import {
   aggTypeOptions,
   allowsStrings,
   changeAggType,
+  fallbackMetric,
   nestedAggs,
   nestedCount,
+  orderByParams,
   orderableMetric,
   paramProblems,
+  parentPipelineMetric,
   topAggregates,
   isValidDateMath,
   isValidIpField,
@@ -815,18 +818,18 @@ function TopAggregateParam({ p }: { p: ParamEditorProps }) {
 function OrderByParam({ p }: { p: ParamEditorProps }) {
   const { agg, params, set, touch, invalid, metricAggs, context, aggs } = p;
   const options = [
-    ...metricAggs.map((metric) => ({ value: metric.id, label: `Metric: ${aggLabel(metric, { ...context, aggs })}`, disabled: !orderableMetric(metric) && metric.type !== 'percentile_ranks' })),
+    ...metricAggs.map((metric) => ({ value: metric.id, label: `Metric: ${aggLabel(metric, { ...context, aggs })}`, disabled: !orderableMetric(metric) })),
     { value: 'custom', label: 'Custom metric' },
     { value: '_key', label: 'Alphabetical' },
   ];
   const value = String(params.orderBy ?? '');
-  // A metric that is no longer asked for gives way to the first one there is, or to the alphabet
+  // A metric that is no longer asked for, or that cannot order the terms, gives way to the alphabet
+  const metrics = metricAggs.map((metric) => `${metric.id}:${metric.type}`).join();
   useEffect(() => {
-    if (!value || value === 'custom' || value === '_key' || metricAggs.some((metric) => metric.id === value)) return;
-    const first = metricAggs.find((metric) => orderableMetric(metric));
-    set({ orderBy: first ? first.id : '_key' });
+    const fallback = fallbackMetric(value, metricAggs, orderableMetric, '_key');
+    if (fallback) set({ orderBy: fallback });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, metricAggs.map((metric) => metric.id).join()]);
+  }, [value, metrics]);
   return (
     <ParamRow label="Order by" labelFor={`visEditorOrderBy${agg.id}`} invalid={invalid('orderBy')}>
       <SelectControl
@@ -834,9 +837,7 @@ function OrderByParam({ p }: { p: ParamEditorProps }) {
         value={value}
         options={options}
         invalid={invalid('orderBy')}
-        onChange={(orderBy) =>
-          set({ orderBy, orderAgg: orderBy === 'custom' ? (params.orderAgg ?? nestedCount(`${agg.id}-orderAgg`, 'orderAgg')) : params.orderAgg })
-        }
+        onChange={(orderBy) => set(orderByParams(agg.id, orderBy, params.orderAgg))}
         onBlur={() => touch('orderBy')}
         testId={`visEditorOrderBy${agg.id}`}
       />
@@ -847,19 +848,29 @@ function OrderByParam({ p }: { p: ParamEditorProps }) {
 function MetricAggParam({ p }: { p: ParamEditorProps }) {
   const { agg, params, set, touch, invalid, metricAggs, context, aggs } = p;
   const options = [
-    ...metricAggs.filter((metric) => metric.type !== agg.type).map((metric) => ({ value: metric.id, label: aggLabel(metric, { ...context, aggs }) })),
+    ...metricAggs
+      .filter((metric) => metric.type !== agg.type)
+      .map((metric) => ({ value: metric.id, label: `Metric: ${aggLabel(metric, { ...context, aggs })}`, disabled: !parentPipelineMetric(metric) })),
     { value: 'custom', label: 'Custom metric' },
   ];
+  const value = String(params.metricAgg ?? '');
+  const choose = (metricAgg: string) =>
+    set({ metricAgg, customMetric: metricAgg === 'custom' ? (params.customMetric ?? nestedCount(`${agg.id}-metric`)) : undefined });
+  // A metric that is no longer asked for, or that a pipeline cannot work on, gives way to a custom one
+  const metrics = metricAggs.map((metric) => `${metric.id}:${metric.type}`).join();
+  useEffect(() => {
+    const fallback = fallbackMetric(value, metricAggs, parentPipelineMetric, 'custom');
+    if (fallback) choose(fallback);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, metrics]);
   return (
     <ParamRow label="Metric" labelFor={`visEditorSubAggMetric${agg.id}`} invalid={invalid('metricAgg')}>
       <SelectControl
         id={`visEditorSubAggMetric${agg.id}`}
-        value={String(params.metricAgg ?? '')}
+        value={value}
         options={options}
         invalid={invalid('metricAgg')}
-        onChange={(metricAgg) =>
-          set({ metricAgg, customMetric: metricAgg === 'custom' ? (params.customMetric ?? nestedCount(`${agg.id}-metric`)) : undefined })
-        }
+        onChange={choose}
         onBlur={() => touch('metricAgg')}
         testId={`visEditorSubAggMetric${agg.id}`}
       />

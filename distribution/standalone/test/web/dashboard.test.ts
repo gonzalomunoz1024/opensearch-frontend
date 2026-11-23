@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { cloneBase, cloneTitle, fullAppState, sameQuery } from '../../web/apps/dashboard/app_state';
+import { cloneBase, cloneTitle, fullAppState, ownTime, sameQuery } from '../../web/apps/dashboard/app_state';
 import {
   MIN_PANEL,
   cellUnder,
@@ -38,6 +38,7 @@ import {
 } from '../../web/apps/dashboard/model';
 import { existsFilter, phraseFilter, uniqueFilters } from '../../web/lib/query';
 import type { Filter } from '../../web/lib/types';
+import { decodeState, encodeState } from '../../web/lib/url';
 import { makeTurns, waitTurn } from '../../web/vis/turns';
 
 const at = (items: GridItem[], id: string) => {
@@ -384,6 +385,60 @@ describe('a dashboard as it is saved', () => {
   });
 });
 
+// What OpenSearch Dashboards 3.9.0 makes of the same panels when it opens such a dashboard and saves it
+describe('a dashboard saved in an older form', () => {
+  const read = (panels: unknown[]) =>
+    dashboardFromSavedObject({ id: 'old', attributes: { title: 'Old', panelsJSON: JSON.stringify(panels) } }).panels;
+
+  it('brings 6.1 and 6.2 panels from their 12 columns to the 48 of today', () => {
+    const panels = read([
+      { gridData: { x: 0, y: 0, w: 6, h: 3, i: '1' }, panelIndex: 1, type: 'visualization', id: 'vis-1', version: '6.1.0' },
+      {
+        gridData: { x: 6, y: 3, w: 6, h: 3, i: '2' },
+        panelIndex: 2,
+        type: 'visualization',
+        id: 'vis-2',
+        version: '6.2.4',
+        embeddableConfig: { vis: { legendOpen: false } },
+      },
+      { gridData: { x: 24, y: 0, w: 24, h: 15, i: '3' }, panelIndex: 3, type: 'visualization', id: 'vis-3', version: '6.3.0' },
+    ]);
+    assert.deepEqual(
+      panels.map((item) => item.gridData),
+      [
+        { x: 0, y: 0, w: 24, h: 15, i: '1' },
+        { x: 24, y: 15, w: 24, h: 15, i: '2' },
+        { x: 24, y: 0, w: 24, h: 15, i: '3' },
+      ]
+    );
+    assert.deepEqual(panels[1].embeddableConfig, { vis: { legendOpen: false } });
+  });
+
+  it("keeps a saved search's columns and sort, which panels before 6.4 held beside their settings", () => {
+    const panels = read([
+      { col: 1, row: 5, size_x: 12, size_y: 4, panelIndex: 3, type: 'search', id: 'search-1', columns: ['category'], sort: ['order_date', 'asc'] },
+      { gridData: { x: 6, y: 0, w: 6, h: 3, i: '2' }, panelIndex: 2, type: 'search', id: 'search-1', version: '6.1.0', sort: ['order_date', 'asc'] },
+      {
+        gridData: { x: 0, y: 0, w: 24, h: 15, i: '4' },
+        panelIndex: 4,
+        type: 'search',
+        id: 'search-1',
+        version: '6.3.0',
+        embeddableConfig: { some: 1 },
+        columns: ['a'],
+        sort: ['b', 'desc'],
+      },
+      { gridData: { x: 0, y: 0, w: 24, h: 15, i: '5' }, panelIndex: '5', type: 'search', id: 'search-1', version: '7.2.0', columns: ['a'] },
+    ]);
+    assert.deepEqual(panels[0].gridData, { x: 0, y: 20, w: 48, h: 20, i: '3' });
+    assert.deepEqual(panels[0].embeddableConfig, { columns: ['category'], sort: ['order_date', 'asc'] });
+    assert.deepEqual(panels[1].embeddableConfig, { sort: ['order_date', 'asc'] });
+    assert.deepEqual(panels[2].embeddableConfig, { some: 1, columns: ['a'], sort: ['b', 'desc'] });
+    // From 6.4 on they are among the settings already; what is beside them is not read
+    assert.deepEqual(panels[3].embeddableConfig, {});
+  });
+});
+
 describe('a dashboard in the address', () => {
   it('carries its panels as the original does, with their version', () => {
     const url = panelsToUrl([panel('a', 0, 0, { title: 'Own' })]);
@@ -400,6 +455,16 @@ describe('a dashboard in the address', () => {
     ]);
     assert.deepEqual(panelsFromUrl(url), [panel('a', 0, 0, { title: 'Own' })]);
     assert.equal(panelsFromUrl('not panels'), undefined);
+  });
+
+  it('is not changed by going through the address, which sorts the keys of its settings', () => {
+    // As a map panel of [eCommerce] is saved: the zoom before the centre
+    const saved = [panel('11', 0, 0, { embeddableConfig: { mapZoom: 2, mapCenter: [28.304380682962783, -22.148437500000004], vis: { b: null, a: 1 } } })];
+    const read = panelsFromUrl(decodeState<{ panels: unknown }>(encodeState({ panels: panelsToUrl(saved) })).panels);
+    assert.deepEqual(Object.keys(read?.[0].embeddableConfig ?? {}), ['mapCenter', 'mapZoom', 'vis']);
+    assert.equal(panelsDiffer(read ?? [], saved), false);
+    const moved = [panel('11', 0, 0, { embeddableConfig: { mapZoom: 3, mapCenter: [28.304380682962783, -22.148437500000004], vis: { b: null, a: 1 } } })];
+    assert.equal(panelsDiffer(moved, saved), true);
   });
 
   it('holds the whole state once open, the panels only while editing', () => {
@@ -425,6 +490,29 @@ describe('a dashboard in the address', () => {
   it('compares queries by their text and language', () => {
     assert.equal(sameQuery({ query: 'a', language: 'kuery' }, { language: 'kuery', query: 'a' }), true);
     assert.equal(sameQuery({ query: 'a', language: 'kuery' }, { query: 'a', language: 'lucene' }), false);
+  });
+});
+
+describe("a dashboard's own time", () => {
+  // As [Flights] is saved: the interval with the picker's own fields beside the pause and value
+  const kept = {
+    timeRestore: true,
+    timeFrom: 'now-7d',
+    timeTo: 'now',
+    refreshInterval: { display: '15 minutes', pause: false, section: 2, value: 900000 },
+  };
+
+  it('comes with the dashboard, the interval as the time filter keeps it', () => {
+    assert.deepEqual(ownTime(kept), { time: { from: 'now-7d', to: 'now' }, refreshInterval: { pause: false, value: 900000 } });
+    assert.deepEqual(ownTime({ ...kept, timeRestore: false }), {});
+    assert.deepEqual(ownTime({ ...kept, refreshInterval: { pause: false, value: 0 } }).refreshInterval, { pause: true, value: 0 });
+  });
+
+  it('gives way to what the address named, each part on its own', () => {
+    // An address with `_g=()` or `_g=(filters:!())` names no time: the dashboard's is taken
+    assert.deepEqual(ownTime(kept, {}).time, { from: 'now-7d', to: 'now' });
+    assert.deepEqual(ownTime(kept, { time: { from: 'now-1h', to: 'now' } }), { refreshInterval: { pause: false, value: 900000 } });
+    assert.deepEqual(ownTime(kept, { refreshInterval: { pause: false, value: 5000 } }), { time: { from: 'now-7d', to: 'now' } });
   });
 });
 

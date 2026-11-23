@@ -76,6 +76,7 @@
   padding: var(--space-8) var(--space-4);
 }
 
+/* A heading only read aloud takes the font around it, as the original's reset gives every heading */
 .homScreenReaderOnly {
   position: absolute;
   width: 1px;
@@ -83,6 +84,7 @@
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+  font: inherit;
 }
 
 /* The product's panel stands 24 px over the header's line, as the original's solutions do */
