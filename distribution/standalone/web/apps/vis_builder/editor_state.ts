@@ -12,7 +12,7 @@ import { flattenHit, type RawHit } from '../../lib/docs';
 import type { Field, IndexPattern } from '../../lib/types';
 import { decodeState } from '../../lib/url';
 import type { UiState } from '../../lib/vis';
-import { FIELD_TYPES, PARENT_PIPELINES, SIBLING_PIPELINES, nextAggId } from '../visualize/defaults';
+import { FIELD_TYPES, PARENT_PIPELINES, SIBLING_PIPELINES, nextAggId, orderableMetric } from '../visualize/defaults';
 import {
   VIS_BUILDER_TYPES,
   visBuilderType,
@@ -209,6 +209,17 @@ export function withDraft(state: AppState, draft: AggConfig | undefined): AppSta
     ...state,
     visualization: { ...state.visualization, activeVisualization: draft ? { ...rest, draftAgg: draft } : rest },
   };
+}
+
+/**
+ * An aggregation as the panel that edits it opens it. The original's editor gives terms that are
+ * ordered by nothing the first metric they can be ordered by, or the alphabet when there is none
+ * (the sample data's objects are saved without one).
+ */
+export function draftForEditing(aggs: AggConfig[], agg: AggConfig): AggConfig {
+  if (agg.type !== 'terms' || agg.params?.orderBy) return agg;
+  const metric = aggs.find((candidate) => candidate.schema === 'metric' && candidate.enabled !== false && orderableMetric(candidate));
+  return { ...agg, params: { ...agg.params, orderBy: metric ? metric.id : '_key' } };
 }
 
 /** What the panel that edits an aggregation keeps, a moment after each valid change */

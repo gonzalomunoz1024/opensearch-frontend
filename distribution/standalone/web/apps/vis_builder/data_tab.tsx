@@ -44,6 +44,7 @@ import {
   newDraft,
   schemaAggTypes,
   withAggs,
+  draftForEditing,
   withDraft,
   withEditorError,
   withSavedDraft,
@@ -606,7 +607,7 @@ function ConfigPanel({
               context={context}
               dnd={dnd}
               onAdd={() => update((current) => withDraft(current, newDraft(current.visualization.activeVisualization?.aggConfigParams ?? [], schema)))}
-              onEdit={(agg) => update((current) => withDraft(current, agg))}
+              onEdit={(agg) => update((current) => withDraft(current, draftForEditing(current.visualization.activeVisualization?.aggConfigParams ?? [], agg)))}
               onDelete={(id) =>
                 update((current) =>
                   withAggs(

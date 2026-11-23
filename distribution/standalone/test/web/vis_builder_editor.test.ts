@@ -6,6 +6,7 @@ import {
   afterChange,
   aggTypeFor,
   aggregationsProblem,
+  draftForEditing,
   droppedAggs,
   fieldDetails,
   lastAddressIn,
@@ -161,6 +162,27 @@ describe('the VisBuilder page state', () => {
     assert.deepEqual(added.visualization.activeVisualization?.draftAgg, average);
     const sum = { ...COUNT, type: 'sum', params: { field: 'taxful_total_price' } };
     assert.deepEqual(withSavedDraft(withDraft(state, sum)).visualization.activeVisualization?.aggConfigParams, [sum, ORDER_DATE]);
+  });
+});
+
+describe('an aggregation opened in the panel that edits it', () => {
+  const count: AggConfig = { id: '4', enabled: true, type: 'count', schema: 'metric', params: {} };
+  const median: AggConfig = { id: '2', enabled: true, type: 'median', schema: 'metric', params: { field: 'bytes' } };
+  const terms: AggConfig = { id: '6', enabled: true, type: 'terms', schema: 'group', params: { field: 'response.keyword', order: 'desc', size: 5 } };
+
+  it('gives terms ordered by nothing the first metric they can be ordered by', () => {
+    assert.deepEqual(draftForEditing([median, count, terms], terms).params, { field: 'response.keyword', order: 'desc', size: 5, orderBy: '4' });
+  });
+
+  it('orders them by the alphabet when no metric can order them', () => {
+    assert.equal(draftForEditing([median, terms], terms).params?.orderBy, '_key');
+    assert.equal(draftForEditing([{ ...count, enabled: false }, terms], terms).params?.orderBy, '_key');
+  });
+
+  it('leaves an order that is set, and every other aggregation, as they are', () => {
+    const custom = { ...terms, params: { ...terms.params, orderBy: 'custom' } };
+    assert.equal(draftForEditing([count, custom], custom), custom);
+    assert.equal(draftForEditing([count, terms], count), count);
   });
 });
 
