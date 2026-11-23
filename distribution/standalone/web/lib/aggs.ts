@@ -203,7 +203,9 @@ export function dateInterval(agg: AggConfig, context: AggContext): Interval & { 
   const written = requested === 'auto' ? undefined : normalizedInterval(requested);
   if (written) requested = `${Number.parseFloat(requested) || 1}${/(ms|[smhdwMy])$/.exec(requested.trim())?.[1] ?? ''}`;
   const range = context.timeRange;
-  const duration = range ? range.to.getTime() - range.from.getTime() : 0;
+  // As the original's TimeBuckets, whose setBounds sorts the two ends: a range typed the other way
+  // round is as long, and not a length below nothing that made buckets of a millisecond
+  const duration = range ? Math.abs(range.to.getTime() - range.from.getTime()) : 0;
   if ((requested === 'auto' || !parseInterval(requested)) && !range) {
     return { ...parseInterval('1d')!, scaled: false };
   }

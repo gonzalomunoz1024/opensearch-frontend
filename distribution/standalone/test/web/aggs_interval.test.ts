@@ -93,6 +93,15 @@ describe('the interval a date histogram asks OpenSearch for', () => {
     assert.equal(widened.asked, undefined);
     assert.equal(dateIntervalProblem(dates('2w'), { ...context, timeRange: { from: new Date('1966-12-31T00:00:00Z'), to: new Date('2026-12-31T00:00:00Z') } }), undefined);
   });
+
+  it('chooses the same interval for a time range typed the other way round', () => {
+    // The original sorts the ends first (TimeBuckets.setBounds): a week either way is 3 hours
+    const week = { from: new Date('2026-11-16T00:00:00Z'), to: new Date('2026-11-23T00:00:00Z') };
+    const forward = dateInterval(dates('auto'), { ...context, timeRange: week });
+    const backward = dateInterval(dates('auto'), { ...context, timeRange: { from: week.to, to: week.from } });
+    assert.equal(forward.expression, '3h');
+    assert.deepEqual(backward, forward);
+  });
 });
 
 describe('a request the original refuses to write', () => {
