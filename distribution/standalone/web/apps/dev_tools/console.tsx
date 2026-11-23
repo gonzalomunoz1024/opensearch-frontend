@@ -2,165 +2,56 @@
 
 /*
  * The console of Dev Tools: requests to OpenSearch written on the left, the answers on the
- * right. What is typed, the history and the settings are kept in the browser under the names
- * OpenSearch Dashboards uses, so a browser that had the one has its text in the other.
+ * right, as OpenSearch Dashboards lays it out. What is typed, the history and the settings are
+ * kept in the browser under the names OpenSearch Dashboards uses (see console_storage).
  */
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
-import { Badge, Button, CallOut, cx } from '../../components/basic';
-import { CodeEditor, SuggestList, type CodeEditorHandle } from '../../components/code_editor';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { Button, CallOut, cx } from '../../components/basic';
 import { Checkbox, FormRow, NumberField, RadioGroup, Switch } from '../../components/form';
 import { Icon } from '../../components/icon';
-import { ConfirmModal, Flyout, MenuButton, Modal, copyText, downloadFile } from '../../components/overlay';
+import { ConfirmModal, Flyout, Modal, Popover, Portal, Tooltip, downloadFile } from '../../components/overlay';
 import { formatDate } from '../../lib/dates';
 import { services } from '../../services';
+import { trackLoading } from '../../shell/loading_count';
+import { buildMatcher, documentationFor, type ApiSpec } from './console_docs';
+import { ConsoleEditor, ConsoleSuggestions, type ConsoleEditorHandle } from './console_editor';
 import {
-  DEFAULT_TEXT,
   autoIndent,
+  blocksBetween,
   bodyOf,
   describePast,
+  expandToRequests,
+  failedAnswer,
   formatAnswer,
+  historyKey,
   insertRequest,
   lineOf,
   looksLikeCurl,
+  outputOf,
   parseCurl,
-  parseRequests,
-  replaceRequest,
+  placeActions,
+  readConsole,
+  requestAt,
+  requestEdge,
   requestOffsets,
-  requestsInRange,
+  requestsBetween,
   suggest,
   toCurl,
-  tokenizeAnswer,
-  tokenizeConsole,
+  typedOnLine,
+  type ActionsPlace,
+  type Answer,
   type ClusterNames,
   type ConsoleRequest,
+  type ConsoleText,
   type PastRequest,
   type Suggestions,
 } from './console_model';
+import { autocompleteRequests, consoleStorage, type ConsoleSettings, type TextObject } from './console_storage';
 
-// --- What the browser keeps --------------------------------------------------------------------
-
-const PREFIX = 'sense:';
-
-const stored = {
-  get<T>(key: string, fallback: T): T {
-    try {
-      const raw = window.localStorage.getItem(PREFIX + key);
-      return raw === null ? fallback : (JSON.parse(raw) as T);
-    } catch {
-      return fallback;
-    }
-  },
-  set(key: string, value: unknown) {
-    try {
-      window.localStorage.setItem(PREFIX + key, JSON.stringify(value));
-    } catch {
-      // a browser that keeps nothing still has a console
-    }
-  },
-  remove(key: string) {
-    try {
-      window.localStorage.removeItem(PREFIX + key);
-    } catch {
-      // nothing to remove
-    }
-  },
-  keys(): string[] {
-    try {
-      return Object.keys(window.localStorage)
-        .filter((key) => key.startsWith(PREFIX))
-        .map((key) => key.slice(PREFIX.length));
-    } catch {
-      return [];
-    }
-  },
-};
-
-interface TextObject {
-  id: string;
-  createdAt: number;
-  updatedAt: number;
-  text: string;
-}
-
-const TEXT_PREFIX = 'console_local_text';
-
-function newId(): string {
-  const random = () => Math.floor(Math.random() * 0x100000000).toString(16).padStart(8, '0');
-  return `${random()}-${random().slice(0, 4)}-4${random().slice(0, 3)}-a${random().slice(0, 3)}-${random()}${random().slice(0, 4)}`;
-}
-
-function loadTextObject(): TextObject {
-  const all = stored
-    .keys()
-    .filter((key) => key.includes(TEXT_PREFIX))
-    .map((key) => stored.get<TextObject | undefined>(key, undefined))
-    .filter((object): object is TextObject => typeof object?.text === 'string')
-    .sort((a, b) => a.createdAt - b.createdAt);
-  if (all[0]) return all[0];
-  const fresh: TextObject = { id: newId(), createdAt: Date.now(), updatedAt: Date.now(), text: DEFAULT_TEXT };
-  stored.set(`${TEXT_PREFIX}_${fresh.id}`, fresh);
-  return fresh;
-}
-
-const saveTextObject = (object: TextObject) => stored.set(`${TEXT_PREFIX}_${object.id}`, object);
-
-interface ConsoleSettings {
-  fontSize: number;
-  wrapMode: boolean;
-  tripleQuotes: boolean;
-  autocomplete: { fields: boolean; indices: boolean; templates: boolean };
-  polling: boolean;
-}
-
-const loadSettings = (): ConsoleSettings => ({
-  fontSize: Number(stored.get<number | string>('font_size', 14)) || 14,
-  wrapMode: stored.get<boolean>('wrap_mode', true) !== false,
-  tripleQuotes: stored.get<boolean>('triple_quotes', true) !== false,
-  autocomplete: { fields: true, indices: true, templates: true, ...stored.get('autocomplete_settings', {}) },
-  polling: Boolean(stored.get('console_polling', true)),
-});
-
-function saveSettings(settings: ConsoleSettings) {
-  stored.set('font_size', settings.fontSize);
-  stored.set('wrap_mode', settings.wrapMode);
-  stored.set('triple_quotes', settings.tripleQuotes);
-  stored.set('autocomplete_settings', settings.autocomplete);
-  stored.set('console_polling', settings.polling);
-}
-
-const historyKeys = () =>
-  stored
-    .keys()
-    .filter((key) => key.indexOf('hist_elem') === 0)
-    .sort()
-    .reverse();
-
-const loadHistory = (): PastRequest[] =>
-  historyKeys()
-    .map((key) => stored.get<PastRequest | undefined>(key, undefined))
-    .filter((request): request is PastRequest => Boolean(request?.endpoint));
-
-let lastHistoryTime = 0;
-function addToHistory(endpoint: string, method: string, data: string) {
-  // Only the 500 latest are kept
-  for (const key of historyKeys().slice(500)) stored.remove(key);
-  lastHistoryTime = Math.max(Date.now(), lastHistoryTime + 1);
-  stored.set(`hist_elem_${lastHistoryTime}`, { time: lastHistoryTime, endpoint, method, data });
-}
+const storage = consoleStorage();
 
 // --- Sending -----------------------------------------------------------------------------------
-
-interface Answer {
-  ok: boolean;
-  method: string;
-  path: string;
-  data: string;
-  statusCode?: number;
-  statusText?: string;
-  timeMs: number;
-  value: string;
-}
 
 const REASONS: Record<number, string> = {
   200: 'OK',
@@ -184,40 +75,53 @@ const REASONS: Record<number, string> = {
   504: 'Gateway Timeout',
 };
 
-async function send(request: ConsoleRequest, several: boolean, tripleQuotes: boolean, signal: AbortSignal): Promise<Answer> {
+/**
+ * A request to the console's proxy, read to its end. The header's loading indicator counts it
+ * until then, as the original's console asks through the http service, which counts its requests.
+ */
+export function askProxy(query: URLSearchParams, init: RequestInit): Promise<{ response: Response; text: string }> {
+  const asked = fetch(`${services.http.prepend('/api/console/proxy')}?${query.toString()}`, { ...init, credentials: 'same-origin' });
+  return trackLoading(asked.then(async (response) => ({ response, text: await response.text() })));
+}
+
+/** Sends one request through the console's proxy, as the original does */
+async function send(request: ConsoleRequest, several: boolean, signal: AbortSignal): Promise<Answer> {
   const data = bodyOf(request);
-  const heading = several ? `${request.method} ${request.url}` : undefined;
   const base = { method: request.method, path: request.url, data };
   const started = Date.now();
+  const titled = (value: string) => (several ? `# ${request.method} ${request.url}\n${value}` : value);
   try {
     const query = new URLSearchParams({ path: request.url, method: request.method });
-    const response = await fetch(`${services.http.prepend('/api/console/proxy')}?${query.toString()}`, {
+    const asked = await askProxy(query, {
       method: 'POST',
       headers: { 'osd-xsrf': 'true', 'content-type': 'application/json' },
       body: data || undefined,
-      credentials: 'same-origin',
       signal,
     });
-    const text = await response.text();
+    const response = asked.response;
     const status = response.status;
-    // Deleting an index that is not there, say, is an answer and not a failure
-    const ok = (status >= 200 && status < 300) || status === 404;
+    const statusText = response.statusText || REASONS[status] || '';
+    // A HEAD request's answer is the proxy's own text, "200 - true", as the original's proxy writes it
+    const text = asked.text;
     const contentType = response.headers.get('content-type') ?? 'text/plain';
-    const value =
-      text === '' && !ok
-        ? formatAnswer(`Request failed to get to the server (status code: ${status})`, 'text/plain', { heading })
-        : formatAnswer(text, contentType, { warnings: ok ? response.headers.get('warning') : null, tripleQuotes, heading });
-    return { ...base, ok, statusCode: status, statusText: response.statusText || REASONS[status] || '', timeMs: Date.now() - started, value };
+    const ok = status >= 200 && status < 300;
+    const timeMs = Date.now() - started;
+    if (!ok) {
+      const value = failedAnswer(text, contentType, status);
+      return { ...base, ok, statusCode: status, statusText, contentType: text ? contentType : 'text/plain', timeMs, value: titled(value) };
+    }
+    const warnings = response.headers.get('warning');
+    return { ...base, ok, statusCode: status, statusText, contentType, timeMs, value: titled(formatAnswer(text, contentType, { warnings })) };
   } catch (error) {
     if ((error as Error).name === 'AbortError') throw error;
     const value = `\n\nFailed to connect to Console's backend.\nPlease check the ${services.boot.name} server is up and running`;
-    return { ...base, ok: false, timeMs: Date.now() - started, value: heading ? `# ${heading}\n${value}` : value };
+    return { ...base, ok: false, contentType: 'text/plain', timeMs: Date.now() - started, value: titled(value) };
   }
 }
 
 // --- The names of the cluster, for what could be typed next ------------------------------------
 
-interface Names {
+export interface Names {
   indices: Record<string, string[]>;
   templates: string[];
   fields: Record<string, string[]>;
@@ -235,35 +139,70 @@ function fieldNames(properties: unknown, prefix = ''): string[] {
   return out;
 }
 
-function useClusterNames(settings: ConsoleSettings): [ClusterNames, () => void] {
-  const [names, setNames] = useState<Names>({ indices: {}, templates: [], fields: {} });
+async function systemGet<T>(path: string): Promise<T> {
+  const query = new URLSearchParams({ path, method: 'GET' });
+  const { response, text } = await askProxy(query, {
+    method: 'POST',
+    headers: { 'osd-xsrf': 'true', 'osd-system-request': 'true' },
+  });
+  if (!response.ok) throw new Error(String(response.status));
+  return JSON.parse(text) as T;
+}
+
+/** The queries of an imported file: any "text" that is not empty, a number as its digits, as the original asks no more of it */
+export function importedText(parsed: { text?: unknown } | null | undefined): string | undefined {
+  return parsed?.text ? String(parsed.text) : undefined;
+}
+
+/** The names loaded, without the kinds the settings do not want suggested */
+export function suggestedNames(loaded: Names, wanted: ConsoleSettings['autocomplete']): Names {
+  return {
+    indices: wanted.indices ? loaded.indices : {},
+    fields: wanted.fields ? loaded.fields : {},
+    templates: wanted.templates ? loaded.templates : [],
+  };
+}
+
+function useClusterNames(settings: ConsoleSettings): [ClusterNames, (autocomplete?: ConsoleSettings['autocomplete']) => void] {
+  const [loaded, setNames] = useState<Names>({ indices: {}, templates: [], fields: {} });
   const wanted = settings.autocomplete;
-  const refresh = useCallback(() => {
-    const quiet = <T,>(request: Promise<T>, fallback: T) => request.catch(() => fallback);
+  const latest = useRef(wanted);
+  latest.current = wanted;
+  // Asks for the names the settings want, or the ones ticked in the settings dialog when it asks
+  const refresh = useCallback((autocomplete: ConsoleSettings['autocomplete'] = latest.current) => {
     type Aliases = Record<string, { aliases?: Record<string, unknown> }>;
     type Mappings = Record<string, { mappings?: { properties?: unknown } }>;
-    const none: Promise<Record<string, never>> = Promise.resolve({});
+    const asked = new Set(autocompleteRequests(autocomplete).map((request) => request.name));
     void Promise.all([
-      wanted.indices ? quiet(services.search.request<Aliases>('GET', '_aliases'), {} as Aliases) : (none as Promise<Aliases>),
-      wanted.fields ? quiet(services.search.request<Mappings>('GET', '_mapping'), {} as Mappings) : (none as Promise<Mappings>),
-      wanted.templates
-        ? quiet(services.search.request<Array<{ name: string }>>('GET', '_cat/templates?format=json&h=name'), [])
-        : Promise.resolve<Array<{ name: string }>>([]),
-    ]).then(([aliases, mappings, templates]) => {
-      setNames({
-        indices: Object.fromEntries(Object.entries(aliases).map(([index, value]) => [index, Object.keys(value?.aliases ?? {})])),
-        fields: Object.fromEntries(Object.entries(mappings).map(([index, value]) => [index, fieldNames(value?.mappings?.properties)])),
-        templates: Array.isArray(templates) ? templates.map((template) => template.name) : [],
-      });
+      // In the original's order: the fields, the indices, the templates
+      asked.has('fields') ? systemGet<Mappings>('_mapping').catch(() => undefined) : Promise.resolve(undefined),
+      asked.has('indices') ? systemGet<Aliases>('_aliases').catch(() => undefined) : Promise.resolve(undefined),
+      asked.has('templates') ? systemGet<Record<string, unknown>>('_template').catch(() => undefined) : Promise.resolve(undefined),
+    ]).then(([mappings, aliases, templates]) => {
+      setNames((now) => ({
+        indices: aliases ? Object.fromEntries(Object.entries(aliases).map(([index, value]) => [index, Object.keys(value?.aliases ?? {})])) : now.indices,
+        fields: mappings ? Object.fromEntries(Object.entries(mappings).map(([index, value]) => [index, fieldNames(value?.mappings?.properties)])) : now.fields,
+        templates: templates ? Object.keys(templates) : now.templates,
+      }));
     });
-  }, [wanted.indices, wanted.fields, wanted.templates]);
+  }, []);
 
+  // Asked once when the console opens, and every minute while the settings say so. Saving the
+  // settings asks nothing, as the original asks nothing then without a data source.
   useEffect(() => {
     refresh();
+  }, [refresh]);
+  useEffect(() => {
     if (!settings.polling) return undefined;
-    const timer = window.setInterval(refresh, 60000);
+    const timer = window.setInterval(() => refresh(), 60000);
     return () => window.clearInterval(timer);
   }, [refresh, settings.polling]);
+
+  // What the settings no longer want is not suggested, though it was asked for before
+  const names = useMemo<Names>(
+    () => suggestedNames(loaded, wanted),
+    [loaded, wanted.fields, wanted.indices, wanted.templates]
+  );
 
   const cluster = useMemo<ClusterNames>(() => {
     const indices = Object.keys(names.indices).sort();
@@ -291,34 +230,17 @@ function useClusterNames(settings: ConsoleSettings): [ClusterNames, () => void] 
 
 // --- Where the manual is -----------------------------------------------------------------------
 
-const DOCS = 'https://opensearch.org/docs/latest';
-const DOC_PAGES: Array<[RegExp, string]> = [
-  [/(^|\/)_plugins\/_(sql|ppl)/, '/search-plugins/sql/sql-ppl-api/'],
-  [/(^|\/)_plugins\/_ism/, '/im-plugin/ism/api/'],
-  [/(^|\/)_plugins\/_rollup/, '/im-plugin/index-rollups/rollup-api/'],
-  [/(^|\/)_plugins\/_transform/, '/im-plugin/index-transforms/transforms-apis/'],
-  [/(^|\/)_plugins\/_sm/, '/tuning-your-cluster/availability-and-recovery/snapshots/sm-api/'],
-  [/(^|\/)_msearch/, '/api-reference/multi-search/'],
-  [/(^|\/)_search\/scroll/, '/api-reference/scroll/'],
-  [/(^|\/)_search/, '/api-reference/search/'],
-  [/(^|\/)_count/, '/api-reference/count/'],
-  [/(^|\/)_bulk/, '/api-reference/document-apis/bulk/'],
-  [/(^|\/)_mget/, '/api-reference/document-apis/multi-get/'],
-  [/(^|\/)_reindex/, '/api-reference/document-apis/reindex/'],
-  [/(^|\/)_update_by_query/, '/api-reference/document-apis/update-by-query/'],
-  [/(^|\/)_delete_by_query/, '/api-reference/document-apis/delete-by-query/'],
-  [/(^|\/)_(doc|create|update|source)(\/|$)/, '/api-reference/document-apis/index/'],
-  [/^\/?_cat/, '/api-reference/cat/index/'],
-  [/^\/?_cluster/, '/api-reference/cluster-api/index/'],
-  [/^\/?_nodes/, '/api-reference/nodes-apis/index/'],
-  [/^\/?_snapshot/, '/api-reference/snapshots/index/'],
-  [/^\/?_ingest/, '/api-reference/ingest-apis/index/'],
-  [/^\/?_tasks/, '/api-reference/tasks/'],
-  [/(^|\/)_analyze/, '/api-reference/analyze-apis/'],
-  [/(^|\/)_(mapping|settings|alias|aliases|template|index_template|component_template|data_stream|refresh|flush|forcemerge|open|close|rollover|shrink|split|clone|stats|segments|recovery)/, '/api-reference/index-apis/index/'],
-];
+type Matcher = ReturnType<typeof buildMatcher>;
+let specs: Promise<Matcher | undefined> | undefined;
 
-const docsFor = (url: string) => `${DOCS}${DOC_PAGES.find(([pattern]) => pattern.test(url))?.[1] ?? '/api-reference/'}`;
+/** The spec definitions of the server, asked for once as the original's console asks at its start */
+function loadSpecs(): Promise<Matcher | undefined> {
+  specs ??= services.http
+    .get<ApiSpec>('/api/console/api_server')
+    .then((api) => buildMatcher(api))
+    .catch(() => undefined);
+  return specs;
+}
 
 // --- The panels around the editor --------------------------------------------------------------
 
@@ -331,67 +253,169 @@ PUT index/_doc/1
 # and get it ...
 GET index/_doc/1`;
 
-function Example() {
-  return <CodeEditor readOnly value={EXAMPLE} tokenize={tokenizeConsole} minLines={8} ariaLabel="Dev Tools Console editor example" />;
-}
-
-function HelpPanel({ onClose }: { onClose: () => void }) {
-  const keys: Array<[string, string]> = [
-    ['Ctrl/Cmd + I', 'Auto indent current request'],
-    ['Ctrl/Cmd + /', 'Open documentation for current request'],
-    ['Ctrl + Space', 'Open Auto complete (even if not typing)'],
-    ['Ctrl/Cmd + Enter', 'Submit request'],
-    ['Ctrl/Cmd + Up/Down', 'Jump to the previous/next request start or end.'],
-    ['Down arrow', 'Switch focus to auto-complete menu. Use arrows to further select a term'],
-    ['Enter/Tab', 'Select the currently selected or the top most term in auto-complete menu'],
-    ['Esc', 'Close auto-complete menu'],
-  ];
+function Example({ panel }: { panel: string }) {
   return (
-    <Flyout title="Help" onClose={onClose} testId="helpFlyout">
-      <div className="atlStack">
-        <h3 className="atlTitleS">Request format</h3>
-        <p>You can type one or more requests in the white editor. Console understands requests in a compact format:</p>
-        <Example />
-        <h3 className="atlTitleS">Keyboard commands</h3>
-        <dl className="dvtKeys">
-          {keys.map(([key, what]) => (
-            <div key={key}>
-              <dt>{key}</dt>
-              <dd>{what}</dd>
-            </div>
-          ))}
-        </dl>
-      </div>
-    </Flyout>
+    <>
+      <label className="atlScreenReaderOnly" htmlFor={`help-example-${panel}-input`}>
+        Dev Tools Console editor example
+      </label>
+      <ConsoleEditor
+        readOnly
+        value={EXAMPLE}
+        mode="text"
+        fontSize={12}
+        wrap
+        id={`help-example-${panel}`}
+        inputId={`help-example-${panel}-input`}
+        className="dvtExample"
+      />
+    </>
   );
 }
 
-function WelcomePanel({ onDismiss }: { onDismiss: () => void }) {
+interface MenuItem {
+  label: string;
+  id?: string;
+  testId: string;
+  onClick: () => void;
+  disabled?: boolean;
+}
+
+/**
+ * The items of a request's menu, as the original's context menu keeps them: the first one that can
+ * be chosen has the focus when the menu opens, the arrows go from one to the next and round, the
+ * first arrow down staying on the first, and Tab goes round them without leaving the menu
+ */
+function RequestMenu({ items, onChoose }: { items: MenuItem[]; onChoose: () => void }) {
+  const list = useRef<HTMLDivElement>(null);
+  const focused = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    // After the popover has placed itself, as the original waits for it
+    const frame = requestAnimationFrame(() =>
+      list.current?.querySelector<HTMLButtonElement>('.dvtMenu__item:not(:disabled)')?.focus()
+    );
+    return () => cancelAnimationFrame(frame);
+  }, []);
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const all = [...(list.current?.querySelectorAll<HTMLButtonElement>('.dvtMenu__item') ?? [])];
+    const count = all.length;
+    if (!count) return;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const down = event.key === 'ArrowDown';
+      const now = focused.current;
+      const next = now === undefined ? (down ? 0 : count - 1) : (now + (down ? 1 : count - 1)) % count;
+      focused.current = next;
+      all[next]?.focus();
+    } else if (event.key === 'Tab') {
+      // Kept as it is before the focus moves, as the original's is
+      const at = all.findIndex((button) => button === document.activeElement);
+      focused.current = at >= 0 ? at : undefined;
+      const enabled = all.filter((button) => !button.disabled);
+      const from = enabled.findIndex((button) => button === document.activeElement);
+      const step = event.shiftKey ? enabled.length - 1 : 1;
+      event.preventDefault();
+      enabled[from < 0 ? 0 : (from + step) % enabled.length]?.focus();
+    }
+  };
   return (
-    <Flyout
+    <div role="menu" ref={list} onKeyDown={onKeyDown}>
+      {items.map((item) => (
+        <button
+          key={item.label}
+          type="button"
+          role="menuitem"
+          id={item.id}
+          className="dvtMenu__item"
+          disabled={item.disabled}
+          onClick={() => {
+            onChoose();
+            item.onClick();
+          }}
+          data-test-subj={item.testId}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** A flyout of the console: small, over a mask that closes it and is not seen */
+function ConsoleFlyout({ title, onClose, testId, footer, children }: { title: string; onClose: () => void; testId: string; footer?: ReactNode; children: ReactNode }) {
+  return (
+    <>
+      <Portal>
+        <div className="dvtMask" onMouseDown={onClose} aria-hidden />
+      </Portal>
+      <Flyout title={title} onClose={onClose} testId={testId} footer={footer} className="dvtFlyout">
+        {children}
+      </Flyout>
+    </>
+  );
+}
+
+const KEYS: Array<[string, string]> = [
+  ['Ctrl/Cmd + I', 'Auto indent current request'],
+  ['Ctrl/Cmd + /', 'Open documentation for current request'],
+  ['Ctrl + Space', 'Open Auto complete (even if not typing)'],
+  ['Ctrl/Cmd + Enter', 'Submit request'],
+  ['Ctrl/Cmd + Up/Down', 'Jump to the previous/next request start or end.'],
+  ['Ctrl/Cmd + Alt + L', 'Collapse/expand current scope.'],
+  ['Ctrl/Cmd + Option + 0', 'Collapse all scopes but the current one. Expand by adding a shift.'],
+  ['Down arrow', 'Switch focus to auto-complete menu. Use arrows to further select a term'],
+  ['Enter/Tab', 'Select the currently selected or the top most term in auto-complete menu'],
+  ['Esc', 'Close auto-complete menu'],
+];
+
+function HelpFlyout({ onClose }: { onClose: () => void }) {
+  return (
+    <ConsoleFlyout title="Help" onClose={onClose} testId="helpFlyout">
+      <div className="dvtText">
+        <h3>Request format</h3>
+        <p className="dvtText__flush">You can type one or more requests in the white editor. Console understands requests in a compact format:</p>
+        <Example panel="help" />
+        <h3>Keyboard commands</h3>
+        <div className="dvtSpacer" />
+        <dl>
+          {KEYS.map(([key, what]) => (
+            <Fragment key={key}>
+              <dt>{key}</dt>
+              <dd>{what}</dd>
+            </Fragment>
+          ))}
+        </dl>
+      </div>
+    </ConsoleFlyout>
+  );
+}
+
+function WelcomeFlyout({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <ConsoleFlyout
       title="Welcome to Console"
       onClose={onDismiss}
       testId="welcomePanel"
       footer={
-        <Button variant="primary" onClick={onDismiss} testId="help-close-button">
+        <Button variant="primary" onClick={onDismiss} testId="help-close-button" className="dvtWide">
           Dismiss
         </Button>
       }
     >
-      <div className="atlStack">
-        <h4 className="atlTitleS">Quick intro to the UI</h4>
+      <div className="dvtText">
+        <h4>Quick intro to the UI</h4>
         <p>
           The Console UI is split into two panes: an editor pane (left) and a response pane (right). Use the editor to type requests and
           submit them to OpenSearch. The results will be displayed in the response pane on the right side.
         </p>
         <p>Console understands requests in a compact format, similar to cURL:</p>
-        <Example />
+        <Example panel="welcome" />
         <p>
           While typing a request, Console will make suggestions which you can then accept by hitting Enter/Tab. These suggestions are made
           based on the request structure as well as your indices and types.
         </p>
-        <h4 className="atlTitleS">A few quick tips, while I have your attention</h4>
-        <ul className="dvtTips">
+        <h4>A few quick tips, while I have your attention</h4>
+        <ul>
           <li>Submit requests to OpenSearch using the green triangle button.</li>
           <li>Use the wrench menu for other useful things.</li>
           <li>You can paste requests in cURL format and they will be translated to the Console syntax.</li>
@@ -399,17 +423,17 @@ function WelcomePanel({ onDismiss }: { onDismiss: () => void }) {
           <li>Study the keyboard shortcuts under the Help button. Good stuff in there!</li>
         </ul>
       </div>
-    </Flyout>
+    </ConsoleFlyout>
   );
 }
 
 // Several controls under one heading: a form row would make one label of them all
-function Group({ label, help, children }: { label: string; help?: string; children: ReactNode }) {
+function Group({ label, help, className, children }: { label: string; help?: string; className?: string; children: ReactNode }) {
   return (
     <div className="atlFormRow atlFormRow--full" role="group" aria-label={label}>
       <span className="atlFormRow__label">{label}</span>
+      <div className={cx('atlStack dvtTight', className)}>{children}</div>
       {help && <span className="atlFormRow__help">{help}</span>}
-      <div className="atlStack dvtTight">{children}</div>
     </div>
   );
 }
@@ -422,7 +446,7 @@ function SettingsModal({
 }: {
   settings: ConsoleSettings;
   onSave: (settings: ConsoleSettings) => void;
-  onRefresh: () => void;
+  onRefresh: (autocomplete: ConsoleSettings['autocomplete']) => void;
   onClose: () => void;
 }) {
   const [draft, setDraft] = useState(settings);
@@ -431,17 +455,18 @@ function SettingsModal({
       checked={draft.autocomplete[name]}
       onChange={(checked) => setDraft({ ...draft, autocomplete: { ...draft.autocomplete, [name]: checked } })}
       label={label}
-      testId={`autocomplete-${name}`}
     />
   );
+  const anyAutocomplete = draft.autocomplete.fields || draft.autocomplete.indices || draft.autocomplete.templates;
   return (
     <Modal
       title="Console Settings"
       onClose={onClose}
       testId="devToolsSettingsModal"
+      className="dvtSettings"
       footer={
         <>
-          <Button variant="empty" onClick={onClose} testId="settingsCloseButton">
+          <Button variant="empty" onClick={onClose} testId="settingsCancelButton">
             Cancel
           </Button>
           <Button variant="primary" onClick={() => onSave(draft)} testId="settings-save-button">
@@ -452,90 +477,138 @@ function SettingsModal({
     >
       <div className="atlStack">
         <FormRow label="Font Size">
-          <NumberField min={6} max={50} value={draft.fontSize} onChange={(fontSize) => setDraft({ ...draft, fontSize: fontSize ?? 14 })} testId="setting-font-size-input" />
+          <NumberField
+            min={6}
+            max={50}
+            value={draft.fontSize}
+            onChange={(fontSize) => {
+              // The original keeps the size it had when the field holds no number
+              if (fontSize) setDraft({ ...draft, fontSize: Math.trunc(fontSize) });
+            }}
+            testId="setting-font-size-input"
+          />
         </FormRow>
-        <Checkbox checked={draft.wrapMode} onChange={(wrapMode) => setDraft({ ...draft, wrapMode })} label="Wrap long lines" testId="settingsWrapLines" />
+        <Switch checked={draft.wrapMode} onChange={(wrapMode) => setDraft({ ...draft, wrapMode })} label="Wrap long lines" testId="settingsWrapLines" />
         <Group label="JSON syntax">
-          <Checkbox checked={draft.tripleQuotes} onChange={(tripleQuotes) => setDraft({ ...draft, tripleQuotes })} label="Use triple quotes in output pane" testId="tripleQuotes" />
+          <Switch checked={draft.tripleQuotes} onChange={(tripleQuotes) => setDraft({ ...draft, tripleQuotes })} label="Use triple quotes in output pane" testId="tripleQuotes" />
         </Group>
-        <Group label="Autocomplete">
+        <Group label="Autocomplete" className="dvtChecks">
           {autocomplete('fields', 'Fields')}
           {autocomplete('indices', 'Indices & Aliases')}
           {autocomplete('templates', 'Templates')}
         </Group>
-        <Group
-          label="Refreshing autocomplete suggestions"
-          help="Console refreshes autocomplete suggestions by querying OpenSearch. Automatic refreshes may be an issue if you have a large cluster or if you have network limitations."
-        >
-          <Switch checked={draft.polling} onChange={(polling) => setDraft({ ...draft, polling })} label="Automatically refresh autocomplete suggestions" testId="autocompletePolling" />
-          <div>
-            <Button size="s" icon="refresh" onClick={onRefresh} testId="autocompletePollingRefresh">
-              Refresh autocomplete suggestions
-            </Button>
-          </div>
-        </Group>
+        {anyAutocomplete && (
+          <>
+            <Group
+              label="Refreshing autocomplete suggestions"
+              help="Console refreshes autocomplete suggestions by querying OpenSearch. Automatic refreshes may be an issue if you have a large cluster or if you have network limitations."
+            >
+              <Switch checked={draft.polling} onChange={(polling) => setDraft({ ...draft, polling })} label="Automatically refresh autocomplete suggestions" testId="autocompletePolling" />
+            </Group>
+            <div>
+              <Button className="dvtWide" onClick={() => onRefresh(draft.autocomplete)} testId="autocompletePolling">
+                Refresh autocomplete suggestions
+              </Button>
+            </div>
+          </>
+        )}
       </div>
     </Modal>
   );
 }
 
-function ImportFlyout({ current, onImported, onClose }: { current: TextObject; onImported: (object: TextObject) => void; onClose: () => void }) {
+/** The file picker of the original (EuiFilePicker): a zone a file is dropped on or chosen through, then named, with a way to take it back */
+function FilePicker({ file, onChange }: { file?: File; onChange: (file?: File) => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  return (
+    <div className={cx('dvtFilePicker', file && 'dvtFilePicker--selected')}>
+      <input
+        ref={input}
+        type="file"
+        name="queryFileImport"
+        accept=".ndjson, .json"
+        className="dvtFilePicker__input"
+        aria-label="Select a file to import"
+        onChange={(event) => onChange(event.target.files?.[0])}
+        data-test-subj="queryFilePicker"
+      />
+      <div className="dvtFilePicker__prompt">
+        <Icon name="importAction" size="l" />
+        <div className="dvtFilePicker__text">{file ? <strong>{file.name}</strong> : 'Import'}</div>
+        {file && (
+          <button
+            type="button"
+            className="dvtFilePicker__remove"
+            onClick={() => {
+              if (input.current) input.current.value = '';
+              onChange(undefined);
+            }}
+          >
+            Remove
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ImportFlyout({ onImported, onClose }: { onImported: (object: TextObject) => void; onClose: () => void }) {
   const [file, setFile] = useState<File>();
+  const [parsed, setParsed] = useState<{ text?: unknown }>();
   const [mode, setMode] = useState<'merge' | 'overwrite'>('merge');
   const [error, setError] = useState<string>();
   const [confirming, setConfirming] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState<string>();
 
-  const run = async (overwriteConfirmed: boolean) => {
-    if (!file) return;
+  const pick = async (picked: File | undefined) => {
     setError(undefined);
-    setBusy(true);
+    setParsed(undefined);
+    setFile(picked);
+    if (!picked) return;
     try {
-      let imported: { text?: unknown };
-      try {
-        imported = JSON.parse(await file.text()) as { text?: unknown };
-      } catch (parseError) {
-        setError(`The file could not be processed due to error: "${(parseError as Error).message}"`);
-        return;
-      }
-      if (typeof imported?.text !== 'string' || imported.text === '') {
-        setError('The selected file is not valid. Please select a valid JSON file.');
-        return;
-      }
-      if (mode === 'overwrite') {
-        if (!overwriteConfirmed) {
-          setConfirming(true);
-          return;
-        }
-        onImported({ ...current, createdAt: Date.now(), updatedAt: Date.now(), text: imported.text });
-        services.toasts.success('Queries overwritten.');
-      } else {
-        const stamp = formatDate(new Date(), services.uiSettings.get('dateFormat', 'MMM D, YYYY @ HH:mm:ss.SSS'), services.timeZone());
-        onImported({
-          ...current,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          text: `${current.text}\n\n#Imported on ${stamp}\n\n${imported.text}`,
-        });
-        services.toasts.success('Queries merged.');
-      }
-      onClose();
-    } finally {
-      setBusy(false);
+      setParsed(JSON.parse(await picked.text()) as { text?: unknown });
+    } catch (parseError) {
+      setError(`The file could not be processed due to error: "${(parseError as Error).message}"`);
     }
   };
 
+  const run = (overwriteConfirmed: boolean) => {
+    setError(undefined);
+    const current = storage.loadText();
+    const imported = importedText(parsed);
+    if (imported === undefined) {
+      setError('The selected file is not valid. Please select a valid JSON file.');
+      return;
+    }
+    if (mode === 'overwrite') {
+      if (!overwriteConfirmed) {
+        setConfirming(true);
+        return;
+      }
+      setLoading('Importing queries and overwriting existing ones...');
+      onImported({ ...current, createdAt: Date.now(), updatedAt: Date.now(), text: imported });
+      services.toasts.success('Queries overwritten.');
+    } else {
+      setLoading('Importing queries and merging with existing ones...');
+      const stamp = formatDate(new Date(), services.uiSettings.get('dateFormat', 'MMM D, YYYY @ HH:mm:ss.SSS'), services.timeZone());
+      onImported({ ...current, createdAt: Date.now(), updatedAt: Date.now(), text: `${current.text}\n\n#Imported on ${stamp}\n\n${imported}` });
+      services.toasts.success('Queries merged.');
+    }
+    setLoading(undefined);
+    onClose();
+  };
+
   return (
-    <Flyout
+    <ConsoleFlyout
       title="Import queries"
       onClose={onClose}
       testId="importQueriesFlyout"
       footer={
         <>
-          <Button variant="empty" onClick={onClose} testId="importQueriesCancelBtn">
+          <Button variant="empty" disabled={Boolean(loading)} onClick={onClose} testId="importQueriesCancelBtn">
             Cancel
           </Button>
-          <Button variant="primary" disabled={!file} loading={busy} onClick={() => void run(false)} testId="importQueriesConfirmBtn">
+          <Button variant="primary" className="dvtWide" disabled={!file} loading={Boolean(loading)} onClick={() => run(false)} testId="importQueriesConfirmBtn">
             Import
           </Button>
         </>
@@ -544,23 +617,29 @@ function ImportFlyout({ current, onImported, onClose }: { current: TextObject; o
       <div className="atlStack">
         {error && (
           <CallOut tone="critical" title="Sorry, there was an error">
-            {error}
+            <p data-test-subj="importSenseObjectsErrorText">{error}</p>
           </CallOut>
         )}
-        <FormRow label="Select a file to import" full>
-          <input type="file" accept=".json,application/json" onChange={(event) => setFile(event.target.files?.[0])} data-test-subj="queryFilePicker" />
-        </FormRow>
-        <div className="atlStack dvtTight">
-          <strong>Import options</strong>
-          <RadioGroup<'merge' | 'overwrite'>
-            value={mode}
-            onChange={setMode}
-            options={[
-              { id: 'merge', label: 'Merge with existing queries' },
-              { id: 'overwrite', label: 'Overwrite existing queries' },
-            ]}
-          />
-        </div>
+        {loading ? (
+          <p className="dvtText">{loading}</p>
+        ) : (
+          <>
+            <FormRow label="Select a file to import" full>
+              <FilePicker file={file} onChange={(picked) => void pick(picked)} />
+            </FormRow>
+            <div className="dvtImportOptions">
+              <strong className="dvtImportOptions__title">Import options</strong>
+              <RadioGroup<'merge' | 'overwrite'>
+                value={mode}
+                onChange={setMode}
+                options={[
+                  { id: 'merge', label: 'Merge with existing queries' },
+                  { id: 'overwrite', label: 'Overwrite existing queries' },
+                ]}
+              />
+            </div>
+          </>
+        )}
       </div>
       {confirming && (
         <ConfirmModal
@@ -571,35 +650,37 @@ function ImportFlyout({ current, onImported, onClose }: { current: TextObject; o
           onCancel={() => setConfirming(false)}
           onConfirm={() => {
             setConfirming(false);
-            void run(true);
+            run(true);
           }}
         >
           Are you sure you want to overwrite the existing queries? This action cannot be undone. All existing queries will be deleted and
-          replaced with the imported queries. If you are unsure, please choose the "Merge with existing queries" option instead
+          replaced with the imported queries. If you are unsure, please choose the &quot;Merge with existing queries&quot; option instead
         </ConfirmModal>
       )}
-    </Flyout>
+    </ConsoleFlyout>
   );
 }
 
-function HistoryPanel({ fontSize, onApply, onClose }: { fontSize: number; onApply: (request: PastRequest) => void; onClose: () => void }) {
-  const [requests, setRequests] = useState(loadHistory);
+function HistoryPanel({ settings, onApply, onClose }: { settings: ConsoleSettings; onApply: (request: PastRequest) => void; onClose: () => void }) {
+  const [requests, setRequests] = useState(() => storage.history());
   const [selected, setSelected] = useState(0);
-  const [hovered, setHovered] = useState<number>();
+  // The request shown is the one the pointer is on, else the one chosen; it is the one marked
+  const [viewing, setViewing] = useState<PastRequest | undefined>(() => requests[0]);
   const list = useRef<HTMLUListElement>(null);
   const now = Date.now();
-  const viewing = requests[hovered ?? selected];
-  const text = viewing ? `${viewing.method} ${viewing.endpoint}${viewing.data ? `\n${viewing.data.replace(/\n$/, '')}` : ''}` : 'No history available';
+  const chosen = requests[selected];
+  const text = viewing ? `${viewing.method} ${viewing.endpoint}\n${viewing.data || ''}` : 'No history available';
 
   const choose = (index: number) => {
     const next = Math.min(Math.max(0, index), requests.length - 1);
     setSelected(next);
+    setViewing(requests[next]);
     list.current?.children[next]?.scrollIntoView({ block: 'nearest' });
   };
 
   return (
     <section className="dvtHistory" data-test-subj="consoleHistoryPanel">
-      <h2 className="atlTitleS">History</h2>
+      <h2>History</h2>
       <div className="dvtHistory__body">
         <ul
           ref={list}
@@ -607,14 +688,8 @@ function HistoryPanel({ fontSize, onApply, onClose }: { fontSize: number; onAppl
           tabIndex={0}
           className="dvtHistory__list"
           aria-label="History of sent requests"
-          aria-activedescendant={requests.length ? `historyReq${selected}` : undefined}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && requests[selected]) onApply(requests[selected]);
-            else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-              event.preventDefault();
-              choose(selected + (event.key === 'ArrowUp' ? -1 : 1));
-            }
-          }}
+          aria-activedescendant={`historyReq${selected}`}
+          onKeyDown={(event) => historyKey(event, selected, { choose, apply: () => chosen && onApply(chosen) })}
         >
           {requests.map((request, index) => {
             const description = describePast(request, now);
@@ -623,40 +698,43 @@ function HistoryPanel({ fontSize, onApply, onClose }: { fontSize: number; onAppl
                 key={`${request.time}-${index}`}
                 id={`historyReq${index}`}
                 role="option"
-                aria-selected={index === selected}
+                aria-selected={viewing === request}
                 aria-label={`Request: ${description}`}
-                className={cx('dvtHistory__item', index === selected && 'dvtHistory__item--selected')}
-                onClick={() => setSelected(index)}
-                onMouseEnter={() => setHovered(index)}
-                onMouseLeave={() => setHovered(undefined)}
-                onDoubleClick={() => onApply(request)}
+                className={cx('dvtHistory__item', viewing === request && 'dvtHistory__item--selected')}
+                onClick={() => choose(index)}
+                onMouseEnter={() => setViewing(request)}
+                onMouseLeave={() => setViewing(requests[selected])}
+                onDoubleClick={() => chosen && onApply(chosen)}
               >
-                <span className="atlTruncate">{description}</span>
-                <Icon name="arrowRight" />
+                {description}
+                <Icon name="chevronRight" />
               </li>
             );
           })}
         </ul>
-        <CodeEditor readOnly value={text} tokenize={viewing ? tokenizeConsole : undefined} height="100%" fontSize={fontSize} ariaLabel="History viewer" className="dvtHistory__viewer" />
+        <div className="dvtHistory__spacer" />
+        <ConsoleEditor readOnly value={text} mode={viewing ? 'input' : 'text'} fontSize={settings.fontSize} wrap={settings.wrapMode} className="dvtHistory__viewer" label="History viewer" />
       </div>
       <div className="dvtHistory__footer">
         <Button
           variant="empty"
-          size="s"
+          className="dvtHistory__clear"
           onClick={() => {
-            for (const key of historyKeys()) stored.remove(key);
-            setRequests([]);
+            storage.clearHistory();
+            const left = storage.history();
+            setRequests(left);
             setSelected(0);
+            setViewing(left[0]);
           }}
           testId="consoleClearHistoryButton"
         >
           Clear
         </Button>
-        <span className="atlRow">
-          <Button variant="empty" size="s" onClick={onClose} testId="consoleHistoryCloseButton">
+        <span className="atlRow dvtNone">
+          <Button variant="empty" onClick={onClose} testId="consoleHistoryCloseButton">
             Close
           </Button>
-          <Button variant="primary" size="s" disabled={!requests[selected]} onClick={() => requests[selected] && onApply(requests[selected])} testId="consoleHistoryApplyButton">
+          <Button className="dvtWide" disabled={!chosen} onClick={() => chosen && onApply(chosen)} testId="consoleHistoryApplyButton">
             Apply
           </Button>
         </span>
@@ -665,21 +743,26 @@ function HistoryPanel({ fontSize, onApply, onClose }: { fontSize: number; onAppl
   );
 }
 
-function StatusBar({ running, answer }: { running: boolean; answer?: Answer }) {
-  if (running) return <Badge>Request in progress</Badge>;
-  if (!answer || answer.statusCode === undefined) return null;
+/** The colour of the status badge; an answer without a status (the server was not reached) is a failure, as in the original */
+export const badgeTone = (code: number | undefined) =>
+  code === undefined ? 'critical' : code <= 199 ? undefined : code <= 299 ? 'healthy' : code <= 399 ? 'accent' : code <= 499 ? 'warning' : 'critical';
+
+function StatusBadges({ running, answer }: { running: boolean; answer?: Answer }) {
+  if (running) return <span className="dvtBadge dvtBadge--hollow">Request in progress</span>;
+  // A request that did not reach the server has no status: the badge reads " - " and the time is shown, as the original's
+  if (!answer) return null;
   const code = answer.statusCode;
-  const tone = code <= 199 ? undefined : code <= 299 ? 'healthy' : code <= 399 ? 'accent' : code <= 499 ? 'warning' : 'critical';
+  const tone = badgeTone(code);
   return (
     <>
-      <span title={`${answer.method} ${answer.path.startsWith('/') ? answer.path : `/${answer.path}`}`} data-test-subj="consoleResponseStatusBadge">
-        <Badge tone={tone}>
+      <Tooltip content={`${answer.method} ${answer.path.startsWith('/') ? answer.path : `/${answer.path}`}`}>
+        <span className={cx('dvtBadge', tone && `dvtBadge--${tone}`)} data-test-subj="consoleResponseStatusBadge">
           {code}&nbsp;-&nbsp;{answer.statusText}
-        </Badge>
-      </span>
-      <span title="Time Elapsed">
-        <Badge>{answer.timeMs}&nbsp;ms</Badge>
-      </span>
+        </span>
+      </Tooltip>
+      <Tooltip content="Time Elapsed">
+        <span className="dvtBadge">{answer.timeMs}&nbsp;ms</span>
+      </Tooltip>
     </>
   );
 }
@@ -689,40 +772,49 @@ function StatusBar({ running, answer }: { running: boolean; answer?: Answer }) {
 type Panel = 'history' | 'settings' | 'help' | 'import';
 
 export function Console() {
-  const [object, setObject] = useState(loadTextObject);
+  const [object, setObject] = useState(() => storage.loadText());
   const [text, setText] = useState(object.text);
-  const [settings, setSettings] = useState(loadSettings);
+  const [settings, setSettings] = useState(() => storage.loadSettings());
   const [selection, setSelection] = useState<[number, number]>([0, 0]);
-  const [output, setOutput] = useState('');
-  const [answer, setAnswer] = useState<Answer>();
+  const [answers, setAnswers] = useState<Answer[]>([]);
   const [running, setRunning] = useState(false);
   const [panel, setPanel] = useState<Panel>();
-  const [welcome, setWelcome] = useState(() => stored.get<string>('version_welcome_shown', '') !== '@@SENSE_REVISION');
+  const [welcome, setWelcome] = useState(() => !storage.welcomeShown());
   const [scrollTop, setScrollTop] = useState(0);
-  const [actionsTop, setActionsTop] = useState<number>();
-  const [split, setSplit] = useState(() => Number(stored.get<number[]>('widths', [50, 50])[0]) || 50);
+  // Counts the editor's new layouts, after which the buttons are placed again
+  const [layouts, setLayouts] = useState(0);
+  // Shown from the start, at the top of the editor, as the original's are
+  const [actionsAt, setActionsAt] = useState<ActionsPlace>({ top: 0 });
+  const [widths, setWidths] = useState(() => storage.widths());
+  const [dragging, setDragging] = useState(false);
   const [menu, setMenu] = useState<(Suggestions & { active: number }) | undefined>();
   const [menuAt, setMenuAt] = useState<{ left: number; top: number }>();
+  const [actionsOpen, setActionsOpen] = useState(false);
   const [host, setHost] = useState('http://localhost:9200');
-  const editor = useRef<CodeEditorHandle>(null);
+  const editor = useRef<ConsoleEditorHandle>(null);
   const panes = useRef<HTMLDivElement>(null);
-  const sending = useRef<AbortController | undefined>(undefined);
+  const sending = useRef(new Set<AbortController>());
   const [names, refreshNames] = useClusterNames(settings);
 
-  // What is typed is kept as it is typed, and once more when the page is left
+  // What is typed is kept half a second after it is typed, and once more when the page is left
   const latest = useRef({ object, text });
   latest.current = { object, text };
   useEffect(() => {
-    const timer = window.setTimeout(() => saveTextObject({ ...latest.current.object, text, updatedAt: Date.now() }), 500);
+    const timer = window.setTimeout(() => storage.saveText({ ...latest.current.object, text, updatedAt: Date.now() }), 500);
     return () => window.clearTimeout(timer);
   }, [text]);
   useEffect(
     () => () => {
-      saveTextObject({ ...latest.current.object, text: latest.current.text, updatedAt: Date.now() });
-      sending.current?.abort();
+      storage.saveText({ ...latest.current.object, text: latest.current.text, updatedAt: Date.now() });
+      for (const controller of sending.current) controller.abort();
+      sending.current.clear();
     },
     []
   );
+
+  useEffect(() => {
+    void loadSpecs();
+  }, []);
 
   useEffect(() => {
     services.http
@@ -731,88 +823,117 @@ export function Console() {
       .catch(() => undefined);
   }, []);
 
-  const requests = useMemo(() => parseRequests(text), [text]);
+  // Read again from what was read before: the lines that did not change keep their tokens
+  const read = useRef<ConsoleText | undefined>(undefined);
+  const doc = useMemo(() => {
+    read.current = readConsole(text, read.current);
+    return read.current;
+  }, [text]);
   const fromLine = lineOf(text, selection[0]);
   const toLine = lineOf(text, selection[1]);
-  const current = useMemo(() => requestsInRange(requests, fromLine, toLine), [requests, fromLine, toLine]);
-  const first = current[0];
-  const last = current[current.length - 1];
+  const marked = useMemo(() => expandToRequests(doc, fromLine, toLine), [doc, fromLine, toLine]);
+  const snippet = useMemo<[number, number] | undefined>(() => (marked ? [marked[0], marked[1]] : undefined), [marked?.[0], marked?.[1]]);
 
+  // The buttons follow the request under the cursor, and stay where they were while there is none
   useLayoutEffect(() => {
-    setActionsTop(first ? editor.current?.lineTop(first.startLine) : undefined);
-  }, [first, text, settings.fontSize, settings.wrapMode, split, panel]);
+    const view = editor.current;
+    if (!snippet || !view) return;
+    const place = placeActions(doc.lines, snippet, {
+      lineTop: view.lineTop,
+      lineBottom: view.lineBottom,
+      endTop: (line) => view.placeTop(doc.lines.slice(0, line + 1).reduce((sum, each) => sum + each.length + 1, -1)),
+      height: view.height(),
+      wrapLimit: view.wrapLimit(),
+    });
+    if (place) setActionsAt(place);
+  }, [snippet, doc, layouts, panel, scrollTop]);
 
   useLayoutEffect(() => {
     if (!menu) {
       setMenuAt(undefined);
       return;
     }
-    const line = lineOf(text, menu.from);
-    const column = menu.from - (text.lastIndexOf('\n', menu.from - 1) + 1);
-    const place = editor.current?.coordinates(line, column);
-    setMenuAt(place ? { left: place.left, top: place.bottom + 2 } : undefined);
+    // Under the start of what is typed, after the quote that opens a name
+    const place = editor.current?.coordinates(menu.from + (text[menu.from] === '"' ? 1 : 0));
+    setMenuAt(place ? { left: place.left, top: place.bottom + 1 } : undefined);
   }, [menu, text, scrollTop]);
 
-  const change = (next: string, start: number, end = start) => {
-    setText(next);
-    editor.current?.select(start, end);
-    setSelection([start, end]);
+  const change = (from: number, to: number, inserted: string, cursor = from + inserted.length) => {
+    editor.current?.replace(from, to, inserted, cursor, cursor);
   };
 
+  // Each send goes out, also while another is on its way, and the one answered last is shown: as
+  // the original, whose "in progress" ends with the first answer and whose output empties at a send
   const sendCurrent = async () => {
-    if (current.length === 0 || running) return;
+    const requests = requestsBetween(doc, fromLine, toLine);
+    if (requests.length === 0) {
+      services.toasts.plain('No request selected. Select a request by placing the cursor inside it.');
+      return;
+    }
     const controller = new AbortController();
-    sending.current = controller;
+    sending.current.add(controller);
     setRunning(true);
+    setAnswers([]);
     setMenu(undefined);
-    const answers: Answer[] = [];
+    const results: Answer[] = [];
     try {
-      for (const request of current) {
-        const result = await send(request, current.length > 1, settings.tripleQuotes, controller.signal);
+      for (const request of requests) {
+        const result = await send(request, requests.length > 1, controller.signal);
         if (!result.ok) {
           // A request that failed is all that is shown, as the ones after it were not sent
-          setOutput(result.value);
-          setAnswer(result);
+          setAnswers([result]);
           return;
         }
-        answers.push(result);
+        results.push(result);
       }
-      for (const result of answers) addToHistory(result.path, result.method, result.data);
-      setOutput(answers.map((result) => result.value).join('\n'));
-      setAnswer(answers[answers.length - 1]);
+      for (const result of results) storage.addToHistory(result.path, result.method, result.data);
+      // Something sent may have made an index or a field: the suggestions are asked for again
+      if (settings.polling) refreshNames();
+      setAnswers(results);
     } catch {
       // the page was left while a request was out
     } finally {
-      if (sending.current === controller) {
-        sending.current = undefined;
-        setRunning(false);
-      }
+      if (sending.current.delete(controller)) setRunning(false);
     }
   };
 
+  // The request the cursor is on, laid out again (only that one, as the original does)
   const indentCurrent = () => {
-    if (!first || first.data.length === 0) return;
-    const next = replaceRequest(text, first, autoIndent(first));
-    const [start] = requestOffsets(text, first);
-    change(next, start);
+    const request = requestAt(doc, lineOf(text, selection[1]));
+    if (!request || request.data.length === 0) return;
+    const [start, end] = requestOffsets(text, request);
+    const trimmedEnd = start + text.slice(start, end).replace(/\s+$/, '').length;
+    change(start, trimmedEnd, autoIndent(request), start);
+    editor.current?.focus();
   };
 
+  // The page of the first request selected, when its endpoint has one; else nothing, as the original
   const openDocs = () => {
-    if (first) window.open(docsFor(first.url), '_blank', 'noopener,noreferrer');
+    const request = requestsBetween(doc, fromLine, toLine)[0];
+    if (!request) return;
+    void loadSpecs().then((matcher) => {
+      const page = matcher && documentationFor(matcher, request.method, request.url);
+      if (page) window.open(page, '_blank');
+    });
+  };
+
+  const copyAsCurl = () => {
+    const curl = toCurl(blocksBetween(doc, fromLine, toLine, true), host);
+    const done = () => services.toasts.plain('Request copied as cURL');
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(curl).then(done, () => undefined);
   };
 
   const jump = (direction: -1 | 1) => {
-    const edges = [...new Set(requests.flatMap((request) => [request.startLine, request.endLine]))].sort((a, b) => a - b);
-    const line = lineOf(text, direction === -1 ? selection[0] : selection[1]);
-    const target = direction === -1 ? [...edges].reverse().find((edge) => edge < line) : edges.find((edge) => edge > line);
-    if (target === undefined) return;
-    const offset = text.split('\n').slice(0, target).reduce((sum, row) => sum + row.length + 1, 0);
+    const row = requestEdge(doc, lineOf(text, editor.current?.selection()[1] ?? selection[1]), direction);
+    const offset = doc.lines.slice(0, row).reduce((sum, line) => sum + line.length + 1, 0);
     editor.current?.select(offset);
     setSelection([offset, offset]);
   };
 
   const openMenu = (value: string, offset: number) => {
-    const found = suggest(value, offset, names);
+    // Read from what was read before, as the page's own reading is
+    read.current = readConsole(value, read.current);
+    const found = suggest(value, offset, names, read.current);
     setMenu(found ? { ...found, active: 0 } : undefined);
   };
 
@@ -821,10 +942,8 @@ export function Console() {
     const item = menu.items[index];
     if (!item) return;
     const insert = item.insert ?? item.label;
-    const next = `${text.slice(0, menu.from)}${insert}${text.slice(menu.to)}`;
-    const cursor = menu.from + insert.length - (item.back ?? 0);
     setMenu(undefined);
-    change(next, cursor);
+    change(menu.from, menu.to, insert, menu.from + insert.length - (item.back ?? 0));
     editor.current?.focus();
   };
 
@@ -859,7 +978,7 @@ export function Console() {
       openDocs();
     } else if (event.ctrlKey && event.key === ' ') {
       event.preventDefault();
-      openMenu(text, event.currentTarget.selectionStart);
+      openMenu(text, editor.current?.selection()[0] ?? selection[0]);
     } else if (mod && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
       event.preventDefault();
       jump(event.key === 'ArrowUp' ? -1 : 1);
@@ -870,30 +989,40 @@ export function Console() {
     const pasted = event.clipboardData.getData('text/plain');
     if (!looksLikeCurl(pasted)) return;
     event.preventDefault();
-    const { selectionStart, selectionEnd } = event.currentTarget;
-    const written = parseCurl(pasted);
-    change(`${text.slice(0, selectionStart)}${written}${text.slice(selectionEnd)}`, selectionStart + written.length);
+    const [selectionStart, selectionEnd] = editor.current?.selection() ?? selection;
+    change(selectionStart, selectionEnd, parseCurl(pasted));
   };
 
   const applyPast = (past: PastRequest) => {
-    const inserted = insertRequest(text, lineOf(text, selection[0]), { ...past, data: past.data?.replace(/\n$/, '') });
-    change(inserted.text, inserted.offset);
+    const inserted = insertRequest(text, lineOf(text, selection[1]), past);
+    change(inserted.from, inserted.from, inserted.inserted, inserted.offset);
     editor.current?.focus();
   };
 
-  const startResize = (down: ReactMouseEvent) => {
+  const resize = (next: [number, number]) => {
+    setWidths(next);
+    storage.setWidths(next);
+  };
+
+  const startResize = (down: React.MouseEvent) => {
     down.preventDefault();
-    const box = panes.current?.getBoundingClientRect();
+    const box = panes.current;
     if (!box) return;
-    let width = split;
+    const [left, right] = [box.children[0], box.children[2]].map((child) => (child as HTMLElement).getBoundingClientRect().width);
+    const total = left + right;
+    let leftWidth = left;
+    let position = down.clientX;
+    setDragging(true);
     const move = (event: MouseEvent) => {
-      width = Math.min(85, Math.max(15, ((event.clientX - box.left) / box.width) * 100));
-      setSplit(width);
+      const delta = event.clientX - position;
+      position = event.clientX;
+      leftWidth += delta;
+      resize([(leftWidth / total) * 100, ((total - leftWidth) / total) * 100]);
     };
     const up = () => {
+      setDragging(false);
       document.removeEventListener('mousemove', move);
       document.removeEventListener('mouseup', up);
-      stored.set('widths', [width, 100 - width]);
     };
     document.addEventListener('mousemove', move);
     document.addEventListener('mouseup', up);
@@ -901,11 +1030,11 @@ export function Console() {
 
   const exportText = () => {
     const saved: TextObject = { ...object, text, updatedAt: Date.now() };
-    saveTextObject(saved);
-    downloadFile('sense.json', JSON.stringify(saved), 'application/json');
+    storage.saveText(saved);
+    downloadFile('sense.json', JSON.stringify(storage.loadText()), 'application/json');
   };
 
-  const menuItems: Array<{ id: Panel | 'export'; label: string; testId: string; onClick: () => void }> = [
+  const navItems: Array<{ id: string; label: string; testId: string; onClick: () => void }> = [
     { id: 'history', label: 'History', testId: 'consoleHistoryButton', onClick: () => setPanel(panel === 'history' ? undefined : 'history') },
     { id: 'settings', label: 'Settings', testId: 'consoleSettingsButton', onClick: () => setPanel('settings') },
     { id: 'help', label: 'Help', testId: 'consoleHelpButton', onClick: () => setPanel(panel === 'help' ? undefined : 'help') },
@@ -913,33 +1042,74 @@ export function Console() {
     { id: 'import', label: 'Import', testId: 'consoleImportButton', onClick: () => setPanel(panel === 'import' ? undefined : 'import') },
   ];
 
-  const actionsShown = actionsTop !== undefined && actionsTop - scrollTop >= 0;
+  const output = useMemo(() => outputOf(answers, settings.tripleQuotes), [answers, settings.tripleQuotes]);
+  const lastAnswer = answers[answers.length - 1];
+  const typed = menu ? text.slice(menu.from, selection[1]).replace(/^"/, '') : '';
+
   return (
-    <div className="dvtConsole" data-test-subj="console">
+    <div className="dvtConsole" id="consoleRoot">
       <h1 className="atlScreenReaderOnly">Console</h1>
-      <div className="dvtMenu">
-        {menuItems.map((item) => (
-          <button key={item.id} type="button" className="dvtMenu__item" aria-pressed={panel === item.id} onClick={item.onClick} data-test-subj={item.testId}>
-            {item.label}
-          </button>
-        ))}
-        <span className="atlGrow" />
-        <span className="dvtMenu__status">
-          <StatusBar running={running} answer={answer} />
-        </span>
+      <div className="dvtNav">
+        <div className="dvtTabs" role="tablist">
+          {navItems.map((item) => (
+            <button key={item.id} type="button" role="tab" className="dvtTab" title={item.label} onClick={item.onClick} data-test-subj={item.testId}>
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <div className="dvtNav__status">
+          <StatusBadges running={running} answer={lastAnswer} />
+        </div>
       </div>
-      {panel === 'history' && <HistoryPanel fontSize={settings.fontSize} onClose={() => setPanel(undefined)} onApply={applyPast} />}
+      {panel === 'history' && <HistoryPanel settings={settings} onClose={() => setPanel(undefined)} onApply={applyPast} />}
+      {running && <div className="dvtProgress" />}
       <div className="dvtPanes" ref={panes}>
-        <div className="dvtPane" style={{ width: `${split}%` }}>
-          <CodeEditor
+        <div className="dvtPane" style={{ width: `${widths[0]}%` }}>
+          <div
+            className="dvtActions"
+            id="ConAppEditorActions"
+            style={'bottom' in actionsAt ? { top: 'auto', bottom: actionsAt.bottom } : { top: actionsAt.top }}
+          >
+            <Tooltip content="Click to send request">
+              <button type="button" className="dvtActions__send" aria-label="Send request" onClick={() => void sendCurrent()} data-test-subj="sendRequestButton">
+                <Icon name="play" />
+              </button>
+            </Tooltip>
+            <Popover
+              open={actionsOpen}
+              onClose={() => setActionsOpen(false)}
+              className="dvtMenu"
+              button={
+                <button type="button" className="dvtActions__more" aria-label="Request options" onClick={() => setActionsOpen(!actionsOpen)} data-test-subj="toggleConsoleMenu">
+                  <Icon name="wrench" />
+                </button>
+              }
+            >
+              <p className="atlScreenReaderOnly">You are in a dialog. To close this dialog, hit escape.</p>
+              <RequestMenu
+                items={[
+                  { label: 'Copy as cURL', id: 'ConCopyAsCurl', testId: 'copyAsCurl', onClick: copyAsCurl, disabled: !navigator.clipboard },
+                  { label: 'Open documentation', testId: 'consoleMenuOpenDocs', onClick: openDocs },
+                  { label: 'Auto indent', testId: 'consoleMenuAutoIndent', onClick: indentCurrent },
+                ]}
+                onChoose={() => setActionsOpen(false)}
+              />
+            </Popover>
+          </div>
+          <label className="atlScreenReaderOnly" htmlFor="ConAppInputTextarea">
+            Dev Tools Console
+          </label>
+          <ConsoleEditor
             handle={editor}
             value={text}
+            mode="input"
+            highlighted={doc.highlighted}
             onChange={(next) => {
-              setText(next);
               const [start, end] = editor.current?.selection() ?? [0, 0];
-              // Suggestions follow what is typed, and go when text is taken away
-              if (start === end && next.length > text.length) openMenu(next, start);
+              // Suggestions follow what is typed, and go when text is taken away or a line is begun
+              if (start === end && next.length > text.length && typedOnLine(next, start)) openMenu(next, start);
               else setMenu(undefined);
+              setText(next);
             }}
             onCursor={(start, end) => {
               setSelection([start, end]);
@@ -948,62 +1118,64 @@ export function Console() {
             onKeyDown={onKeyDown}
             onPaste={onPaste}
             onScroll={setScrollTop}
-            tokenize={tokenizeConsole}
-            markedLines={first && last ? [first.startLine, last.endLine] : undefined}
+            onLayout={() => setLayouts((count) => count + 1)}
+            snippet={snippet}
             wrap={settings.wrapMode}
             fontSize={settings.fontSize}
-            height="100%"
-            ariaLabel="Console editor"
+            keyboardHint
+            autoFocus
+            id="ConAppEditor"
+            inputId="ConAppInputTextarea"
             testId="request-editor"
-            className="dvtEditor"
           />
-          {first && actionsShown && (
-            <div className="dvtActions" style={{ top: (actionsTop ?? 0) - scrollTop + 1 }}>
-              <button type="button" className="dvtActions__send" title="Click to send request" aria-label="Click to send request" onClick={() => void sendCurrent()} data-test-subj="sendRequestButton">
-                <Icon name="play" />
-              </button>
-              <MenuButton
-                align="right"
-                items={[
-                  { id: 'curl', label: 'Copy as cURL', testId: 'consoleMenuCopyAsCurl', onClick: () => copyText(toCurl(first, host), 'Request copied as cURL') },
-                  { id: 'docs', label: 'Open documentation', testId: 'consoleMenuOpenDocs', onClick: openDocs },
-                  { id: 'indent', label: 'Auto indent', testId: 'consoleMenuAutoIndent', onClick: indentCurrent },
-                ]}
-                button={(toggle) => (
-                  <button type="button" className="dvtActions__more" aria-label="Request options" onClick={toggle} data-test-subj="toggleConsoleMenu">
-                    <Icon name="wrench" />
-                  </button>
-                )}
-              />
-            </div>
-          )}
         </div>
-        <div className="dvtResizer" role="separator" aria-orientation="vertical" aria-label="Press left/right to adjust panels size" onMouseDown={startResize} data-test-subj="splitPanelResizer">
-          <span aria-hidden>‖</span>
-        </div>
-        <div className="dvtPane atlGrow">
-          <CodeEditor
+        <button
+          type="button"
+          className={cx('dvtResizer', dragging && 'dvtResizer--active')}
+          aria-label="Press left/right to adjust panels size"
+          onMouseDown={startResize}
+          onKeyDown={(event) => {
+            if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+            event.preventDefault();
+            const step = event.key === 'ArrowLeft' ? -1 : 1;
+            resize([widths[0] + step, widths[1] - step]);
+          }}
+          data-test-subj="splitPanelResizer"
+        >
+          <Icon name="grabHorizontal" />
+        </button>
+        <div className="dvtPane" style={{ width: `${widths[1]}%` }}>
+          <label className="atlScreenReaderOnly" htmlFor="ConAppOutputTextarea">
+            Dev Tools Console output
+          </label>
+          <ConsoleEditor
             readOnly
-            value={output}
-            tokenize={tokenizeAnswer}
+            value={output.value}
+            mode={output.mode}
             wrap={settings.wrapMode}
             fontSize={settings.fontSize}
-            height="100%"
-            ariaLabel="Console output"
+            inputId="ConAppOutputTextarea"
             testId="response-editor"
-            className="dvtEditor"
           />
         </div>
       </div>
 
       {menu && menuAt && (
-        <SuggestList items={menu.items} active={menu.active} at={menuAt} onPick={accept} testId="consoleAutocomplete" />
+        <ConsoleSuggestions
+          items={menu.items}
+          active={menu.active}
+          typed={typed}
+          at={menuAt}
+          fontSize={12}
+          onPick={accept}
+          onHover={(active) => setMenu({ ...menu, active })}
+        />
       )}
 
       {welcome && (
-        <WelcomePanel
+        <WelcomeFlyout
           onDismiss={() => {
-            stored.set('version_welcome_shown', '@@SENSE_REVISION');
+            storage.setWelcomeShown();
             setWelcome(false);
           }}
         />
@@ -1011,22 +1183,21 @@ export function Console() {
       {panel === 'settings' && (
         <SettingsModal
           settings={settings}
-          onRefresh={refreshNames}
+          onRefresh={(autocomplete) => refreshNames(autocomplete)}
           onClose={() => setPanel(undefined)}
           onSave={(next) => {
-            saveSettings(next);
-            setSettings(next);
+            storage.saveSettings(next);
+            setSettings(storage.loadSettings());
             setPanel(undefined);
           }}
         />
       )}
-      {panel === 'help' && <HelpPanel onClose={() => setPanel(undefined)} />}
+      {panel === 'help' && <HelpFlyout onClose={() => setPanel(undefined)} />}
       {panel === 'import' && (
         <ImportFlyout
-          current={{ ...object, text }}
           onClose={() => setPanel(undefined)}
           onImported={(next) => {
-            saveTextObject(next);
+            storage.saveText(next);
             setObject(next);
             setText(next.text);
           }}

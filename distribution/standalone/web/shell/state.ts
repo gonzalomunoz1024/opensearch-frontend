@@ -7,6 +7,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
+import { isValidTimeRange } from '../lib/date_picker';
 import type { TimeRange } from '../lib/dates';
 import type { Filter, RefreshInterval } from '../lib/types';
 import { decodeState, encodeState } from '../lib/url';
@@ -60,11 +61,16 @@ export function defaultGlobalState(): GlobalState {
   };
 }
 
-function readGlobal(raw: string | undefined): GlobalState {
+/**
+ * What a `_g` stands for. A range whose ends are not both dates is the default range, as in the
+ * original, which searches and shows `timepicker:timeDefaults` in its place (and leaves the
+ * address as it is): no page searches without a time bound because of it.
+ */
+export function globalStateOf(raw: string | undefined): GlobalState {
   const defaults = defaultGlobalState();
   const state = decodeState<GlobalState>(raw);
   return {
-    time: state.time?.from && state.time?.to ? state.time : defaults.time,
+    time: isValidTimeRange(state.time) ? state.time : defaults.time,
     refreshInterval: state.refreshInterval ?? defaults.refreshInterval,
     filters: Array.isArray(state.filters) ? state.filters : [],
   };
@@ -80,8 +86,10 @@ export function currentGlobalParam(): string | undefined {
  * loading a saved query changes the query, the filters and the time range at once.
  */
 export function globalParamWith(patch: Partial<GlobalState>): string {
-  const latest = readGlobal(getLocation().hashParams._g ?? readSession());
-  const encoded = encodeState({ ...latest, ...patch });
+  const raw = getLocation().hashParams._g ?? readSession();
+  // A range that is no date stays in the address until the range itself changes, as in the original
+  const held = decodeState<GlobalState>(raw).time;
+  const encoded = encodeState({ ...globalStateOf(raw), ...(held === undefined ? {} : { time: held }), ...patch });
   writeSession(encoded);
   return encoded;
 }
@@ -89,7 +97,7 @@ export function globalParamWith(patch: Partial<GlobalState>): string {
 export function useGlobalState(): [GlobalState, (patch: Partial<GlobalState>) => void] {
   const location = useLocation();
   const raw = location.hashParams._g ?? readSession();
-  const state = useMemo(() => readGlobal(raw), [raw]);
+  const state = useMemo(() => globalStateOf(raw), [raw]);
 
   // The address always says what is on screen
   useEffect(() => {
@@ -125,7 +133,13 @@ export function useAutoRefresh(interval: RefreshInterval, onTick: () => void) {
 
 export interface Breadcrumb {
   text: string;
+  /** A path of this product the crumb leads to, which the base path is put in front of */
   to?: string;
+  /**
+   * An address the link carries as it is given, as the original's crumbs take their `href`: `#`
+   * for a crumb that leads to its application's first page, whatever page it is on
+   */
+  href?: string;
 }
 
 interface ChromeState {
@@ -156,15 +170,55 @@ export function setFullScreen(fullScreen: boolean) {
   if (chrome.fullScreen !== fullScreen) setChrome({ fullScreen });
 }
 
+/**
+ * The tab's title of a page that does not set its own, as the original's applications set it
+ * (`chrome.docTitle.change`, reset to the product's name when the application changes): most name
+ * the page by the last crumb of its trail, and a dashboard by its title, also while it is edited;
+ * Discover says "Discover", or "Discover: " and the saved search; Saved objects says "Saved
+ * Objects" on every page of its own; a new dashboard, Dashboards Management's landing page and
+ * advanced settings, Query Workbench, Index Management and Snapshot Management leave the product's
+ * name alone.
+ */
+export function documentTitleOf(
+  location: { pathname: string; hashPath: string; hashParams: Record<string, string | undefined> },
+  breadcrumbs: Breadcrumb[],
+  name: string
+): string {
+  const { pathname, hashPath } = location;
+  const under = (...paths: string[]) =>
+    paths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+  const last = breadcrumbs[breadcrumbs.length - 1]?.text ?? '';
+  let parts: string[];
+  if (under('/app/management/opensearch-dashboards/objects')) parts = ['Saved Objects'];
+  else if (under('/app/management/opensearch-dashboards/indexPatterns')) parts = [last];
+  else if (
+    under(
+      '/app/management',
+      '/app/settings',
+      '/app/opensearch-query-workbench',
+      '/app/opensearch_index_management_dashboards',
+      '/app/opensearch_snapshot_management_dashboards'
+    )
+  ) {
+    parts = [];
+  } else if (under('/app/discover', '/app/data-explorer')) {
+    parts = [hashPath.startsWith('/view/') && breadcrumbs.length > 1 ? `Discover: ${last}` : 'Discover'];
+  } else if (under('/app/home')) parts = ['Home'];
+  else if (under('/app/dashboards', '/app/dashboard')) {
+    // The trail says "Editing <title>", and " (unsaved)" after it, where the title says the title
+    const editing = decodeState<{ viewMode?: string }>(location.hashParams._a).viewMode === 'edit';
+    const title = editing ? last.replace(/^Editing /, '').replace(/ \(unsaved\)$/, '') : last;
+    parts = hashPath.startsWith('/create') ? [] : [title];
+  } else parts = [last];
+  return [...parts, name].filter(Boolean).join(' - ');
+}
+
 /** Says where the page is, in the header and in the tab's title */
 export function useBreadcrumbs(breadcrumbs: Breadcrumb[]) {
   const key = JSON.stringify(breadcrumbs);
   useEffect(() => {
     setChrome({ breadcrumbs });
-    const last = breadcrumbs[breadcrumbs.length - 1]?.text;
-    const first = breadcrumbs[0]?.text;
-    const parts = [last, first !== last ? first : undefined, services.boot.name].filter(Boolean);
-    document.title = parts.join(' - ');
+    document.title = documentTitleOf(getLocation(), breadcrumbs, services.boot.name);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 }

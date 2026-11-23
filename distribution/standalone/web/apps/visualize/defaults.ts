@@ -8,13 +8,15 @@
  * saved here opens there and the other way round.
  */
 
-import { METRIC_TYPES, BUCKET_TYPES, aggLabel, type AggConfig, type AggContext } from '../../lib/aggs';
-import type { Field, IndexPattern } from '../../lib/types';
+import { AGG_TITLES, METRIC_TYPES, BUCKET_TYPES, aggLabel, responseAggs, type AggConfig, type AggContext } from '../../lib/aggs';
+import { parseDateMath, parseInterval } from '../../lib/dates';
+import type { IndexPattern } from '../../lib/types';
 import { visType, type Vis, type VisType } from '../../lib/vis';
 import { tileMapDefaults } from '../../vis/tile_map/defaults';
 import { DEFAULT_VEGA_SPEC } from '../../vis/vega/default_spec';
 import { regionMapDefaults } from '../../vis/region_map/region_map_type';
 import { tsvbDefaults } from './tsvb/model';
+import { availableFields, fieldTypesOf, paramsForType } from './agg_params';
 
 export type Schema = NonNullable<VisType['schemas']>[number];
 
@@ -54,7 +56,8 @@ function xyDefaults(kind: 'area' | 'line' | 'histogram' | 'horizontal_bar'): Rec
     valueAxes: [
       {
         id: 'ValueAxis-1',
-        name: horizontal ? 'BottomAxis-1' : 'LeftAxis-1',
+        // As the original names it, at the bottom of a horizontal bar chart too
+        name: 'LeftAxis-1',
         type: 'value',
         position: horizontal ? 'bottom' : 'left',
         show: true,
@@ -226,44 +229,99 @@ export function newVis(type: string, source: { indexPatternId?: string; savedSea
 
 // --- Which aggregations a part of a chart accepts -------------------------------------------------
 
+const NOT_GEO = ['!geo_centroid', '!geo_bounds'];
+const NOT_GRIDS = ['!geohash_grid', '!geotile_grid', '!filter'];
+const RADIUS = ['count', 'avg', 'sum', 'min', 'max', 'cardinality'];
 const NO_PIPELINE = ['!derivative', '!serial_diff', '!moving_avg', '!cumulative_sum'];
-const ANY_BUCKET = ['!geohash_grid'];
+const XY_FILTERS = { metric: NOT_GEO, radius: RADIUS, segment: NOT_GRIDS, group: NOT_GRIDS, split: NOT_GRIDS };
+const MAP_METRICS = ['count', 'avg', 'sum', 'min', 'max', 'cardinality', 'top_hits'];
 
+/** The `aggFilter` of the original's schemas: what each part of each kind of chart accepts */
 const AGG_FILTERS: Record<string, Record<string, string[]>> = {
-  xy: {
-    radius: ['count', 'avg', 'sum', 'min', 'max', 'cardinality', 'top_hits'],
-    segment: ANY_BUCKET,
-    group: ANY_BUCKET,
-    split: ANY_BUCKET,
-  },
-  pie: { metric: ['sum', 'count', 'cardinality', 'top_hits'], segment: ANY_BUCKET, split: ANY_BUCKET },
-  gauge: { metric: ['!std_dev', '!percentiles', '!percentile_ranks', ...NO_PIPELINE], group: ANY_BUCKET },
+  area: XY_FILTERS,
+  histogram: XY_FILTERS,
+  horizontal_bar: XY_FILTERS,
+  line: { ...XY_FILTERS, radius: [...RADIUS, 'top_hits'] },
+  pie: { metric: ['sum', 'count', 'cardinality', 'top_hits'], segment: NOT_GRIDS, split: NOT_GRIDS },
+  gauge: { metric: ['!std_dev', '!geo_centroid', '!percentiles', '!percentile_ranks', ...NO_PIPELINE, '!geo_bounds'], group: NOT_GRIDS },
+  goal: { metric: ['!std_dev', '!geo_centroid', '!percentiles', '!percentile_ranks', ...NO_PIPELINE, '!geo_bounds'], group: NOT_GRIDS },
   heatmap: {
     metric: ['count', 'avg', 'median', 'sum', 'min', 'max', 'cardinality', 'std_dev', 'top_hits'],
-    segment: ANY_BUCKET,
-    group: ANY_BUCKET,
-    split: ANY_BUCKET,
+    segment: NOT_GRIDS,
+    group: NOT_GRIDS,
+    split: NOT_GRIDS,
   },
-  metric: { metric: ['!std_dev', ...NO_PIPELINE], group: ANY_BUCKET },
-  tagcloud: { metric: ['!std_dev', '!percentiles', '!percentile_ranks', '!derivative'], segment: ['terms', 'significant_terms'] },
-  table: {},
-  tile_map: { metric: ['count', 'avg', 'sum', 'min', 'max', 'cardinality', 'top_hits'], segment: ['geohash_grid'] },
-  region_map: {
-    metric: ['count', 'avg', 'sum', 'min', 'max', 'cardinality', 'top_hits', 'sum_bucket', 'min_bucket', 'max_bucket', 'avg_bucket'],
-    segment: ['terms'],
-  },
+  metric: { metric: ['!std_dev', '!geo_centroid', ...NO_PIPELINE, '!geo_bounds'], group: NOT_GRIDS },
+  tagcloud: { metric: ['!std_dev', '!percentiles', '!percentile_ranks', '!derivative', '!geo_bounds', '!geo_centroid'], segment: ['terms', 'significant_terms'] },
+  table: { metric: NOT_GEO, bucket: ['!filter'], split: ['!filter'] },
+  tile_map: { metric: MAP_METRICS, segment: ['geohash_grid'] },
+  region_map: { metric: [...MAP_METRICS, 'sum_bucket', 'min_bucket', 'max_bucket', 'avg_bucket'], segment: ['terms'] },
 };
 
-const filterFamily = (type: string) =>
-  type === 'area' || type === 'line' || type === 'histogram' || type === 'horizontal_bar' ? 'xy' : type === 'goal' ? 'gauge' : type;
+/** The parts of a chart that must be asked before any other bucket */
+const MUST_BE_FIRST: Record<string, string[]> = { pie: ['split'] };
+/** The parts of a chart whose top hit may be on a field of text */
+const ALLOW_STRINGS: Record<string, string[]> = { table: ['metric'], metric: ['metric'] };
 
-/** The aggregations someone may choose for a part of a kind of chart, in the order they are listed */
-export function allowedAggs(type: string, schema: Schema): string[] {
-  const all: readonly string[] = schema.group === 'metrics' ? METRIC_TYPES : BUCKET_TYPES;
-  const filter = AGG_FILTERS[filterFamily(type)]?.[schema.name] ?? [];
+export const mustBeFirst = (type: string, schema: string | undefined) => Boolean(schema && MUST_BE_FIRST[type]?.includes(schema));
+export const allowsStrings = (type: string, schema: string | undefined) => Boolean(schema && ALLOW_STRINGS[type]?.includes(schema));
+
+/** What a list of names allows: names, or names to refuse after a `!` */
+function filterNames(names: readonly string[], filter: readonly string[]): string[] {
   const wanted = filter.filter((name) => !name.startsWith('!'));
   const refused = new Set(filter.filter((name) => name.startsWith('!')).map((name) => name.slice(1)));
-  return all.filter((name) => (wanted.length ? wanted.includes(name) : true) && !refused.has(name));
+  return names.filter((name) => (wanted.length ? wanted.includes(name) : true) && !refused.has(name));
+}
+
+/**
+ * The aggregations someone may choose for a part of a kind of chart. The bucket types named by
+ * the advanced setting `visualize:disableBucketAgg` are not offered, as the original leaves them
+ * out of its registry.
+ */
+export function allowedAggs(type: string, schema: Schema, disabledBuckets: readonly string[] = []): string[] {
+  const all: readonly string[] = schema.group === 'metrics' ? METRIC_TYPES : BUCKET_TYPES.filter((name) => !disabledBuckets.includes(name));
+  return filterNames(all, AGG_FILTERS[type]?.[schema.name] ?? []);
+}
+
+/**
+ * Aggregations as the original reads them while `visualize:disableBucketAgg` names their type: the
+ * type is gone from its registry, so such an aggregation keeps its id, its state and its part in
+ * the chart but loses its type and its parameters, in the list and inside another's parameters.
+ * The editor then shows it without an aggregation, and the request leaves it out.
+ */
+export function withoutDisabledBuckets(aggs: AggConfig[], disabledBuckets: readonly string[]): AggConfig[] {
+  if (!disabledBuckets.length) return aggs;
+  const isAgg = (value: unknown): value is AggConfig =>
+    value !== null && typeof value === 'object' && typeof (value as { id?: unknown }).id === 'string' && typeof (value as { type?: unknown }).type === 'string';
+  const strip = (agg: AggConfig): AggConfig => {
+    if ((BUCKET_TYPES as readonly string[]).includes(agg.type) && disabledBuckets.includes(agg.type)) {
+      const out: AggConfig = { id: agg.id, enabled: agg.enabled, type: '', params: {} };
+      if (agg.schema !== undefined) out.schema = agg.schema;
+      return out;
+    }
+    if (!agg.params) return agg;
+    let changed = false;
+    const params: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(agg.params)) {
+      params[key] = isAgg(value) ? strip(value) : value;
+      changed = changed || params[key] !== value;
+    }
+    return changed ? { ...agg, params } : agg;
+  };
+  return aggs.map(strip);
+}
+
+/** The aggregations an aggregation inside another may be: the original's `allowedAggs` of the parameter */
+export function nestedAggs(parentType: string, param: string, disabledBuckets: readonly string[] = []): string[] {
+  if (param === 'customBucket') return BUCKET_TYPES.filter((name) => !disabledBuckets.includes(name));
+  const excluded = ['top_hits', 'percentiles', 'percentile_ranks', 'median', 'std_dev'];
+  if (param === 'orderAgg') {
+    return filterNames(METRIC_TYPES, ['top_hits', 'percentiles', 'median', 'std_dev', ...PARENT_PIPELINES, ...SIBLING_PIPELINES].map((name) => `!${name}`));
+  }
+  if (SIBLING_PIPELINES.includes(parentType)) {
+    return filterNames(METRIC_TYPES, [...excluded, ...SIBLING_PIPELINES, ...PARENT_PIPELINES].map((name) => `!${name}`));
+  }
+  return filterNames(METRIC_TYPES, excluded.map((name) => `!${name}`));
 }
 
 export const SIBLING_PIPELINES = ['avg_bucket', 'sum_bucket', 'min_bucket', 'max_bucket'];
@@ -274,6 +332,21 @@ export function aggGroup(type: string): string | undefined {
   if (SIBLING_PIPELINES.includes(type)) return 'Sibling pipeline aggregations';
   if (PARENT_PIPELINES.includes(type)) return 'Parent Pipeline Aggregations';
   return (METRIC_TYPES as readonly string[]).includes(type) ? 'Metric Aggregations' : undefined;
+}
+
+const byLabel = (a = '', b = '') => a.toLowerCase().localeCompare(b.toLowerCase());
+
+/**
+ * The aggregations the editor's select offers, as OpenSearch Dashboards lists them: by title,
+ * under headings in the same order, and with no heading when all would be under one. A nested
+ * aggregation's are listed without headings.
+ */
+export function aggTypeOptions(types: readonly string[], nested?: boolean): Array<{ value: string; label: string; group?: string }> {
+  const options = types.map((type) => ({ value: type, label: AGG_TITLES[type] ?? type, group: nested ? undefined : aggGroup(type) }));
+  const headed = new Set(options.map((option) => option.group)).size > 1;
+  return options
+    .map((option) => (headed ? option : { ...option, group: undefined }))
+    .sort((a, b) => byLabel(a.group, b.group) || byLabel(a.label, b.label));
 }
 
 // --- Which fields an aggregation accepts ----------------------------------------------------------
@@ -297,31 +370,11 @@ export const FIELD_TYPES: Record<string, string[] | '*'> = {
   terms: ['number', 'boolean', 'date', 'ip', 'string'],
   significant_terms: ['string'],
   geohash_grid: ['geo_point'],
+  geotile_grid: ['geo_point'],
 };
 
 /** Whether an aggregation is on a field at all: a count and the pipelines are not */
 export const takesField = (type: string) => type in FIELD_TYPES;
-
-const META_FIELDS = new Set(['_id', '_index', '_score', '_source', '_type']);
-
-/** The fields of an index pattern an aggregation can be on, by name */
-export function fieldsFor(type: string, indexPattern: IndexPattern | undefined, purpose: 'field' | 'sort' = 'field'): Field[] {
-  const fields = indexPattern?.fields ?? [];
-  let accepted: Field[];
-  if (purpose === 'sort') {
-    accepted = fields.filter((field) => field.aggregatable && ['number', 'date', 'ip', 'string'].includes(field.type));
-  } else if (type === 'top_hits') {
-    // A top hit reads the document itself, so any field of it will do
-    accepted = fields.filter((field) => !META_FIELDS.has(field.name) || field.name === '_source');
-  } else {
-    const types = FIELD_TYPES[type];
-    if (!types) return [];
-    accepted = fields.filter(
-      (field) => (field.aggregatable || field.scripted) && !META_FIELDS.has(field.name) && (types === '*' || types.includes(field.type))
-    );
-  }
-  return [...accepted].sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
-}
 
 // --- New aggregations -----------------------------------------------------------------------------
 
@@ -334,120 +387,89 @@ export function nextAggId(aggs: AggConfig[]): string {
   return String(highest + 1);
 }
 
-/** The parameters an aggregation has when someone has just chosen its type */
+const fieldName = (agg: AggConfig | undefined): string | undefined => {
+  const field = agg?.params?.field as string | { name?: string } | undefined;
+  return typeof field === 'string' ? field : field?.name;
+};
+
+/** A count inside another aggregation, as the original's `makeAgg` makes one */
+export const nestedCount = (id: string, schema?: string): AggConfig => ({ id, enabled: true, type: 'count', params: {}, ...(schema ? { schema } : {}) });
+
+/**
+ * The parameters an aggregation has when someone has just chosen its type: its type's defaults,
+ * with what the editor of each sets as it opens. A terms aggregation is ordered by the first
+ * metric it can be ordered by; a pipeline gets the aggregations inside it.
+ */
 export function defaultAggParams(
   type: string,
   id: string,
   indexPattern: IndexPattern | undefined,
   aggs: AggConfig[],
-  language = 'kuery'
+  language = 'kuery',
+  field?: string
 ): Record<string, unknown> {
-  const timeField = indexPattern?.timeFieldName;
-  switch (type) {
-    case 'date_histogram':
-      return {
-        field: timeField,
-        timeRange: undefined,
-        useNormalizedOpenSearchInterval: true,
-        scaleMetricValues: false,
-        interval: 'auto',
-        drop_partials: false,
-        min_doc_count: 1,
-        extended_bounds: {},
-      };
-    case 'histogram':
-      return { interval: 'auto', min_doc_count: false, has_extended_bounds: false, extended_bounds: { min: '', max: '' } };
-    case 'range':
-      return {
-        ranges: [
-          { from: 0, to: 1000 },
-          { from: 1000, to: 2000 },
-        ],
-      };
-    case 'date_range':
-      return { ranges: [{ from: 'now-1w/w', to: 'now' }] };
-    case 'ip_range':
-      return {
-        ipRangeType: 'fromTo',
-        ranges: {
-          fromTo: [
-            { from: '0.0.0.0', to: '127.255.255.255' },
-            { from: '128.0.0.0', to: '191.255.255.255' },
-          ],
-          mask: [{ mask: '0.0.0.0/1' }, { mask: '128.0.0.0/2' }],
-        },
-      };
-    case 'terms': {
-      const metric = aggs.find((agg) => orderableMetric(agg));
-      return {
-        orderBy: metric ? metric.id : '_key',
-        order: 'desc',
-        size: 5,
-        otherBucket: false,
-        otherBucketLabel: 'Other',
-        missingBucket: false,
-        missingBucketLabel: 'Missing',
-      };
-    }
-    case 'significant_terms':
-      return { size: 10 };
-    case 'filters':
-      return { filters: [{ input: { query: '', language }, label: '' }] };
-    case 'geohash_grid':
-      return { autoPrecision: true, precision: 2, useGeocentroid: true, isFilteredByCollar: true };
-    case 'percentiles':
-      return { percents: [1, 5, 25, 50, 75, 95, 99] };
-    case 'percentile_ranks':
-      return { values: [0] };
-    case 'top_hits':
-      return { aggregate: 'concat', size: 1, sortField: timeField, sortOrder: 'desc' };
-    case 'avg_bucket':
-    case 'sum_bucket':
-    case 'min_bucket':
-    case 'max_bucket':
-      return {
-        customBucket: {
-          id: `${id}-bucket`,
-          enabled: true,
-          type: 'date_histogram',
-          params: defaultAggParams('date_histogram', `${id}-bucket`, indexPattern, aggs, language),
-        },
-        customMetric: { id: `${id}-metric`, enabled: true, type: 'count', params: {} },
-      };
-    case 'derivative':
-    case 'cumulative_sum':
-    case 'moving_avg':
-    case 'serial_diff':
-      return { metricAgg: 'custom', customMetric: { id: `${id}-metric`, enabled: true, type: 'count', params: {} } };
-    default:
-      return {};
+  const env = { indexPattern, queryLanguage: language };
+  const params = paramsForType(type, field, env);
+  if (type === 'terms') params.orderBy = firstOrderBy(aggs.filter(isMetricSchema), { indexPattern, aggs });
+  if (SIBLING_PIPELINES.includes(type)) {
+    params.customBucket = { id: `${id}-bucket`, enabled: true, type: 'date_histogram', params: paramsForType('date_histogram', undefined, env) };
+    params.customMetric = nestedCount(`${id}-metric`);
   }
+  if (PARENT_PIPELINES.includes(type)) params.customMetric = nestedCount(`${id}-metric`);
+  return params;
 }
 
-/** Whether the buckets of a terms aggregation can be ordered by a metric of the chart */
+const isMetricSchema = (agg: AggConfig) => agg.schema === undefined || agg.schema === 'metric' || agg.schema === 'radius';
+
+/** Whether the buckets of a terms aggregation can be ordered by a metric of the chart: the original's `termsAggFilter` */
 export const orderableMetric = (agg: AggConfig) =>
   agg.enabled !== false &&
   (METRIC_TYPES as readonly string[]).includes(agg.type) &&
-  !['top_hits', 'percentiles', 'percentile_ranks', 'std_dev', ...SIBLING_PIPELINES, ...PARENT_PIPELINES].includes(agg.type);
+  !['top_hits', 'percentiles', 'std_dev', 'median', ...SIBLING_PIPELINES, ...PARENT_PIPELINES].includes(agg.type);
 
 /**
- * The aggregations with one more, for a part of the chart. A metric starts as a count; a bucket
- * has no type until someone chooses one. A chart is split before anything else, so the
- * aggregation that splits it goes in front of the other buckets.
+ * What a terms aggregation is ordered by when nothing says: the first value of the chart's metrics
+ * that can order it (a percentile rank is one), or the alphabet
  */
-export function addAgg(aggs: AggConfig[], schema: Schema): AggConfig[] {
-  const id = nextAggId(aggs);
-  const agg: AggConfig = { id, enabled: true, type: schema.group === 'metrics' ? 'count' : '', schema: schema.name, params: {} };
-  if (schema.name === 'split') {
-    if (schema.group === 'buckets') agg.params = { row: true };
-    const firstBucket = aggs.findIndex((candidate) => !(METRIC_TYPES as readonly string[]).includes(candidate.type));
-    if (firstBucket === -1) return [...aggs, agg];
-    return [...aggs.slice(0, firstBucket), agg, ...aggs.slice(firstBucket)];
-  }
-  return [...aggs, agg];
+export function firstOrderBy(metrics: AggConfig[], context: AggContext): string {
+  const metric = metrics.find((agg) => agg.enabled !== false && Boolean(agg.type) && orderableMetric(agg));
+  return (metric && responseAggs(metric, context)[0]?.id) ?? '_key';
 }
 
-/** The same aggregation with another type: what the old and the new one share is kept */
+/**
+ * The parameters of a terms aggregation once someone chooses what it is ordered by: it has a custom
+ * metric only while it is ordered by one, as the original's `order_agg` editor takes it away
+ */
+export const orderByParams = (aggId: string, orderBy: string, orderAgg: unknown): Record<string, unknown> => ({
+  orderBy,
+  orderAgg: orderBy === 'custom' ? (orderAgg ?? nestedCount(`${aggId}-orderAgg`, 'orderAgg')) : undefined,
+});
+
+/** Whether a parent pipeline can work on a metric of the chart, as the original's `metric_agg` editor filters them */
+export const parentPipelineMetric = (agg: AggConfig) => !['top_hits', 'percentiles', 'percentile_ranks', 'median', 'std_dev'].includes(agg.type);
+
+/**
+ * What a terms aggregation is ordered by, or a parent pipeline works on, once the chart's metrics
+ * have changed, as the original's `useFallbackMetric`: a metric that is gone, or one that cannot be
+ * used, gives way to the fallback. Nothing when the choice stands.
+ */
+export function fallbackMetric<T extends { id: string }>(chosen: string, metrics: T[], usable: (agg: T) => boolean, fallback: string): string | undefined {
+  if (!chosen || chosen === 'custom' || chosen === fallback) return undefined;
+  return metrics.some((metric) => metric.id === chosen && usable(metric)) ? undefined : fallback;
+}
+
+/**
+ * The aggregations with one more, for a part of the chart, as the original adds one: last of
+ * them all, with no type until someone chooses one.
+ */
+export function addAgg(aggs: AggConfig[], schema: Schema): AggConfig[] {
+  return [...aggs, { id: nextAggId(aggs), enabled: true, type: '', schema: schema.name, params: {} }];
+}
+
+/**
+ * The same aggregation with another type, as the original's type setter: the field is kept when
+ * the new type accepts it, everything else starts again from the new type's defaults.
+ */
 export function changeAggType(
   agg: AggConfig,
   type: string,
@@ -455,72 +477,248 @@ export function changeAggType(
   aggs: AggConfig[],
   language?: string
 ): AggConfig {
-  const params = defaultAggParams(type, agg.id, indexPattern, aggs, language);
-  const kept: Record<string, unknown> = {};
-  if (agg.params?.customLabel) kept.customLabel = agg.params.customLabel;
-  if (agg.schema === 'split' && agg.params?.row !== undefined) kept.row = agg.params.row;
-  const field = typeof agg.params?.field === 'string' ? agg.params.field : (agg.params?.field as { name?: string } | undefined)?.name;
-  const accepted = fieldsFor(type, indexPattern);
-  if (takesField(type)) {
-    if (field && accepted.some((candidate) => candidate.name === field)) kept.field = field;
-    else if (params.field === undefined && accepted.length === 1) kept.field = accepted[0].name;
+  const field = fieldName(agg);
+  const kept = field && availableFields(type, indexPattern).some((candidate) => candidate.name === field) ? field : undefined;
+  return { ...agg, type, params: defaultAggParams(type, agg.id, indexPattern, aggs, language, kept) };
+}
+
+/** The aggregations without one, as the original removes one: a chart keeps a metric switched on */
+export function removeAgg(aggs: AggConfig[], id: string, schemas: Schema[]): AggConfig[] {
+  const removed = aggs.find((agg) => agg.id === id);
+  const next = aggs.filter((agg) => agg.id !== id);
+  const wasMetric = schemas.find((schema) => schema.name === removed?.schema)?.group === 'metrics';
+  if (wasMetric && !next.some((agg) => agg.schema === 'metric' && agg.enabled !== false)) {
+    const first = next.findIndex((agg) => agg.schema === 'metric');
+    if (first !== -1) return next.map((agg, index) => (index === first ? { ...agg, enabled: true } : agg));
   }
-  return { ...agg, type, params: { ...params, ...kept } };
+  return next;
+}
+
+/** The aggregations with one moved to where another was, as the original's drag and drop */
+export function reorderAggs(aggs: AggConfig[], sourceId: string, destinationId: string): AggConfig[] {
+  const from = aggs.findIndex((agg) => agg.id === sourceId);
+  const to = aggs.findIndex((agg) => agg.id === destinationId);
+  if (from === -1 || to === -1 || from === to) return aggs;
+  const next = [...aggs];
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  return next;
 }
 
 // --- What is wrong with an aggregation ------------------------------------------------------------
 
-/** Why an aggregation cannot be asked yet, or nothing */
-export function aggProblem(agg: AggConfig, indexPattern: IndexPattern | undefined): string | undefined {
-  if (!agg.type) return 'Select an aggregation';
-  const fieldName = typeof agg.params?.field === 'string' ? agg.params.field : (agg.params?.field as { name?: string } | undefined)?.name;
-  if (takesField(agg.type)) {
-    if (!fieldName) return 'Select a field';
-    if (indexPattern && !indexPattern.fields.some((field) => field.name === fieldName)) {
-      return `The field “${fieldName}” is not in this index pattern`;
-    }
-  }
-  if (SIBLING_PIPELINES.includes(agg.type)) {
-    const bucket = agg.params?.customBucket as AggConfig | undefined;
-    const metric = agg.params?.customMetric as AggConfig | undefined;
-    return (bucket ? aggProblem(bucket, indexPattern) : 'Select an aggregation') ?? (metric ? aggProblem(metric, indexPattern) : undefined);
-  }
-  if (PARENT_PIPELINES.includes(agg.type) && (agg.params?.metricAgg ?? 'custom') === 'custom') {
-    const metric = agg.params?.customMetric as AggConfig | undefined;
-    return metric ? aggProblem(metric, indexPattern) : 'Select an aggregation';
-  }
-  if (agg.type === 'terms' && agg.params?.orderBy === 'custom') {
-    const order = agg.params?.orderAgg as AggConfig | undefined;
-    return order ? aggProblem(order, indexPattern) : 'Select an aggregation';
-  }
-  if ((agg.type === 'terms' || agg.type === 'significant_terms') && !(Number(agg.params?.size) > 0)) return 'Size must be greater than 0';
-  if (agg.type === 'histogram') {
-    const interval = agg.params?.interval;
-    if (interval !== 'auto' && interval !== undefined && !(Number(interval) > 0)) return 'Enter an interval';
-  }
-  return undefined;
+const IPV4 = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
+const isIp = (text: unknown) => typeof text === 'string' && IPV4.test(text);
+const isCidr = (text: unknown) => {
+  if (typeof text !== 'string') return false;
+  const [ip, bits, ...rest] = text.split('/');
+  return rest.length === 0 && isIp(ip) && /^\d{1,2}$/.test(bits ?? '') && Number(bits) <= 32;
+};
+const isDateMath = (text: unknown) => typeof text === 'string' && text !== '' && (parseDateMath(text) !== undefined || !Number.isNaN(new Date(text).getTime()));
+const isBlank = (value: unknown) => value === undefined || value === null || value === '';
+
+/** An end of a date range the original takes: nothing, or date math or a date */
+export const isValidDateMath = (text: unknown): boolean => isBlank(text) || isDateMath(text);
+
+/** A field of an IP range the original takes: nothing, or an address (a mask with `cidr`) */
+export const isValidIpField = (text: unknown, cidr = false): boolean => isBlank(text) || (cidr ? isCidr(text) : isIp(text));
+
+/** Whether an interval is one a date histogram takes: auto, a unit, or a number of a unit */
+export function isValidDateInterval(value: unknown): boolean {
+  if (typeof value !== 'string' || value.trim() === '') return false;
+  const text = value.trim();
+  if (text === 'auto' || text === 'custom') return true;
+  return parseInterval(text) !== undefined;
 }
 
-/** What keeps a chart from being drawn: an aggregation in error, or a part it needs and lacks */
+/** Whether JSON input is JSON, or nothing */
+export function isValidJson(json: unknown): boolean {
+  if (typeof json !== 'string' || json.trim() === '') return true;
+  try {
+    JSON.parse(json);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export interface ProblemOptions {
+  /** The kind of chart: a top hit takes text where it allows it */
+  visType?: string;
+  /** Every aggregation of the chart: a pipeline points at one of them */
+  aggs?: AggConfig[];
+}
+
+/**
+ * What is wrong with each parameter of an aggregation, as the original's editors judge them: a
+ * message to show under it, or `true` for a field drawn invalid without one. `type` is the
+ * aggregation itself.
+ */
+export function paramProblems(agg: AggConfig, indexPattern: IndexPattern | undefined, options: ProblemOptions = {}): Record<string, string | true> {
+  const problems: Record<string, string | true> = {};
+  if (!agg.type) {
+    problems.type = true;
+    return problems;
+  }
+  const params = agg.params ?? {};
+  const allowStrings = options.visType ? allowsStrings(options.visType, agg.schema) : true;
+  if (takesField(agg.type)) {
+    const fields = availableFields(agg.type, indexPattern, 'field', allowStrings);
+    const name = fieldName(agg);
+    if (!fields.length) {
+      problems.field = `The index pattern ${indexPattern?.displayName || indexPattern?.title || ''} does not contain any of the following compatible field types: ${prose(fieldTypesOf(agg.type))}`;
+    } else if (!name || (indexPattern && !indexPattern.fields.some((field) => field.name === name))) problems.field = true;
+  }
+  const json = params.json;
+  if (!isValidJson(json)) problems.json = true;
+  switch (agg.type) {
+    case 'terms': {
+      if (!(Number(params.size) > 0)) problems.size = true;
+      if (!params.orderBy) problems.orderBy = true;
+      if (params.orderBy === 'custom') nested(problems, 'orderAgg', params.orderAgg, indexPattern, options);
+      break;
+    }
+    case 'significant_terms':
+      if (!(Number(params.size) > 0)) problems.size = true;
+      break;
+    case 'top_hits': {
+      if (!(Number(params.size) > 0)) problems.size = true;
+      const field = indexPattern?.fields.find((candidate) => candidate.name === fieldName(agg));
+      if (field && !params.aggregate) problems.aggregate = topAggregates(field.type).length ? true : 'The chosen field has no compatible aggregations.';
+      const sortFields = availableFields('top_hits', indexPattern, 'sortField');
+      const sort = params.sortField as string | { name?: string } | undefined;
+      const sortName = typeof sort === 'string' ? sort : sort?.name;
+      if (sortFields.length && !sortName) problems.sortField = true;
+      break;
+    }
+    case 'histogram': {
+      const interval = params.interval;
+      if (isBlank(interval) || (interval !== 'auto' && !(Number(interval) >= 0))) problems.interval = true;
+      if (params.has_extended_bounds) {
+        const bounds = (params.extended_bounds ?? {}) as { min?: unknown; max?: unknown };
+        if (isBlank(bounds.min) || isBlank(bounds.max)) problems.extended_bounds = true;
+        else if (Number(bounds.max) < Number(bounds.min)) problems.extended_bounds = 'Min should be less than or equal to Max.';
+      }
+      break;
+    }
+    case 'date_histogram': {
+      const interval = params.interval === 'custom' ? params.customInterval : params.interval;
+      // As the original, weeks, months and years are asked one at a time
+      const calendar = typeof interval === 'string' ? /^([1-9][0-9]*)\s*(w|M|y)$/.exec(interval.trim()) : null;
+      if (calendar && Number(calendar[1]) !== 1) problems.interval = `Invalid calendar interval: ${String(interval)}, value must be 1`;
+      else if (!isValidDateInterval(interval)) problems.interval = isBlank(interval) ? true : 'Invalid interval format.';
+      break;
+    }
+    case 'date_range': {
+      const ranges = (Array.isArray(params.ranges) ? params.ranges : []) as Array<{ from?: string; to?: string }>;
+      const wrong = ranges.some(({ from, to }) => (!from && !to) || (Boolean(from) && !isDateMath(from)) || (Boolean(to) && !isDateMath(to)));
+      if (wrong) problems.ranges = 'Each range should have at least one valid date.';
+      break;
+    }
+    case 'ip_range': {
+      const ranges = (params.ranges ?? {}) as { fromTo?: Array<{ from?: string; to?: string }>; mask?: Array<{ mask?: string }> };
+      const wrong =
+        params.ipRangeType === 'mask'
+          ? (ranges.mask ?? []).some((item) => !isCidr(item.mask))
+          : (ranges.fromTo ?? []).some((item) => (!isBlank(item.from) && !isIp(item.from)) || (!isBlank(item.to) && !isIp(item.to)));
+      if (wrong) problems.ranges = true;
+      break;
+    }
+    case 'percentiles':
+    case 'percentile_ranks': {
+      const name = agg.type === 'percentiles' ? 'percents' : 'values';
+      const list = (Array.isArray(params[name]) ? params[name] : []) as unknown[];
+      const numbers = list.map((value) => (isBlank(value) ? Number.NaN : Number(value)));
+      const outOfRange = agg.type === 'percentiles' && numbers.some((value) => value < 0 || value > 100);
+      const repeated = agg.type === 'percentiles' && new Set(numbers).size !== numbers.length;
+      const unordered = agg.type === 'percentile_ranks' && numbers.some((value, index) => index > 0 && value <= numbers[index - 1]);
+      if (!list.length || numbers.some(Number.isNaN) || outOfRange || repeated || unordered) problems[name] = true;
+      break;
+    }
+    default:
+      break;
+  }
+  if (SIBLING_PIPELINES.includes(agg.type)) {
+    nested(problems, 'customBucket', params.customBucket, indexPattern, options);
+    nested(problems, 'customMetric', params.customMetric, indexPattern, options);
+  }
+  if (PARENT_PIPELINES.includes(agg.type)) {
+    if (!params.metricAgg) problems.metricAgg = true;
+    else if (params.metricAgg === 'custom') nested(problems, 'customMetric', params.customMetric, indexPattern, options);
+  }
+  return problems;
+}
+
+function nested(problems: Record<string, string | true>, name: string, value: unknown, indexPattern: IndexPattern | undefined, options: ProblemOptions) {
+  const agg = value as AggConfig | undefined;
+  if (!agg || typeof agg !== 'object') {
+    problems[name] = true;
+    return;
+  }
+  if (Object.keys(paramProblems(agg, indexPattern, { aggs: options.aggs })).length) problems[name] = true;
+}
+
+/** The ways a top hit can reduce several values of a field to one, for a type of field */
+export function topAggregates(fieldType: string | undefined): Array<{ value: string; label: string }> {
+  const concat = { value: 'concat', label: 'Concatenate' };
+  if (fieldType === 'number') {
+    return [{ value: 'average', label: 'Average' }, concat, { value: 'max', label: 'Max' }, { value: 'min', label: 'Min' }, { value: 'sum', label: 'Sum' }];
+  }
+  return fieldType && fieldType !== '_source' && fieldType !== 'geo_shape' ? [concat] : [];
+}
+
+/** A list in words, as the original's `formatListAsProse` without the last comma */
+function prose(items: string[]): string {
+  if (items.length <= 1) return items.join('');
+  return `${items.slice(0, -1).join(', ')} or ${items[items.length - 1]}`;
+}
+
+/** Why an aggregation cannot be asked yet, or nothing */
+export function aggProblem(agg: AggConfig, indexPattern: IndexPattern | undefined, options: ProblemOptions = {}): string | undefined {
+  const problems = paramProblems(agg, indexPattern, options);
+  const [name] = Object.keys(problems);
+  if (!name) return undefined;
+  const problem = problems[name];
+  if (typeof problem === 'string') return problem;
+  return name === 'type' ? 'Select an aggregation' : name === 'field' ? 'Select a field' : `Check ${name}`;
+}
+
+/** The title of the last parent pipeline metric that is asked: the buckets must end in a histogram for it */
+export function lastParentPipelineTitle(aggs: AggConfig[], schemas: Schema[]): string | undefined {
+  const metrics = aggs.filter((agg) => agg.enabled !== false && agg.type && schemas.find((schema) => schema.name === agg.schema)?.group === 'metrics');
+  const last = [...metrics].reverse().find((agg) => PARENT_PIPELINES.includes(agg.type));
+  return last ? AGG_TITLES[last.type] : undefined;
+}
+
+/**
+ * What keeps a chart from being drawn, by aggregation: one in error, a bucket out of its place,
+ * a parent pipeline without the histogram it needs under it; `buckets` when there is no bucket
+ * at all for it.
+ */
 export function visProblems(vis: Pick<Vis, 'type' | 'aggs'>, indexPattern: IndexPattern | undefined): Record<string, string> {
   const problems: Record<string, string> = {};
+  const schemas = visType(vis.type)?.schemas ?? [];
   for (const agg of vis.aggs) {
-    if (agg.enabled === false) continue;
-    const problem = aggProblem(agg, indexPattern);
+    const problem = aggProblem(agg, indexPattern, { visType: vis.type, aggs: vis.aggs });
     if (problem) problems[agg.id] = problem;
   }
-  for (const schema of visType(vis.type)?.schemas ?? []) {
-    const count = vis.aggs.filter((agg) => agg.schema === schema.name && agg.enabled !== false).length;
-    if (schema.min && count < schema.min) problems[`schema:${schema.name}`] = `${schema.title} needs at least ${schema.min}`;
-  }
-  const parent = vis.aggs.find((agg) => agg.enabled !== false && PARENT_PIPELINES.includes(agg.type));
-  if (parent && !problems[parent.id]) {
-    const buckets = vis.aggs.filter((agg) => agg.enabled !== false && !(METRIC_TYPES as readonly string[]).includes(agg.type));
+  const buckets = vis.aggs.filter((agg) => schemas.find((schema) => schema.name === agg.schema)?.group === 'buckets');
+  const pipeline = lastParentPipelineTitle(vis.aggs, schemas);
+  if (pipeline) {
     const last = buckets[buckets.length - 1];
-    if (!last || (last.type !== 'date_histogram' && last.type !== 'histogram')) {
-      problems[parent.id] = 'Add a bucket with "Date Histogram" or "Histogram" aggregation.';
+    if (!last) problems.buckets = 'Add a bucket with "Date Histogram" or "Histogram" aggregation.';
+    else if (last.type && last.type !== 'date_histogram' && last.type !== 'histogram' && !problems[last.id]) {
+      problems[last.id] = `Last bucket aggregation must be "Date Histogram" or "Histogram" when using "${pipeline}" metric aggregation.`;
     }
   }
+  buckets.forEach((agg, index) => {
+    if (!mustBeFirst(vis.type, agg.schema) || problems[agg.id]) return;
+    const firstOther = buckets.findIndex((other) => other.schema !== agg.schema);
+    if (firstOther !== -1 && index > firstOther) {
+      const title = schemas.find((schema) => schema.name === agg.schema)?.title ?? agg.schema;
+      problems[agg.id] = `"${title}" aggs must run before all other buckets!`;
+    }
+  });
   return problems;
 }
 
@@ -543,7 +741,7 @@ interface ValueAxis {
   [other: string]: unknown;
 }
 
-const isXY = (type: string) => filterFamily(type) === 'xy';
+const isXY = (type: string) => type === 'area' || type === 'line' || type === 'histogram' || type === 'horizontal_bar';
 
 // The title an axis takes by itself: the label of its series, when it has one only
 function axisLabels(series: SeriesParam[], axes: ValueAxis[]): Record<string, string> {
@@ -566,9 +764,11 @@ export function syncParams(vis: Pick<Vis, 'type' | 'params' | 'aggs'>, context: 
   const axes = (Array.isArray(vis.params.valueAxes) ? vis.params.valueAxes : []) as ValueAxis[];
   const metrics = vis.aggs.filter((agg) => agg.schema === 'metric' && agg.type);
   const firstAxis = axes[0]?.id ?? 'ValueAxis-1';
+  // A pipeline is labelled after the metric it is on, as the original's `makeLabel`
+  const labels: AggContext = { ...context, aggs: vis.aggs };
 
   const series = metrics.map((agg) => {
-    const label = aggLabel(agg, context);
+    const label = aggLabel(agg, labels);
     const existing = before.find((item) => item.data?.id === agg.id);
     if (existing) return existing.data.label === label ? existing : { ...existing, data: { id: agg.id, label } };
     const last = before[before.length - 1];

@@ -93,7 +93,7 @@ function ViewDataButton({ set }: { set: SampleDataSetSummary }) {
           <Button
             className="homSampleDataSetCard__button"
             aria-label={ariaLabel}
-            icon="arrowDown"
+            icon="chevronDown"
             iconSide="right"
             onClick={() => setOpen((was) => !was)}
           >
@@ -160,7 +160,7 @@ function CardFooter({
   // The status could not be told: the button says why, and adds nothing, as the original's
   return (
     <div className="homSampleDataSetCard__footer">
-      <Tooltip className="homSampleDataTip" content={<p>Unable to verify dataset status, error: {set.statusMsg}</p>}>
+      <Tooltip content={<p>Unable to verify dataset status, error: {set.statusMsg}</p>}>
         <Button className="homSampleDataSetCard__button" testId={`addSampleDataSet${set.id}`} aria-label={`Add ${set.name}`}>
           Add data
         </Button>

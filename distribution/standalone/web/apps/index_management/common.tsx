@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button, CallOut, CodeBlock, Health, Spinner, cx, type Tone } from '../../components/basic';
 import { CodeEditor } from '../../components/code_editor';
-import { Checkbox, FormRow, SearchField, TextField } from '../../components/form';
+import { Checkbox, FormRow, TextField } from '../../components/form';
 import { Icon } from '../../components/icon';
 import { MenuButton, Modal, copyText, type MenuItem } from '../../components/overlay';
 import { Pagination } from '../../components/table';
@@ -18,6 +18,7 @@ import { tokenizeJson } from '../../lib/json_text';
 import { getLocation, navigate, navigateHash, useLocation } from '../../router';
 import { services } from '../../services';
 import { errorMessage, type FetchOptions } from '../../services/http';
+import { tableCaption } from './model';
 import { SNAPSHOT_MANAGEMENT_PATH } from './routes';
 
 export const APP_PATH = '/app/opensearch_index_management_dashboards';
@@ -155,7 +156,12 @@ export function useListQuery<Extra extends Record<string, string>>(
   const setQuery = useCallback(
     (changes: Partial<ListQuery & Extra>) => {
       const next = { ...latest.current, ...changes };
-      const params = Object.fromEntries(Object.entries(next).map(([name, value]) => [name, String(value)]));
+      // in the order of their names, as the plugin writes them
+      const params = Object.fromEntries(
+        Object.entries(next)
+          .map(([name, value]): [string, string] => [name, String(value)])
+          .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      );
       navigateHash(hashPath, params, { replace: true });
     },
     [hashPath]
@@ -247,18 +253,21 @@ export function ActionsMenu({
   label = 'Actions',
   testId = 'moreAction',
   disabled,
+  size = 's',
 }: {
   items: MenuItem[];
   label?: string;
   testId?: string;
   disabled?: boolean;
+  /** 'm' for the theme's small button, the plugin's (32 px) */
+  size?: 's' | 'm';
 }) {
   return (
     <MenuButton
       align="right"
       items={items}
       button={(toggle) => (
-        <Button size="s" icon="chevronDown" iconSide="right" disabled={disabled} onClick={toggle} testId={testId}>
+        <Button size={size} icon="chevronDown" iconSide="right" disabled={disabled} onClick={toggle} testId={testId}>
           {label}
         </Button>
       )}
@@ -271,6 +280,7 @@ export function ExternalLink({ href, children = 'Learn more' }: { href: string; 
     <a href={href} target="_blank" rel="noopener noreferrer" className="ismExternal">
       {children}
       <Icon name="external" />
+      <span className="atlScreenReaderOnly">(opens in a new tab or window)</span>
     </a>
   );
 }
@@ -283,10 +293,12 @@ export interface TableColumn<Row> {
   name: string;
   sortable?: boolean;
   width?: string;
-  align?: 'right';
+  align?: 'right' | 'center';
   render: (row: Row) => ReactNode;
   /** What a table sorted in the browser sorts by; the field of the row when left out */
   value?: (row: Row) => unknown;
+  /** On one line, cut with an ellipsis: the theme's `truncateText` (a `fixed` table only) */
+  truncate?: boolean;
 }
 
 export interface TableProps<Row> {
@@ -302,10 +314,16 @@ export interface TableProps<Row> {
   selectable?: (row: Row) => boolean;
   loading?: boolean;
   empty?: ReactNode;
+  /** What the table says when it has no rows shows while they load as well, as the theme's table */
+  emptyWhileLoading?: boolean;
   testId?: string;
   pageSizes?: number[];
   /** Whether the rows come in pages; a table that shows them all has no pager */
   paged?: boolean;
+  /** Laid out as the theme's tables are: the columns of fixed widths, the others sharing the rest */
+  fixed?: boolean;
+  /** The theme's caption, which says how many rows there are: read aloud, and a pixel high */
+  caption?: boolean;
 }
 
 export function Table<Row>({
@@ -320,9 +338,12 @@ export function Table<Row>({
   selectable,
   loading,
   empty,
+  emptyWhileLoading,
   testId,
   pageSizes = PAGE_SIZES,
   paged = true,
+  fixed,
+  caption,
 }: TableProps<Row>) {
   const ids = new Set((selected ?? []).map(rowId));
   const tickable = rows.filter((row) => (selectable ? selectable(row) : true));
@@ -330,16 +351,21 @@ export function Table<Row>({
   const pages = Math.max(1, Math.ceil(total / query.size));
   const page = Math.min(Math.floor(query.from / query.size), pages - 1);
   return (
-    <div className={cx('ismTable', loading && 'ismTable--loading')}>
+    <div className={cx('ismTable', loading && 'ismTable--loading', fixed && 'ismTable--fixed')}>
       <div className="ismTable__scroll">
         <table className="atlTable" data-test-subj={testId}>
+          {caption && (
+            <caption className="ismTable__caption">
+              {tableCaption(rows.length, total, query.size, query.from, paged)}
+            </caption>
+          )}
           <thead>
             <tr>
               {onSelect && (
                 <th className="atlTable__check">
+                  {/* As the component library's table, ticked or not: never half ticked */}
                   <Checkbox
                     checked={allTicked}
-                    indeterminate={!allTicked && tickable.some((row) => ids.has(rowId(row)))}
                     disabled={tickable.length === 0}
                     onChange={(checked) => onSelect(checked ? tickable : [])}
                     testId="checkboxSelectAll"
@@ -347,10 +373,12 @@ export function Table<Row>({
                 </th>
               )}
               {columns.map((column, index) => {
-                const sorted = query.sortField === column.field;
+                // Two columns may show one field, as the plugin's Job Status shows the index's
+                const sorted = Boolean(column.sortable) && query.sortField === column.field;
                 return (
                   <th
-                    key={column.field}
+                    key={`${column.field}-${index}`}
+                    className={column.align === 'right' ? 'ismTable__right' : undefined}
                     style={{ width: column.width, textAlign: column.align }}
                     data-test-subj={`tableHeaderCell_${column.field}_${index}`}
                     aria-sort={sorted ? (query.sortDirection === 'asc' ? 'ascending' : 'descending') : undefined}
@@ -358,7 +386,7 @@ export function Table<Row>({
                     {column.sortable ? (
                       <button
                         type="button"
-                        className="atlTable__sort"
+                        className={cx('atlTable__sort', sorted && 'atlTable__sort--sorted')}
                         data-test-subj="tableHeaderSortButton"
                         onClick={() =>
                           onQuery({
@@ -399,8 +427,12 @@ export function Table<Row>({
                       />
                     </td>
                   )}
-                  {columns.map((column) => (
-                    <td key={column.field} style={{ textAlign: column.align }}>
+                  {columns.map((column, index) => (
+                    <td
+                      key={`${column.field}-${index}`}
+                      style={{ textAlign: column.align }}
+                      className={fixed && column.truncate ? 'ismTable__truncate' : undefined}
+                    >
                       {column.render(row)}
                     </td>
                   ))}
@@ -410,7 +442,7 @@ export function Table<Row>({
             {rows.length === 0 && (
               <tr>
                 <td colSpan={columns.length + (onSelect ? 1 : 0)}>
-                  <div className="ismTable__empty">{loading ? <Spinner /> : empty}</div>
+                  <div className="ismTable__empty">{loading && !emptyWhileLoading ? <Spinner /> : empty}</div>
                 </td>
               </tr>
             )}
@@ -513,15 +545,25 @@ export function SearchRow({
   onSearch,
   placeholder = 'Search',
   children,
+  className,
+  autoFocus,
+  clearable,
 }: {
   search: string;
   onSearch: (text: string) => void;
   placeholder?: string;
   children?: ReactNode;
+  /** In the place of the row's own spacing and line under it */
+  className?: string;
+  /** The box has the focus when the list opens */
+  autoFocus?: boolean;
+  /** The theme's small round button at the end of a box that holds text, which empties it */
+  clearable?: boolean;
 }) {
   // What is typed is shown at once and searched for a moment later
   const [text, setText] = useState(search);
   const sent = useRef(search);
+  const field = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (search !== sent.current) {
       sent.current = search;
@@ -538,9 +580,36 @@ export function SearchRow({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text]);
   return (
-    <div className="ismSearchRow">
+    <div className={className ?? 'ismSearchRow'}>
       <div className="atlGrow">
-        <SearchField value={text} onChange={setText} placeholder={placeholder} aria-label={placeholder} />
+        {/* The theme's search field, with a hold on its box to give it the focus back */}
+        <TextField
+          ref={field}
+          icon="search"
+          type="search"
+          compact
+          className={clearable ? 'ismSearchField' : undefined}
+          value={text}
+          onChange={setText}
+          placeholder={placeholder}
+          aria-label={placeholder}
+          autoFocus={autoFocus}
+          append={
+            clearable && text !== '' ? (
+              <button
+                type="button"
+                className="ismSearchField__clear"
+                aria-label="Clear input"
+                onClick={() => {
+                  setText('');
+                  field.current?.focus();
+                }}
+              >
+                <Icon name="cross" />
+              </button>
+            ) : undefined
+          }
+        />
       </div>
       {children}
     </div>
@@ -756,7 +825,7 @@ export function BottomBar({ children }: { children: ReactNode }) {
 export function SubmitError({ error }: { error?: string }) {
   if (!error) return null;
   return (
-    <CallOut tone="critical" title="Sorry, there was an error">
+    <CallOut tone="critical" icon="warning" title="Sorry, there was an error">
       <p>{error}</p>
     </CallOut>
   );
@@ -787,7 +856,7 @@ export function JSONModal({
       wide
       footer={
         <>
-          <Button variant="empty" size="s" icon="copy" onClick={() => copyText(text)}>
+          <Button variant="empty" size="s" icon="copyClipboard" onClick={() => copyText(text)}>
             Copy
           </Button>
           <Button variant="empty" size="s" onClick={onClose} testId="jsonModalCloseButton">
@@ -876,6 +945,8 @@ export function LocalTable<Row>({
   selected,
   onSelect,
   selectable,
+  fixed,
+  caption,
 }: {
   columns: Array<TableColumn<Row>>;
   rows: Row[];
@@ -889,6 +960,8 @@ export function LocalTable<Row>({
   selected?: Row[];
   onSelect?: (rows: Row[]) => void;
   selectable?: (row: Row) => boolean;
+  fixed?: boolean;
+  caption?: boolean;
 }) {
   const [query, setQuery] = useState<Pick<ListQuery, 'from' | 'size' | 'sortField' | 'sortDirection'>>({
     from: 0,
@@ -914,6 +987,8 @@ export function LocalTable<Row>({
       selected={selected}
       onSelect={onSelect}
       selectable={selectable}
+      fixed={fixed}
+      caption={caption}
     />
   );
 }

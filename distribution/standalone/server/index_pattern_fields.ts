@@ -6,7 +6,7 @@
  * aggregated on.
  */
 
-import { notFound } from './http';
+import { HttpError, errorBody } from './http';
 import { OpenSearchError, type OpenSearchClient } from './opensearch';
 
 export interface FieldDescriptor {
@@ -18,6 +18,8 @@ export interface FieldDescriptor {
   aggregatable: boolean;
   readFromDocValues: boolean;
   subType?: { multi?: { parent: string }; nested?: { path: string } };
+  /** Of a field of several kinds: the indices that hold it as each type */
+  conflictDescriptions?: Record<string, string[] | undefined>;
 }
 
 const KINDS: Record<string, string[]> = {
@@ -56,14 +58,25 @@ export const kindOf = (esType: string) => KIND_OF.get(esType) ?? 'unknown';
 const META_OVERRIDES: Record<string, Partial<FieldDescriptor>> = {
   _source: { type: '_source', esTypes: ['_source'], searchable: false, aggregatable: false },
   _id: { type: 'string', esTypes: ['_id'], searchable: true, aggregatable: true },
-  _type: { type: 'string', esTypes: ['_type'], searchable: true, aggregatable: true },
+  // OpenSearch has no _type any more: the original describes it as it describes any field it lacks
+  _type: { type: 'string' },
   _index: { type: 'string', esTypes: ['_index'], searchable: true, aggregatable: true },
   _score: { type: 'number', searchable: false, aggregatable: false },
 };
 
 type FieldCaps = Record<
   string,
-  Record<string, { type: string; searchable: boolean; aggregatable: boolean; indices?: string[] }>
+  Record<
+    string,
+    {
+      type: string;
+      searchable: boolean;
+      aggregatable: boolean;
+      indices?: string[];
+      non_searchable_indices?: string[] | null;
+      non_aggregatable_indices?: string[] | null;
+    }
+  >
 >;
 
 export function readFieldCaps(fields: FieldCaps, metaFields: string[]): FieldDescriptor[] {
@@ -80,23 +93,26 @@ export function readFieldCaps(fields: FieldCaps, metaFields: string[]): FieldDes
     if (name.startsWith('_') && !metaFields.includes(name)) continue;
 
     const caps = Object.values(byType);
+    // What some of its indices can do a field can do, as the original reads the capabilities
+    const searchable = caps.some((cap) => cap.searchable || (cap.non_searchable_indices?.length ?? 0) > 0);
+    const aggregatable = caps.some((cap) => cap.aggregatable || (cap.non_aggregatable_indices?.length ?? 0) > 0);
     if (kinds.length > 1) {
       described.push({
         name,
         type: 'conflict',
         esTypes,
-        searchable: caps.some((cap) => cap.searchable),
-        aggregatable: caps.some((cap) => cap.aggregatable),
+        searchable,
+        aggregatable,
         readFromDocValues: false,
+        conflictDescriptions: Object.fromEntries(esTypes.map((type) => [type, byType[type].indices])),
       });
       continue;
     }
-    const aggregatable = caps.every((cap) => cap.aggregatable);
     described.push({
       name,
       type: kinds[0],
       esTypes,
-      searchable: caps.every((cap) => cap.searchable),
+      searchable,
       aggregatable,
       readFromDocValues:
         aggregatable && !name.startsWith('_') && !esTypes.some((type) => ['text', 'geo_shape'].includes(type)),
@@ -118,7 +134,7 @@ export function readFieldCaps(fields: FieldCaps, metaFields: string[]): FieldDes
     // `title.keyword` under the field `title` is another way to index the same value
     const parent = parts.slice(0, -1).join('.');
     if (byName.has(parent) && !containers.has(parent)) {
-      field.subType = { ...field.subType, multi: { parent } };
+      field.subType = { multi: { parent }, ...field.subType };
     }
   }
 
@@ -127,7 +143,8 @@ export function readFieldCaps(fields: FieldCaps, metaFields: string[]): FieldDes
     const existing = byName.get(name);
     if (existing) {
       if (override) Object.assign(existing, override);
-    } else if (override) {
+    } else {
+      // A meta field OpenSearch does not describe is a text nothing can be done with
       described.push({
         name,
         type: 'string',
@@ -140,6 +157,51 @@ export function readFieldCaps(fields: FieldCaps, metaFields: string[]): FieldDes
   }
 
   return described.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+}
+
+/** A value of a failure, as the legacy client of the original writes it into its message (prettyPrint) */
+function printed(value: unknown, path: unknown[] = []): string {
+  if (typeof value !== 'object') return String(JSON.stringify(value));
+  if (path.includes(value)) return '[circular]';
+  const entries = value === null ? [] : Object.entries(value);
+  return `{ ${entries.map(([name, inner]) => `${name}=${printed(inner, [...path, value])}`).join(' & ')} }`;
+}
+
+/** What OpenSearch said, in the words of the original's legacy client (its StatusCodeError) */
+export function legacyClientMessage(body: unknown, status: number): string {
+  const error = body !== null && typeof body === 'object' ? (body as { error?: unknown }).error : undefined;
+  if (error === null || typeof error !== 'object' || Array.isArray(error)) {
+    return typeof error === 'string' && error !== '' ? error : String(errorBody(status, '').error);
+  }
+  const { root_cause: rootCause, type, reason } = error as { root_cause?: unknown; type?: unknown; reason?: unknown };
+  let message = ([] as unknown[]).concat(rootCause ?? []).reduce<string>((memo, cause) => {
+    const { type: causeType, reason: causeReason, ...extra } = (cause ?? {}) as Record<string, unknown>;
+    let text = `${memo ? `${memo} (and) ` : ''}[${String(causeType)}] ${String(causeReason)}`;
+    if (Object.keys(extra).length > 0) text += `, with ${printed(extra)}`;
+    return text;
+  }, '');
+  if (!message) {
+    if (type) message += `[${String(type)}] `;
+    if (reason) message += String(reason);
+  }
+  return message || String(errorBody(status, '').error);
+}
+
+/**
+ * Why the fields could not be read, as the original's route answers it: 404 for every failure of
+ * OpenSearch, with what the failure was in `attributes`; "No indices match" with the code
+ * no_matching_indices when the pattern names no index
+ */
+function fieldsFailure(error: OpenSearchError, pattern: string): HttpError {
+  const type = (error.body as { error?: { type?: unknown } } | undefined)?.error?.type;
+  if (type === 'index_not_found_exception') {
+    const message = `No indices match pattern "${pattern}"`;
+    return new HttpError(404, message, { ...errorBody(404, message), code: 'no_matching_indices' });
+  }
+  // (The original's message begins with "[object Object]: ", what Boom makes of the error object
+  // it is given as a message: that is left out)
+  const message = legacyClientMessage(error.body, error.status);
+  return new HttpError(404, message, { ...errorBody(error.status, message) });
 }
 
 export async function fieldsForWildcard(
@@ -155,9 +217,7 @@ export async function fieldsForWildcard(
     });
     return readFieldCaps(result.fields ?? {}, metaFields);
   } catch (error) {
-    if (error instanceof OpenSearchError && error.status === 404) {
-      throw notFound(`No indices match pattern "${pattern}"`);
-    }
+    if (error instanceof OpenSearchError) throw fieldsFailure(error, pattern);
     throw error;
   }
 }

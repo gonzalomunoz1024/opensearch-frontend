@@ -7,7 +7,9 @@ import { Button, CallOut, Health, Panel, Spinner, Tabs, type Tone } from '../../
 import { TextField } from '../../components/form';
 import { ConfirmModal, MenuButton, Portal } from '../../components/overlay';
 import { useBreadcrumbs } from '../../shell/state';
-import { Labeled, UnsavedBar, capital, go, ism, to, toasts } from './common';
+import { UnsavedChangesBar } from './bottom_bar';
+import { ExternalLink, capital, go, ism, to, toasts } from './common';
+import { FormRow } from './form_row';
 import {
   AliasSelect,
   MappingEditor,
@@ -44,9 +46,7 @@ function MappingsHelp({ after }: { after: string }) {
     <>
       <div>
         Define how documents and their fields are stored and indexed.{' '}
-        <a href={MAPPINGS_DOCS} target="_blank" rel="noreferrer">
-          Learn more
-        </a>
+        <ExternalLink href={MAPPINGS_DOCS} />
       </div>
       <div>{after}</div>
     </>
@@ -56,8 +56,8 @@ function MappingsHelp({ after }: { after: string }) {
 function FormPanel({ title, help, children }: { title: ReactNode; help?: ReactNode; children: ReactNode }) {
   return (
     <Panel>
-      <h2 className="ismPanel__heading">{title}</h2>
-      {help && <div className="ismLabeled__help">{help}</div>}
+      <h2 className="ismPanelTitle">{title}</h2>
+      {help && <div className="ismHelpText">{help}</div>}
       <hr className="ismRule" />
       {children}
     </Panel>
@@ -200,8 +200,14 @@ export const IndexForm = forwardRef<
     ) : null;
 
   const define = (
-    <div className="ismForm">
-      <Labeled title="Index name" testId="form-name-index" error={submitted ? nameError : undefined}>
+    <div>
+      <FormRow
+        title="Index name"
+        testId="form-name-index"
+        help={<div>{INDEX_NAMING_MESSAGE}</div>}
+        helpAt="bottom"
+        error={submitted ? nameError : undefined}
+      >
         <TextField
           compact
           value={item.index}
@@ -210,14 +216,15 @@ export const IndexForm = forwardRef<
           placeholder="Specify a name for the new index."
           invalid={submitted && Boolean(nameError)}
         />
-        <div className="ismLabeled__help">{INDEX_NAMING_MESSAGE}</div>
-      </Labeled>
-      {matching && (
-        <CallOut tone="accent" title="The index name matches one or more index templates">
-          Index alias, settings, and mappings are automatically inherited from matching index templates.
-        </CallOut>
-      )}
-      <Labeled
+      </FormRow>
+      <FormRow fullWidth testId="form-name-templateMessage">
+        {matching && (
+          <CallOut tone="accent" title="The index name matches one or more index templates">
+            Index alias, settings, and mappings are automatically inherited from matching index templates.
+          </CallOut>
+        )}
+      </FormRow>
+      <FormRow
         title="Index alias"
         optional
         testId="form-name-aliases"
@@ -229,7 +236,7 @@ export const IndexForm = forwardRef<
           onChange={(aliases) => change({ aliases })}
           invalid={submitted && Boolean(aliasError)}
         />
-      </Labeled>
+      </FormRow>
     </div>
   );
   const settings = (
@@ -253,20 +260,39 @@ export const IndexForm = forwardRef<
   return (
     <>
       {withoutPanel ? (
-        <div className="ismDefinition ismDefinition--index">
-          <h3 className="ismDefinition__title">Define index</h3>
+        // The parts one under the other, each under the theme's small title (a span, a heading and a
+        // block, as the plugin has them), 24 px apart
+        <>
+          <span className="ismPanelTitle">Define index</span>
+          <div className="ismSpacer ismSpacer--s" />
           {define}
-          {importButton}
-          <h3 className="ismDefinition__title">Index settings</h3>
+          {importButton && (
+            <>
+              <div className="ismSpacer ismSpacer--l" />
+              {importButton}
+            </>
+          )}
+          <div className="ismSpacer ismSpacer--l" />
+          <h2 className="ismPanelTitle">Index settings</h2>
+          <div className="ismSpacer ismSpacer--s" />
           {settings}
-          <h3 className="ismDefinition__title">Index mapping</h3>
+          <div className="ismSpacer ismSpacer--l" />
+          <div className="ismPanelTitle">Index mapping</div>
+          <div className="ismSpacer ismSpacer--s" />
           {mappings}
-        </div>
+        </>
       ) : (
         <>
           <FormPanel title="Define index">{define}</FormPanel>
-          {importButton}
+          <div className="ismSpacer ismSpacer--l" />
+          {importButton && (
+            <>
+              {importButton}
+              <div className="ismSpacer ismSpacer--l" />
+            </>
+          )}
           <FormPanel title="Index settings">{settings}</FormPanel>
+          <div className="ismSpacer ismSpacer--l" />
           <FormPanel
             title={
               <>
@@ -353,14 +379,16 @@ export function CreateIndex() {
   };
 
   return (
-    <div className="ismPage ismPage--form">
-      <h1 className="ismPageTitle">Create index</h1>
+    <div className="ismFormPage">
+      <h1 className="ismTextTitle">Create index</h1>
+      <div className="ismSpacer ismSpacer--l" />
       <IndexForm ref={form} />
-      <div className="ismButtons">
-        <Button variant="empty" size="s" onClick={() => go(ROUTES.INDICES)} testId="createIndexCancelButton">
+      <div className="ismSpacer ismSpacer--l" />
+      <div className="ismEndButtons">
+        <Button variant="empty" onClick={() => go(ROUTES.INDICES)} testId="createIndexCancelButton">
           Cancel
         </Button>
-        <Button variant="primary" size="s" loading={busy} onClick={submit} testId="createIndexCreateButton">
+        <Button variant="primary" loading={busy} onClick={submit} testId="createIndexCreateButton">
           Create
         </Button>
       </div>
@@ -376,7 +404,6 @@ type Mode = 'settings' | 'mappings' | 'aliases';
 function IndexPart({ index, mode, onSaved, unsaved }: { index: string; mode: Mode; onSaved: () => void; unsaved: (count: number) => void }) {
   const [old, setOld] = useState<IndexItem>();
   const [item, setItem] = useState<IndexItem>();
-  const [busy, setBusy] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const editorText = useRef('');
 
@@ -416,7 +443,6 @@ function IndexPart({ index, mode, onSaved, unsaved }: { index: string; mode: Mod
     if (mode === 'settings' && Object.keys(errors).length > 0) return;
     if (mode === 'aliases' && aliasError) return;
     if (mode === 'mappings' && fieldsHaveErrors(item.mappings?.properties ?? [], old.mappings?.properties, true)) return;
-    setBusy(true);
     let result: { ok: boolean; error?: string } = { ok: true };
     if (mode === 'settings') {
       const body = changedSettings(item.settings ?? {}, old.settings ?? {});
@@ -431,7 +457,6 @@ function IndexPart({ index, mode, onSaved, unsaved }: { index: string; mode: Mod
         body: { ...item.mappings, properties: propertiesOf(fields) },
       });
     }
-    setBusy(false);
     if (result.ok) {
       toasts.success(`${index} has been successfully updated.`);
       await load();
@@ -446,9 +471,12 @@ function IndexPart({ index, mode, onSaved, unsaved }: { index: string; mode: Mod
   return (
     <>
       {system && (
-        <CallOut tone="warning">
-          This index may contain critical system data. Changing system indexes may break OpenSearch.
-        </CallOut>
+        <>
+          <CallOut tone="warning">
+            This index may contain critical system data. Changing system indexes may break OpenSearch.
+          </CallOut>
+          <div className="ismSpacer ismSpacer--l" />
+        </>
       )}
       {mode === 'settings' && (
         <SettingsFields
@@ -472,23 +500,20 @@ function IndexPart({ index, mode, onSaved, unsaved }: { index: string; mode: Mod
         />
       )}
       {mode === 'aliases' && (
-        <div className="ismForm">
-          <Labeled
-            title="Index alias"
-            optional
-            across
-            testId="form-name-aliases"
-            help="Allow this index to be referenced by existing aliases or specify a new alias."
-            error={submitted ? aliasError : undefined}
-          >
-            <AliasSelect value={item.aliases} onChange={(aliases: AliasMap) => change({ aliases })} />
-          </Labeled>
-        </div>
+        <FormRow
+          title="Index alias"
+          optional
+          across
+          testId="form-name-aliases"
+          help="Allow this index to be referenced by existing aliases or specify a new alias."
+          error={submitted ? aliasError : undefined}
+        >
+          <AliasSelect value={item.aliases} onChange={(aliases: AliasMap) => change({ aliases })} />
+        </FormRow>
       )}
       {count > 0 && (
-        <UnsavedBar
+        <UnsavedChangesBar
           count={count}
-          busy={busy}
           testId="createIndexCreateButton"
           onCancel={() => setItem({ ...item, [mode]: JSON.parse(JSON.stringify(old[mode] ?? {})) as unknown })}
           onSave={save}
@@ -570,22 +595,22 @@ export function IndexDetail({ index }: { index: string }) {
     .filter(([, value]) => value === 'true')
     .map(([key]) => key);
   const overview: Array<[string, ReactNode]> = [
-    ['Index name', record.index],
+    ['Index name', <span>{record.index}</span>],
     ['Health', <Health tone={record.health ? HEALTH_TONES[record.health] : undefined}>{capital(record.health || record.status || '')}</Health>],
-    ['Status', capital(record.status ?? '')],
-    ['Creation date', created ? new Date(parseInt(created, 10)).toLocaleString() : ''],
-    ['Total size', record['store.size']],
-    ['Size of primaries', record['pri.store.size']],
-    ['Total documents', record['docs.count']],
-    ['Deleted documents', record['docs.deleted']],
-    ['Primaries', record.pri],
-    ['Replicas', record.rep],
+    ['Status', <span className="ismCapital">{record.status}</span>],
+    ['Creation date', <span>{created ? new Date(parseInt(created, 10)).toLocaleString() : '-'}</span>],
+    ['Total size', <span>{record['store.size']}</span>],
+    ['Size of primaries', <span>{record['pri.store.size']}</span>],
+    ['Total documents', <span>{record['docs.count']}</span>],
+    ['Deleted documents', <span>{record['docs.deleted']}</span>],
+    ['Primaries', <span>{record.pri}</span>],
+    ['Replicas', <span>{record.rep}</span>],
     [
       'Index blocks',
       blocks.length === 0 ? (
-        '-'
+        <span>-</span>
       ) : (
-        <ul className="ismBlocks">
+        <ul>
           {blocks.map((block) => (
             <li key={block}>{block}</li>
           ))}
@@ -594,30 +619,39 @@ export function IndexDetail({ index }: { index: string }) {
     ],
     [
       'Managed by policy',
-      record.managedPolicy ? <a href={to(ROUTES.POLICY_DETAILS, { id: record.managedPolicy })}>{record.managedPolicy}</a> : '-',
+      <span>
+        {record.managedPolicy ? <a href={to(ROUTES.POLICY_DETAILS, { id: record.managedPolicy })}>{record.managedPolicy}</a> : '-'}
+      </span>,
     ],
   ];
   const shown = TABS.find((item) => item.id === tab) ?? TABS[0];
 
+  // As the plugin's page: its title and actions, the overview, then the tabs, 24 px apart
   return (
-    <div className="ismPage ismPage--details">
-      <div className="ismPageHeader ismPageHeader--center">
-        <h1 className="ismPageTitle">{index}</h1>
+    <div className="ismIndexDetail">
+      <div className="ismIndexDetail__header">
+        <h1 className="ismTextTitle">{index}</h1>
         <IndicesActions selected={[record]} onChange={() => void refresh()} onDelete={() => go(ROUTES.INDICES)} />
       </div>
+      <div className="ismSpacer ismSpacer--l" />
       <Panel>
-        <h2 className="ismPanel__heading">Overview</h2>
+        <h2 className="ismPanelTitle">Overview</h2>
         <hr className="ismRule" />
-        <div className="ismOverview">
-          {overview.map(([label, value]) => (
-            <div key={label} className="ismOverview__item" data-test-subj={`indexDetailOverviewItem-${label}`}>
-              <h4>{label}</h4>
-              <div>{value}</div>
-            </div>
-          ))}
-        </div>
+        <dl className="ismOverviewList">
+          <div className="ismSpacer ismSpacer--s" />
+          <div>
+            {overview.map(([label, value]) => (
+              <div key={label} className="ismOverviewList__item" data-test-subj={`indexDetailOverviewItem-${label}`}>
+                <dt>{label}</dt>
+                <dd style={label === 'Index name' ? { wordBreak: 'break-word' } : undefined}>{value}</dd>
+              </div>
+            ))}
+          </div>
+        </dl>
       </Panel>
+      <div className="ismSpacer ismSpacer--l" />
       <Tabs
+        size="s"
         tabs={TABS.map((item) => ({ id: item.id, label: item.label }))}
         selected={tab}
         onSelect={(id) => {
@@ -626,14 +660,17 @@ export function IndexDetail({ index }: { index: string }) {
           else setTab(id as Mode);
         }}
       />
+      <div className="ismSpacer ismSpacer--m" />
       <Panel>
-        <h2 className="ismPanel__heading">{shown.title}</h2>
+        <h2 className="ismPanelTitle">{shown.title}</h2>
         {tab === 'mappings' && (
-          <div className="ismLabeled__help">
+          <div className="ismHelpText">
             <MappingsHelp after="Mappings and field types cannot be changed once they have been added." />
           </div>
         )}
         <hr className="ismRule" />
+        {/* 16 px under the rule for every tab: the alias form's row of a template's message, empty, has 16 above it */}
+        <div className="ismSpacer ismSpacer--s" />
         <IndexPart
           key={tab}
           index={index}

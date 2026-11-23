@@ -6,7 +6,7 @@
  * the dialogs and notices say about them.
  */
 
-import { parseSearch } from '../../lib/search_syntax';
+import { readSearch } from '../../lib/search_syntax';
 
 // --- What a search box asks for -------------------------------------------------------------------
 
@@ -17,16 +17,20 @@ export interface SearchClauses {
 }
 
 /**
- * The words of a search, and what it names with `indices:` and `data_streams:`. A text that is
- * no search asks for nothing in particular.
+ * The words of a search, and what it names with `indices:` and `data_streams:`, as the plugin
+ * takes them from its search bar's query (`getTermClauses`, `getFieldClauses`): a word counts
+ * with or without a `-`, a word inside brackets does not, and a field counts whatever its sign.
+ * A text that is no search asks for nothing in particular.
  */
 export function searchClauses(search: string): SearchClauses {
-  const clauses = (search.trim() === '' ? [] : parseSearch(search)) ?? [];
+  const clauses = readSearch(search) ?? [];
   const found: SearchClauses = { terms: [], indices: [], dataStreams: [] };
+  // What goes into the address: a number or a yes-no word as text, a date as nothing
+  const sent = (value: unknown) => (typeof value === 'object' ? '' : String(value));
   for (const clause of clauses) {
     if (clause.type === 'term') found.terms.push(clause.value);
     if (clause.type !== 'field') continue;
-    const values = Array.isArray(clause.value) ? clause.value : [clause.value];
+    const values = (Array.isArray(clause.value) ? clause.value : [clause.value]).map(sent);
     if (clause.field === 'indices') found.indices.push(...values);
     if (clause.field === 'data_streams') found.dataStreams.push(...values);
   }
@@ -232,4 +236,14 @@ export const pageQuery = <Q extends { from: number; size: number }>(query: Q): Q
 export function pageChanges<C extends { from?: number; size?: number }>(changes: C, size: number): C {
   if (changes.from === undefined) return changes;
   return { ...changes, from: Math.floor(changes.from / (changes.size ?? size)) };
+}
+
+/** The theme's caption of a table, which a screen reader reads: how many rows it shows of how many */
+export function tableCaption(shown: number, total: number, size: number, from: number, paged: boolean): string {
+  if (!paged) return `This table contains ${shown} rows.`;
+  const page = Math.floor(from / size) + 1;
+  const pages = Math.ceil(total / size);
+  return total > 0
+    ? `This table contains ${shown} rows out of ${total} rows; Page ${page} of ${pages}.`
+    : `This table contains ${shown} rows; Page ${page} of ${pages}.`;
 }

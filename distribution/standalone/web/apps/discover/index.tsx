@@ -2,19 +2,19 @@
 
 /* Discover: search an index pattern's documents, see when they happened, look into each one. */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, EmptyPrompt, Loading, Panel, Tabs } from '../../components/basic';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Button, EmptyPrompt, Loading, Tabs } from '../../components/basic';
 import { Select } from '../../components/form';
-import { CopyableCode, downloadFile } from '../../components/overlay';
-import { XYChart } from '../../charts/xy';
+import { Icon } from '../../components/icon';
+import { CopyableCode, Tooltip } from '../../components/overlay';
 import { dateInterval, tabify } from '../../lib/aggs';
-import { formatDate, resolveTimeRange } from '../../lib/dates';
-import { flattenHit, toCsv, type RawHit } from '../../lib/docs';
-import { existsFilter, mergeFilters, phraseFilter } from '../../lib/query';
+import { formatDate, parseInterval, timeZoneOffset } from '../../lib/dates';
+import { flattenHit, type RawHit } from '../../lib/docs';
+import { existsFilter, mergeFilters } from '../../lib/query';
 import { parseSearchSource, serializeSearchSource } from '../../lib/search_source';
 import type { Field, Filter, IndexPattern, Query } from '../../lib/types';
 import { appUrl, decodeState, encodeState } from '../../lib/url';
-import { href, navigate, navigateHash, setHashParams, useLocation } from '../../router';
+import { getLocation, href, navigate, navigateHash, setHashParams, useLocation } from '../../router';
 import { services } from '../../services';
 import type { IndexPatternSummary } from '../../services/index_patterns';
 import type { SavedObject } from '../../services/saved_objects';
@@ -28,12 +28,29 @@ import { OpenFlyout, SaveModal, ShareModal } from '../../shell/saved_objects_ui'
 import { pageFiltersOf, savedQueryGlobalParam, type SavedQueryChange } from '../../shell/saved_query';
 import { SearchBar } from '../../shell/search_bar';
 import { showSearchError } from '../../shell/search_error';
-import { addRecentlyAccessed, currentGlobalParam, useAutoRefresh, useBreadcrumbs, useGlobalState } from '../../shell/state';
+import { addRecentlyAccessed, currentGlobalParam, useAutoRefresh, useBreadcrumbs, useGlobalState, writeStored } from '../../shell/state';
 import { DocDetails } from './doc_viewer';
-import { DocTable, type SortPair } from './doc_table';
+import {
+  RESTORE_ERROR_TITLE,
+  appStateParam,
+  columnToggled,
+  isAppState,
+  openingAppState,
+  stateColumnNames,
+  stateReadError,
+  writeDiscoverState,
+} from './app_state';
+import { DocTable, filterColumns, type SortPair } from './doc_table';
+import { DownloadCsv } from './download_csv';
 import { DocPage, ContextPage } from './doc_pages';
-import { aggContext, buildDiscoverRequest, histogramAgg } from './search';
+import { filtersOf, valueFilter } from './filters';
+import { Histogram } from './histogram';
+import { bucketSpan, parseBucketInterval, shortestBucket } from './histogram_scale';
+import { aggContext, buildDiscoverRequest, histogramAgg, searchTimeRange, stateInterval } from './search';
+import { SelectData } from './select_data';
 import { Sidebar } from './sidebar';
+import { openingQueryState } from './open_state';
+import { indexPatternStore, keepPopularity, popularizeField } from './popularity';
 import { normalizeSort } from './sort';
 import '../../styles/discover.css';
 
@@ -48,12 +65,12 @@ interface SavedSearchAttributes {
 }
 
 interface UrlAppState {
-  discover?: { columns?: string[]; sort?: unknown; interval?: string; isDirty?: boolean; savedQuery?: string };
+  discover?: { columns?: string[]; sort?: unknown; interval?: unknown; isDirty?: boolean; savedQuery?: string; savedSearch?: string };
   metadata?: { indexPattern?: string; view?: string };
   // The shape of older addresses
   columns?: string[];
   sort?: unknown;
-  interval?: string;
+  interval?: unknown;
   index?: string;
   query?: Query;
   filters?: Filter[];
@@ -65,16 +82,19 @@ interface UrlQueryState {
   filters?: Filter[];
 }
 
+/** The original's id of its message for a state of the address it cannot read */
+const RESTORE_ERROR_ID = 'opensearch_dashboards_utils.state_management.url.restoreUrlError';
+
 const INTERVALS = [
   { value: 'auto', label: 'Auto' },
   { value: 'ms', label: 'Millisecond' },
   { value: 's', label: 'Second' },
   { value: 'm', label: 'Minute' },
-  { value: 'h', label: 'Hourly' },
-  { value: 'd', label: 'Daily' },
-  { value: 'w', label: 'Weekly' },
-  { value: 'M', label: 'Monthly' },
-  { value: 'y', label: 'Yearly' },
+  { value: 'h', label: 'Hour' },
+  { value: 'd', label: 'Day' },
+  { value: 'w', label: 'Week' },
+  { value: 'M', label: 'Month' },
+  { value: 'y', label: 'Year' },
 ];
 
 interface Result {
@@ -140,7 +160,14 @@ export function Discover({ basePath }: { basePath: string }) {
     return <DocPage indexPatternId={decodeURIComponent(doc[1])} index={decodeURIComponent(doc[2])} id={location.hashParams.id ?? ''} basePath={basePath} />;
   }
   if (context) {
-    return <ContextPage indexPatternId={decodeURIComponent(context[1])} id={decodeURIComponent(context[2])} basePath={basePath} />;
+    return (
+      <ContextPage
+        key={`${context[1]}/${context[2]}`}
+        indexPatternId={decodeURIComponent(context[1])}
+        id={decodeURIComponent(context[2])}
+        basePath={basePath}
+      />
+    );
   }
   const savedId = /^\/view\/(.+)$/.exec(hashPath)?.[1];
   return <DiscoverMain basePath={basePath} savedId={savedId ? decodeURIComponent(savedId) : undefined} />;
@@ -155,6 +182,8 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
   const [savedError, setSavedError] = useState<string>();
   const [indexPattern, setIndexPattern] = useState<IndexPattern>();
   const [patternError, setPatternError] = useState<string>();
+  // The index patterns could not be listed: Discover cannot start
+  const [listError, setListError] = useState<string>();
   const [result, setResult] = useState<Result>();
   // The search failed: no results, and a "Search Error" message says why, as in the original
   const [failed, setFailed] = useState(false);
@@ -171,46 +200,67 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
     [saved]
   );
 
-  const columns = useMemo(() => {
-    const fromUrl = urlApp.discover?.columns ?? urlApp.columns;
-    const chosen = fromUrl ?? saved?.attributes.columns ?? services.uiSettings.get<string[]>('defaultColumns', ['_source']);
-    return chosen.length ? chosen : ['_source'];
+  // The columns as the original's state holds them: the address's, the saved search's or the
+  // setting's, as they are; what is not a list of names is none
+  const chosenColumns = useMemo((): unknown => {
+    const fromUrl: unknown = urlApp.discover?.columns ?? urlApp.columns;
+    return fromUrl ?? saved?.attributes.columns ?? services.uiSettings.get<string[]>('defaultColumns', ['_source']);
   }, [urlApp, saved]);
+  // What the sidebar lists as selected: none for an empty list, nothing at all for no list
+  const sidebarColumns = useMemo(() => stateColumnNames(chosenColumns), [chosenColumns]);
+  const stateColumns = useMemo(() => sidebarColumns ?? [], [sidebarColumns]);
+  // What the page works with: none chosen is the whole source
+  const columns = useMemo(() => (stateColumns.length ? stateColumns : ['_source']), [stateColumns]);
   const sort = useMemo(
     () => normalizeSort(urlApp.discover?.sort ?? urlApp.sort ?? saved?.attributes.sort),
     [urlApp, saved]
   );
-  const interval = urlApp.discover?.interval ?? urlApp.interval ?? 'auto';
+  // None until one is picked: the histogram is then "auto", and its header still says "per". The
+  // state keeps what the address holds; what is no interval is searched as auto
+  const chosenInterval: unknown = urlApp.discover?.interval ?? urlApp.interval;
+  const interval = stateInterval(chosenInterval);
   const indexPatternId = urlApp.metadata?.indexPattern ?? urlApp.index ?? savedSource?.indexId ?? defaultId;
   const query: Query = useMemo(
     () => urlQuery.query ?? urlApp.query ?? savedSource?.query ?? { query: '', language: defaultQueryLanguage() },
     [urlQuery, urlApp, savedSource]
   );
   const appFilters: Filter[] = useMemo(
-    () => urlQuery.filters ?? urlApp.filters ?? savedSource?.filters ?? [],
+    () => filtersOf(urlQuery.filters ?? urlApp.filters ?? savedSource?.filters ?? []),
     [urlQuery, urlApp, savedSource]
   );
   const filters = useMemo(() => [...global.filters, ...appFilters.filter((filter) => !isPinned(filter))], [global.filters, appFilters]);
   // The saved query loaded into the search bar; an older address keeps it beside the columns
   const savedQueryId = urlApp.discover?.savedQuery ?? urlApp.savedQuery;
 
+  // As the original's state keeps them: whether a column was taken out since the saved search was
+  // opened or saved, and the saved search the state started from
+  const isDirty = urlApp.discover?.isDirty === true;
+  const savedSearchId = typeof urlApp.discover?.savedSearch === 'string' ? urlApp.discover.savedSearch : undefined;
+
   const appParam = useCallback(
-    (changes: { columns?: string[]; sort?: SortPair[]; interval?: string; indexPattern?: string; savedQuery?: string }) =>
-      encodeState({
-        discover: {
-          columns: changes.columns ?? columns,
-          interval: changes.interval ?? interval,
-          isDirty: Boolean(savedId),
-          savedQuery: 'savedQuery' in changes ? changes.savedQuery : savedQueryId,
-          sort: changes.sort ?? sort,
-        },
-        metadata: { indexPattern: changes.indexPattern ?? indexPatternId, view: 'discover' },
+    (changes: {
+      columns?: string[];
+      sort?: SortPair[];
+      interval?: string;
+      indexPattern?: string;
+      savedQuery?: string;
+      isDirty?: boolean;
+      savedSearch?: string;
+    }) =>
+      appStateParam({
+        columns: changes.columns ?? stateColumns,
+        interval: changes.interval ?? chosenInterval,
+        isDirty: changes.isDirty ?? isDirty,
+        savedQuery: 'savedQuery' in changes ? changes.savedQuery : savedQueryId,
+        savedSearch: changes.savedSearch ?? savedSearchId,
+        sort: changes.sort ?? sort,
+        indexPattern: changes.indexPattern ?? indexPatternId,
       }),
-    [columns, interval, sort, indexPatternId, savedId, savedQueryId]
+    [stateColumns, chosenInterval, isDirty, savedQueryId, savedSearchId, sort, indexPatternId]
   );
   const writeApp = useCallback(
-    (changes: { columns?: string[]; sort?: SortPair[]; interval?: string; indexPattern?: string }, replace = false) => {
-      setHashParams({ _a: appParam(changes) }, { replace });
+    (changes: { columns?: string[]; sort?: SortPair[]; interval?: string; indexPattern?: string; isDirty?: boolean }) => {
+      writeDiscoverState({ _a: appParam(changes) });
     },
     [appParam]
   );
@@ -229,7 +279,7 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
   );
   const writeQuery = useCallback(
     (changes: { query?: Query; filters?: Filter[] }) => {
-      setHashParams({ _q: encodeState({ filters: changes.filters ?? appFilters, query: changes.query ?? query }) }, { replace: false });
+      writeDiscoverState({ _q: encodeState({ filters: changes.filters ?? appFilters, query: changes.query ?? query }) });
     },
     [appFilters, query]
   );
@@ -253,29 +303,87 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
         setPatterns(list);
         setDefaultId(chosen);
       })
-      .catch((failure) => live && setPatternError((failure as Error).message));
+      .catch((failure) => live && setListError((failure as Error).message));
     return () => {
       live = false;
     };
   }, []);
 
+  // Each opening of the page: another saved search, or "Reset search" and "Open" reading the saved
+  // search again, as the original's opens Discover anew for them
+  const [openings, setOpenings] = useState(0);
+  const openKey = `${savedId ?? ''}\n${openings}`;
+  // The opening the saved search was read for
+  const [savedKey, setSavedKey] = useState<string>();
   useEffect(() => {
-    setSaved(undefined);
     setSavedError(undefined);
-    if (!savedId) return undefined;
+    if (!savedId) {
+      setSaved(undefined);
+      return undefined;
+    }
+    // The one shown, or saved a moment ago, stays while it is read again
+    setSaved((current) => (current?.id === savedId ? current : undefined));
     let live = true;
     services.savedObjects
       .get<SavedSearchAttributes>('search', savedId)
       .then((object) => {
         if (!live) return;
         setSaved(object);
+        setSavedKey(openKey);
         addRecentlyAccessed(appUrl(basePath, `/view/${encodeURIComponent(savedId)}`), object.attributes.title, savedId);
       })
       .catch((failure) => live && setSavedError((failure as Error).message));
     return () => {
       live = false;
     };
-  }, [savedId, basePath]);
+  }, [savedId, basePath, openKey]);
+
+  // As the original's loadSavedSearch: when the page opens, the query is chosen again (one with no
+  // text is the saved search's or the default, in the language chosen last) and its language
+  // becomes the user's; an address without the state gets the saved search's or the default one,
+  // as the original's preloaded state. The address is given them in place. Nothing is searched
+  // before.
+  const [openedKey, setOpenedKey] = useState<string>();
+  const opened = openedKey === openKey;
+  useEffect(() => {
+    if (opened || (savedId !== undefined && (savedKey !== openKey || !saved))) return;
+    // The saved search this opening is for: none for Discover itself, whatever was shown before
+    const opening = savedId === undefined ? undefined : saved;
+    const params = getLocation().hashParams;
+    // An `_a` that cannot be read, or is no state, is as none: the default one is written
+    const appReadable = isAppState(params._a);
+    // The default index pattern is still being read
+    if (!appReadable && !opening && patterns === undefined) return;
+    // As the original's: a state of the address that cannot be read is said, once
+    const appError = stateReadError(params._a);
+    const queryError = stateReadError(params._q);
+    for (const error of [appError, queryError]) {
+      if (error) services.toasts.addError(error, { title: RESTORE_ERROR_TITLE, id: RESTORE_ERROR_ID });
+    }
+    const app = decodeState<UrlAppState>(params._a);
+    const fromQ = decodeState<UrlQueryState>(params._q);
+    const hasQueryState = (params._q !== undefined && !queryError) || app.query !== undefined || app.filters !== undefined;
+    const source = opening ? parseSearchSource(opening.attributes.kibanaSavedObjectMeta?.searchSourceJSON, opening.references) : undefined;
+    const { query: chosen, filters: chosenFilters } = openingQueryState(
+      { query: fromQ.query ?? app.query, filters: fromQ.filters ?? app.filters, hasQueryState },
+      source,
+      defaultQueryLanguage()
+    );
+    const changes: { _a?: string; _q?: string } = {};
+    if (!appReadable) {
+      const state = openingAppState(
+        opening && { id: opening.id, columns: opening.attributes.columns, sort: opening.attributes.sort, indexId: source?.indexId },
+        services.uiSettings.get<string[]>('defaultColumns', ['_source']),
+        defaultId
+      );
+      changes._a = appStateParam(state);
+    }
+    const next = encodeState({ filters: chosenFilters, query: chosen });
+    if (next !== params._q) changes._q = next;
+    if (changes._a !== undefined || changes._q !== undefined) writeDiscoverState(changes);
+    if (typeof chosen.language === 'string') writeStored('queryLanguage', chosen.language);
+    setOpenedKey(openKey);
+  }, [opened, openKey, savedId, saved, savedKey, patterns, defaultId]);
 
   const waitingForSaved = Boolean(savedId) && !saved && !savedError;
   useEffect(() => {
@@ -302,12 +410,35 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
   // --- The search ---
   const sampleSize = services.uiSettings.get<number>('discover:sampleSize', 500);
   const queryKey = JSON.stringify([query, filters, sort, interval]);
+  // With discover:searchOnPageLoad off the page waits, as the original's, until it is asked for a
+  // search: a query, filters, a time range, a refresh. A saved search or a running refresh
+  // interval searches at once.
+  const [searchStarted, setSearchStarted] = useState(
+    () => services.uiSettings.get<boolean>('discover:searchOnPageLoad', true) || Boolean(savedId) || !global.refreshInterval.pause
+  );
+  const startKey = JSON.stringify([queryKey, global.time.from, global.time.to, tick]);
+  // Taken once the page has opened: the query it opens with is not a search asked for
+  const firstStartKey = useRef<string>();
   useEffect(() => {
-    if (!indexPattern || indexPattern.id !== indexPatternId) return undefined;
+    if (!opened) return;
+    if (firstStartKey.current === undefined) firstStartKey.current = startKey;
+    else if (!searchStarted && startKey !== firstStartKey.current) setSearchStarted(true);
+  }, [startKey, searchStarted, opened]);
+  useEffect(() => {
+    if (!opened || !searchStarted || !indexPattern || indexPattern.id !== indexPatternId) return undefined;
     const controller = new AbortController();
-    const range = indexPattern.timeFieldName
-      ? resolveTimeRange(global.time, { weekStart: services.weekStart() })
-      : undefined;
+    const range = searchTimeRange(indexPattern, global.time, services.weekStart());
+    if (range === null) {
+      // A time range that cannot be read: the original's Discover searches nothing and says so,
+      // where a search without it would run over all the documents there are
+      setFailed(true);
+      setLoading(false);
+      services.toasts.danger(
+        'Invalid time range',
+        `The provided time range is invalid. (from: '${global.time.from}', to: '${global.time.to}')`
+      );
+      return undefined;
+    }
     let body: Record<string, unknown>;
     try {
       body = buildDiscoverRequest({ indexPattern, query, filters, range, sort, size: sampleSize, interval });
@@ -318,7 +449,7 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
       showSearchError(failure);
       return undefined;
     }
-    const record: RequestRecord = { name: 'data', index: indexPattern.title, body, startedAt: Date.now() };
+    const record: RequestRecord = { name: 'data', index: indexPattern.title, indexPatternId: indexPattern.id, description: 'This request queries OpenSearch to fetch the data for the search.', body, startedAt: Date.now() };
     setLoading(true);
     services.search
       .search(indexPattern.title, body, { signal: controller.signal, record })
@@ -337,21 +468,23 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
       });
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [indexPattern, indexPatternId, queryKey, global.time.from, global.time.to, sampleSize, tick]);
+  }, [opened, searchStarted, indexPattern, indexPatternId, queryKey, global.time.from, global.time.to, sampleSize, tick]);
 
   const refresh = useCallback(() => setTick((count) => count + 1), []);
   useAutoRefresh(global.refreshInterval, refresh);
 
   // --- What the page does ---
-  const toggleColumn = useCallback(
+  const toggleColumn = useCallback((name: string) => writeApp(columnToggled(columns, sort, name)), [columns, sort, writeApp]);
+  // As the original's: a field added as a column, taken out or moved counts once more, written into
+  // the index pattern, before the columns change; "Popular fields" is drawn with the count at once
+  const [, setPopularized] = useState(0);
+  const popularize = useCallback(
     (name: string) => {
-      const without = columns.filter((column) => column !== name);
-      let next: string[];
-      if (without.length !== columns.length) next = without.length ? without : ['_source'];
-      else next = [...columns.filter((column) => column !== '_source'), name];
-      writeApp({ columns: next, sort: sort.filter(([field]) => next.includes(field) || field === indexPattern?.timeFieldName) });
+      if (!indexPattern) return;
+      void popularizeField(indexPattern, name, indexPatternStore(services.savedObjects));
+      setPopularized((count) => count + 1);
     },
-    [columns, sort, writeApp, indexPattern]
+    [indexPattern]
   );
   const moveColumn = useCallback(
     (name: string, by: number) => {
@@ -369,19 +502,18 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
     (name: string, value: unknown, negate: boolean) => {
       if (!indexPattern) return;
       const values = Array.isArray(value) ? value : [value];
-      const made = values.map((item) => {
-        const filter = phraseFilter({ name }, item, indexPattern.id);
-        filter.meta.negate = negate;
-        if (services.uiSettings.get('filters:pinnedByDefault', false)) filter.$state = { store: 'globalState' };
-        return filter;
-      });
-      setFilters(mergeFilters(filters, made));
+      // The field itself, so that a filter on a scripted field carries its script
+      const field = indexPattern.fields.find((candidate) => candidate.name === name) ?? { name };
+      const pinned = services.uiSettings.get('filters:pinnedByDefault', false);
+      setFilters(mergeFilters(filters, values.map((item) => valueFilter(field, item, negate, indexPattern.id, pinned))));
     },
     [indexPattern, filters, setFilters]
   );
   const addExists = useCallback(
     (name: string) => {
-      if (indexPattern) setFilters(mergeFilters(filters, [existsFilter({ name }, indexPattern.id)]));
+      if (!indexPattern) return;
+      const field = indexPattern.fields.find((candidate) => candidate.name === name) ?? { name };
+      setFilters(mergeFilters(filters, [existsFilter(field, indexPattern.id)]));
     },
     [indexPattern, filters, setFilters]
   );
@@ -412,18 +544,45 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
     [indexPattern, appFilters, query]
   );
 
+  // The columns the table shows, as the original's filterColumns leaves them: the names the
+  // pattern has and those the documents found hold
+  const shownColumns = useMemo(() => {
+    if (!indexPattern) return columns;
+    const names = new Set(indexPattern.fields.map((field) => field.name));
+    for (const row of result?.rows ?? []) for (const name of Object.keys(flattenHit(row, indexPattern))) names.add(name);
+    return filterColumns(
+      columns,
+      names,
+      services.uiSettings.get<string[]>('defaultColumns', ['_source']),
+      services.uiSettings.get<boolean>('discover:modifyColumnsOnSwitch', true)
+    );
+  }, [columns, indexPattern, result]);
+
   const details = useCallback(
-    (hit: RawHit) => (
+    (hit: RawHit, drawn: string[]) => (
       <DocDetails
         hit={hit}
         indexPattern={indexPattern as IndexPattern}
         basePath={basePath}
-        actions={{ columns, onToggleColumn: toggleColumn, onFilter: addFilter, onFilterExists: addExists }}
+        appFilters={filters.filter((filter) => !isPinned(filter))}
+        actions={{
+          columns: drawn,
+          // As the original's: a column drawn is taken out, another added; the time column the
+          // table adds of itself is no chosen column, so taking it out does nothing
+          onToggleColumn: (name) => {
+            popularize(name);
+            if (drawn.includes(name) === columns.includes(name)) toggleColumn(name);
+          },
+          onFilter: addFilter,
+          onFilterExists: addExists,
+        }}
       />
     ),
-    [indexPattern, basePath, columns, toggleColumn, addFilter, addExists]
+    [indexPattern, basePath, filters, columns, toggleColumn, popularize, addFilter, addExists]
   );
 
+  // The zone the chart is drawn in: the setting dateFormat:tz, or the browser's own
+  const offsetAt = useCallback((time: number) => timeZoneOffset(time, services.timeZone()), []);
   const histogram = useMemo(() => {
     if (!result || !indexPattern?.timeFieldName || !result.range) return undefined;
     const agg = histogramAgg(indexPattern, interval);
@@ -432,30 +591,50 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
     const table = tabify([agg, { id: '1', type: 'count', schema: 'metric' }], result.response, aggContextValue);
     const [bucketColumn, countColumn] = table.columns;
     if (!bucketColumn || !countColumn) return undefined;
-    return {
-      interval: dateInterval(agg, aggContextValue),
-      column: bucketColumn,
-      points: table.rows.map((row) => ({ x: row[bucketColumn.id] as number, y: row[countColumn.id] as number })),
-    };
-  }, [result, indexPattern, interval]);
-
-  const downloadCsv = () => {
-    if (!result || !indexPattern) return;
-    const names =
-      columns.length === 1 && columns[0] === '_source'
-        ? [...new Set(result.rows.flatMap((row) => Object.keys(flattenHit(row, indexPattern))))].sort()
-        : [...(indexPattern.timeFieldName && !columns.includes(indexPattern.timeFieldName) ? [indexPattern.timeFieldName] : []), ...columns];
-    const csv = toCsv(
-      names,
-      result.rows.map((row) => {
-        const flat = flattenHit(row, indexPattern);
-        return names.map((name) => flat[name]);
-      }),
-      services.uiSettings.get('csv:separator', ','),
-      services.uiSettings.get('csv:quoteValues', true)
+    const bucketInterval = dateInterval(agg, aggContextValue);
+    const points = table.rows.map((row) => ({ x: row[bucketColumn.id] as number, y: row[countColumn.id] as number }));
+    const unit = parseBucketInterval(bucketInterval.expression);
+    const minInterval = shortestBucket(
+      points.map((point) => point.x),
+      (time) => (unit ? bucketSpan(time, unit, offsetAt, services.weekStart()) : bucketInterval.ms)
     );
-    downloadFile(`${saved?.attributes.title ?? 'discover'}.csv`, csv, 'text/csv');
-  };
+    // An interval asked for that would give too many bars is widened, and the header says so
+    const asked = interval && interval !== 'auto' ? parseInterval(INTERVALS.some((item) => item.value === interval) ? `1${interval}` : interval) : undefined;
+    return {
+      interval: bucketInterval,
+      scale: asked ? asked.ms / bucketInterval.ms : 1,
+      column: bucketColumn,
+      points,
+      minInterval,
+    };
+  }, [result, indexPattern, interval, offsetAt]);
+  const formatBucket = useCallback((value: number) => (histogram ? histogram.column.format(value) : String(value)), [histogram]);
+  const narrowTime = useCallback(
+    (from: number, to: number) => setGlobal({ time: { from: new Date(from).toISOString(), to: new Date(to).toISOString() } }),
+    [setGlobal]
+  );
+  // The pane that scrolls: the table's "Back to top." goes back to its start
+  const canvasRef = useRef<HTMLDivElement>(null);
+
+  // "Max available": the page's search again, for as many documents as asked and no histogram,
+  // in the time range as it reads now, as the original's fetchForMaxCsvOption
+  const fetchCsvRows = useCallback(
+    async (size: number, signal: AbortSignal): Promise<RawHit[]> => {
+      if (!indexPattern) throw new Error('Dataset not found');
+      const range = searchTimeRange(indexPattern, global.time, services.weekStart());
+      if (range === null) {
+        services.toasts.danger(
+          'Invalid time range',
+          `The provided time range is invalid. (from: '${global.time.from}', to: '${global.time.to}')`
+        );
+        throw new Error('Invalid time range');
+      }
+      const body = buildDiscoverRequest({ indexPattern, query, filters, range, sort, size, interval, documentsOnly: true });
+      const response = await services.search.search(indexPattern.title, body, { signal });
+      return response.hits.hits as RawHit[];
+    },
+    [indexPattern, global.time, query, filters, sort, interval]
+  );
 
   const save = async ({ title, asNew }: { title: string; asNew: boolean }) => {
     if (!indexPattern) return;
@@ -472,23 +651,142 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
       version: 1,
       kibanaSavedObjectMeta: { searchSourceJSON: source.searchSourceJSON },
     };
-    const object =
-      saved && !asNew
-        ? await services.savedObjects.update('search', saved.id, attributes, { references: source.references })
-        : await services.savedObjects.create('search', attributes, { references: source.references });
-    services.toasts.success(`Search “${title}” was saved`);
+    let object: SavedObject<SavedSearchAttributes>;
+    try {
+      object =
+        saved && !asNew
+          ? await services.savedObjects.update('search', saved.id, attributes, { references: source.references })
+          : await services.savedObjects.create('search', attributes, { references: source.references });
+    } catch (failure) {
+      // As the original's: the dialog stays open
+      services.toasts.danger(`Search '${title}' was not saved.`, (failure as Error).message);
+      return;
+    }
+    services.toasts.success(`Search '${title}' was saved`);
     setDialog(undefined);
     setSaved({ ...object, attributes, references: source.references });
-    navigateHash(`/view/${encodeURIComponent(object.id)}`, { _g: location.hashParams._g });
+    // As the original's: the state is clean and names the saved search. A search saved anew is gone
+    // to with a new entry of the history, the address keeping the time and this state; its query
+    // and filters are the saved search's, so it is not opened again.
+    const app = appParam({ isDirty: false, savedSearch: object.id });
+    if (object.id === savedSearchId && object.id === savedId) {
+      writeDiscoverState({ _a: app });
+      return;
+    }
+    setOpenedKey(`${object.id}\n${openings}`);
+    navigateHash(`/view/${encodeURIComponent(object.id)}`, { _g: location.hashParams._g, _a: app });
   };
 
   // --- What is drawn ---
-  if (patternError && !indexPattern) {
+  const topNav = (
+    <TopNav
+      items={[
+        {
+          id: 'new',
+          label: 'New',
+          // As the original's: a new search keeps the query and drops the page's filters
+          onClick: () => {
+            navigate(appUrl(basePath, '/', { _g: currentGlobalParam(), _q: { filters: [], query } }));
+            setOpenings((count) => count + 1);
+          },
+          testId: 'discoverNewButton',
+        },
+        { id: 'save', label: 'Save', onClick: () => setDialog('save'), testId: 'discoverSaveButton' },
+        { id: 'open', label: 'Open', onClick: () => setDialog('open'), testId: 'discoverOpenButton' },
+        { id: 'share', label: 'Share', onClick: () => setDialog('share'), testId: 'shareTopNavButton' },
+        { id: 'inspect', label: 'Inspect', onClick: () => setDialog('inspect'), testId: 'openInspectorButton' },
+      ]}
+    />
+  );
+  const dialogs = (
+    <>
+      {dialog === 'save' && (
+        <SaveModal
+          objectType="search"
+          intro="Save your Discover search so you can use it in visualizations and dashboards"
+          title={saved?.attributes.title ?? ''}
+          existing={Boolean(saved)}
+          onSave={save}
+          onClose={() => setDialog(undefined)}
+        />
+      )}
+      {dialog === 'open' && (
+        <OpenFlyout
+          title="Open search"
+          types={[{ type: 'search', name: 'Saved search', icon: 'discover' }]}
+          manageLink="/app/management/opensearch-dashboards/objects"
+          onClose={() => setDialog(undefined)}
+          onChoose={(object) => {
+            setDialog(undefined);
+            navigate(appUrl(basePath, `/view/${encodeURIComponent(object.id)}`, { _g: currentGlobalParam() }));
+            setOpenings((count) => count + 1);
+          }}
+        />
+      )}
+      {dialog === 'share' && (
+        <ShareModal
+          objectType="search"
+          savedUrl={saved ? `${window.location.origin}${href(appUrl(basePath, `/view/${encodeURIComponent(saved.id)}`))}` : undefined}
+          onClose={() => setDialog(undefined)}
+        />
+      )}
+      {dialog === 'inspect' && (
+        <Inspector title={saved?.attributes.title} requests={records} onClose={() => setDialog(undefined)} />
+      )}
+    </>
+  );
+  if (listError) {
     return (
       <div className="shlPage">
         <EmptyPrompt icon="warning" title="Discover could not start">
-          {patternError}
+          {listError}
         </EmptyPrompt>
+      </div>
+    );
+  }
+  if (patternError && !indexPattern) {
+    // As the original's: an index pattern that cannot be read leaves Discover as it is, with no
+    // pattern chosen and nothing searched, and asks for one
+    return (
+      <div className="dscPage" data-test-subj="discoverApp">
+        {topNav}
+        <Sidebar
+          indexPattern={undefined}
+          indexPatterns={patterns ?? []}
+          onIndexPatternChange={(id) => writeApp({ indexPattern: id })}
+          onRefreshFields={() => {
+            services.indexPatterns.clear();
+            services.indexPatterns
+              .list()
+              .then(setPatterns)
+              .catch((failure) => services.toasts.error(failure, 'The index patterns could not be read'));
+          }}
+          columns={undefined}
+          rows={[]}
+          onToggleColumn={toggleColumn}
+          onFilter={addFilter}
+          onFilterExists={addExists}
+        />
+        <div className="dscCanvas" data-test-subj="dscCanvas">
+          <SearchBar
+            indexPatterns={[]}
+            query={query}
+            onQuerySubmit={(next) => writeQuery({ query: next })}
+            filters={filters}
+            onFiltersChange={setFilters}
+            time={global.time}
+            refreshInterval={global.refreshInterval}
+            onTimeChange={(time) => setGlobal({ time })}
+            onRefreshChange={(refreshInterval) => setGlobal({ refreshInterval })}
+            onRefresh={refresh}
+            loading={false}
+            showTime={false}
+            savedQueryId={savedQueryId}
+            onSavedQueryChange={onSavedQueryChange}
+          />
+          <SelectData />
+        </div>
+        {dialogs}
       </div>
     );
   }
@@ -534,27 +832,15 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
 
   return (
     <div className="dscPage" data-test-subj="discoverApp">
-      <TopNav
-        items={[
-          { id: 'new', label: 'New', to: appUrl(basePath, '/', { _g: currentGlobalParam() }), testId: 'discoverNewButton' },
-          { id: 'save', label: 'Save', onClick: () => setDialog('save'), testId: 'discoverSaveButton' },
-          { id: 'open', label: 'Open', onClick: () => setDialog('open'), testId: 'discoverOpenButton' },
-          { id: 'share', label: 'Share', onClick: () => setDialog('share'), testId: 'shareTopNavButton' },
-          { id: 'inspect', label: 'Inspect', onClick: () => setDialog('inspect'), testId: 'openInspectorButton' },
-        ]}
-      />
+      {topNav}
       <Sidebar
         indexPattern={indexPattern}
         indexPatterns={patterns}
         onIndexPatternChange={(id) => {
+          // As the original's: only the pattern changes; the columns, the sort, the query and the
+          // filters stay, and the table shows the columns the new pattern has
           setResult(undefined);
-          setHashParams({
-            _a: encodeState({
-              discover: { columns: ['_source'], interval: 'auto', isDirty: false, savedQuery: savedQueryId, sort: [] },
-              metadata: { indexPattern: id, view: 'discover' },
-            }),
-            _q: encodeState({ filters: [], query }),
-          });
+          writeApp({ indexPattern: id });
         }}
         onRefreshFields={() => {
           services.indexPatterns
@@ -564,18 +850,28 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
               const kept = new Map(indexPattern.fields.map((field) => [field.name, field]));
               const merged = fields.map((field) => ({ ...field, count: kept.get(field.name)?.count ?? 0 }));
               for (const field of indexPattern.fields) if (field.scripted) merged.push({ ...field, count: field.count ?? 0 });
-              setIndexPattern({ ...indexPattern, fields: merged });
+              const refreshed = { ...indexPattern, fields: merged };
+              // The counts go on being written for the pattern as it is now, and the pattern as it
+              // was read before is read again where it is asked for next
+              keepPopularity(indexPattern, refreshed);
+              services.indexPatterns.clear(indexPattern.id);
+              setIndexPattern(refreshed);
               services.toasts.success('The field list was refreshed');
             })
             .catch((failure) => services.toasts.error(failure, 'The fields could not be read'));
         }}
-        columns={columns}
+        columns={sidebarColumns}
         rows={rows}
-        onToggleColumn={toggleColumn}
+        onToggleColumn={(name) => {
+          popularize(name);
+          toggleColumn(name);
+        }}
         onFilter={addFilter}
+        onFilterExists={addExists}
         onVisualize={visualize}
       />
-      <div className="dscMain">
+      <div ref={canvasRef} className="dscCanvas" data-test-subj="dscCanvas">
+        {loading && <div className="atlProgress" />}
         <SearchBar
           indexPatterns={[indexPattern]}
           query={query}
@@ -592,135 +888,144 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
           savedQueryId={savedQueryId}
           onSavedQueryChange={onSavedQueryChange}
         />
-        <Panel flush className="dscCanvas">
-          {loading && <div className="atlProgress" />}
-          {failed || (result && total === 0) ? (
-            <NoResults query={query} />
-          ) : !result ? (
-            <Loading>Searching</Loading>
-          ) : (
-            <>
-              {histogram && result.range && (
-                <>
-                  <div className="dscChartHeader" data-test-subj="discoverIntervalDateRange">
-                    <span>
-                      {formatDate(result.range.from, dateFormat, services.timeZone())} -{' '}
-                      {formatDate(result.range.to, dateFormat, services.timeZone())} per
-                    </span>
+        {!searchStarted ? (
+          <div className="dscUninitialized">
+            <EmptyPrompt
+              icon="discover"
+              title="Start searching"
+              actions={
+                <Button variant="primary" size="s" onClick={() => setSearchStarted(true)} testId="discover-refreshDataButton">
+                  Refresh data
+                </Button>
+              }
+            >
+              <p>Write a query, add some filters, or simply hit Refresh to retrieve results for the current query.</p>
+            </EmptyPrompt>
+          </div>
+        ) : failed || (result && total === 0) ? (
+          <NoResults query={query} />
+        ) : !result ? (
+          <Loading>Searching</Loading>
+        ) : (
+          <div className="dscCanvas__results" data-test-subj="dscCanvasResults">
+            {histogram && result.range && (
+              <div className="dscChart" data-test-subj="dscChartWrapper">
+                <div className="dscChart__header" data-test-subj="dscChartTimechartHeader">
+                  <Tooltip content="To change the time, use the global time filter above">
+                    <div className="dscChart__range" data-test-subj="discoverIntervalDateRange">
+                      {`${formatDate(result.range.from, dateFormat, services.timeZone())} - ${formatDate(
+                        result.range.to,
+                        dateFormat,
+                        services.timeZone()
+                      )} ${interval !== 'auto' ? 'per' : ''}`}
+                    </div>
+                  </Tooltip>
+                  <div className="dscChart__interval">
                     <Select
-                      compact
-                      style={{ width: 132 }}
-                      value={INTERVALS.some((item) => item.value === interval) ? interval : 'auto'}
+                      className="dscChart__select"
+                      value={interval && INTERVALS.some((item) => item.value === interval) ? interval : 'auto'}
                       onChange={(next) => writeApp({ interval: next })}
                       options={INTERVALS}
-                      aria-label="Interval"
+                      aria-label="Time interval"
                       testId="discoverIntervalSelect"
                     />
                     {histogram.interval.scaled && (
-                      <span className="atlSubdued atlSmall">
-                        This interval makes too many bars for the time range, so it was scaled to {histogram.interval.description}.
-                      </span>
+                      <Tooltip
+                        content={`This interval creates ${
+                          histogram.scale > 1 ? 'buckets that are too large' : 'too many buckets'
+                        } to show in the selected time range, so it has been scaled to ${histogram.interval.description}.`}
+                        testId="discoverIntervalIconTip"
+                      >
+                        <span className="dscChart__scaled" tabIndex={0}>
+                          <Icon name="warning" />
+                        </span>
+                      </Tooltip>
                     )}
                   </div>
-                  <div className="dscChart" data-test-subj="discoverChart">
-                    <XYChart
-                      series={[
-                        {
-                          id: 'count',
-                          label: 'Count',
-                          color: '#6092C0',
-                          type: 'histogram',
-                          mode: 'stacked',
-                          axisId: 'count',
-                          points: histogram.points,
-                        },
-                      ]}
-                      axes={[{ id: 'count', position: 'left', title: 'Count', format: (value) => value.toLocaleString() }]}
-                      x={{
-                        type: 'time',
-                        values: histogram.points.map((point) => point.x),
-                        interval: histogram.interval.ms,
-                        domain: [result.range.from.getTime(), result.range.to.getTime()],
-                        format: (value) => histogram.column.format(value),
-                        title: `${indexPattern.timeFieldName} per ${histogram.interval.description}`,
-                      }}
-                      legend={false}
-                      nowMarker
-                      onBrush={(from, to) =>
-                        setGlobal({ time: { from: new Date(from).toISOString(), to: new Date(to).toISOString() } })
-                      }
-                      onPointClick={(_series, point) =>
-                        setGlobal({
-                          time: {
-                            from: new Date(point.x as number).toISOString(),
-                            to: new Date((point.x as number) + histogram.interval.ms).toISOString(),
-                          },
-                        })
-                      }
+                </div>
+                <section className="dscTimechart" data-test-subj="dscTimechart">
+                  <div className="dscHistogram" data-test-subj="discoverChart">
+                    <Histogram
+                      points={histogram.points}
+                      from={result.range.from.getTime()}
+                      to={result.range.to.getTime()}
+                      intervalMs={histogram.interval.ms}
+                      minInterval={histogram.minInterval}
+                      offsetAt={offsetAt}
+                      formatX={formatBucket}
+                      xTitle={`${indexPattern.timeFieldName} per ${histogram.interval.description}`}
+                      yTitle="Count"
+                      onTimeChange={narrowTime}
                     />
                   </div>
-                </>
-              )}
-              <div className="dscResultsHeader">
-                <span className="atlTitleXxs" data-test-subj="discoverQueryHits">
-                  Results ({rows.length.toLocaleString()}/{total.toLocaleString()})
-                </span>
-                <Button variant="empty" size="s" icon="download" onClick={downloadCsv} testId="dscDownloadCsvButton">
-                  Download as CSV
-                </Button>
+                </section>
               </div>
-              <DocTable
-                rows={rows}
-                indexPattern={indexPattern}
-                columns={columns}
-                sort={sort}
-                onSort={(next) => writeApp({ sort: next })}
-                onRemoveColumn={toggleColumn}
-                onMoveColumn={moveColumn}
-                onFilter={addFilter}
-                details={details}
-              />
-              {rows.length < total && (
-                <div className="dscFooter">
-                  These are the first {rows.length.toLocaleString()} documents matching your search. Refine your search to see others.
+            )}
+            <div className="dscResultsBar" data-test-subj="dscResultsActionBar">
+              <div className="dscResultsBar__actions">
+                <div className="dscResultsBar__count" data-test-subj="dscResultCount">
+                  <strong>
+                    {rows.length === 1 ? 'Result' : 'Results'} (
+                    <span data-test-subj="discoverQueryRowsCount" aria-label={`${rows.length} ${rows.length === 1 ? 'row' : 'rows'} shown`}>
+                      {rows.length.toLocaleString()}
+                    </span>
+                    {total ? (
+                      <>
+                        /
+                        <span data-test-subj="discoverQueryHits" aria-label={`${total} ${total === 1 ? 'hit' : 'hits'}`}>
+                          {total.toLocaleString()}
+                        </span>
+                      </>
+                    ) : null}
+                    )
+                  </strong>
+                  {saved && (
+                    <button
+                      type="button"
+                      className="dscResults__button"
+                      aria-label="Reset search"
+                      data-test-subj="resetSavedSearch"
+                      onClick={() => {
+                        navigate(appUrl(basePath, `/view/${encodeURIComponent(saved.id)}`, { _g: currentGlobalParam() }));
+                        setOpenings((count) => count + 1);
+                      }}
+                    >
+                      <Icon name="refresh" />
+                      Reset search
+                    </button>
+                  )}
                 </div>
-              )}
-            </>
-          )}
-        </Panel>
+                {rows.length > 0 && (
+                  <DownloadCsv rows={rows} hits={total} indexPattern={indexPattern} columns={columns} fetchRows={fetchCsvRows} />
+                )}
+              </div>
+            </div>
+            <DocTable
+              rows={rows}
+              indexPattern={indexPattern}
+              columns={shownColumns}
+              sort={sort}
+              onSort={(next) => writeApp({ sort: next })}
+              onRemoveColumn={(name) => {
+                popularize(name);
+                // A default column the table adds of itself is no chosen column: the original
+                // leaves the columns as they are
+                if (columns.includes(name)) toggleColumn(name);
+              }}
+              onMoveColumn={(name, by) => {
+                popularize(name);
+                moveColumn(name, by);
+              }}
+              onFilter={addFilter}
+              details={details}
+              onBackToTop={() => {
+                if (canvasRef.current) canvasRef.current.scrollTop = 0;
+              }}
+            />
+          </div>
+        )}
       </div>
-      {dialog === 'save' && (
-        <SaveModal
-          objectType="search"
-          intro="Save your Discover search so you can use it in visualizations and dashboards"
-          title={saved?.attributes.title ?? ''}
-          existing={Boolean(saved)}
-          onSave={save}
-          onClose={() => setDialog(undefined)}
-        />
-      )}
-      {dialog === 'open' && (
-        <OpenFlyout
-          title="Open search"
-          types={[{ type: 'search', name: 'Saved search', icon: 'discover' }]}
-          manageLink="/app/management/opensearch-dashboards/objects"
-          onClose={() => setDialog(undefined)}
-          onChoose={(object) => {
-            setDialog(undefined);
-            navigate(appUrl(basePath, `/view/${encodeURIComponent(object.id)}`, { _g: currentGlobalParam() }));
-          }}
-        />
-      )}
-      {dialog === 'share' && (
-        <ShareModal
-          objectType="search"
-          savedUrl={saved ? `${window.location.origin}${href(appUrl(basePath, `/view/${encodeURIComponent(saved.id)}`))}` : undefined}
-          onClose={() => setDialog(undefined)}
-        />
-      )}
-      {dialog === 'inspect' && (
-        <Inspector title={saved?.attributes.title ?? 'Discover'} requests={records} onClose={() => setDialog(undefined)} />
-      )}
+      {dialogs}
     </div>
   );
 }

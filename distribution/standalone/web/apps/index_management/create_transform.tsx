@@ -7,14 +7,26 @@
  */
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Accordion, Button, CallOut, IconButton, Panel } from '../../components/basic';
+import { Button, CallOut, IconButton, Panel, cx } from '../../components/basic';
 import { ComboBox } from '../../components/combo_box';
-import { Checkbox, NumberField, RadioGroup, Select, TextField } from '../../components/form';
+import { Checkbox, NumberField, Select, TextField } from '../../components/form';
 import { Icon } from '../../components/icon';
 import { Popover } from '../../components/overlay';
 import { useBreadcrumbs } from '../../shell/state';
-import { Detail, Details, ExternalLink, JsonEditor, go, ism, toasts } from './common';
-import { ConfigureJob, FieldRow, FormPanel, Wizard, nameOptions, useIndexNames } from './job_parts';
+import { JsonEditor, go, ism, toasts } from './common';
+import {
+  ConfigureJob,
+  FieldRow,
+  DocsLink,
+  Fold,
+  InfoGrid,
+  PluginRow,
+  Radio,
+  Rule,
+  SmallRow,
+  Spacer,
+  TitledPanel,
+  Wizard, nameOptions, useIndexNames } from './job_parts';
 import {
   CALENDAR_TIMEUNITS,
   FIXED_TIMEUNITS,
@@ -111,6 +123,7 @@ export function ConfigureTransform({
       isEdit={isEdit}
       onChangeName={onChangeName}
       onChangeDescription={onChangeDescription}
+      transform
     />
   );
 }
@@ -121,25 +134,26 @@ function FilterEditor({ filter, onSave, onClose }: { filter: string; onSave: (fi
   return (
     <div className="ismFilterEditor">
       <div className="ismFilterEditor__title">Edit data filter</div>
-      <div className="ismFilterEditor__body">
-        <div className="ismRow__label">Custom query DSL</div>
-        <JsonEditor value={text} onChange={setText} height="40vh" />
-        <div className="ismButtons">
-          <Button variant="empty" size="s" onClick={onClose} testId="cancelSaveFilter">
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            size="s"
-            onClick={() => {
-              onSave(text);
-              onClose();
-            }}
-            testId="saveFilter"
-          >
-            Save
-          </Button>
+      <SmallRow label="Custom query DSL" className="ismFilterEditor__row">
+        <div className="ismFilterEditor__code">
+          <JsonEditor value={text} onChange={setText} height="40vh" />
         </div>
+      </SmallRow>
+      <Spacer />
+      <div className="ismFilterEditor__buttons">
+        <Button variant="empty" onClick={onClose} testId="cancelSaveFilter">
+          Cancel
+        </Button>
+        <Button
+          variant="primary"
+          onClick={() => {
+            onSave(text);
+            onClose();
+          }}
+          testId="saveFilter"
+        >
+          Save
+        </Button>
       </div>
     </div>
   );
@@ -170,14 +184,18 @@ function TransformIndices({
 }) {
   const { sources, targets, loading, onSearch } = useIndexNames();
   const [editing, setEditing] = useState(false);
+  // As the plugin's panel: the rows of its form, the filter as a badge with a link beside it
   return (
-    <FormPanel title="Indices">
+    <TitledPanel title="Indices" itemTitle>
       {hasDefinitions && (
-        <CallOut tone="warning">
-          Note: changing source index will erase all existing definitions about aggregations and metrics.
-        </CallOut>
+        <>
+          <CallOut tone="warning">
+            <p>Note: changing source index will erase all existing definitions about aggregations and metrics.</p>
+          </CallOut>
+          <Spacer size="m" />
+        </>
       )}
-      <FieldRow
+      <PluginRow
         title="Source index"
         error={sourceIndexError}
         help="The index where this transform job is performed on. Type in * as wildcard for index pattern. Indices cannot be changed once the job is created. Please ensure that you select the right source index."
@@ -195,55 +213,59 @@ function TransformIndices({
           invalid={Boolean(sourceIndexError)}
           testId="sourceIndexCombobox"
         />
-      </FieldRow>
-      <div className="ismRow">
-        <h3 className="ismRow__title">
-          Source index filter<i> – optional</i>
+      </PluginRow>
+      <Spacer size="s" />
+      <div className="ismOptional ismOptional--heading">
+        <h3 className="ismPr__title">Source index filter</h3>
+        <h3 className="ismPr__title ismOptional__text">
+          <i> – optional</i>
         </h3>
-        <div className="ismLabeled__help">
-          You can use the custom DSL to filter a subset of the source index to use in the transform job, which
-          optimizes the job for performance and computing resources. You cannot change these filters once the job is
-          created.
-        </div>
-        <div className="ismLabeled__help">
-          <ExternalLink href={FILTER_DOCS} />
-        </div>
-        <div className="ismFilterRow">
-          <span className="ismFilterBadge">
-            <button
-              type="button"
-              className="ismFilterBadge__text"
-              onClick={() => setEditing(!editing)}
-              aria-label="Edit Source Index Filter"
-            >
-              {filter}
-            </button>
-            <button
-              type="button"
-              className="ismFilterBadge__clear"
-              onClick={() => onChangeFilter('')}
-              aria-label="Clear Source Index Filter"
-            >
-              <Icon name="cross" />
-            </button>
-          </span>
-          <Popover
-            open={editing}
-            onClose={() => setEditing(false)}
-            className="ismFilterPopover"
-            button={
-              <button type="button" className="atlLinkButton" onClick={() => setEditing(!editing)} data-test-subj="addFilter">
-                Edit data filter
-              </button>
-            }
-          >
-            <FilterEditor filter={filter} onSave={onChangeFilter} onClose={() => setEditing(false)} />
-          </Popover>
-        </div>
-        {filterError && <div className="ismLabeled__error">{filterError}</div>}
       </div>
-      <hr className="ismRule" />
-      <FieldRow
+      <div className="ismFilterHelp">
+        You can use the custom DSL to filter a subset of the source index to use in the transform job, which optimizes
+        the job for performance and computing resources. You cannot change these filters once the job is created.
+      </div>
+      <div className="ismFilterHelp ismFilterHelp--link">
+        <DocsLink href={FILTER_DOCS} />
+      </div>
+      <Spacer size="s" />
+      <div className="ismFilterRow">
+        <span className="ismFilterBadge">
+          <button
+            type="button"
+            className="ismFilterBadge__text"
+            onClick={() => setEditing(!editing)}
+            aria-label="Edit Source Index Filter"
+          >
+            {filter}
+          </button>
+          <button
+            type="button"
+            className="ismFilterBadge__clear"
+            onClick={() => onChangeFilter('')}
+            aria-label="Clear Source Index Filter"
+          >
+            <Icon name="cross" size="s" />
+          </button>
+        </span>
+        <Popover
+          open={editing}
+          onClose={() => setEditing(false)}
+          className="ismDslPopover"
+          position="downCenter"
+          button={
+            <button type="button" className="ismFilterEdit" onClick={() => setEditing(!editing)} data-test-subj="addFilter">
+              Edit data filter
+            </button>
+          }
+        >
+          <FilterEditor filter={filter} onSave={onChangeFilter} onClose={() => setEditing(false)} />
+        </Popover>
+      </div>
+      <div className="ismFilterError">{filterError}</div>
+      <Spacer size="s" />
+      <Rule />
+      <PluginRow
         title="Target index"
         error={targetIndexError}
         help="The index stores transform results. You can look up an existing index to reuse or type to create a new index."
@@ -262,8 +284,8 @@ function TransformIndices({
           invalid={Boolean(targetIndexError)}
           testId="targetIndexCombobox"
         />
-      </FieldRow>
-    </FormPanel>
+      </PluginRow>
+    </TitledPanel>
   );
 }
 
@@ -283,10 +305,10 @@ function PanelButtons({
 }) {
   return (
     <div className="ismButtons">
-      <Button size="s" onClick={onCancel} testId={testIds?.[0]}>
+      <Button onClick={onCancel} testId={testIds?.[0]}>
         Cancel
       </Button>
-      <Button variant="primary" size="s" disabled={disabled} onClick={onOk} testId={testIds?.[1]}>
+      <Button variant="primary" disabled={disabled} onClick={onOk} testId={testIds?.[1]}>
         OK
       </Button>
     </div>
@@ -316,7 +338,7 @@ function PercentsField({
             onClick={() => onChange(percents.filter((_item, index) => index !== at))}
             aria-label={`Remove ${percent}`}
           >
-            <Icon name="cross" />
+            <Icon name="cross" size="s" />
           </button>
         </span>
       ))}
@@ -488,6 +510,8 @@ function TransformOptions({ field, onAdd }: { field: FieldItem; onAdd: (item: Ag
     else add(metricItem(option === 'count' ? 'value_count' : option, name));
   };
   const options = optionsOf(field.type);
+  // The plugin's panels with a form in them are 350 px wide; its lists, the menu's own 256 px
+  const wide = panel !== 'root' && panel !== 'dateTypes';
   const leads = (option: OptionId) =>
     option === 'histogram' || option === 'date_histogram' || option === 'percentile' || option === 'scripted';
 
@@ -509,11 +533,11 @@ function TransformOptions({ field, onAdd }: { field: FieldItem; onAdd: (item: Ag
             aria-label={`Transform options of ${name}`}
             data-test-subj={`${name}OptionsPopover`}
           >
-            <Icon name="plus" />
+            <Icon name="plusInCircleFilled" />
           </button>
         }
       >
-        <div className="atlMenu ismOptionsMenu" role="menu">
+        <div className={cx('atlMenu ismOptionsMenu', wide && 'ismOptionsMenu--wide')} role="menu">
           {panel === 'root' && (
             <>
               <div className="ismMenuTitle">Transform options</div>
@@ -662,7 +686,7 @@ export function PreviewTransform({
   if (ids.length === 0) {
     return (
       <Panel>
-        <div className="ismPreviewEmpty">
+        <div className={isReadOnly ? 'ismPreviewEmpty' : 'ismPreviewEmpty ismPreviewEmpty--text'}>
           {isReadOnly ? (
             <h4>No preview available</h4>
           ) : (
@@ -671,7 +695,7 @@ export function PreviewTransform({
               <p>
                 From the table above, select a field you want to transform by clicking{' '}
                 <span className="ismGridAdd ismGridAdd--inline">
-                  <Icon name="plus" />
+                  <Icon name="plusInCircleFilled" />
                 </span>{' '}
                 next to the field name.
               </p>
@@ -779,31 +803,38 @@ function DefineTransforms({
 
   if (isReadOnly) {
     return (
-      <div className="ismDefine">
-        <h3 className="ismRow__title">Original fields with sample data</h3>
+      <div>
+        <h3 className="ismPr__title">Original fields with sample data</h3>
+        <Spacer size="s" />
         {grid}
-        <h3 className="ismRow__title">Transformed fields preview based on sample data</h3>
+        <Spacer />
+        <h3 className="ismPr__title">Transformed fields preview based on sample data</h3>
+        <Spacer size="s" />
         {preview}
       </div>
     );
   }
+  // As the plugin's panel: the title 16 px further in than the line under it, and what it holds 10 px in
   return (
-    <FormPanel title="Select fields to transform">
-      <div className="ismDefine">
-        <div>
-          <h3 className="ismRow__title">Original fields with sample data</h3>
-          <div className="ismLabeled__help">Viewing sample data from index {sourceIndex}</div>
-        </div>
+    <section className="atlPanel ismTp">
+      <div className="ismDefineHead">
+        <h2 className="atlTitleS">Select fields to transform</h2>
+      </div>
+      <Rule />
+      <div className="ismDefineBody">
+        <h3 className="ismPr__title">Original fields with sample data</h3>
+        <Spacer size="s" />
+        <p className="ismDefineNote">Viewing sample data from index {sourceIndex}</p>
+        <Spacer size="s" />
         {grid}
-        <div>
-          <h3 className="ismRow__title">Transformed fields preview based on sample data</h3>
-          <div className="ismLabeled__help">
-            This fields preview displays only the first 10 results of your transform job.
-          </div>
-        </div>
+        <Spacer />
+        <h3 className="ismPr__title">Transformed fields preview based on sample data</h3>
+        <Spacer size="s" />
+        <p className="ismDefineNote">This fields preview displays only the first 10 results of your transform job.</p>
+        <Spacer size="s" />
         {preview}
       </div>
-    </FormPanel>
+    </section>
   );
 }
 
@@ -837,27 +868,29 @@ export function TransformSchedule({
   onChangeInterval: (interval: number | undefined) => void;
 }) {
   return (
-    <FormPanel title="Schedule">
-      <Checkbox
-        checked={values.enabled}
-        onChange={(enabled) => change({ enabled })}
-        label="Job enabled by default"
-        testId={isEdit ? 'jobEnabled' : 'jobEnabledByDefault'}
-      />
+    <TitledPanel title="Schedule" itemTitle>
+      <div className={isEdit ? 'ismCheckRow ismCheckRow--text' : 'ismCheckRow'}>
+        <Checkbox
+          checked={values.enabled}
+          onChange={(enabled) => change({ enabled })}
+          label="Job enabled by default"
+          testId={isEdit ? 'jobEnabled' : 'jobEnabledByDefault'}
+        />
+      </div>
+      <Spacer size="m" />
       {!isEdit && (
-        <FieldRow title="Continuous" minor>
-          <RadioGroup
-            options={[
-              { id: 'no', label: 'No' },
-              { id: 'yes', label: 'Yes' },
-            ]}
-            value={values.continuous ? 'yes' : 'no'}
-            onChange={(id) => change({ continuous: id === 'yes' })}
-          />
-        </FieldRow>
+        <>
+          <SmallRow label={<h4 className="ismSr__heading">Continuous</h4>}>
+            <div>
+              <Radio id="no" name="continuousJob" label="No" checked={!values.continuous} onChange={() => change({ continuous: false })} />
+              <Radio id="yes" name="continuousJob" label="Yes" checked={Boolean(values.continuous)} onChange={() => change({ continuous: true })} />
+            </div>
+          </SmallRow>
+          <Spacer size="m" />
+        </>
       )}
-      <FieldRow title="Transform execution interval" small error={intervalError}>
-        <div className="ismPaired">
+      <div className="ismTsInterval">
+        <SmallRow label="Transform execution interval" error={intervalError} className="ismTsInterval__number">
           <NumberField
             compact
             value={values.interval}
@@ -865,6 +898,8 @@ export function TransformSchedule({
             invalid={Boolean(intervalError)}
             aria-label="Transform execution interval"
           />
+        </SmallRow>
+        <div className="ismTsInterval__unit">
           <Select
             compact
             id="selectIntervalTimeunit"
@@ -875,23 +910,28 @@ export function TransformSchedule({
             aria-label="Transform execution interval unit"
           />
         </div>
-      </FieldRow>
-      <hr className="ismRule" />
-      <Accordion title="Advanced" initiallyOpen={false}>
-        <div className="ismAccordionBody">
-          <FieldRow title="Pages per execution" small help={isEdit ? PAGES_HELP_EDIT : PAGES_HELP}>
-            <NumberField
-              compact
-              min={1}
-              placeholder="1000"
-              value={values.pageSize}
-              onChange={(pageSize) => change({ pageSize })}
-              aria-label="Pages per execution"
-            />
-          </FieldRow>
-        </div>
-      </Accordion>
-    </FormPanel>
+      </div>
+      <Spacer size="m" />
+      {!isEdit && (
+        <>
+          <Rule />
+          <Spacer size="m" />
+        </>
+      )}
+      <Fold title="Advanced" size={isEdit ? 'l' : 'text'}>
+        <Spacer size="m" />
+        <SmallRow label="Pages per execution" help={isEdit ? PAGES_HELP_EDIT : PAGES_HELP}>
+          <NumberField
+            compact
+            min={1}
+            placeholder="1000"
+            value={values.pageSize}
+            onChange={(pageSize) => change({ pageSize })}
+            aria-label="Pages per execution"
+          />
+        </SmallRow>
+      </Fold>
+    </TitledPanel>
   );
 }
 
@@ -900,15 +940,7 @@ export function TransformSchedule({
 /** What a job groups and aggregates by, each as a name over the field it works on */
 export function Definitions({ items }: { items: DefinitionItem[] }) {
   return (
-    <div className="ismSmallDetails">
-      <Details columns={4}>
-        {items.map((item, at) => (
-          <Detail key={at} name={item.title}>
-            {item.field}
-          </Detail>
-        ))}
-      </Details>
-    </div>
+    <InfoGrid size="xs" items={items.map((item) => ({ term: item.title, value: item.field }))} />
   );
 }
 
@@ -1047,7 +1079,7 @@ export function CreateTransform() {
   };
 
   const edit = (to: number) => (
-    <Button size="s" onClick={() => setStep(to)}>
+    <Button onClick={() => setStep(to)} testId="EditButton">
       Edit
     </Button>
   );
@@ -1059,18 +1091,17 @@ export function CreateTransform() {
       step={step}
       buttons={
         <>
-          <Button variant="empty" size="s" onClick={() => go(ROUTES.TRANSFORMS)} testId="createTransformCancelButton">
+          <Button variant="empty" onClick={() => go(ROUTES.TRANSFORMS)} testId="createTransformCancelButton">
             Cancel
           </Button>
           {step !== 1 && (
-            <Button size="s" onClick={() => setStep(step - 1)} testId="createTransformPreviousButton">
+            <Button onClick={() => setStep(step - 1)} testId="createTransformPreviousButton">
               Previous
             </Button>
           )}
           {step === 4 ? (
             <Button
               variant="primary"
-              size="s"
               loading={submitting}
               onClick={() => void submit()}
               testId="createTransformSubmitButton"
@@ -1080,7 +1111,6 @@ export function CreateTransform() {
           ) : (
             <Button
               variant="primary"
-              size="s"
               loading={searching}
               onClick={() => void next()}
               testId="createTransformNextButton"
@@ -1106,6 +1136,7 @@ export function CreateTransform() {
               change((before) => withDescription(before, text));
             }}
           />
+          <Spacer />
           <TransformIndices
             sourceIndex={sourceIndex}
             sourceIndexError={errors.sourceIndex}
@@ -1134,9 +1165,12 @@ export function CreateTransform() {
               change((before) => withTargetIndex(before, index || undefined));
             }}
           />
+          <Spacer />
           <CallOut tone="warning">
-            You can&apos;t change indices after creating a job. Double-check the source and target index names before
-            proceeding.
+            <p>
+              You can&apos;t change indices after creating a job. Double-check the source and target index names before
+              proceeding.
+            </p>
           </CallOut>
         </>
       )}
@@ -1172,21 +1206,27 @@ export function CreateTransform() {
       )}
       {step === 4 && (
         <>
-          <FormPanel title="Set up indices" actions={edit(1)}>
-            <div className="ismSmallDetails">
-              <Details columns={3}>
-                <Detail name="Name">{transformId}</Detail>
-                <Detail name="Source Index">{sourceIndex}</Detail>
-                <Detail name="Target index">{targetIndex}</Detail>
-                <Detail name="Description">{description === '' ? '-' : description}</Detail>
-                <Detail name="Source index filter">{filter === '' ? '-' : filter}</Detail>
-              </Details>
-            </div>
-          </FormPanel>
-          <FormPanel title="Define transforms" actions={edit(2)}>
+          <TitledPanel title="Set up indices" itemTitle actions={edit(1)}>
+            <InfoGrid
+              columns={3}
+              size="xs"
+              items={[
+                { term: 'Name', value: transformId },
+                { term: 'Source Index', value: sourceIndex },
+                { term: 'Target index', value: targetIndex },
+                { term: 'Description', value: description === '' ? '-' : description },
+                { term: 'Source index filter', value: filter === '' ? '-' : filter },
+              ]}
+            />
+            <Spacer size="s" />
+          </TitledPanel>
+          <Spacer />
+          <TitledPanel title="Define transforms" itemTitle actions={edit(2)}>
             <Definitions items={reviewItems(aggList)} />
-            <Accordion title="Sample source index and transform result" initiallyOpen={false}>
-              <div className="ismAccordionBody">
+            <Spacer />
+            <Fold title="Sample source index and transform result" keepMounted>
+              <div className="ismAcc__body">
+                <Spacer size="m" />
                 <DefineTransforms
                   sourceIndex={sourceIndex}
                   filter={filter}
@@ -1196,22 +1236,28 @@ export function CreateTransform() {
                   isReadOnly
                 />
               </div>
-            </Accordion>
-          </FormPanel>
-          <FormPanel title="Specify schedule" actions={edit(3)}>
-            <div className="ismSmallDetails">
-              <Details columns={4}>
-                <Detail name="Enabled by default">{schedule.enabled ? 'Yes' : 'No'}</Detail>
-                <Detail name="Schedule">
-                  {intervalScheduleText(Boolean(schedule.continuous), schedule.interval ?? NaN, schedule.intervalTimeunit)}
-                </Detail>
-                <Detail name="Pages per execution">{schedule.pageSize ?? NaN}</Detail>
-              </Details>
-            </div>
-          </FormPanel>
-          <CallOut tone="warning">
-            You can only change the description and schedule after creating a job. Double-check your choices before
-            proceeding.
+            </Fold>
+          </TitledPanel>
+          <Spacer />
+          <TitledPanel title="Specify schedule" itemTitle actions={edit(3)}>
+            <InfoGrid
+              size="xs"
+              items={[
+                { term: 'Enabled by default', value: schedule.enabled ? 'Yes' : 'No' },
+                {
+                  term: 'Schedule',
+                  value: intervalScheduleText(Boolean(schedule.continuous), schedule.interval ?? NaN, schedule.intervalTimeunit),
+                },
+                { term: 'Pages per execution', value: schedule.pageSize ?? NaN },
+              ]}
+            />
+          </TitledPanel>
+          <Spacer />
+          <CallOut tone="warning" size="s">
+            <p>
+              You can only change the description and schedule after creating a job. Double-check your choices before
+              proceeding.
+            </p>
           </CallOut>
         </>
       )}

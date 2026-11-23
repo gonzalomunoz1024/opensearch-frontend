@@ -5,12 +5,13 @@
  * change, and the spec Vega was given, read and shown as the original shows them.
  */
 
-import { useEffect, useMemo, useState } from 'react';
-import { Button, Tabs } from '../../components/basic';
-import { CodeEditor } from '../../components/code_editor';
-import { Select } from '../../components/form';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Tabs } from '../../components/basic';
+import { CodeEditor, type CodeToken } from '../../components/code_editor';
+import { ComboBox } from '../../components/combo_box';
+import { Icon } from '../../components/icon';
 import { copyText } from '../../components/overlay';
-import { DataTable, type Column } from '../../components/table';
+import { InspectorDataGrid, type GridColumn } from './inspector_grid';
 import type { VegaView } from './library';
 
 /** What Inspect shows of a Vega visualization: its view, and the spec it was drawn from */
@@ -30,9 +31,11 @@ export interface VegaDataSet extends VegaRuntimeData {
 
 const SIGNAL = 'Signal';
 const VALUE = 'Value';
-const PAGE_SIZE = 15;
-// the signal's name 150 pixels wide, its value the rest
-const SIGNAL_WIDTHS = [150, undefined];
+// The signal's name 150 pixels wide, its value the rest; a data set's columns are JSON
+const SIGNAL_COLUMNS: GridColumn[] = [
+  { id: SIGNAL, schema: 'string', initialWidth: 150 },
+  { id: VALUE, schema: 'json' },
+];
 
 /** A row of a grid: each column's value as text, objects as JSON, and "(..)" for what cannot be written */
 export function serializeColumns(item: Record<string, unknown>, columns: string[]) {
@@ -74,66 +77,32 @@ export function vegaSignals(view: VegaView): VegaRuntimeData {
 /** The spec as Inspect shows it */
 export const vegaSpecText = (values: VegaDebugValues) => JSON.stringify(values.spec, null, 2);
 
-// The grid's columns as wide as the original's: 100 pixels unless set, scrolled sideways when there are many
-const COLUMN_WIDTH = 100;
-
-function RuntimeGrid({
-  columns,
-  data,
-  ariaLabel,
-  widths,
-}: VegaRuntimeData & { ariaLabel: string; widths?: Array<number | undefined> }) {
-  const rows = useMemo(() => data.map((row, index) => ({ row, index })), [data]);
-  const gridColumns = useMemo<Array<Column<{ row: Record<string, string | undefined>; index: number }>>>(
-    () =>
-      columns.map((column, index) => ({
-        id: column,
-        name: column,
-        // as the original's grid: an empty value shows nothing
-        render: (item) => item.row[column] || null,
-        sortValue: (item) => item.row[column],
-        // text compared as written, as the original sorts its rows
-        plainOrder: true,
-        truncate: true,
-        width: widths ? widths[index] : COLUMN_WIDTH,
-      })),
-    [columns, widths]
-  );
-  return (
-    <div aria-label={ariaLabel} role="region">
-      <DataTable
-        compact
-        rows={rows}
-        rowId={(item) => String(item.index)}
-        columns={gridColumns}
-        pageSize={PAGE_SIZE}
-        pageSizes={[PAGE_SIZE, 25, 50]}
-      />
-    </div>
-  );
-}
-
 function DataViewer({ values }: { values: VegaDebugValues }) {
   const sets = useMemo(() => vegaDataSets(values.view), [values]);
-  // the set first shown is kept until another is picked, as in the original
-  const [selected, setSelected] = useState<VegaDataSet | undefined>(sets[0]);
-  useEffect(() => {
-    if (!selected) setSelected(sets[0]);
-  }, [selected, sets]);
+  // The set first shown is kept until another is picked, as in the original, with its rows as
+  // they are now (the original goes on showing the rows it had when the view draws again)
+  const [selectedId, setSelectedId] = useState<string | undefined>(sets[0]?.id);
+  const selected = sets.find((set) => set.id === selectedId) ?? sets[0];
+  const columns = useMemo<GridColumn[]>(
+    () => (selected ? selected.columns.map((id) => ({ id, schema: 'json' })) : []),
+    [selected]
+  );
   if (!selected) return null;
   return (
-    <div className="atlStack vgaDebug__panel">
-      <Select
-        value={selected.id}
-        onChange={(id) => {
-          const next = sets.find((set) => set.id === id);
-          if (next) setSelected(next);
-        }}
-        options={sets.map((set) => ({ value: set.id, label: set.id }))}
-        aria-label="Data set"
-        compact
-      />
-      <RuntimeGrid columns={selected.columns} data={selected.data} ariaLabel={`${selected.id} data grid`} />
+    <div className="vgaDebug__panel">
+      <div className="vgaDebug__chooser" aria-label="Data set">
+        <ComboBox
+          single
+          fullWidth
+          clearable={false}
+          options={sets.map((set) => ({ value: set.id, label: set.id }))}
+          selected={[selected.id]}
+          onChange={([id]) => {
+            if (id !== undefined && sets.some((set) => set.id === id)) setSelectedId(id);
+          }}
+        />
+      </div>
+      <InspectorDataGrid columns={columns} data={selected.data} ariaLabel={`${selected.id} data grid`} />
     </div>
   );
 }
@@ -158,22 +127,67 @@ function SignalViewer({ values }: { values: VegaDebugValues }) {
   }, [values]);
   return (
     <div className="vgaDebug__panel">
-      <RuntimeGrid columns={signals.columns} data={signals.data} ariaLabel="Signal values data grid" widths={SIGNAL_WIDTHS} />
+      <InspectorDataGrid columns={SIGNAL_COLUMNS} data={signals.data} ariaLabel="Signal values data grid" />
     </div>
   );
 }
 
+/**
+ * The spec as the original's editor draws it: plain, with a guide at the start of each two spaces
+ * of a line's indent
+ */
+export function specLines(text: string): CodeToken[][] {
+  return text.split('\n').map((line) => {
+    const indent = /^ */.exec(line)?.[0].length ?? 0;
+    const guides = Math.floor(indent / 2);
+    const tokens: CodeToken[] = Array.from({ length: guides }, () => ({ text: '  ', kind: 'SpecGuide' }));
+    const rest = line.slice(guides * 2);
+    return rest || tokens.length === 0 ? [...tokens, { text: rest }] : tokens;
+  });
+}
+
+// The editor ends where the original's does: 32 px above the bottom of the window
+const SPEC_BOTTOM_GAP = 32;
+
 function SpecViewer({ values }: { values: VegaDebugValues }) {
   const spec = useMemo(() => vegaSpecText(values), [values]);
+  const place = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState(400);
+  useLayoutEffect(() => {
+    const fit = () => {
+      const top = place.current?.getBoundingClientRect().top;
+      if (top !== undefined) setHeight(Math.max(120, window.innerHeight - top - SPEC_BOTTOM_GAP));
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, []);
   if (!spec) return null;
   return (
-    <div className="atlStack vgaDebug__panel vgaDebug__spec">
-      <div className="atlRow" style={{ justifyContent: 'flex-end' }}>
-        <Button variant="empty" size="s" icon="copy" onClick={() => copyText(spec)} testId="vegaDataInspectorCopyClipboardButton">
+    <div className="vgaDebug__panel vgaDebug__spec">
+      <div className="vgaDebug__copy">
+        <button
+          type="button"
+          className="vgaGrid__footerBtn"
+          onClick={() => copyText(spec)}
+          data-test-subj="vegaDataInspectorCopyClipboardButton"
+        >
+          <Icon name="copyClipboard" size="s" />
           Copy to clipboard
-        </Button>
+        </button>
       </div>
-      <CodeEditor value={spec} readOnly wrap gutter={false} fontSize={12} height="calc(100vh - 240px)" ariaLabel="Spec" />
+      <div ref={place}>
+        <CodeEditor
+          value={spec}
+          readOnly
+          wrap
+          gutter={false}
+          fontSize={12}
+          height={height}
+          tokenize={specLines}
+          ariaLabel="Spec"
+        />
+      </div>
     </div>
   );
 }
@@ -187,8 +201,8 @@ const TABS = [
 export function VegaDebugView({ values }: { values: VegaDebugValues }) {
   const [tab, setTab] = useState(TABS[0].id);
   return (
-    <div className="atlStack vgaDebug">
-      <Tabs tabs={TABS} selected={tab} onSelect={setTab} />
+    <div className="vgaDebug">
+      <Tabs size="s" tabs={TABS} selected={tab} onSelect={setTab} />
       {tab === 'data-viewer--id' && <DataViewer values={values} />}
       {tab === 'signal-viewer--id' && <SignalViewer values={values} />}
       {tab === 'spec-viewer--id' && <SpecViewer values={values} />}

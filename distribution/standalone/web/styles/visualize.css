@@ -26,6 +26,17 @@
   flex: none;
 }
 
+/*
+ * The editor's main action keeps its width in the header while the anchor of its tooltip holds
+ * it ("Apply or Discard your changes before saving"), as EUI's button keeps its own: the header's
+ * rule reaches only a button that is its child
+ */
+.shlHeader__actions > .atlTooltipAnchor > .atlButton:not(.atlButton--empty) {
+  gap: var(--space-2);
+  min-width: 112px;
+  border: 1px solid transparent;
+}
+
 .vzeEditor {
   display: flex;
   flex: 1 1 auto;
@@ -317,18 +328,6 @@
   line-height: 20px;
 }
 
-/* "Add" sits 12px under the last aggregation, a small button in the size of the text */
-.vzePanel__add {
-  display: flex;
-  justify-content: center;
-  padding-top: var(--space-1);
-}
-
-.vzePanel__add .atlButton {
-  height: 24px;
-  font-size: var(--font-size-s);
-}
-
 .vzeFields {
   display: flex;
   flex-direction: column;
@@ -348,57 +347,6 @@
 
 .vzePair > * {
   min-width: 0;
-}
-
-.vzeSub {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-2) 0 var(--space-2) var(--space-3);
-  border-left: 2px solid var(--color-border-light);
-}
-
-.vzeSub__title {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  text-transform: none;
-}
-
-.vzeRanges {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.vzeRanges__row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-
-.vzeRanges__row > .atlField {
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-.vzeRanges__sign {
-  flex: 0 0 auto;
-  min-width: 14px;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-xs);
-  text-align: center;
-}
-
-.vzeColor {
-  width: 56px;
-  height: var(--control-height-s);
-  padding: 2px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  cursor: pointer;
 }
 
 /* The Markdown of a Markdown visualization: its title and help, 16px over the text that fills the rest */
@@ -444,85 +392,1127 @@
   resize: none;
 }
 
-/* --- An aggregation ------------------------------------------------------------------------- */
+/* --- The Data tab ---------------------------------------------------------------------------- */
 
-/* An aggregation is a row on the panel's surface, as in the original: no frame of its own */
+/* The original's spacers between the parts of a group and of a form: 4, 8 and 16px */
+.vzeSpacer {
+  flex: none;
+}
+
+.vzeSpacer--xs {
+  height: var(--space-1);
+}
+
+.vzeSpacer--s {
+  height: var(--space-2);
+}
+
+.vzeSpacer--m {
+  height: var(--space-4);
+}
+
+/* A group, "Metrics" or "Buckets": the title, 8px, its aggregations 12px apart, then "Add" */
+.vzePanel.vzeAggGroup {
+  display: block;
+}
+
+/* An aggregation: 8px around its line, on the surface of its group, 12px over what follows */
 .vzeAgg {
+  position: relative;
+  margin-bottom: var(--space-3);
+  padding: var(--space-2);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
+  transition: transform var(--duration-normal) var(--ease-out-quint);
 }
 
-.vzeAgg--error {
-  box-shadow: inset 0 0 0 1px var(--color-critical);
+/* In the dark the original lifts an aggregation off its group: the second surface on the first */
+:root.themeDark .vzeAgg,
+:root.themeDark .vzeSection {
+  background: var(--color-surface-secondary);
 }
 
-/* The original's accordion: 8px around a line of text, or around its 32px round buttons */
-.vzeAgg__head {
+.vzeAgg--dragging {
+  z-index: 1;
+}
+
+/* As tall as its button, or as the buttons beside it when there are any */
+.vzeAgg__trigger {
   display: flex;
   align-items: center;
-  padding: var(--space-2);
 }
 
-.vzeAgg__head .atlButton--icon {
-  width: var(--control-height);
-  height: var(--control-height);
-  border-radius: 50%;
-}
-
-.vzeAgg__toggle {
+/* The accordion's button: its arrow, its part in the chart and, closed, what it is */
+.vzeAgg__button,
+.vzeDisclosure__button {
   display: flex;
   flex: 1 1 auto;
   align-items: center;
-  gap: var(--space-1);
   min-width: 0;
   padding: 0;
   border: 0;
   background: none;
+  color: var(--color-text-primary);
+  font: inherit;
   font-size: var(--font-size-s);
   line-height: 21px;
   text-align: left;
   cursor: pointer;
 }
 
-.vzeAgg__toggle > .atlIcon {
-  margin: 0 var(--space-1);
+.vzeAgg__button:focus-visible,
+.vzeDisclosure__button:focus-visible {
+  border-radius: var(--radius-xs);
+  outline: 2px solid var(--color-focus-ring);
 }
 
-.vzeAgg__toggle strong {
-  flex: 0 0 auto;
-  font-weight: var(--font-weight-regular);
+.vzeArrow {
+  display: inline-flex;
+  flex: none;
+  margin: 0 var(--space-2) 0 var(--space-1);
+  transition: transform var(--duration-fast) var(--ease-out-quint);
 }
 
-.vzeAgg__label {
+.vzeArrow--open {
+  transform: rotate(90deg);
+}
+
+.vzeAgg__title {
   flex: 1 1 auto;
+  min-width: 0;
+}
+
+.vzeAgg__description {
   color: var(--color-text-secondary);
 }
 
-.vzeAgg--off .vzeAgg__toggle {
-  color: var(--color-text-tertiary);
+/* The buttons on the right; together they are what one drags the aggregation by */
+.vzeAgg__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
 }
 
-.vzeAgg--off .vzeAgg__label {
-  color: var(--color-text-tertiary);
-  text-decoration: line-through;
+.vzeAgg__actions[role="button"]:focus-visible {
+  border-radius: var(--radius-md);
+  outline: 2px solid var(--color-focus-ring);
 }
 
-.vzeAgg__warn {
+.vzeAgg__grab {
   display: inline-flex;
-  color: var(--color-critical-text);
+  color: var(--color-text-primary);
+  cursor: grab;
 }
 
-.vzeAgg__remove.atlButton {
-  color: var(--color-critical-text);
+.vzeAgg__grabIcon.atlIcon {
+  fill: currentcolor;
+  stroke: none;
 }
 
-.vzeAgg__body {
-  padding: var(--space-2) var(--space-3) var(--space-3);
-  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+/* The theme's round icon button: no surface until the pointer is on it, then a tint of its colour */
+.vzeIconButton {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-height);
+  height: var(--control-height);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) ease-out,
+    transform var(--duration-fast) ease-out;
 }
 
-.vzeAgg > .atlFormRow__error {
-  padding: 0 var(--space-3) var(--space-2);
+.vzeIconButton:hover:not(:disabled),
+.vzeIconButton:focus-visible {
+  background: color-mix(in srgb, var(--color-text-primary) var(--tint-opacity), transparent);
+  outline: none;
+}
+
+.vzeIconButton:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* OUI raises the critical colour to read on white, as the theme's outlined danger button does */
+.vzeIconButton--danger {
+  color: color-mix(in srgb, var(--color-critical) 84%, #000000);
+}
+
+:root.themeDark .vzeIconButton--danger {
+  color: var(--color-critical);
+}
+
+.vzeIconButton--danger:hover:not(:disabled),
+.vzeIconButton--danger:focus-visible {
+  background: var(--color-critical-tint);
+}
+
+/* A primary one, as the toggle of a filter's label */
+.vzeIconButton--primary {
+  color: color-mix(in srgb, var(--color-accent) 92%, #000000);
+}
+
+:root.themeDark .vzeIconButton--primary {
+  color: var(--color-accent);
+}
+
+.vzeIconButton--primary:hover:not(:disabled),
+.vzeIconButton--primary:focus-visible {
+  background: var(--color-accent-tint);
+}
+
+.vzeIconButton:disabled {
+  color: var(--color-text-tertiary);
+  cursor: not-allowed;
+}
+
+/* "Add" and its menu: the original's extra small empty button, its plus filled */
+.vzeAddRow {
+  display: flex;
+  justify-content: center;
+}
+
+.vzeAddButton {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: 24px;
+  padding: 0 calc(var(--space-2) + 1px);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: color-mix(in srgb, var(--color-accent) 92%, #000000);
+  font: inherit;
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 21px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) ease-out,
+    transform var(--duration-fast) ease-out;
+}
+
+:root.themeDark .vzeAddButton {
+  color: var(--color-accent);
+}
+
+.vzeAddButton:hover:not(:disabled),
+.vzeAddButton:focus-visible {
+  background: var(--color-accent-tint);
+  outline: none;
+}
+
+.vzeAddButton:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.vzeAddButton:disabled {
+  color: var(--color-text-tertiary);
+  cursor: not-allowed;
+}
+
+.vzeAddButton--block {
+  display: flex;
+  width: 100%;
+}
+
+.vzeAddButton > .atlIcon {
+  width: 12px;
+  height: 12px;
+}
+
+.atlPopover.vzeAddMenu {
+  min-width: 112px;
+  border-radius: var(--radius-lg);
+}
+
+.vzeAddMenu__title {
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--color-border-light);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+.vzeAddMenu__items {
+  display: flex;
+  flex-direction: column;
+}
+
+.vzeAddMenu__item {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-s);
+  line-height: 21px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.vzeAddMenu__item:hover:not(:disabled),
+.vzeAddMenu__item:focus {
+  background: var(--color-surface-secondary);
+  outline: none;
+}
+
+:root.themeDark .vzeAddMenu__item:hover:not(:disabled),
+:root.themeDark .vzeAddMenu__item:focus {
+  background: var(--color-surface-tertiary);
+}
+
+.vzeAddMenu__item:disabled {
+  color: var(--color-text-tertiary);
+  cursor: not-allowed;
+}
+
+/* --- The form of an aggregation: rows 16px apart, compressed -------------------------------- */
+
+.vzeForm {
+  min-width: 0;
+}
+
+/* A sub-aggregation: a frame of the border's colour, 8px in */
+.vzeForm.visEditorAgg__subAgg {
+  padding: var(--space-2);
+  border: 2px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+}
+
+.visEditorAgg__subAgg + .visEditorAggParam__string {
+  margin-top: var(--space-4);
+}
+
+/* The form's error above it, as the original's: a call-out that lists it */
+.vzeForm__errors {
+  margin-bottom: var(--space-4);
+}
+
+.vzeForm__errors ul {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-6);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+.vzeRow {
+  min-width: 0;
+}
+
+.vzeRow + .vzeRow {
+  margin-top: var(--space-4);
+}
+
+/* The label and what is beside it start at the top: the buttons of a filter are taller */
+.vzeRow__labels {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+}
+
+.vzeRow__label,
+.vzeFormLabel {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 18px;
+}
+
+.vzeFormLabel {
+  display: block;
+}
+
+/* An invalid row says so in its label, in the critical colour raised to read on white */
+.vzeRow--invalid > .vzeRow__labels > .vzeRow__label {
+  color: color-mix(in srgb, var(--color-critical) 84%, #000000);
+}
+
+:root.themeDark .vzeRow--invalid > .vzeRow__labels > .vzeRow__label {
+  color: var(--color-critical);
+}
+
+.vzeRow__error {
+  padding-top: var(--space-1);
+  color: var(--color-critical);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+.vzeRow__help {
+  padding-top: var(--space-1);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+.vzeRow__append {
+  display: inline-flex;
+  align-items: center;
+}
+
+.vzeBlock {
+  display: block;
+}
+
+/* Two rows side by side: order and size, aggregate and size */
+.visEditorAggParam--half {
+  display: inline-block;
+  width: calc(50% - var(--space-1));
+  margin: var(--space-4) 0;
+  vertical-align: top;
+}
+
+.visEditorAggParam--half-size {
+  margin-left: var(--space-2);
+}
+
+/* A link beside a label: the help of a type, the formats of a date */
+.vzeHelpLink {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-accent);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+/* On a line of its own, as the original's extra small text: 18px high */
+.vzeRow__field > .vzeHelpLink {
+  display: flex;
+  width: fit-content;
+}
+
+.vzeHelpLink:hover {
+  text-decoration: underline;
+}
+
+.vzeHelpLink > .atlIcon {
+  width: 12px;
+  height: 12px;
+  margin-left: var(--space-1);
+}
+
+/* A question mark in a label keeps the label one line of 18px */
+.vzeRow__label .atlTooltipAnchor {
+  vertical-align: top;
+}
+
+.vzeIconTip {
+  display: inline-flex;
+  height: 18px;
+  padding-top: 2px;
+  vertical-align: top;
+}
+
+/* A compressed field: 32px, the text 8px from its outer edge (the original draws its hairline inside) */
+.atlField.vzeControl {
+  height: var(--control-height);
+  padding: 0 calc(var(--space-2) - 1px);
+}
+
+.atlField.vzeControl--invalid {
+  border-color: var(--color-critical);
+}
+
+/* A combo box of the form: its text 8px from the edge, its arrow in the colour of the text */
+.vzeForm .atlCombo {
+  padding-left: calc(var(--space-2) - 1px);
+}
+
+.vzeForm .atlCombo > input {
+  padding-left: 0;
+}
+
+/* The original writes its placeholder, and what is typed, 4px further in */
+.vzeForm .atlCombo > input:placeholder-shown,
+.vzeForm .atlCombo > input[aria-expanded="true"] {
+  padding-left: var(--space-1);
+}
+
+.vzeForm .atlCombo__caret.atlIcon {
+  margin-right: -1px;
+  color: var(--color-text-primary);
+}
+
+/* A select draws the theme's small arrow 8px from its right edge */
+.vzeSelect {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
+.vzeSelect > select.atlField.vzeControl {
+  padding-right: calc(var(--space-8) - 1px);
+  background-image: none;
+}
+
+.vzeSelect__arrow.atlIcon {
+  position: absolute;
+  top: var(--space-2);
+  right: 6px;
+  color: var(--color-text-primary);
+  pointer-events: none;
+}
+
+.vzeSelect--disabled > .vzeSelect__arrow.atlIcon {
+  color: var(--color-text-tertiary);
+}
+
+/* A field with something before it: the original's group, a hairline around both */
+.atlField.vzeGroup {
+  display: flex;
+  align-items: stretch;
+  padding: 0;
+  overflow: hidden;
+}
+
+.vzeGroup__prepend {
+  display: flex;
+  flex: none;
+  align-items: center;
+  padding: 0 var(--space-2);
+  background: var(--color-border-light);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  line-height: 14px;
+}
+
+.vzeGroup__prepend .atlTooltipAnchor {
+  align-items: center;
+  height: 100%;
+}
+
+.vzeGroup > input {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  padding: 0 var(--space-2);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--font-size-s);
+  outline: none;
+}
+
+.vzeGroup--disabled {
+  color: var(--color-text-tertiary);
+}
+
+/* The rows of a list: two fields and an arrow between them, the button that removes the row */
+.vzeRangeRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.vzeRangeRow--tight {
+  gap: var(--space-1);
+}
+
+.vzeRangeRow > .atlField,
+.vzeRangeRow > .vzeRangeRow__field {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.vzeRangeRow__arrow.atlIcon {
+  color: var(--color-text-secondary);
+}
+
+.vzeColumn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.vzeColumn > .vzeRow + .vzeRow {
+  margin-top: 0;
+}
+
+/* The original's compressed switch: 28 by 16, the accent when on */
+/* A switch's row is as tall as the switch (the original's is a sixth of a pixel taller) */
+.vzeRow--switch > .vzeRow__field {
+  display: flex;
+}
+
+.vzeSwitch {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+}
+
+.vzeSwitch__button {
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  cursor: pointer;
+}
+
+.vzeSwitch__body {
+  position: relative;
+  display: block;
+  width: 28px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--color-border);
+  transition: background-color var(--duration-normal) ease-in;
+}
+
+.vzeSwitch__button:focus {
+  outline: none;
+}
+
+.vzeSwitch__button:focus .vzeSwitch__body {
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
+}
+
+.vzeSwitch__thumb {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  transition:
+    left var(--duration-normal) ease-in,
+    border-color var(--duration-normal) ease-in;
+}
+
+.vzeSwitch__button[aria-checked="true"] .vzeSwitch__body {
+  background: var(--color-accent);
+}
+
+.vzeSwitch__button[aria-checked="true"] .vzeSwitch__thumb {
+  left: 13px;
+  border-color: var(--color-accent);
+}
+
+.vzeSwitch__label {
+  padding-left: var(--space-2);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.vzeSwitch--disabled .vzeSwitch__button,
+.vzeSwitch--disabled .vzeSwitch__label {
+  cursor: not-allowed;
+}
+
+.vzeSwitch--disabled .vzeSwitch__body,
+.vzeSwitch--disabled .vzeSwitch__button[aria-checked="true"] .vzeSwitch__body {
+  background: var(--color-border);
+}
+
+.vzeSwitch--disabled .vzeSwitch__thumb,
+.vzeSwitch--disabled .vzeSwitch__button[aria-checked="true"] .vzeSwitch__thumb {
+  border-color: var(--color-border);
+  background: var(--color-border);
+  box-shadow: none;
+}
+
+.vzeSwitch--disabled .vzeSwitch__label {
+  color: var(--color-text-tertiary);
+}
+
+/* The original's button group: a track of the secondary surface, the chosen one a raised piece */
+.vzeButtonGroup {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.vzeButtonGroup__buttons {
+  display: flex;
+  height: var(--control-height);
+  padding: 2px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+}
+
+.vzeButtonGroup__button {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  height: 28px;
+  padding: 0 var(--space-3);
+  border-radius: calc(var(--radius-md) - 2px);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 28px;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) ease-out,
+    color var(--duration-fast) ease-out,
+    transform var(--duration-fast) ease-out;
+}
+
+.vzeButtonGroup__button + .vzeButtonGroup__button {
+  margin-left: -1px;
+}
+
+.vzeButtonGroup__button > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vzeButtonGroup__button:hover,
+.vzeButtonGroup__button:focus-within {
+  color: var(--color-text-primary);
+}
+
+.vzeButtonGroup__button:has(input:focus-visible) {
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
+}
+
+.vzeButtonGroup__button:active {
+  transform: scale(0.97);
+}
+
+.vzeButtonGroup__button--selected {
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--color-text-primary);
+}
+
+:root.themeDark .vzeButtonGroup__button--selected {
+  background: var(--color-surface-tertiary);
+}
+
+.vzeButtonGroup--disabled .vzeButtonGroup__button {
+  color: var(--color-text-tertiary);
+  cursor: not-allowed;
+}
+
+/* The original's compressed slider: a hairline, the part up to the value filled, a white thumb,
+   and the value in a bubble beside it */
+.vzeRange {
+  position: relative;
+  height: var(--control-height);
+}
+
+.vzeRange::before {
+  content: "";
+  position: absolute;
+  top: calc(50% - 1px);
+  right: 0;
+  left: 0;
+  height: 2px;
+  background: var(--color-text-secondary);
+}
+
+/* With the part up to the value filled, the rest of the line is lighter */
+.vzeRange--hasRange::before {
+  background: color-mix(in srgb, var(--color-text-secondary) 40%, transparent);
+}
+
+.vzeRange__highlight {
+  position: absolute;
+  top: calc(50% - 2px);
+  left: 0;
+  height: var(--space-1);
+  border-radius: var(--space-1);
+  background: var(--color-text-secondary);
+  pointer-events: none;
+}
+
+.vzeRange__input {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+}
+
+.vzeRange__input:focus {
+  outline: none;
+}
+
+.vzeRange__input::-webkit-slider-runnable-track {
+  height: 100%;
+  background: transparent;
+}
+
+.vzeRange__input::-moz-range-track {
+  height: 100%;
+  background: transparent;
+}
+
+.vzeRange__input::-webkit-slider-thumb {
+  width: var(--space-4);
+  height: var(--space-4);
+  margin-top: var(--space-2);
+  border: 1px solid var(--color-text-secondary);
+  border-radius: 50%;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  appearance: none;
+}
+
+.vzeRange__input::-moz-range-thumb {
+  box-sizing: border-box;
+  width: var(--space-4);
+  height: var(--space-4);
+  border: 1px solid var(--color-text-secondary);
+  border-radius: 50%;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.vzeRange__input:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
+}
+
+.vzeRange--disabled {
+  opacity: 0.25;
+}
+
+.vzeRange--disabled .vzeRange__input {
+  cursor: not-allowed;
+}
+
+.vzeRange__value {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  padding: 2px var(--space-2);
+  border: 1px solid var(--color-text-primary);
+  border-radius: var(--radius-sm);
+  background: var(--color-text-primary);
+  color: var(--color-surface);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+  white-space: nowrap;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.vzeRange__value::before {
+  content: "";
+  position: absolute;
+  top: 0.5px;
+  left: -5px;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background: inherit;
+  transform: translateY(50%) rotate(45deg);
+}
+
+/* "Advanced": the original's accordion inside the form */
+.vzeDisclosure__button {
+  width: 100%;
+}
+
+/*
+ * A JSON input: the original's code editor, 250px high, without a frame. Its numbers stand on a
+ * white column 43px wide with a hairline at its left, the text 4px after it, and a band marks the
+ * line of the cursor in both.
+ */
+.vzeJson {
+  min-width: 0;
+}
+
+:root:not(.themeDark) .vzeJson {
+  --code-name: #037098;
+  --code-number: #037098;
+  --code-string: #087824;
+  --code-keyword: #5256e1;
+}
+
+.vzeJson .atlCodeEditor {
+  --code-gutter: 47px;
+  border: 0;
+  border-radius: 0;
+  background:
+    linear-gradient(to right, var(--color-border-light) 1px, var(--color-surface) 1px 43px, transparent 43px)
+    var(--color-surface-secondary);
+}
+
+.vzeJson .atlCodeEditor:focus-within {
+  box-shadow: none;
+}
+
+.vzeJson .atlCodeEditor__paint {
+  padding: 0;
+}
+
+.vzeJson .atlCodeEditor__line,
+.vzeJson .atlCodeEditor__input {
+  padding: 0 var(--space-1) 0 var(--code-gutter);
+}
+
+.vzeJson .atlCodeEditor__line {
+  background: transparent;
+}
+
+.vzeJson .atlCodeEditor__line::before {
+  box-sizing: border-box;
+  width: 43px;
+  padding-right: 13px;
+  margin: 0 var(--space-1) 0 calc(-1 * var(--code-gutter));
+  background: var(--color-surface);
+  box-shadow: inset 1px 0 0 var(--color-border-light);
+  color: var(--color-text-secondary);
+}
+
+.vzeJson .atlCodeEditor__line--marked {
+  background: color-mix(in srgb, var(--color-border) 70%, transparent);
+}
+
+.vzeJson .atlCodeEditor__line--marked::before {
+  background: color-mix(in srgb, var(--color-border) 70%, var(--color-surface));
+}
+
+/* The query of a filter, and its label */
+.vzeFilterQuery {
+  min-width: 0;
+}
+
+/* "Add filter": the original's small filled button, as wide as the form */
+.vzeFillButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  height: var(--control-height);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-accent);
+  box-shadow: var(--shadow-sm);
+  color: var(--color-on-accent);
+  font: inherit;
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition:
+    filter var(--duration-fast) ease-out,
+    transform var(--duration-fast) ease-out;
+}
+
+.vzeFillButton:hover,
+.vzeFillButton:focus-visible {
+  filter: brightness(1.1);
+  outline: none;
+}
+
+.vzeFillButton:active {
+  transform: scale(0.97);
+}
+
+/* --- The option tabs ------------------------------------------------------------------------ */
+
+/* A panel of settings: its title, then its rows with the original's spacers between them */
+.vzePanel.vzeOptPanel {
+  display: block;
+}
+
+/* The title and a button on its right: the original sets them on the title's baseline, which puts
+   the title 5px under the top of the 32px button */
+.vzeOptPanel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.vzeOptPanel__head--action > .vzePanel__title {
+  padding-top: 5px;
+}
+
+/* The extra extra small title inside a panel: "Labels" */
+.vzeOptSubtitle {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+/* The original's rule: a hairline of the light border, 16px from what is around it, or 12px */
+.vzeRule {
+  flex: none;
+  height: 1px;
+  margin: var(--space-4) 0;
+  border: 0;
+  background: var(--color-border-light);
+}
+
+.vzeRule--s {
+  margin: var(--space-3) 0;
+}
+
+/* Two rows side by side, 8px apart */
+.vzeHalves {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.vzeHalves > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.vzeHalves > .vzeRow + .vzeRow {
+  margin-top: 0;
+}
+
+/* A section that opens, a series or an axis: 8px around it on the surface, 8px under the one before */
+.vzeSection {
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.vzeSection + .vzeSection {
+  margin-top: var(--space-2);
+}
+
+/* The original measures a section to the edge of its last part: rows side by side, a flex group
+   with negative margins, leave 4px under them */
+.vzeSection__content > .vzeHalves:last-child {
+  margin-bottom: var(--space-1);
+}
+
+/* A slider with its ends written beside it, 8px away, and a field 16px after it; a range of two
+   values has a field at each end */
+.vzeRangeField {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.vzeRangeField > .vzeRange {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.vzeRangeField__label {
+  flex: none;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xs);
+  line-height: 12px;
+}
+
+.vzeRangeField__label:first-child {
+  margin-right: var(--space-2);
+}
+
+.vzeRange + .vzeRangeField__label {
+  margin-left: var(--space-2);
+}
+
+.atlField.vzeRangeField__input {
+  flex: none;
+  width: 64px;
+}
+
+.vzeRangeField__input:first-child {
+  margin-right: var(--space-4);
+}
+
+.vzeRangeField > * + .vzeRangeField__input {
+  margin-left: var(--space-4);
+}
+
+/* Two handles on one line: each slider lets the pointer through but at its handle */
+.vzeRange--dual > .vzeRange__input {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Its handles are the original's thumbs, drawn with the border's colour */
+.vzeRange--dual > .vzeRange__input::-webkit-slider-thumb {
+  border-color: var(--color-border);
+  pointer-events: auto;
+}
+
+.vzeRange--dual > .vzeRange__input::-moz-range-thumb {
+  border-color: var(--color-border);
+  pointer-events: auto;
+}
+
+/* The original's colour field: the colour's swatch 8px in, its code in capitals 32px in, an arrow
+   8px from the end; disabled, only the code is dimmed */
+.atlField.vzeColorField {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+  padding: 0 calc(var(--space-2) - 1px);
+}
+
+.vzeColorField__swatch {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  color: var(--color-text-primary);
+  fill: currentcolor;
+}
+
+.vzeColorField__stroke {
+  fill: none;
+  stroke: rgb(0 0 0 / 20%);
+}
+
+.vzeColorField > input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0 var(--space-3);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--font-size-s);
+  outline: none;
+}
+
+.vzeColorField > input::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.vzeColorField--disabled > input {
+  color: var(--color-text-tertiary);
+  cursor: not-allowed;
+}
+
+.vzeColorField__arrow.atlIcon {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  color: var(--color-text-primary);
 }
 
 /* --- "New Visualization" -------------------------------------------------------------------- */
@@ -651,4 +1641,12 @@
   .vzeNew {
     grid-template-columns: 1fr;
   }
+}
+
+/* The type of a visualization in the list: its icon before its name, as the original's */
+.vzeListType .atlIcon {
+  position: relative;
+  top: -1px;
+  margin-right: var(--space-2);
+  vertical-align: middle;
 }

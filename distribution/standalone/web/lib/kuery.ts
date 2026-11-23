@@ -805,7 +805,8 @@ const wildcardQueryString = (node: WildcardNode) => node.value.split(WILDCARD).m
 const wildcardTest = (node: WildcardNode, text: string) =>
   new RegExp(`^${node.value.split(WILDCARD).map(escapeRegExp).join('[\\s\\S]*')}$`).test(text);
 
-function timeZone(dateFormatTZ: string): string {
+/** The zone a query names, as the original's getTimeZoneFromSettings: the browser's own for "Browser" */
+export function timeZone(dateFormatTZ: string): string {
   return dateFormatTZ === 'Browser' ? Intl.DateTimeFormat().resolvedOptions().timeZone : dateFormatTZ;
 }
 
@@ -931,7 +932,10 @@ function isQuery(node: FunctionNode, indexPattern: IndexPattern | undefined, con
   for (const field of fields) {
     const wrap = wrapper(fieldNode, field, context);
     if (field.scripted) {
-      // an exists query means nothing for a scripted field
+      // An exists query means nothing for a scripted field, so it adds nothing, as the original
+      // means it to. The original's reducer (functions/is.ts) returns nothing for it, which drops
+      // what it had gathered and fails on the next plain field ("accumulator is not iterable"): a
+      // fault not copied
       if (!isExistsQuery) queries.push({ script: { ...phraseScript(field, value) } });
     } else if (isExistsQuery) {
       queries.push(wrap({ exists: { field: field.name } }));

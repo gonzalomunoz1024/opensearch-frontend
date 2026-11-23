@@ -3,8 +3,9 @@
 /*
  * A place to write JSON, a query or a request. The text is drawn line by line, numbered and in
  * colour, and a text area of the same size lies over it with its own text unseen: what is typed
- * goes to the text area, what is read is the drawing. It keeps indentation, closes brackets and
- * indents with the Tab key's two spaces.
+ * goes to the text area, what is read is the drawing. It keeps indentation, closes brackets, puts
+ * a selection between the bracket or quote typed over it and its pair, and indents with the Tab
+ * key's two spaces.
  */
 
 import {
@@ -70,6 +71,14 @@ export interface CodeEditorProps {
 
 const PAIRS: Record<string, string> = { '{': '}', '[': ']', '(': ')', '"': '"' };
 const LINE_HEIGHT = 18;
+
+/**
+ * Where the line of an offset of a text starts, as the original's editor reads it: at 0 for the
+ * text's start, whatever follows it (a search before 0 would find a line break at 0)
+ */
+export function lineStartOf(text: string, offset: number): number {
+  return offset <= 0 ? 0 : text.lastIndexOf('\n', offset - 1) + 1;
+}
 
 const sameTokens = (a: CodeToken[], b: CodeToken[]) =>
   a.length === b.length && a.every((token, index) => token.text === b[index].text && token.kind === b[index].kind);
@@ -202,7 +211,7 @@ export function CodeEditor({
         return;
       }
       // Several lines move in or out together
-      const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+      const lineStart = lineStartOf(value, start);
       const block = value.slice(lineStart, end);
       const moved = event.shiftKey
         ? block.replace(/^ {1,2}/gm, '')
@@ -214,7 +223,7 @@ export function CodeEditor({
       );
     } else if (event.key === 'Enter' && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
       event.preventDefault();
-      const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+      const lineStart = lineStartOf(value, start);
       const indent = /^[ \t]*/.exec(value.slice(lineStart, start))?.[0] ?? '';
       const before = value[start - 1];
       const after = value[end];
@@ -230,6 +239,19 @@ export function CodeEditor({
           start + 1 + indent.length + deeper.length
         );
       }
+    } else if (PAIRS[event.key] && start !== end && !event.ctrlKey && !event.metaKey) {
+      // What is selected goes between the pair, as the original's editors put it, unless it is
+      // that brace or a quote alone
+      const selected = value.slice(start, end);
+      const lone = event.key === '"' ? /^["'`]$/.test(selected) : event.key === '{' && selected === '{';
+      if (!lone) {
+        event.preventDefault();
+        edit(
+          `${value.slice(0, start)}${event.key}${selected}${PAIRS[event.key]}${value.slice(end)}`,
+          start + 1,
+          end + 1
+        );
+      }
     } else if (PAIRS[event.key] && start === end && !event.ctrlKey && !event.metaKey) {
       const next = value[start];
       if (event.key === '"' && next === '"') {
@@ -242,7 +264,8 @@ export function CodeEditor({
     } else if (/^[}\])]$/.test(event.key) && start === end && value[start] === event.key) {
       event.preventDefault();
       target.setSelectionRange(start + 1, start + 1);
-    } else if (event.key === 'Backspace' && start === end && start > 0) {
+    } else if (event.key === 'Backspace' && start === end && start > 0 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      // A pair goes as one, as the original's; held with a key that takes a word, the word goes
       const before = value[start - 1];
       if (PAIRS[before] && value[start] === PAIRS[before]) {
         event.preventDefault();
@@ -270,7 +293,8 @@ export function CodeEditor({
       tabIndex={readOnly ? 0 : undefined}
       onScroll={onScroll ? (event) => onScroll(event.currentTarget.scrollTop) : undefined}
       aria-label={readOnly ? ariaLabel : undefined}
-      data-test-subj={readOnly ? testId : undefined}
+      // As the original's: the test id on what holds the text and not on the text itself
+      data-test-subj={testId}
     >
       <div className="atlCodeEditor__body">
         <pre ref={paint} className="atlCodeEditor__paint" aria-hidden={!readOnly}>
@@ -289,7 +313,6 @@ export function CodeEditor({
             autoCapitalize="off"
             autoCorrect="off"
             wrap={wrap ? 'soft' : 'off'}
-            data-test-subj={testId}
             onChange={(event) => onChange?.(event.target.value)}
             onKeyDown={handleKeyDown}
             onPaste={onPaste}

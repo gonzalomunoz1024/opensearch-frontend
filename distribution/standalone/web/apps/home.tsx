@@ -2,8 +2,8 @@
 
 /*
  * The first page, as the home plugin of OpenSearch Dashboards draws it (its "legacy" home, the one
- * the product opens on) with the welcome screen of a new instance, and the two overviews: what
- * the product has, one card each.
+ * the product opens on) with the welcome screen of a new instance, and the two overviews: the
+ * product's, as its overview plugin draws it, and management's, as the management overview does.
  */
 
 import { useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
@@ -14,6 +14,7 @@ import { href, navigate, useLocation } from '../router';
 import { services } from '../services';
 import { useBreadcrumbs } from '../shell/state';
 import '../styles/home.css';
+import { slashHash } from './home_address';
 import {
   INDEX_PATTERN_QUERY,
   isNewInstance,
@@ -23,95 +24,14 @@ import {
 } from './home_welcome';
 import { SampleDataPage } from './sample_data';
 
-interface Card {
-  title: string;
-  description: string;
-  icon: IconName;
-  to: string;
-}
-
-const EXPLORE: Card[] = [
-  {
-    title: 'Discover',
-    description: 'Search the documents of an index pattern, filter them and look inside each one.',
-    icon: 'discover',
-    to: '/app/discover',
-  },
-  {
-    title: 'Dashboards',
-    description: 'Charts, tables and text side by side, on one time range and one set of filters.',
-    icon: 'dashboard',
-    to: '/app/dashboards',
-  },
-  {
-    title: 'Visualize',
-    description: 'Build the charts a dashboard shows: lines, areas, bars, pies, metrics, tables and more.',
-    icon: 'visualize',
-    to: '/app/visualize',
-  },
-  {
-    title: 'Query Workbench',
-    description: 'Run SQL and PPL against OpenSearch and see the answer as a table.',
-    icon: 'sql',
-    to: '/app/opensearch-query-workbench',
-  },
-];
-
-const MANAGE: Card[] = [
-  {
-    title: 'Index Management',
-    description: 'Indices, their policies, templates, aliases and rollups.',
-    icon: 'database',
-    to: '/app/opensearch_index_management_dashboards',
-  },
-  {
-    title: 'Index patterns',
-    description: 'Say which indices the pages read and how their fields are shown.',
-    icon: 'index',
-    to: '/app/management/opensearch-dashboards/indexPatterns',
-  },
-  {
-    title: 'Saved objects',
-    description: 'Every dashboard, visualization and search: inspect, export, import, delete.',
-    icon: 'folder',
-    to: '/app/management/opensearch-dashboards/objects',
-  },
-  {
-    title: 'Advanced settings',
-    description: 'Date formats, defaults and the dark theme.',
-    icon: 'gear',
-    to: '/app/management/opensearch-dashboards/settings',
-  },
-  {
-    title: 'Dev Tools',
-    description: 'Send any request to OpenSearch from a console.',
-    icon: 'console',
-    to: '/app/dev_tools',
-  },
-];
-
-function Cards({ cards }: { cards: Card[] }) {
-  return (
-    <div className="homCards">
-      {cards.map((card) => (
-        <a key={card.title} className="homCard" href={href(card.to)} data-test-subj={`homeCard-${card.title}`}>
-          <span className="homCard__icon">
-            <Icon name={card.icon} size="l" />
-          </span>
-          <span className="atlTitleXs">{card.title}</span>
-          <span className="atlSubdued">{card.description}</span>
-        </a>
-      ))}
-    </div>
-  );
-}
-
 /**
  * The home application: its first page, the sample data page at `#/tutorial_directory` and the
  * app directory at `#/feature_directory`
  */
 export function Home() {
-  const { hashPath } = useLocation();
+  const location = useLocation();
+  useEffect(slashHash, [location]);
+  const { hashPath } = location;
   if (hashPath === '/tutorial_directory' || hashPath.startsWith('/tutorial_directory/')) {
     return <SampleDataPage withHomeBreadcrumb />;
   }
@@ -190,10 +110,14 @@ function SynopsisCard({
 interface Feature {
   id: string;
   title: string;
+  /** What the overview's card of the application says under its title */
+  subtitle?: string;
   description: string;
   icon: IconName;
   path: string;
   category: 'data' | 'admin';
+  /** Shown in the sections on data of the first page and of the overview */
+  showOnHomePage?: true;
 }
 
 /** What the original's plugins enter in its catalogue of features, in the order of their titles */
@@ -205,6 +129,7 @@ const FEATURES: Feature[] = [
     icon: 'document',
     path: '/app/home#/tutorial_directory',
     category: 'data',
+    showOnHomePage: true,
   },
   {
     id: 'advanced_settings',
@@ -218,6 +143,7 @@ const FEATURES: Feature[] = [
   {
     id: 'dashboard',
     title: 'Dashboard',
+    subtitle: 'Analyze data in dashboards.',
     description: 'Display and share a collection of visualizations and saved searches.',
     icon: 'dashboard',
     path: '/app/dashboards#/list',
@@ -226,6 +152,7 @@ const FEATURES: Feature[] = [
   {
     id: 'discover',
     title: 'Discover',
+    subtitle: 'Search and find insights.',
     description: 'Interactively explore your data by querying and filtering raw documents.',
     icon: 'discover',
     path: '/app/discover#/',
@@ -243,7 +170,7 @@ const FEATURES: Feature[] = [
     id: 'opensearch_management_overview',
     title: 'Management',
     description: 'Your center location for managing the OpenSearch Stack.',
-    icon: 'gear',
+    icon: 'managementApp',
     path: '/app/opensearch_management_overview',
     category: 'admin',
   },
@@ -251,7 +178,7 @@ const FEATURES: Feature[] = [
     id: 'saved_objects',
     title: 'Saved Objects',
     description: 'Import, export, and manage your saved searches, visualizations, and dashboards.',
-    icon: 'folder',
+    icon: 'savedObjectsApp',
     path: '/app/management/opensearch-dashboards/objects',
     category: 'admin',
   },
@@ -313,10 +240,13 @@ function FeatureDirectory() {
   );
 }
 
-/** "Display a different page on log in", or "Make this my landing page" when another page is */
-function PageFooter() {
+/**
+ * "Display a different page on log in" when the page at `path` is the landing page, or "Make this
+ * my landing page" when another page is
+ */
+function PageFooter({ path }: { path: string }) {
   useSyncExternalStore(services.uiSettings.subscribe, services.uiSettings.getVersion);
-  const isLanding = services.uiSettings.get<string>('defaultRoute', '/app/home') === '/app/home';
+  const isLanding = services.uiSettings.get<string>('defaultRoute', '/app/home') === path;
   return (
     <footer className="homFooter">
       <div>
@@ -330,7 +260,7 @@ function PageFooter() {
             className="homLink homFooter__button"
             onClick={() => {
               services.uiSettings
-                .set('defaultRoute', '/app/home')
+                .set('defaultRoute', path)
                 .then(() => services.toasts.success('Landing page updated'))
                 .catch((error: unknown) => services.toasts.error(error, 'Unable to update UI setting'));
             }}
@@ -541,30 +471,296 @@ function HomeContent() {
           </section>
         </div>
         <hr className="homRule" aria-hidden="true" />
-        <PageFooter />
+        <PageFooter path="/app/home" />
       </div>
     </main>
   );
 }
 
-export function Overview() {
-  useBreadcrumbs([{ text: services.boot.name }, { text: 'Overview' }]);
+/**
+ * The product's own applications, as the catalogue orders them. The overview shows them first, a
+ * card each, or on a new instance as what there is to begin with.
+ */
+const MAIN_APPS = ['dashboard', 'discover'];
+
+/**
+ * The catalogue's entries of a kind that the overview shows. As in the original, Console's card is
+ * the one to manage data when no entry of that kind is shown, which is the case here.
+ */
+function homeFeatures(category: Feature['category']): Feature[] {
+  const features = FEATURES.filter((feature) => feature.showOnHomePage === true && feature.category === category);
+  if (category === 'admin' && features.length === 0) {
+    return FEATURES.filter((feature) => feature.id === 'console');
+  }
+  return features;
+}
+
+/** A card of the overview: an application's title over its subtitle, in the middle */
+function AppCard({ feature }: { feature: Feature }) {
+  const id = `homApp${feature.id}`;
   return (
-    <div className="shlPage homPage">
-      <h1 className="atlTitleL">{services.boot.name}</h1>
-      <p className="atlSubdued homLead">Search, observe and visualize your data.</p>
-      <Cards cards={EXPLORE} />
+    // The whole card leads where its title does
+    <div
+      className="homCard homCard--centered"
+      onClick={(event) => {
+        if ((event.target as Element).closest('a')) return;
+        navigate(feature.path);
+      }}
+    >
+      <h3 className="homCard__title atlTitleS" id={`${id}Title`}>
+        <a className="homCard__link" href={href(feature.path)} aria-describedby={`${id}Description`}>
+          {feature.title}
+        </a>
+      </h3>
+      <div className="homCard__description" id={`${id}Description`}>
+        <p>{feature.subtitle}</p>
+      </div>
     </div>
   );
 }
 
-export function ManagementOverview() {
-  useBreadcrumbs([{ text: 'Management' }, { text: 'Overview' }]);
+/** The cards of the catalogue's entries of a kind, under a title */
+function DataSection({ kind, title, features }: { kind: 'Add' | 'Manage'; title: string; features: Feature[] }) {
   return (
-    <div className="shlPage homPage">
-      <h1 className="atlTitleL">Management</h1>
-      <p className="atlSubdued homLead">Manage the indices of OpenSearch and the objects of {services.boot.name}.</p>
-      <Cards cards={MANAGE} />
+    <section
+      className={`homData${kind}`}
+      aria-labelledby={`osdOverviewData${kind}__title`}
+      data-test-subj={kind === 'Manage' ? 'osdOverviewDataManage' : undefined}
+    >
+      <h2 id={`osdOverviewData${kind}__title`} className="homData__title atlTitleS">
+        {title}
+      </h2>
+      {features.map((feature) => (
+        <SynopsisCard
+          key={feature.id}
+          id={feature.id}
+          title={feature.title}
+          description={feature.description}
+          icon={feature.icon}
+          to={feature.path}
+        />
+      ))}
+    </section>
+  );
+}
+
+/** What the overview of a new instance says under its title */
+function gettingStartedText(name: string): string {
+  return `${name} empowers you to visualize your data, your way.  Start with one question, and see where the answer leads you.`;
+}
+
+/** The overview of a new instance: what to begin with and a way to add data, beside a picture */
+function GettingStarted({ apps }: { apps: Feature[] }) {
+  const name = services.boot.name;
+  const dark = services.uiSettings.get<boolean>('theme:darkMode', false) === true;
+  return (
+    <section aria-labelledby="osdOverviewGettingStarted__title" className="homGettingStarted">
+      <div className="homGettingStarted__content">
+        <h2 id="osdOverviewGettingStarted__title" className="atlTitleS">
+          Getting started with {name}
+        </h2>
+        <p className="homGettingStarted__text">{gettingStartedText(name)}</p>
+        <div className="homGettingStarted__apps">
+          {apps.map((app) => (
+            <div key={app.id} className="homGettingStarted__app">
+              <Icon name={app.icon} className="homGettingStarted__icon" />
+              <div className="homGettingStarted__appContent">
+                <h3 className="atlTitleXs">{app.title}</h3>
+                <div className="homGettingStarted__description">
+                  <p>{app.subtitle}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <Button
+          variant="primary"
+          icon="document"
+          to="/app/management/opensearch-dashboards/indexPatterns"
+          className="homGettingStarted__add"
+        >
+          Add your data
+        </Button>
+      </div>
+      <div className="homGettingStarted__graphic">
+        <img
+          src={href(`/plugins/opensearchDashboardsOverview/assets/opensearch_dashboards_montage_${dark ? 'dark' : 'light'}.svg`)}
+          alt={`${name} visualizations illustration`}
+        />
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Whether the instance is new, as the overview asks: until the answer comes the overview is the
+ * one of an instance with data, and a failed request leaves it so
+ */
+function useNewInstance(): boolean {
+  const [isNew, setIsNew] = useState(false);
+  useEffect(() => {
+    let live = true;
+    services.savedObjects.find(INDEX_PATTERN_QUERY).then(
+      (answer) => {
+        if (live) setIsNew(answer.total === 0);
+      },
+      () => undefined
+    );
+    return () => {
+      live = false;
+    };
+  }, []);
+  return isNew;
+}
+
+/**
+ * The product's overview: its mark and name, a card for each of its main applications, the
+ * sections on data of the first page and the footer; on a new instance, how to get started in
+ * their place and no link in the header. The tab keeps the product's name.
+ */
+export function Overview() {
+  useBreadcrumbs([{ text: 'Overview' }]);
+  const location = useLocation();
+  useEffect(slashHash, [location]);
+  useEffect(() => {
+    document.title = services.boot.name;
+  }, []);
+  const isNew = useNewInstance();
+  const apps = MAIN_APPS.flatMap((id) => FEATURES.filter((feature) => feature.id === id));
+  const logo = href('/logo.svg');
+  return (
+    <main aria-labelledby="osdOverviewPageHeader__title" className="homWrapper">
+      <header className="homHeader homHeader--noOverlap">
+        <div className="homHeader__inner">
+          <div className="homHeader__brand">
+            <img
+              className="homHeader__logo"
+              src={logo}
+              alt=""
+              data-test-subj="osdOverviewPageHeaderLogo"
+              data-test-logo={logo}
+            />
+            <h1 id="osdOverviewPageHeader__title" className="homHeader__title atlTitleL">
+              {services.boot.name}
+            </h1>
+          </div>
+          {!isNew && (
+            <div className="homHeader__actions">
+              <PageLink to="/app/home#/tutorial_directory" icon="document" className="homHeader__action">
+                Add data
+              </PageLink>
+            </div>
+          )}
+        </div>
+      </header>
+      <div className="homContent">
+        {isNew ? (
+          <GettingStarted apps={apps} />
+        ) : (
+          <>
+            <section aria-labelledby="osdOverviewApps__title" className="homApps">
+              <h2 id="osdOverviewApps__title" className="homScreenReaderOnly">
+                Explore these apps
+              </h2>
+              <div className="homApps__group">
+                {apps.map((feature) => (
+                  <div key={feature.id} className="homApps__item">
+                    <AppCard feature={feature} />
+                  </div>
+                ))}
+              </div>
+            </section>
+            <hr className="homRule" aria-hidden="true" />
+            <div className="homData">
+              <DataSection kind="Add" title="Ingest your data" features={homeFeatures('data')} />
+              <DataSection kind="Manage" title="Manage your data" features={homeFeatures('admin')} />
+            </div>
+          </>
+        )}
+        <hr className="homRule" aria-hidden="true" />
+        <PageFooter path="/app/opensearch_dashboards_overview" />
+      </div>
+    </main>
+  );
+}
+
+interface ManagementApp {
+  id: string;
+  title: string;
+  description: string;
+}
+
+/** What the management overview lists, as the plugins that ship enter themselves, in their order */
+const MANAGEMENT_APPS: ManagementApp[] = [
+  {
+    id: 'opensearch_index_management_dashboards',
+    title: 'Index Management',
+    description:
+      'Manage your indexes with state polices, templates and aliases. You can also roll up or transform your indexes.',
+  },
+  {
+    id: 'opensearch_snapshot_management_dashboards',
+    title: 'Snapshot Management',
+    description:
+      "Back up and restore your cluster's indexes and state. Setup a policy to automate snapshot creation and deletion.",
+  },
+  {
+    id: 'management',
+    title: 'Dashboards Management',
+    description:
+      'Manage Dashboards saved objects and data source connections. You can also modify advanced settings for Dashboards.',
+  },
+  {
+    id: 'dev_tools',
+    title: 'Dev Tools',
+    description: 'Use the console to set up and troubleshoot your OpenSearch environment with the REST API.',
+  },
+];
+
+/** A card of the management overview: its title is a button that opens the application */
+function ManagementCard({ app }: { app: ManagementApp }) {
+  const open = () => navigate(`/app/${app.id}`);
+  const id = `homManagement${app.id}`;
+  return (
+    // The whole card opens what its title does
+    <div
+      className="homCard"
+      data-test-subj={`link-${app.id}`}
+      onClick={(event) => {
+        if ((event.target as Element).closest('button')) return;
+        open();
+      }}
+    >
+      <h3 className="homCard__title atlTitleXs" id={`${id}Title`}>
+        <button type="button" className="homCard__link" onClick={open} aria-describedby={`${id}Description`}>
+          {app.title}
+        </button>
+      </h3>
+      <div className="homCard__description" id={`${id}Description`}>
+        <p>{app.description}</p>
+      </div>
+    </div>
+  );
+}
+
+/** Management's overview: a card for each application that manages something, three a row */
+export function ManagementOverview() {
+  useBreadcrumbs([{ text: 'Overview' }]);
+  useEffect(() => {
+    document.title = services.boot.name;
+  }, []);
+  return (
+    <div className="homManagement">
+      <main className="homManagement__body">
+        <h1 className="homManagement__title atlTitleL">Overview</h1>
+        <div className="homManagement__grid">
+          {MANAGEMENT_APPS.map((app) => (
+            <div key={app.id} className="homManagement__item">
+              <ManagementCard app={app} />
+            </div>
+          ))}
+        </div>
+      </main>
     </div>
   );
 }

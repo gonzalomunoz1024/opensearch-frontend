@@ -40,9 +40,11 @@
   overflow-wrap: anywhere;
 }
 
+/* Its text as the product's extra small text: 12 px on a line of 1.5 */
 .visTsvbNoData {
   gap: var(--space-2);
   color: var(--color-text-secondary);
+  line-height: 1.5;
 }
 
 .visTsvbNoData p {
@@ -85,418 +87,25 @@
   min-height: 0;
 }
 
-/* Pie */
-
-.chtPieLabel text {
-  fill: var(--color-text-secondary);
-  font-size: 11px;
-}
-
-/* Metric */
-
-.visMetric {
-  display: flex;
-  flex: 1 1 auto;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  align-items: center;
-  justify-content: space-around;
-  min-height: 0;
-  padding: var(--space-2);
-  overflow: auto;
-}
-
-.visMetric__item {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
-  text-align: center;
-}
-
-.visMetric__value {
-  max-width: 100%;
-  font-weight: var(--font-weight-semibold);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
-  line-height: 1.15;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.visMetric__label {
-  font-size: var(--font-size-m);
-  line-height: 1.3;
-}
-
-/* Gauge and goal */
-
-.visGauge {
-  position: relative;
-  display: flex;
-  flex: 1 1 auto;
-  flex-wrap: wrap;
-  align-content: flex-start;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.visGauge svg {
-  display: block;
-  flex: none;
-}
-
-.visGauge text {
-  font-variant-numeric: tabular-nums;
-}
-
-/* Tag cloud */
-
-.visTagCloud {
-  position: relative;
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.visTagCloud__label {
-  height: 22px;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  text-align: center;
-}
-
-/* Data table */
-
-.visTable {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-}
-
-.visTable__scroll {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: auto;
-}
-
-.visTable .atlTable__numeric {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.visTable th.atlTable__numeric .atlTable__sort {
-  justify-content: flex-end;
-  width: 100%;
-}
-
-.visTable tfoot th {
-  border-top: 1px solid var(--color-border);
-  font-weight: var(--font-weight-semibold);
-}
-
-.visTable__cell {
-  display: inline-flex;
-  gap: var(--space-1);
-  align-items: center;
-  min-height: 22px;
-}
-
-.visTable__actions {
-  display: inline-flex;
-  visibility: hidden;
-}
-
-.visTable__actions .atlButton {
-  width: 20px;
-  height: 20px;
-}
-
-.visTable tr:hover .visTable__actions,
-.visTable__cell:focus-within .visTable__actions {
-  visibility: visible;
-}
-
-/* Markdown */
-
-/* A Markdown visualization: the original's panel, 8px in, scrolled when the text is longer */
-.visMarkdownVis {
-  flex: 1 1 auto;
-  min-height: 0;
-  padding: var(--space-2);
-  overflow: auto;
-}
-
 /*
- * The original's Markdown body (`osdMarkdown__body`): every size is in em of the base size the
- * visualization sets, as the original's are of its 14px, so that the base size scales them all.
- * Its lines are the text's colour at 15%, its fills at 5%.
+ * A TSVB panel is drawn on the line-height of the product's page, 1, which those of its parts
+ * that set none inherit (a Top N's rows, a gauge's ring in its line); in the TSVB editor its chart
+ * sets `normal` instead, as the product's does
  */
-.atlMarkdown.visMarkdownBody {
-  --vis-markdown-line: color-mix(in srgb, var(--color-text-primary) 15%, transparent);
-  --vis-markdown-fill: color-mix(in srgb, var(--color-text-primary) 5%, transparent);
-
-  line-height: normal;
-}
-
-.atlMarkdown.visMarkdownBody p,
-.atlMarkdown.visMarkdownBody blockquote,
-.atlMarkdown.visMarkdownBody ul,
-.atlMarkdown.visMarkdownBody ol,
-.atlMarkdown.visMarkdownBody dl,
-.atlMarkdown.visMarkdownBody table,
-.atlMarkdown.visMarkdownBody pre {
-  margin-top: 0;
-  margin-bottom: 1.1429em;
-  line-height: 1.5em;
-}
-
-.atlMarkdown.visMarkdownBody strong {
-  font-weight: var(--font-weight-semibold);
-}
-
-.atlMarkdown.visMarkdownBody a {
-  color: inherit;
-  text-decoration: underline;
-}
-
-.atlMarkdown.visMarkdownBody a:hover {
-  text-decoration: underline dotted;
-}
-
-.atlMarkdown.visMarkdownBody a:not([href]) {
-  text-decoration: none;
-}
-
-.atlMarkdown.visMarkdownBody h1,
-.atlMarkdown.visMarkdownBody h2,
-.atlMarkdown.visMarkdownBody h3,
-.atlMarkdown.visMarkdownBody h4,
-.atlMarkdown.visMarkdownBody h5,
-.atlMarkdown.visMarkdownBody h6 {
-  margin-top: 0;
-  margin-bottom: 0.5714em;
-}
-
-/* The first two levels are large and light, as in the original */
-.atlMarkdown.visMarkdownBody h1 {
-  font-size: 2.5714em;
-  font-weight: 300;
-  line-height: 1.3333em;
-}
-
-.atlMarkdown.visMarkdownBody h2 {
-  font-size: 2em;
-  font-weight: 300;
-  line-height: 1.4286em;
-}
-
-.atlMarkdown.visMarkdownBody h3 {
-  font-size: 1.4286em;
-  font-weight: var(--font-weight-semibold);
-  line-height: 1.6em;
-}
-
-.atlMarkdown.visMarkdownBody h4 {
-  font-size: 1.1429em;
-  font-weight: var(--font-weight-semibold);
-  line-height: 1.5em;
-}
-
-.atlMarkdown.visMarkdownBody h5 {
-  font-size: 1em;
-  font-weight: 700;
-  line-height: 1.1429em;
-}
-
-.atlMarkdown.visMarkdownBody h6 {
-  font-size: 0.8571em;
-  font-weight: 700;
-  line-height: 1.3333em;
-  text-transform: uppercase;
-}
-
-.atlMarkdown.visMarkdownBody > :first-child {
-  margin-top: 0;
-}
-
-.atlMarkdown.visMarkdownBody > :last-child {
-  margin-bottom: 0;
-}
-
-.atlMarkdown.visMarkdownBody img {
-  max-width: 100%;
-  box-sizing: content-box;
-  border-style: none;
-}
-
-.atlMarkdown.visMarkdownBody blockquote {
-  padding: 0 1em;
-  border-left: 4px solid var(--vis-markdown-line);
-  color: inherit;
-}
-
-.atlMarkdown.visMarkdownBody hr {
-  height: 2px;
-  margin: 1.7143em 0;
-  padding: 0;
-  border: 0;
-  background-color: var(--vis-markdown-line);
-  overflow: hidden;
-}
-
-.atlMarkdown.visMarkdownBody ul,
-.atlMarkdown.visMarkdownBody ol {
-  padding-left: 1.7143em;
-}
-
-.atlMarkdown.visMarkdownBody ul {
-  list-style-type: disc;
-}
-
-.atlMarkdown.visMarkdownBody ol {
-  list-style-type: decimal;
-}
-
-.atlMarkdown.visMarkdownBody ul ul {
-  list-style-type: circle;
-}
-
-.atlMarkdown.visMarkdownBody ol ol,
-.atlMarkdown.visMarkdownBody ul ol {
-  list-style-type: lower-roman;
-}
-
-.atlMarkdown.visMarkdownBody ul ul ol,
-.atlMarkdown.visMarkdownBody ul ol ol,
-.atlMarkdown.visMarkdownBody ol ul ol,
-.atlMarkdown.visMarkdownBody ol ol ol {
-  list-style-type: lower-alpha;
-}
-
-.atlMarkdown.visMarkdownBody dd {
-  margin-left: 0;
-}
-
-.atlMarkdown.visMarkdownBody ul ul,
-.atlMarkdown.visMarkdownBody ul ol,
-.atlMarkdown.visMarkdownBody ol ol,
-.atlMarkdown.visMarkdownBody ol ul {
-  margin-top: 0;
-  margin-bottom: 0;
-}
-
-.atlMarkdown.visMarkdownBody li > p {
-  margin-bottom: 0.5714em;
-}
-
-.atlMarkdown.visMarkdownBody li + li {
-  margin-top: 0.2857em;
-}
-
-.atlMarkdown.visMarkdownBody table {
-  display: block;
-  width: 100%;
-  border-left: 1px solid var(--vis-markdown-line);
-  border-spacing: 0;
-  border-collapse: collapse;
-  overflow: auto;
-}
-
-.atlMarkdown.visMarkdownBody th,
-.atlMarkdown.visMarkdownBody td {
-  padding: 0.2857em 0.8571em;
-  border: 0;
-  border-top: 1px solid var(--vis-markdown-line);
-  border-bottom: 1px solid var(--vis-markdown-line);
-}
-
-.atlMarkdown.visMarkdownBody th:last-child,
-.atlMarkdown.visMarkdownBody td:last-child {
-  border-right: 1px solid var(--vis-markdown-line);
-}
-
-.atlMarkdown.visMarkdownBody tr {
-  border-top: 1px solid var(--vis-markdown-line);
-  background-color: transparent;
-}
-
-/* Code in the original's own face, not the kit's: the text is the original's to draw */
-.atlMarkdown.visMarkdownBody code,
-.atlMarkdown.visMarkdownBody pre {
-  margin-bottom: 0.5714em;
-  font-family: Monaco, Menlo, "Ubuntu Mono", Consolas, source-code-pro, monospace;
-  font-size: 0.8571em;
-}
-
-.atlMarkdown.visMarkdownBody code {
-  margin: 0;
-  padding: 0.2857em 0;
-  line-height: 1.5;
-  border-radius: var(--radius-xs);
-  background-color: var(--vis-markdown-fill);
-}
-
-.atlMarkdown.visMarkdownBody code::before,
-.atlMarkdown.visMarkdownBody code::after {
-  content: "\00a0";
-  letter-spacing: -0.2em;
-}
-
-.atlMarkdown.visMarkdownBody pre {
-  padding: 1.1429em;
-  border-radius: var(--radius-xs);
-  background-color: var(--vis-markdown-fill);
-  line-height: 1.3333em;
-  overflow: auto;
-  overflow-wrap: normal;
-}
-
-.atlMarkdown.visMarkdownBody pre code {
-  display: inline;
-  padding: 0;
-  border: 0;
-  background-color: transparent;
-  line-height: inherit;
-  white-space: pre;
-  overflow: visible;
-  overflow-wrap: normal;
-}
-
-.atlMarkdown.visMarkdownBody pre code::before,
-.atlMarkdown.visMarkdownBody pre code::after {
-  content: normal;
-}
-
-.visMarkdown {
-  flex: 1 1 auto;
-  min-height: 0;
-  padding: var(--space-2) var(--space-4);
-  overflow: auto;
+.visRoot[data-vis-type="metrics"] {
+  line-height: 1;
 }
 
 /*
- * The frame the product draws a TSVB markdown panel and a failed panel in: the visualization's
- * padding, then a transparent border that leaves the panel's background colour inside it
+ * The frame the product draws a TSVB panel in: a transparent border that leaves the panel's
+ * background colour inside it. The visualization's padding of 8 px around it is its container's,
+ * as a dashboard panel's body keeps it; the TSVB editor, whose chart has none, gives it a margin.
  */
 .visTsvbFrame {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
-  margin: var(--space-2);
   border: var(--space-2) solid transparent;
 }
 
@@ -561,6 +170,25 @@
 
 .visTsvbMarkdown__content--scroll {
   overflow: auto;
+}
+
+/*
+ * The text is the product's markdown body (.visMarkdownBody), whose lines and fills are the full
+ * shade at 15% and 5%; over a background that reads as the other theme it is written in the
+ * lightest shade, its lines and fills from the surface, as the product's osdMarkdown__body--reversed
+ */
+.visTsvbMarkdown .atlMarkdown.visMarkdownBody {
+  --vis-markdown-line: color-mix(in srgb, var(--color-full-shade) 15%, transparent);
+  --vis-markdown-fill: color-mix(in srgb, var(--color-full-shade) 5%, transparent);
+}
+
+.visTsvbMarkdown__content--reversed {
+  color: var(--color-surface-secondary);
+}
+
+.visTsvbMarkdown__content--reversed .atlMarkdown.visMarkdownBody {
+  --vis-markdown-line: color-mix(in srgb, var(--color-surface) 15%, transparent);
+  --vis-markdown-fill: color-mix(in srgb, var(--color-surface) 5%, transparent);
 }
 
 /* Controls: the original's input controls with the Atlas theme */
@@ -786,104 +414,215 @@
 
 /* TSVB */
 
-.visTsvbMetric {
+/*
+ * A TSVB metric or gauge writes its label and values in the product's colours: the theme's full
+ * shade (black, white in dark) at 40% for a label and 70% for a value, or, over a panel colour
+ * that reads as the other theme, the theme's surface at 60% and 80%; and at the product's sizes
+ * from its base of 14px, before they are scaled to the panel
+ */
+.visTsvbMetric,
+.visTsvbGauge {
+  --vis-tsvb-text: color-mix(in srgb, var(--color-full-shade) 40%, transparent);
+  --vis-tsvb-value: color-mix(in srgb, var(--color-full-shade) 70%, transparent);
+
+  position: relative;
   display: flex;
-  flex: 1 1 auto;
+  flex: 1 0 auto;
   flex-direction: column;
-  gap: var(--space-1);
-  align-items: center;
-  justify-content: center;
-  min-height: 0;
-  padding: var(--space-3);
-  border-radius: var(--radius-sm);
-  text-align: center;
+  font-size: var(--font-size-s);
+}
+
+.visTsvbMetric--reversed,
+.visTsvbGauge--reversed {
+  --vis-tsvb-text: color-mix(in srgb, var(--color-surface) 60%, transparent);
+  --vis-tsvb-value: color-mix(in srgb, var(--color-surface) 80%, transparent);
+}
+
+.visTsvbMetric__resize {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.visTsvbMetric__inner {
+  position: absolute;
+  padding: var(--space-1) var(--space-2) var(--space-2);
 }
 
 .visTsvbMetric__label {
-  font-size: var(--font-size-m);
-  opacity: 0.8;
+  margin-bottom: 0.25em;
+  color: var(--vis-tsvb-text);
+  font-size: 0.5em;
+  line-height: 1em;
+  text-align: center;
 }
 
 .visTsvbMetric__value {
-  font-size: 44px;
-  font-variant-numeric: tabular-nums;
+  color: var(--vis-tsvb-value);
+  font-size: 1em;
   font-weight: var(--font-weight-semibold);
-  line-height: 1.1;
+  line-height: 1em;
+  text-align: center;
 }
 
 .visTsvbMetric__secondary {
-  font-size: var(--font-size-s);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.05em;
+}
+
+.visTsvbMetric__secondaryLabel,
+.visTsvbMetric__secondaryValue {
+  color: var(--vis-tsvb-value);
+  font-size: 0.35em;
+  line-height: 1em;
+}
+
+.visTsvbMetric__secondaryLabel {
+  margin-right: 0.3em;
+  color: var(--vis-tsvb-text);
 }
 
 /* The name of the part of a split metric, under its values */
 .visTsvbMetric__additional {
   max-width: 100%;
-  font-size: var(--font-size-xs);
+  padding: calc(var(--space-1) / 2) 0 0;
+  overflow: hidden;
+  color: var(--vis-tsvb-value);
+  font-size: 0.25em;
   line-height: 1.2;
-  overflow: hidden;
+  text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* A TSVB Top N as the product draws it, in its colours and at its base size */
 .visTsvbTopN {
-  flex: 1 1 auto;
-  min-height: 0;
-  padding: var(--space-2);
+  --vis-tsvb-text: color-mix(in srgb, var(--color-full-shade) 40%, transparent);
+  --vis-tsvb-value: color-mix(in srgb, var(--color-full-shade) 70%, transparent);
+  --vis-tsvb-hover: color-mix(in srgb, var(--color-full-shade) 10%, transparent);
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
   overflow: auto;
+  font-size: var(--font-size-s);
 }
 
-.visTsvbTopN table {
-  width: 100%;
+.visTsvbTopN--reversed {
+  --vis-tsvb-text: color-mix(in srgb, var(--color-surface) 60%, transparent);
+  --vis-tsvb-value: color-mix(in srgb, var(--color-surface) 80%, transparent);
+  --vis-tsvb-hover: color-mix(in srgb, var(--color-surface) 10%, transparent);
+}
+
+.visTsvbTopN__table {
   border-collapse: collapse;
-  font-size: var(--font-size-xs);
+  border-spacing: 0;
 }
 
-.visTsvbTopN td {
-  padding: var(--space-1) var(--space-2);
-  vertical-align: middle;
+.visTsvbTopN tr:hover td {
+  background-color: var(--vis-tsvb-hover);
 }
 
+/* On the baseline of its row, as the product's reset leaves every cell that sets nothing else */
 .visTsvbTopN__label {
-  max-width: 180px;
+  padding: var(--space-1) 0;
   overflow: hidden;
+  color: var(--vis-tsvb-text);
   text-overflow: ellipsis;
   white-space: nowrap;
+  vertical-align: baseline;
 }
 
 .visTsvbTopN__bar {
-  width: 60%;
+  padding: var(--space-1) var(--space-3);
+  vertical-align: middle;
 }
 
-.visTsvbTopN__bar span {
-  display: block;
-  height: 14px;
-  border-radius: 0 4px 4px 0;
+.visTsvbTopN__innerBar {
+  position: relative;
+}
+
+.visTsvbTopN__innerBar > div {
+  width: 100%;
+  min-height: var(--space-4);
 }
 
 .visTsvbTopN__value {
-  font-variant-numeric: tabular-nums;
-  font-weight: var(--font-weight-medium);
+  padding: var(--space-1) var(--space-1) 0;
+  color: var(--vis-tsvb-value);
+  line-height: 0;
   text-align: right;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* The box a gauge writes its label and value in: the foot of 100 by 70 for a half circle */
+.visTsvbGauge__metrics {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100px;
+  height: 100px;
+  padding: var(--space-2);
+  text-align: center;
+}
+
+.visTsvbGauge__metrics--half {
+  justify-content: flex-end;
+  height: 70px;
+  padding: 0 var(--space-3) var(--space-2);
+}
+
+.visTsvbGauge__label {
+  padding: 0 var(--space-2) var(--space-1);
+  color: var(--vis-tsvb-text);
+  font-size: 0.5em;
+  line-height: 1em;
+  text-align: center;
+}
+
+.visTsvbGauge__value {
+  color: var(--vis-tsvb-value);
+  font-size: 0.9em;
+  line-height: 1em;
+  text-align: center;
+}
+
+/* The name of the part of a split gauge, under its value */
+.visTsvbGauge__additional {
+  width: 100%;
+  max-width: 100%;
+  padding: calc(var(--space-1) / 2) var(--space-1);
+  overflow: hidden;
+  color: var(--vis-tsvb-value);
+  font-size: 0.4em;
+  line-height: 1.2em;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.visTsvbGauge {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
-  min-height: 0;
+/* The ring is drawn over the text, and cut to the panel */
+.visTsvbGauge__rings {
+  position: absolute;
+  inset: 0;
   overflow: hidden;
 }
 
-.visTsvbGauge text {
-  font-variant-numeric: tabular-nums;
+/* The ring stands in a line of text, as tall as the line makes it, and is scaled from the size it
+   measures */
+.visTsvbGauge__ring {
+  position: absolute;
 }
 
 /*
  * A metric or a gauge split by terms or filters: one for each part, as the product lays them out,
- * at least a quarter of the width and 192 by 154 pixels each, spread over as many rows as they need
+ * at least a quarter of the width, 192 pixels wide and a fifth less high each, spread over as many
+ * rows as they need
  */
 .visTsvbSplit {
   display: flex;
@@ -892,7 +631,6 @@
   align-items: stretch;
   justify-content: space-around;
   min-height: 0;
-  margin: var(--space-2);
   overflow: auto;
 }
 
@@ -901,26 +639,94 @@
   flex: 1 0 25%;
   flex-direction: column;
   min-width: 192px;
-  min-height: 154px;
+  min-height: calc(192px / 1.25);
   border: var(--space-2) solid transparent;
+}
+
+/* --- TSVB's table ------------------------------------------------------------------------------ */
+
+/*
+ * TSVB's table is not the data table: the product draws it with the table style of its legacy
+ * style sheet, whose lines have that sheet's own colour (not the Atlas theme's) in each theme.
+ */
+:root {
+  --vis-tsvb-table-line: #d3dae6;
+}
+
+:root.themeDark {
+  --vis-tsvb-table-line: #343741;
+}
+
+/*
+ * What scrolls it in a panel: the visualization, with its 8 px of padding inside what scrolls. The
+ * panel's body keeps that padding around it, so the scroller spans it and takes it inside.
+ */
+.visTsvbTable {
+  display: flex;
+  flex: 1 1 100%;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  margin: calc(-1 * var(--space-2));
+  padding: var(--space-2);
+  overflow: auto;
+}
+
+/* The panel's frame: a transparent border, as wide again */
+.visTsvbTable__frame {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+  border: var(--space-2) solid transparent;
+}
+
+.visTsvbTable__table {
+  width: 100%;
+  max-width: 100%;
+  margin-bottom: 20px;
+  border-spacing: 0;
+  border-collapse: collapse;
+  font-size: var(--font-size-xs);
+}
+
+/* A cell: 8 px around its text on a line of 1.42857143, a line over every row but the titles' */
+.visTsvbTable__table th,
+.visTsvbTable__table td {
+  padding: var(--space-2);
+  border-top: 1px solid var(--vis-tsvb-table-line);
+  line-height: 1.42857143;
+  vertical-align: top;
+}
+
+/* The titles: bold, in the middle of their columns and at the foot of their row, a line under them */
+.visTsvbTable__table th {
+  border-top: 0;
+  border-bottom: 1px solid var(--vis-tsvb-table-line);
+  /* The browser's own weight of a title cell, which the legacy table keeps */
+  font-weight: 700;
+  text-align: center;
+  vertical-align: bottom;
+}
+
+.visTsvbTable__table th.visTsvbTable__pivot {
+  text-align: left;
+}
+
+.visTsvbTable__value {
+  text-align: right;
+}
+
+/* The arrows of a sort and of a trend stand in the middle of their line; a trend's is subdued */
+.visTsvbTable__table .atlIcon {
+  vertical-align: middle;
 }
 
 .visTsvbTable__trend {
   color: var(--color-text-secondary);
 }
 
-.visTsvbTable__trend .atlIcon {
-  vertical-align: middle;
-}
-
-/* The arrow of the column a TSVB table is sorted by, and the room for one the other columns keep */
-.visTsvbTable__sort {
-  vertical-align: middle;
-}
-
-.visTsvbTable__noSort {
+/* A title that cannot sort tells so in a tip: its anchor is a box in the line, as the product's */
+.visTsvbTable__table .atlTooltipAnchor {
   display: inline-block;
-  width: 16px;
-  height: 16px;
-  vertical-align: middle;
 }

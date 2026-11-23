@@ -16,7 +16,7 @@ import { describe, it } from 'node:test';
 import { hasLuceneSyntax, kueryToDsl, KuerySyntaxError, parseKuery } from '../../web/lib/kuery';
 import { buildQuery } from '../../web/lib/query';
 import { stringifyJson } from '../../web/services/http';
-import type { IndexPattern } from '../../web/lib/types';
+import type { Filter, IndexPattern } from '../../web/lib/types';
 
 interface Case {
   q: string;
@@ -95,6 +95,37 @@ describe('DQL, as OpenSearch Dashboards reads it', () => {
     }
   });
 
+  it('leaves scripted fields out of an exists query, without the fault of the original', () => {
+    // The original's own functions drop what they had gathered at a scripted field, then fail on
+    // the next plain field; here a scripted field adds nothing and the others are kept
+    const field = (name: string, scripted = false) => ({
+      name,
+      type: 'string',
+      searchable: true,
+      aggregatable: true,
+      ...(scripted ? { scripted: true, lang: 'painless', script: "doc['x'].value" } : {}),
+    });
+    const ask = (...fields: Array<ReturnType<typeof field>>) => {
+      const indexPattern = { fields: [...fields, field('zzz')] } as unknown as IndexPattern;
+      try {
+        return kueryToDsl(parseKuery('a_*:*'), indexPattern);
+      } catch (error) {
+        return `${(error as Error).name} ${(error as Error).message}`;
+      }
+    };
+    const exist = (...names: string[]) => ({
+      bool: { should: names.map((name) => ({ exists: { field: name } })), minimum_should_match: 1 },
+    });
+    assert.deepEqual(ask(field('a_one'), field('a_two', true)), exist('a_one'));
+    assert.deepEqual(ask(field('a_one'), field('a_two', true), field('a_four', true)), exist('a_one'));
+    assert.deepEqual(ask(field('a_one'), field('a_two', true), field('a_three')), exist('a_one', 'a_three'));
+    assert.deepEqual(ask(field('a_two', true), field('a_one')), exist('a_one'));
+    assert.deepEqual(ask(field('a_one'), field('a_three')), exist('a_one', 'a_three'));
+    // a scripted field asked for a value is still asked by its script
+    const scripted = kueryToDsl(parseKuery('a_two:x'), { fields: [field('a_two', true)] } as unknown as IndexPattern);
+    assert.ok(JSON.stringify(scripted).includes('"script"'));
+  });
+
   it('reads words without quotes as one value, spaces included', () => {
     assert.deepEqual(kueryToDsl(parseKuery('zz-agent short')), {
       multi_match: { type: 'best_fields', query: 'zz-agent short', lenient: true },
@@ -163,5 +194,32 @@ describe('the query of a page, with DQL', () => {
       }).bool.must,
       [{ query_string: { query: 'a:b', analyze_wildcard: false, time_zone: 'Asia/Tokyo' } }]
     );
+  });
+
+  it('names the zone of the browser when dateFormat:tz says "Browser", as the original does', () => {
+    const browser = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    assert.deepEqual(buildQuery(pattern, { query: 'a:b', language: 'lucene' }, [], { dateFormatTZ: 'Browser' }).bool.must, [
+      { query_string: { query: 'a:b', analyze_wildcard: true, time_zone: browser } },
+    ]);
+  });
+
+  it('gives a Lucene query written as a query_string the options and the zone too', () => {
+    const config = { dateFormatTZ: 'Europe/Paris', queryStringOptions: { analyze_wildcard: true } };
+    assert.deepEqual(buildQuery(pattern, { query: { query_string: { query: 'a:b' } }, language: 'lucene' }, [], config).bool.must, [
+      { query_string: { query: 'a:b', analyze_wildcard: true, time_zone: 'Europe/Paris' } },
+    ]);
+    // The options go over the query's own; the zone it names stays
+    const own = { query_string: { query: 'a:b', analyze_wildcard: false, time_zone: 'Asia/Tokyo' } };
+    assert.deepEqual(buildQuery(pattern, { query: own, language: 'lucene' }, [], config).bool.must, [
+      { query_string: { query: 'a:b', analyze_wildcard: true, time_zone: 'Asia/Tokyo' } },
+    ]);
+    assert.equal(own.query_string.analyze_wildcard, false, 'the query handed in is not changed');
+    // Any other DSL is used as it is
+    assert.deepEqual(buildQuery(pattern, { query: { match_all: {} }, language: 'lucene' }, [], config).bool.must, [{ match_all: {} }]);
+  });
+
+  it('takes a filter that says nothing about itself, as the original does', () => {
+    const bare = { query: { match_phrase: { response: '200' } } } as unknown as Filter;
+    assert.deepEqual(buildQuery(pattern, undefined, [bare]).bool.filter, [{ match_phrase: { response: '200' } }]);
   });
 });

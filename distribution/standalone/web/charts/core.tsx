@@ -17,6 +17,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from '../components/icon';
+import { standardColor } from './standard_color';
 
 /*
  * The series colours of OpenSearch Dashboards (its component library's palette), so that a
@@ -41,6 +42,15 @@ let configured: Record<string, string> = {};
 /** The setting visualization:colorMapping: labels with a colour of their own */
 export function setColorMapping(mapping: Record<string, string>) {
   configured = mapping ?? {};
+}
+
+/**
+ * The opacity of the other series while one is hovered, the setting visualization:dimmingOpacity:
+ * a number from 0 to 1, else 0.5, as the original's charts read it
+ */
+export function dimmingOpacity(value: unknown): number {
+  const opacity = typeof value === 'number' ? value : Number.parseFloat(String(value));
+  return opacity >= 0 && opacity <= 1 ? opacity : 0.5;
 }
 
 const mix = (from: string, to: string, share: number): string => {
@@ -92,11 +102,11 @@ export function assignColors(labels: string[], overrides?: Record<string, string
   const keys = [...new Set(labels)];
   const taken: string[] = [];
   const fresh: string[] = [];
-  const configuredColors = Object.values(configured).map((color) => color.toLowerCase());
+  const configuredColors = Object.values(configured).map((color: unknown) => standardColor(color));
   for (const key of keys) {
     if (configured[key]) {
       mapped.delete(key);
-      taken.push(configured[key].toLowerCase());
+      taken.push(standardColor(configured[key]) ?? '');
       continue;
     }
     // A label whose colour has since been set aside for another in the setting takes a new one.
@@ -444,20 +454,33 @@ export function useSize<T extends HTMLElement>(): [RefObject<T>, Size] {
 let measureContext: CanvasRenderingContext2D | null | undefined;
 
 /** A canvas set to the chart's face, to measure text with; none outside a browser */
-function measurer(fontSize: number, weight: number): CanvasRenderingContext2D | null {
+function measurer(fontSize: number, weight: number, family?: string): CanvasRenderingContext2D | null {
   if (measureContext === undefined) {
     measureContext = typeof document === 'undefined' ? null : document.createElement('canvas').getContext('2d');
   }
   if (measureContext) {
-    measureContext.font = `${weight} ${fontSize}px -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif`;
+    measureContext.font = `${weight} ${fontSize}px ${family ?? '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif'}`;
   }
   return measureContext;
 }
 
-/** The width a text takes in the chart's face */
-export function textWidth(text: string, fontSize = 11, weight = 400): number {
-  const context = measurer(fontSize, weight);
+/** The width a text takes in the chart's face, or in another */
+export function textWidth(text: string, fontSize = 11, weight = 400, family?: string): number {
+  const context = measurer(fontSize, weight, family);
   return context ? context.measureText(text).width : text.length * fontSize * 0.58;
+}
+
+/**
+ * How far below the middle of a line of text its baseline lies, as a canvas sets text whose
+ * baseline is its middle: what an SVG text needs added to stand where a canvas chart puts it
+ */
+export function middleShift(fontSize: number, weight = 400, family?: string): number {
+  const context = measurer(fontSize, weight, family);
+  if (!context) return fontSize * 0.3;
+  context.textBaseline = 'middle';
+  const shift = -context.measureText('0').alphabeticBaseline;
+  context.textBaseline = 'alphabetic';
+  return Number.isFinite(shift) ? shift : fontSize * 0.3;
 }
 
 /** How far a line of the chart's face reaches above and below its baseline */
@@ -565,6 +588,7 @@ export function Legend({
   onToggle,
   onHover,
   classic,
+  elasticSize,
 }: {
   items: LegendItem[];
   position: LegendPosition;
@@ -572,9 +596,23 @@ export function Legend({
   onHover?: (id: string | undefined) => void;
   /** As wide as the legend of a classic chart of OpenSearch Dashboards, whatever the chart's width */
   classic?: boolean;
+  /**
+   * Laid out as elastic-charts lays out its legend: this many pixels wide beside the chart, or
+   * this many high above or below it
+   */
+  elasticSize?: number;
 }) {
+  const elastic = elasticSize !== undefined;
+  const beside = position === 'left' || position === 'right';
+  // Above or below the chart elastic-charts gives a legend of a single item the whole width, and
+  // the columns of at least 200 pixels only to more items
+  const across = items.length === 1 ? { gridTemplateColumns: '1fr' } : {};
   return (
-    <ul className={`chtLegend chtLegend--${position}${classic ? ' chtLegend--classic' : ''}`} data-test-subj="legendContainer">
+    <ul
+      className={`chtLegend chtLegend--${position}${classic ? ' chtLegend--classic' : ''}${elastic ? ' chtLegend--elastic' : ''}`}
+      style={elastic ? (beside ? { width: elasticSize } : { height: elasticSize, ...across }) : undefined}
+      data-test-subj="legendContainer"
+    >
       {items.map((item) => (
         <li key={item.id}>
           <button
@@ -618,16 +656,19 @@ export function LegendToggle({ open, onToggle }: { open: boolean; onToggle: () =
 export function ChartFrame({
   legend,
   position = 'right',
+  tight,
   children,
 }: {
   legend?: ReactNode;
   position?: LegendPosition;
+  /** No room between the chart and its legend, which keeps its own */
+  tight?: boolean;
   children: ReactNode;
 }) {
   const column = position === 'top' || position === 'bottom';
   const first = position === 'left' || position === 'top';
   return (
-    <div className="chtFrame" style={{ flexDirection: column ? 'column' : 'row' }}>
+    <div className="chtFrame" style={{ flexDirection: column ? 'column' : 'row', gap: tight ? 0 : undefined }}>
       {legend && first && legend}
       <div className="chtFrame__plot">{children}</div>
       {legend && !first && legend}

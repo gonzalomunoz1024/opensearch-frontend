@@ -17,6 +17,8 @@
   --color-text-primary: #1d1d1f;
   --color-text-secondary: #6e6e73;
   --color-text-tertiary: #86868b;
+  /* The component library's full shade, in which the original writes a document's values */
+  --color-full-shade: #000000;
 
   /* The one accent and the three states */
   --color-accent: #007aff;
@@ -27,6 +29,30 @@
   --color-healthy-text: #007871;
   --color-warning-text: #83650a;
   --color-critical-text: #bd271e;
+  /* The component library's success text, as the original's theme computes it from the healthy
+     colour (a share of the documents in Discover) */
+  --color-success-text: #2b8342;
+  /* The healthy and warning colours as the theme draws a shape in them on the surface: the second
+     colour of an application's icon, a health's dot (the component library's graphic shades) */
+  --color-healthy-graphic: #30a74e;
+  --color-warning-graphic: #d57f06;
+  /* The text of a button that is not filled, as the theme writes it in each colour: an empty
+     button, an icon button, an outlined one. In light the accent and the critical colour darken to
+     be read; an invalid field's label takes the critical one */
+  --color-accent-button-text: #0371e9;
+  --color-healthy-button-text: #2b8342;
+  --color-critical-button-text: #d5352d;
+  /* The text of a filled button that cannot be pressed, on the border's colour */
+  --color-disabled-fill-text: #8f8f93;
+  /* A call-out of each kind as the theme draws it: its title and icon, and its fill */
+  --color-accent-callout-text: #0569d5;
+  --color-accent-callout-fill: #e6f2ff;
+  --color-healthy-callout-text: #2a7e40;
+  --color-healthy-callout-fill: #ebf9ee;
+  --color-warning-callout-text: #9e610d;
+  --color-warning-callout-fill: #fff4e6;
+  --color-critical-callout-text: #c3332b;
+  --color-critical-callout-fill: #ffebea;
   --color-on-accent: #ffffff;
 
   /* A colour as a soft fill */
@@ -54,6 +80,51 @@
   --code-name: #006bb4;
   --code-number: #00756c;
   --code-keyword: #6b4fa8;
+  /* The component library's code block, as the original's theme colours a JSON document */
+  --code-block-string: #d74987;
+  --code-block-number: #0c8967;
+  --code-block-keyword: #6e28c3;
+
+  /* Field kind tokens: Atlas names none, these are the component library's tokens as the
+     original's theme compiles them: the glyph, the fill and the ring of each kind, and its solid
+     fill, which marks a scripted field */
+  --token-number: #3e7768;
+  --token-number-fill: #eef7f5;
+  --token-number-ring: #cce8e0;
+  --token-number-solid: #6dccb1;
+  --token-string: #4e7395;
+  --token-string-fill: #eff4f9;
+  --token-string-ring: #cfdeec;
+  --token-string-solid: #79aad9;
+  --token-nested: #aa516f;
+  --token-nested-fill: #fbeff3;
+  --token-nested-ring: #f2cfdb;
+  --token-nested-solid: #ee789d;
+  --token-geo: #7c703c;
+  --token-geo-fill: #fbf9ee;
+  --token-geo-ring: #f3eccd;
+  --token-geo-solid: #f1d86f;
+  --token-date: #7a705e;
+  --token-date-fill: #f8f6f3;
+  --token-date-ring: #eae5db;
+  --token-date-solid: #d2c0a0;
+  --token-boolean: #946237;
+  --token-boolean-fill: #fbf3ec;
+  --token-boolean-ring: #f4dcc7;
+  --token-boolean-solid: #f5a35c;
+  --token-ip: #b15340;
+  --token-ip-fill: #fdf0ed;
+  --token-ip-ring: #f8d1c9;
+  --token-ip-solid: #ff7e62;
+  --token-gray: #6a6a6f;
+  --token-gray-fill: #f1f1f1;
+  --token-gray-ring: #d4d4d5;
+  --token-gray-solid: #6e6e73;
+  /* The gray of a token without fill */
+  --token-plain: #6e6e73;
+  /* The glyph on a solid fill: dark on the colours, white on the gray */
+  --token-on-solid: #1d1d1f;
+  --token-on-gray-solid: #ffffff;
 
   /* Type: the system face, on the sizes Atlas takes from the HIG */
   --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter UI",
@@ -113,6 +184,7 @@
   --color-text-primary: #f5f5f7;
   --color-text-secondary: #98989d;
   --color-text-tertiary: #636366;
+  --color-full-shade: #ffffff;
 
   --color-accent: #0a84ff;
   --color-healthy: #30d158;
@@ -121,6 +193,21 @@
   --color-healthy-text: #7dded8;
   --color-warning-text: #f3d371;
   --color-critical-text: #f86b63;
+  --color-success-text: #30d158;
+  --color-healthy-graphic: #30d158;
+  --color-warning-graphic: #ff9f0a;
+  --color-accent-button-text: #0a84ff;
+  --color-healthy-button-text: #30d158;
+  --color-critical-button-text: #ff453a;
+  --color-disabled-fill-text: #656567;
+  --color-accent-callout-text: #76baff;
+  --color-accent-callout-fill: #021426;
+  --color-healthy-callout-text: #62dc80;
+  --color-healthy-callout-fill: #071f0d;
+  --color-warning-callout-text: #ffb645;
+  --color-warning-callout-fill: #261802;
+  --color-critical-callout-text: #ff9791;
+  --color-critical-callout-fill: #260a09;
 
   --tint-opacity: 15%;
   --color-hover: color-mix(in srgb, var(--color-text-primary) 8%, transparent);
@@ -139,6 +226,36 @@
   --code-name: #6ab0f1;
   --code-number: #10b688;
   --code-keyword: #b174fc;
+  --code-block-string: #d0809b;
+  --code-block-number: #10b688;
+  --code-block-keyword: #b174fc;
+
+  --token-number: #74c1ac;
+  --token-number-fill: #2e4a44;
+  --token-number-ring: #335950;
+  --token-string: #8aafd1;
+  --token-string-fill: #31404f;
+  --token-string-ring: #384c5f;
+  --token-nested: #e090ab;
+  --token-nested-fill: #54313e;
+  --token-nested-ring: #663848;
+  --token-geo: #d6bf57;
+  --token-geo-fill: #554e30;
+  --token-geo-ring: #675e35;
+  --token-date: #c3b499;
+  --token-date-fill: #4c473f;
+  --token-date-ring: #5b5549;
+  --token-boolean: #e2a56f;
+  --token-boolean-fill: #563e2a;
+  --token-boolean-ring: #69492e;
+  --token-ip: #ed8f7b;
+  --token-ip-fill: #5a332d;
+  --token-ip-ring: #6e3a31;
+  --token-gray: #9d9d9f;
+  --token-gray-fill: #323234;
+  --token-gray-ring: #39393b;
+  --token-gray-solid: #636366;
+  --token-plain: #636366;
 
   color-scheme: dark;
 }

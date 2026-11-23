@@ -9,6 +9,7 @@
  */
 
 import {
+  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -17,13 +18,14 @@ import {
   useState,
   type CSSProperties,
   type DragEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   type RefObject,
 } from 'react';
-import { FieldToken, IconButton, cx } from '../../components/basic';
+import { FieldToken, cx } from '../../components/basic';
 import { SearchField } from '../../components/form';
-import { Icon } from '../../components/icon';
-import { Portal } from '../../components/overlay';
+import { Icon, type IconName } from '../../components/icon';
+import { Portal, Tooltip } from '../../components/overlay';
 import { aggLabel, type AggConfig, type AggContext } from '../../lib/aggs';
 import type { RawHit } from '../../lib/docs';
 import { fieldFormatter } from '../../lib/field_formats';
@@ -42,6 +44,7 @@ import {
   newDraft,
   schemaAggTypes,
   withAggs,
+  draftForEditing,
   withDraft,
   withEditorError,
   withSavedDraft,
@@ -68,8 +71,21 @@ const FILTERABLE_TYPES = ['string', 'number', 'date', 'ip', 'boolean', 'histogra
 const filterable = (field: Field) =>
   field.name === '_id' || Boolean(field.scripted) || (field.searchable && FILTERABLE_TYPES.includes(field.type));
 
-/** A name that may break after each dot: a long field name wraps where it reads well */
-const wrapOnDot = (name: string) => name.replace(/\./g, '.​');
+/**
+ * A name that may break after each dot, as the original writes one: a long field name wraps where
+ * it reads well, and is copied as it is
+ */
+const wrapOnDot = (name: string): ReactNode =>
+  name.split('.').map((part, index) => (
+    <Fragment key={index}>
+      {index > 0 && (
+        <>
+          .<wbr />
+        </>
+      )}
+      {part}
+    </Fragment>
+  ));
 
 const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
@@ -187,6 +203,7 @@ function FieldSelector({
   onAddFilters,
 }: Pick<DataTabProps, 'state' | 'update' | 'indexPattern' | 'hits' | 'onAddFilters'> & { dnd: DragAndDrop }) {
   const search = state.visualization.searchField;
+  const setSearch = (searchField: string) => update((current) => ({ ...current, visualization: { ...current.visualization, searchField } }));
   const metaFields = services.uiSettings.get<string[]>('metaFields', META_FIELDS);
   const groups = useMemo(() => {
     const result: Record<FieldCategory, Field[]> = { categorical: [], numerical: [], meta: [] };
@@ -201,11 +218,29 @@ function FieldSelector({
     <div className="vbdFields">
       <form onSubmit={(event) => event.preventDefault()}>
         <SearchField
+          compact
+          className="vbdFields__search"
           value={search}
           placeholder="Search field names"
           aria-label="Search field names"
-          onChange={(searchField) => update((current) => ({ ...current, visualization: { ...current.visualization, searchField } }))}
+          onChange={setSearch}
           testId="fieldFilterSearchInput"
+          append={
+            // The original's button that clears the search, which gives the focus back to it
+            search ? (
+              <button
+                type="button"
+                className="vbdFields__clear"
+                aria-label="Clear input"
+                onClick={(event) => {
+                  setSearch('');
+                  event.currentTarget.parentElement?.querySelector('input')?.focus();
+                }}
+              >
+                <Icon name="cross" />
+              </button>
+            ) : undefined
+          }
         />
       </form>
       <div className="vbdFields__groups">
@@ -262,6 +297,7 @@ function FieldButton({
   active,
   onClick,
   drag,
+  buttonRef,
 }: {
   name: string;
   label: string;
@@ -270,9 +306,17 @@ function FieldButton({
   active?: boolean;
   onClick?: () => void;
   drag: ReturnType<DragAndDrop['source']>;
+  buttonRef?: RefObject<HTMLButtonElement>;
 }) {
   return (
-    <button type="button" className={cx('vbdField', active && 'vbdField--active')} onClick={onClick} data-test-subj={testId} {...drag}>
+    <button
+      ref={buttonRef}
+      type="button"
+      className={cx('vbdField', active && 'vbdField--active')}
+      onClick={onClick}
+      data-test-subj={testId}
+      {...drag}
+    >
       <span className="vbdField__token">
         <FieldToken type={type} />
       </span>
@@ -300,10 +344,15 @@ function FieldWithDetails({
 }) {
   const [open, setOpen] = useState(false);
   const anchor = useRef<HTMLDivElement>(null);
-  const close = useCallback(() => setOpen(false), []);
+  const button = useRef<HTMLButtonElement>(null);
+  const close = useCallback((returnFocus: boolean) => {
+    setOpen(false);
+    if (returnFocus) button.current?.focus();
+  }, []);
   return (
     <div ref={anchor} className="vbdFields__item">
       <FieldButton
+        buttonRef={button}
         name={field.name}
         label={field.name}
         type={field.type}
@@ -321,8 +370,23 @@ function FieldWithDetails({
   );
 }
 
-/** A popover at the right of a field, its top level with the field's, that stays on screen */
-function SidePopover({ anchor, onClose, children }: { anchor: RefObject<HTMLElement>; onClose: () => void; children: ReactNode }) {
+const TABBABLE = 'button:not(:disabled), [href], input:not(:disabled), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * A popover at the right of a field, as the original opens one "rightUp": its top 4.5 px above a
+ * field 35 px tall, kept 16 px from the window's edges. As one that owns the focus, it takes the
+ * focus once placed (its first stop is the title), keeps Tab inside it, and gives the focus back
+ * to the field on Escape.
+ */
+function SidePopover({
+  anchor,
+  onClose,
+  children,
+}: {
+  anchor: RefObject<HTMLElement>;
+  onClose: (returnFocus: boolean) => void;
+  children: ReactNode;
+}) {
   const panel = useRef<HTMLDivElement>(null);
   const [style, setStyle] = useState<CSSProperties>({ visibility: 'hidden' });
 
@@ -332,7 +396,12 @@ function SidePopover({ anchor, onClose, children }: { anchor: RefObject<HTMLElem
       const height = panel.current?.offsetHeight ?? 0;
       if (!box) return;
       const margin = 8;
-      const top = Math.max(margin, Math.min(box.top - 6, window.innerHeight - height - margin));
+      // As the component library places it: its top no lower than where its arrow (24 px wide, 10 px
+      // from the panel's corner) would point at the field's middle, and 16 px from the window's edges
+      const arrowReach = 10 + 24 / 2;
+      const windowBuffer = 16;
+      const wanted = Math.min(box.top, box.top + box.height / 2 - arrowReach);
+      const top = Math.max(windowBuffer, Math.min(wanted, window.innerHeight - height - windowBuffer));
       setStyle({ left: box.right + margin, top });
     };
     place();
@@ -347,14 +416,20 @@ function SidePopover({ anchor, onClose, children }: { anchor: RefObject<HTMLElem
     };
   }, [anchor]);
 
+  // once placed: hidden, nothing in it can take the focus
+  const placed = style.visibility !== 'hidden';
+  useEffect(() => {
+    if (placed) panel.current?.querySelector<HTMLElement>(TABBABLE)?.focus();
+  }, [placed]);
+
   useEffect(() => {
     const onDown = (event: MouseEvent) => {
       const target = event.target as Node;
       if (anchor.current?.contains(target) || panel.current?.contains(target)) return;
-      onClose();
+      onClose(false);
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') onClose(true);
     };
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
@@ -364,9 +439,32 @@ function SidePopover({ anchor, onClose, children }: { anchor: RefObject<HTMLElem
     };
   }, [anchor, onClose]);
 
+  const keepFocus = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Tab' || !panel.current) return;
+    const stops = [...panel.current.querySelectorAll<HTMLElement>(TABBABLE)];
+    if (!stops.length) return;
+    const first = stops[0];
+    const last = stops[stops.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
   return (
     <Portal>
-      <div ref={panel} className="atlPopover atlMaterial vbdFieldPopover" style={style} data-test-subj="field-popover">
+      <div
+        ref={panel}
+        className="atlPopover atlMaterial vbdFieldPopover"
+        style={style}
+        role="dialog"
+        aria-modal="true"
+        data-test-subj="field-popover"
+        onKeyDown={keepFocus}
+      >
         {children}
       </div>
     </Portal>
@@ -388,7 +486,7 @@ function FieldDetailsView({
 }) {
   const details = useMemo(() => fieldDetails(hits, field, indexPattern), [hits, field, indexPattern]);
   const format = fieldFormatter(indexPattern, field.name, services.formatSettings());
-  const title = details.error ? 'No values found' : details.buckets.length > 1 ? `Top ${details.buckets.length} values` : 'Top value';
+  const title = !details.buckets.length ? 'No values found' : details.buckets.length > 1 ? `Top ${details.buckets.length} values` : 'Top value';
   const existsFilterAllowed = !metaFields.includes(field.name) && !field.scripted;
 
   // A filter for a value is pinned when the settings say new filters are
@@ -407,9 +505,9 @@ function FieldDetailsView({
       </div>
       <div className="vbdFieldDetails" data-test-subj="fieldDetailsContainer">
         {details.error ? (
-          <p className="atlSmall" data-test-subj="fieldDetailsError">
+          <div className="vbdFieldDetails__error" data-test-subj="fieldDetailsError">
             {details.error}
-          </p>
+          </div>
         ) : (
           <div data-test-subj="fieldDetailsBucketsContainer">
             {details.buckets.map((bucket, index) => {
@@ -420,33 +518,36 @@ function FieldDetailsView({
                 <div className="vbdBucket" key={`bucket${index}`}>
                   <div className="vbdBucket__value">
                     <div className="vbdBucket__text">
-                      <span className="atlTruncate" title={`${shown}: ${bucket.count} (${percent}%)`}>
+                      <span className="vbdBucket__name atlTruncate" title={`${shown}: ${bucket.count} (${percent}%)`}>
                         {shown}
                       </span>
-                      <span className="vbdBucket__percent">{percent}%</span>
+                      <span className="vbdBucket__percent atlTruncate">{percent}%</span>
                     </div>
-                    <div className="vbdBucket__bar" role="progressbar" aria-valuenow={bucket.percent} aria-valuemin={0} aria-valuemax={100}>
-                      <span style={{ width: `${bucket.percent}%` }} />
-                    </div>
+                    <progress
+                      className="vbdBucket__bar"
+                      value={bucket.percent}
+                      max={100}
+                      aria-label={`${String(bucket.value)}: ${bucket.count} (${bucket.percent}%)`}
+                    />
                   </div>
                   {filterable(field) && (
                     <div className="vbdBucket__actions">
-                      <IconButton
-                        icon="plusCircle"
-                        size="s"
-                        label={`Filter for ${field.name}: "${String(bucket.value)}"`}
-                        title="Filter for value"
-                        onClick={() => filterValue(bucket.value, false)}
-                        testId={`plus-${field.name}-${String(bucket.value)}`}
-                      />
-                      <IconButton
-                        icon="minusCircle"
-                        size="s"
-                        label={`Filter out ${field.name}: "${String(bucket.value)}"`}
-                        title="Filter out value"
-                        onClick={() => filterValue(bucket.value, true)}
-                        testId={`minus-${field.name}-${String(bucket.value)}`}
-                      />
+                      <Tooltip content="Filter for value" delay="long" position="bottom">
+                        <SmallIconButton
+                          icon="plusInCircle"
+                          label={`Filter for ${field.name}: "${String(bucket.value)}"`}
+                          onClick={() => filterValue(bucket.value, false)}
+                          testId={`plus-${field.name}-${String(bucket.value)}`}
+                        />
+                      </Tooltip>
+                      <Tooltip content="Filter out value" delay="long" position="bottom">
+                        <SmallIconButton
+                          icon="minusInCircle"
+                          label={`Filter out ${field.name}: "${String(bucket.value)}"`}
+                          onClick={() => filterValue(bucket.value, true)}
+                          testId={`minus-${field.name}-${String(bucket.value)}`}
+                        />
+                      </Tooltip>
                     </div>
                   )}
                 </div>
@@ -457,19 +558,21 @@ function FieldDetailsView({
       </div>
       {!details.error && (
         <div className="vbdFieldPopover__footer">
-          {existsFilterAllowed ? (
-            <button
-              type="button"
-              className="atlLinkButton"
-              onClick={() => onAddFilters([pinned(existsFilter(field, indexPattern.id))])}
-              data-test-subj="fieldDetailsExistsLink"
-            >
-              Exists in {details.exists}
-            </button>
-          ) : (
-            details.exists
-          )}{' '}
-          / {details.total} records
+          <div className="vbdFieldPopover__footerText">
+            {existsFilterAllowed ? (
+              <button
+                type="button"
+                className="atlLinkButton vbdFieldPopover__link"
+                onClick={() => onAddFilters([pinned(existsFilter(field, indexPattern.id))])}
+                data-test-subj="fieldDetailsExistsLink"
+              >
+                Exists in {details.exists}
+              </button>
+            ) : (
+              details.exists
+            )}{' '}
+            / {details.total} records
+          </div>
         </div>
       )}
     </>
@@ -504,7 +607,7 @@ function ConfigPanel({
               context={context}
               dnd={dnd}
               onAdd={() => update((current) => withDraft(current, newDraft(current.visualization.activeVisualization?.aggConfigParams ?? [], schema)))}
-              onEdit={(agg) => update((current) => withDraft(current, agg))}
+              onEdit={(agg) => update((current) => withDraft(current, draftForEditing(current.visualization.activeVisualization?.aggConfigParams ?? [], agg)))}
               onDelete={(id) =>
                 update((current) =>
                   withAggs(
@@ -558,46 +661,57 @@ function Dropbox({
   const targetClass = (key: string) =>
     cx('vbdDropbox__field', 'vbdDropbox__target', dnd.dragging && 'vbdDropbox__target--valid', dnd.over === key && 'vbdDropbox__target--over');
 
+  // The text of an aggregation opens it as the original's link does, and from the keyboard too
+  const openOnKey = (agg: AggConfig) => (event: ReactKeyboardEvent) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    onEdit(agg);
+  };
+
   return (
     <div className="vbdDropbox">
-      <div className="vbdDropbox__label">{schema.title}</div>
+      <div className="vbdDropbox__labelRow">
+        <span className="vbdDropbox__label">{schema.title}</span>
+      </div>
       <div className="vbdDropbox__container" {...dnd.target(`${schema.name}:list`, { schema }, 'list')}>
-        {items.length > 0 && (
-          <div className="vbdDropbox__items">
-            {items.map((agg, index) => {
-              const key = `${schema.name}:${agg.id}`;
-              const label = aggLabel(agg, context);
-              return (
+        <div className="vbdDropbox__droppable">
+          {items.map((agg, index) => {
+            const key = `${schema.name}:${agg.id}`;
+            const label = aggLabel(agg, context);
+            return (
+              <div
+                key={agg.id}
+                className={cx('vbdDropbox__draggable', closing === agg.id && 'vbdDropbox__draggable--closing')}
+                {...dnd.source({ kind: 'agg', id: agg.id }, label)}
+              >
                 <div
-                  key={agg.id}
-                  className={cx('vbdDropbox__draggable', closing === agg.id && 'vbdDropbox__draggable--closing')}
-                  {...dnd.source({ kind: 'agg', id: agg.id }, label)}
+                  className={targetClass(key)}
+                  data-test-subj={`dropBoxField-${schema.name}-${index}`}
+                  {...dnd.target(key, { schema, aggId: agg.id }, 'item')}
                 >
-                  <div
-                    className={targetClass(key)}
-                    data-test-subj={`dropBoxField-${schema.name}-${index}`}
-                    {...dnd.target(key, { schema, aggId: agg.id }, 'item')}
-                  >
-                    <button type="button" className="atlLinkButton vbdDropbox__text" onClick={() => onEdit(agg)}>
+                  <div className="vbdDropbox__text" onClick={() => onEdit(agg)}>
+                    <a role="button" tabIndex={0} className="vbdDropbox__link" onKeyDown={openOnKey(agg)}>
                       {label}
-                    </button>
-                    <IconButton icon="cross" size="s" label={`Remove ${label}`} onClick={() => remove(agg.id)} testId="dropBoxRemoveBtn" />
+                    </a>
                   </div>
+                  <SmallIconButton icon="cross" subdued label={`Remove ${label}`} onClick={() => remove(agg.id)} testId="dropBoxRemoveBtn" />
                 </div>
-              );
-            })}
-          </div>
-        )}
-        {room && (
-          <div
-            className={targetClass(`${schema.name}:add`)}
-            data-test-subj={`dropBoxAddField-${schema.name}`}
-            {...dnd.target(`${schema.name}:add`, { schema }, 'add')}
-          >
-            <span className="vbdDropbox__hint">Click or drop to add</span>
-            <IconButton icon="plusCircle" size="s" label={`Add to ${schema.title}`} onClick={onAdd} testId="dropBoxAddBtn" />
-          </div>
-        )}
+              </div>
+            );
+          })}
+        </div>
+        <div>
+          {room && (
+            <div
+              className={targetClass(`${schema.name}:add`)}
+              data-test-subj={`dropBoxAddField-${schema.name}`}
+              {...dnd.target(`${schema.name}:add`, { schema }, 'add')}
+            >
+              <div className="vbdDropbox__hint">Click or drop to add</div>
+              <SmallIconButton icon="plusInCircle" label={`Add to ${schema.title}`} onClick={onAdd} testId="dropBoxAddBtn" />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -640,12 +754,13 @@ function SecondaryPanel({
 
   return (
     <>
-      <div className="vbdConfig__title vbdConfig__title--secondary">
+      <div className="vbdConfig__title">
         <button type="button" className="vbdConfig__back" aria-label="Close" onClick={() => update((current) => withDraft(current, undefined))} data-test-subj="panelCloseBtn">
           <Icon name="chevronLeft" />
         </button>
         <h2>{schema?.title ?? 'Edit'}</h2>
       </div>
+      <hr className="vbdConfig__rule" />
       {draft && indexPattern && (
         <div className="vbdConfig__editor">
           <AggEditor
@@ -660,5 +775,33 @@ function SecondaryPanel({
         </div>
       )}
     </>
+  );
+}
+
+/** The original's small icon button drawn with a small icon (`EuiSmallButtonIcon iconSize="s"`) */
+function SmallIconButton({
+  icon,
+  label,
+  onClick,
+  subdued,
+  testId,
+}: {
+  icon: IconName;
+  label: string;
+  onClick: () => void;
+  /** In the subdued colour, as a button that removes */
+  subdued?: boolean;
+  testId?: string;
+}) {
+  return (
+    <button
+      type="button"
+      className={cx('vbdIconButton', subdued && 'vbdIconButton--subdued')}
+      aria-label={label}
+      onClick={onClick}
+      data-test-subj={testId}
+    >
+      <Icon name={icon} size="s" />
+    </button>
   );
 }

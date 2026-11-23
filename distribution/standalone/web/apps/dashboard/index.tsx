@@ -2,63 +2,98 @@
 
 /* Dashboards: the list of them, and one of them on screen, looked at or edited. */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, EmptyPrompt, Loading } from '../../components/basic';
-import { FormRow, Switch, TextField } from '../../components/form';
-import { ConfirmModal, Flyout, Modal } from '../../components/overlay';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Button, EmptyPrompt, Link, Loading } from '../../components/basic';
+import { ConfirmModal, ContextMenu, Flyout, Popover } from '../../components/overlay';
 import type { TimeRange } from '../../lib/dates';
-import { mergeFilters } from '../../lib/query';
+import { uniqueFilters } from '../../lib/query';
 import { parseSearchSource } from '../../lib/search_source';
 import type { Filter, IndexPattern, Query } from '../../lib/types';
-import { appUrl, decodeState, encodeState } from '../../lib/url';
-import { getLocation, href, navigate, setHashParams, setLeaveGuard, useLocation } from '../../router';
+import { appUrl, decodeState, encodeQueryValue, encodeState } from '../../lib/url';
+import { enteredAnotherApplication, getLocation, href, locationState, navigate, setHashParams, setLocationState, useLocation } from '../../router';
 import { services } from '../../services';
 import { errorMessage } from '../../services/http';
 import type { SavedObject } from '../../services/saved_objects';
 import { TopNav, type TopNavItem } from '../../shell/chrome';
-import { isPinned, splitFilters } from '../../shell/filter_bar';
+import { FilterBar, isPinned, splitFilters } from '../../shell/filter_bar';
 import { Inspector } from '../../shell/inspect';
-import { Listing } from '../../shell/listing';
+import { Listing, ListingEmpty, type ListingColumn } from '../../shell/listing';
 import { defaultQueryLanguage } from '../../shell/query_bar';
-import { SaveModal, SavedObjectFinder, ShareModal } from '../../shell/saved_objects_ui';
+import { ShareModal } from '../../shell/saved_objects_ui';
 import { pageFiltersOf, savedQueryGlobalParam, type SavedQueryChange } from '../../shell/saved_query';
 import { SearchBar } from '../../shell/search_bar';
-import { addRecentlyAccessed, currentGlobalParam, setFullScreen, useAutoRefresh, useBreadcrumbs, useGlobalState } from '../../shell/state';
+import { addRecentlyAccessed, currentGlobalParam, globalParamWith, setFullScreen, useAutoRefresh, useBreadcrumbs, useGlobalState } from '../../shell/state';
 import type { VisInput } from '../../vis/request';
 import { makeTurns } from '../../vis/turns';
+import { NewVisModal } from '../visualize';
+import { VIS_BUILDER_TITLE, VIS_BUILDER_TYPE } from '../vis_builder/model';
+import {
+  asHeld,
+  cloneBase,
+  cloneTitle,
+  fullAppState,
+  marksDiffer,
+  openingMarks,
+  ownTime,
+  restoredOptions,
+  viewedFromAddress,
+  type ChangeMarks,
+  type UrlAppState,
+} from './app_state';
+import {
+  CloneModal,
+  CustomizePanelModal,
+  DashboardSaveModal,
+  EmptyDashboard,
+  ExitFullScreen,
+  OptionsMenu,
+  type DashboardSaveResult,
+} from './dialogs';
 import { DashboardGrid } from './grid';
 import {
   DEFAULT_PANEL,
-  compact,
+  createNewState,
+  dashboardBars,
   dashboardFromSavedObject,
+  dashboardQuery,
   dashboardToSavedObject,
   emptyDashboard,
   findPlace,
-  nextPanelIndex,
+  handedPanel,
+  layoutsDiffer,
+  newPanelIndex,
+  openedEmbedded,
+  orderAsOriginal,
+  panelsDiffer,
+  panelsFromUrl,
+  panelsToUrl,
+  placeBeside,
+  readingOrder,
+  samePanels,
+  settleLayout,
+  withHandedPanel,
+  type ContainerInfo,
   type Dashboard,
   type DashboardAttributes,
+  type DashboardOptions,
   type GridItem,
   type PanelState,
 } from './model';
 import { DashboardPanel, type LoadedObject, type PanelData } from './panel';
-import { VIS_BUILDER_TITLE, VIS_BUILDER_TYPE } from '../vis_builder/model';
+import { PanelFinder, type FoundObject, type PanelFinderType } from './panel_finder';
+import type { PanelAction } from './panel_menu';
 import '../../styles/dashboard.css';
 
 const BASE = '/app/dashboards';
 
-interface UrlAppState {
-  query?: Query;
-  filters?: Filter[];
-  viewMode?: 'view' | 'edit';
-  fullScreenMode?: boolean;
-  /** The id of the saved query loaded into the search bar */
-  savedQuery?: string;
-}
+// The header stays hidden while a page opened to be embedded in another is open, as the
+// original's: what the dashboard shows over its panels then follows from it
+const HEADER_SHOWN = !openedEmbedded(window.location.hash);
 
-const FINDER_TYPES = [
-  { type: 'visualization', name: 'Visualization', icon: 'visualize' as const },
-  { type: VIS_BUILDER_TYPE, name: VIS_BUILDER_TITLE, icon: 'visBuilder' as const },
-  { type: 'search', name: 'Saved search', icon: 'discover' as const },
+const FINDER_TYPES: PanelFinderType[] = [
+  { type: 'visualization', name: 'Visualization', icon: 'visualize' },
+  { type: VIS_BUILDER_TYPE, name: VIS_BUILDER_TITLE, icon: 'visBuilder' },
+  { type: 'search', name: 'Saved search', icon: 'discover' },
 ];
 
 export function Dashboards() {
@@ -71,62 +106,183 @@ export function Dashboards() {
 
 function DashboardList() {
   useBreadcrumbs([{ text: 'Dashboards' }]);
+  const { hashParams } = useLocation();
+  const titleParam = hashParams.title;
+  const filterParam = hashParams.filter ?? '';
+
+  // An address with `?title=` opens the dashboard of that title, or lists those with it
+  useEffect(() => {
+    if (!titleParam) return;
+    services.savedObjects
+      .find<{ title?: string }>({ type: 'dashboard', search: `"${titleParam}"`, searchFields: ['title'] })
+      .then((answer) => {
+        const matching = answer.saved_objects.filter(
+          (object) => (object.attributes.title ?? '').toLowerCase() === titleParam.toLowerCase()
+        );
+        if (matching.length === 1) navigate(appUrl(BASE, `/view/${encodeURIComponent(matching[0].id)}`), { replace: true });
+        else navigate(`${BASE}#/list?filter=${encodeQueryValue(`"${titleParam}"`)}`, { replace: true });
+      })
+      .catch(() => services.toasts.warning('Unable to filter by title'));
+  }, [titleParam]);
+
   return (
     <Listing
+      key={filterParam}
       title="Dashboards"
+      headingId="dashboardListingHeading"
       entity="dashboard"
       entities="dashboards"
       types={['dashboard']}
-      createLabel="Create dashboard"
+      fields={['title', 'type', 'description', 'updated_at']}
+      searchFields={['title^3', 'type', 'description']}
+      createLabel={'Create\u00a0Dashboard'}
       createTo={appUrl(BASE, '/create')}
       linkTo={(object) => appUrl(BASE, `/view/${encodeURIComponent(object.id)}`)}
+      titleTestId={dashboardTitleTestId}
       editTo={(object) => appUrl(BASE, `/view/${encodeURIComponent(object.id)}`, { _a: { viewMode: 'edit' } })}
-      emptyBody="You can combine data views from any OpenSearch Dashboards app into one dashboard and see everything in one place."
-      testId="dashboardLandingPage"
+      typeColumn={DASHBOARD_TYPE_COLUMN}
+      initialFilter={filterParam}
+      deleteErrors={{ title: 'Error deleting dashboard', per: 'first' }}
+      noItems={
+        <ListingEmpty
+          icon="dashboard"
+          headingId="dashboardListingHeading"
+          title="Create your first dashboard"
+          actions={
+            <Button variant="primary" icon="plus" to={appUrl(BASE, '/create')} testId="createDashboardPromptButton">
+              Create new dashboard
+            </Button>
+          }
+        >
+          <p>
+            You can combine data views from any OpenSearch Dashboards app into one dashboard and see everything in one place.
+          </p>
+          <p>
+            New to OpenSearch Dashboards? <Link to="/app/import_sample_data">Install some sample data</Link> to take a test
+            drive.
+          </p>
+        </ListingEmpty>
+      }
     />
   );
 }
 
+const dashboardTitleTestId = (title: string) => `dashboardListingTitleLink-${title.split(' ').join('-')}`;
+
+const DASHBOARD_TYPE_COLUMN: ListingColumn = { field: 'type', name: 'Type', value: () => 'Dashboard' };
+
+/** The same objects for panels that did not change, so that what is drawn from them holds still */
+function useStablePanels(panels: PanelState[]): PanelState[] {
+  const known = useRef(new Map<string, { key: string; panel: PanelState }>());
+  return useMemo(() => {
+    const next = new Map<string, { key: string; panel: PanelState }>();
+    const result = panels.map((panel) => {
+      const key = JSON.stringify(panel);
+      const previous = known.current.get(panel.panelIndex);
+      const kept = previous && previous.key === key ? previous.panel : panel;
+      next.set(panel.panelIndex, { key, panel: kept });
+      return kept;
+    });
+    known.current = next;
+    return result;
+  }, [panels]);
+}
+
+/**
+ * The panels as the original's grid leaves them, each as high up as those above allow, and the
+ * order the dashboard then keeps them in: when the grid moved one, the grid's own (reading order
+ * of the places it was given), else `order`.
+ */
+function settle(panels: PanelState[], order: string[]): { panels: PanelState[]; order: string[] } {
+  const given = panels.map((panel) => panel.gridData);
+  const layout = settleLayout(given);
+  if (!layoutsDiffer(layout, given)) return { panels, order };
+  return { panels: panels.map((panel, index) => ({ ...panel, gridData: layout[index] })), order: readingOrder(panels) };
+}
+
 function DashboardPage({ savedId }: { savedId?: string }) {
   const location = useLocation();
-  // Whether the address named a time range when the page opened: a dashboard's own gives way to it
-  const cameWithTime = useRef(location.hashParams._g !== undefined);
+  const rawApp = location.hashParams._a;
+  // The time range and refresh interval the address named when the page opened: a dashboard's
+  // own give way to them, each on its own
+  const cameWithGlobal = useRef(decodeState<{ time?: unknown; refreshInterval?: unknown }>(location.hashParams._g));
+  // What the address had when the page opened, which the original takes over what was saved
+  const cameWith = useRef(decodeState<UrlAppState>(location.hashParams._a));
+  // The query and options as they last came to the original, the order of their keys kept
+  const held = useRef<{ query?: Query; options?: DashboardOptions }>({});
   const [global, setGlobal] = useGlobalState();
   const [saved, setSaved] = useState<Dashboard | undefined>(savedId ? undefined : emptyDashboard());
-  const [draft, setDraft] = useState<Dashboard>(emptyDashboard());
+  // What changed on the panels while the dashboard is looked at: a legend opened, a map moved
+  const [viewPanels, setViewPanels] = useState<PanelState[]>();
   const [loadError, setLoadError] = useState<string>();
   const [objects, setObjects] = useState<Record<string, LoadedObject>>({});
   const [patterns, setPatterns] = useState<IndexPattern[]>([]);
   const [tick, setTick] = useState(0);
-  const [expanded, setExpanded] = useState<string>();
   const [dialog, setDialog] = useState<
-    | { kind: 'save' | 'clone' | 'share' | 'add' | 'options' | 'discard' }
+    | { kind: 'save' | 'clone' | 'share' | 'add' | 'discard' | 'create' }
     | { kind: 'inspect' | 'rename' | 'replace'; panel: string }
   >();
-  const [storeTime, setStoreTime] = useState(false);
-  const [draftTitle, setDraftTitle] = useState('');
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const panelData = useRef<Record<string, PanelData>>({});
+  const lastToast = useRef<number>();
 
-  const urlState = useMemo(() => decodeState<UrlAppState>(location.hashParams._a), [location.hashParams._a]);
+  const urlState = useMemo(() => decodeState<UrlAppState>(rawApp), [rawApp]);
   const editing = (urlState.viewMode ?? (savedId ? 'view' : 'edit')) === 'edit';
   const fullScreen = Boolean(urlState.fullScreenMode);
+  const expanded = urlState.expandedPanelId;
+  const defaultQuery = useMemo<Query>(() => ({ query: '', language: defaultQueryLanguage() }), []);
   const query: Query = useMemo(
-    () => urlState.query ?? saved?.query ?? { query: '', language: defaultQueryLanguage() },
-    [urlState.query, saved?.query]
+    () => (urlState.query === undefined ? saved?.query ?? defaultQuery : dashboardQuery(urlState.query)),
+    [urlState.query, saved?.query, defaultQuery]
   );
   const appFilters = useMemo(() => urlState.filters ?? saved?.filters ?? [], [urlState.filters, saved?.filters]);
   const filters = useMemo(() => [...global.filters, ...appFilters.filter((filter) => !isPinned(filter))], [global.filters, appFilters]);
+  const options: DashboardOptions = urlState.options ?? saved?.options ?? {};
+  const heldQuery = asHeld(query, held.current.query ?? (cameWith.current.query === undefined ? saved?.query ?? defaultQuery : undefined));
+  const heldOptions = asHeld(options, held.current.options ?? (cameWith.current.options === undefined ? saved?.options : undefined));
+  const title = urlState.title ?? saved?.title ?? '';
+  // The dashboard as its panels name it to the editor they are sent to: its title, and the id of
+  // its saved object, none while it is new
+  const container = useMemo<ContainerInfo>(() => ({ containerName: title, containerId: savedId ?? '' }), [title, savedId]);
+  const description = urlState.description ?? saved?.description ?? '';
+  const timeRestore = urlState.timeRestore ?? saved?.timeRestore ?? false;
 
+  // While the dashboard is edited its panels are in the address, as the original keeps them; those
+  // an address carries while it is looked at are the ones shown, as the original takes them
+  const urlPanelsKey = urlState.panels !== undefined ? JSON.stringify(urlState.panels) : '';
+  const urlPanels = useMemo(() => (urlPanelsKey ? panelsFromUrl(JSON.parse(urlPanelsKey)) : undefined), [urlPanelsKey]);
+  const panels = useStablePanels(urlPanels ?? viewPanels ?? saved?.panels ?? NO_PANELS);
+  const panelsNow = useRef(panels);
+  panelsNow.current = panels;
+
+  /** Changes the state in the address: each change a step back can undo, as in the original */
   const writeApp = useCallback(
-    (changes: UrlAppState, replace = false) => {
-      const latest = decodeState<UrlAppState>(location.hashParams._a);
-      setHashParams({ _a: encodeState({ ...latest, ...changes }) }, { replace });
+    (changes: Partial<UrlAppState>, replace = false) => {
+      const next: UrlAppState = { ...decodeState<UrlAppState>(getLocation().hashParams._a), ...changes };
+      if ((next.viewMode ?? (savedId ? 'view' : 'edit')) === 'view') delete next.panels;
+      setHashParams({ _a: encodeState(next) }, { replace });
     },
-    [location.hashParams._a]
+    [savedId]
   );
+  /**
+   * Changes the panels. A change that leaves them as they are is none, as in the original; else
+   * they take the original's order, from `base`: the order its container holds them in.
+   */
+  const setPanels = useCallback(
+    (next: PanelState[], base: string[] = panelsNow.current.map((panel) => panel.panelIndex), replace = false) => {
+      if (samePanels(next, panelsNow.current)) return;
+      const ordered = orderAsOriginal(next, base);
+      if (editing) writeApp({ panels: panelsToUrl(ordered) }, replace);
+      else setViewPanels(ordered);
+    },
+    [editing, writeApp]
+  );
+  const updatePanels = useCallback((change: (current: PanelState[]) => PanelState[]) => setPanels(change(panelsNow.current)), [setPanels]);
+
   const onSavedQueryChange = useCallback((change: SavedQueryChange) => {
     const { savedQuery: _previous, ...latest } = decodeState<UrlAppState>(getLocation().hashParams._a);
     const next: UrlAppState = { ...latest, query: change.query, filters: pageFiltersOf(change) };
+    held.current.query = change.query;
     if (change.id) next.savedQuery = change.id;
     setHashParams({ _g: savedQueryGlobalParam(change), _a: encodeState(next) }, { replace: change.replace });
   }, []);
@@ -141,23 +297,52 @@ function DashboardPage({ savedId }: { savedId?: string }) {
         if (!live) return;
         const dashboard = dashboardFromSavedObject(object);
         setSaved(dashboard);
-        setDraft(dashboard);
-        setStoreTime(dashboard.timeRestore);
         addRecentlyAccessed(appUrl(BASE, `/view/${encodeURIComponent(savedId)}`), dashboard.title, savedId);
-        if (dashboard.timeRestore && !cameWithTime.current && dashboard.timeFrom && dashboard.timeTo) {
-          setGlobal({
-            time: { from: dashboard.timeFrom, to: dashboard.timeTo },
-            ...(dashboard.refreshInterval ? { refreshInterval: dashboard.refreshInterval } : {}),
-          });
-        }
+        // The dashboard's own time comes with it, unless the address named one: no step back
+        const own = ownTime(dashboard, cameWithGlobal.current);
+        if (own.time || own.refreshInterval) setHashParams({ _g: globalParamWith(own) }, { replace: true });
       })
       .catch((failure) => live && setLoadError(errorMessage(failure)));
     return () => {
       live = false;
     };
-  }, [savedId, setGlobal]);
+  }, [savedId]);
 
-  const panelKey = draft.panels.map((panel) => `${panel.type}:${panel.id}`).join(',');
+  // Once open, the address holds the dashboard's whole state, as the original writes it: while the
+  // dashboard is looked at, without its panels, those it carried kept as the ones shown before
+  // they leave it (else, between the two, the page would show the saved ones for a moment)
+  useEffect(() => {
+    if (!saved) return;
+    const raw = getLocation().hashParams._a;
+    const current = decodeState<UrlAppState>(raw);
+    const shown = viewedFromAddress(saved, current);
+    if (shown && (!viewPanels || panelsDiffer(shown, viewPanels))) {
+      setViewPanels(shown);
+      return;
+    }
+    const full = encodeState(fullAppState(saved, current, panelsNow.current, defaultQuery));
+    if (full !== raw) setHashParams({ _a: full }, { replace: true });
+  }, [saved, rawApp, defaultQuery, viewPanels]);
+
+  // A panel an editor hands back as it comes back, as the original's dashboard takes it when it
+  // opens: the panel sent there, given what the editor gives it, or else a new one. It is taken
+  // once, which a reload, keeping what the entry of the history carries, does not undo.
+  useEffect(() => {
+    if (!saved) return;
+    const handed = handedPanel(locationState<unknown>());
+    if (!handed) return;
+    setLocationState(undefined);
+    const current = panelsNow.current;
+    const next = withHandedPanel(current, handed, newPanelIndex);
+    if (!next) return;
+    if (next.length === current.length) setPanels(next);
+    else {
+      const settled = settle(next, current.map((panel) => panel.panelIndex));
+      setPanels(settled.panels, settled.order);
+    }
+  }, [saved, setPanels]);
+
+  const panelKey = panels.map((panel) => `${panel.type}:${panel.id}`).join(',');
   useEffect(() => {
     const missing = [...new Set(panelKey.split(',').filter((key) => key && !(key in objects)))];
     if (missing.length === 0) return undefined;
@@ -199,39 +384,60 @@ function DashboardPage({ savedId }: { savedId?: string }) {
   useEffect(() => {
     let live = true;
     const ids = patternIds ? patternIds.split(',') : [];
-    Promise.allSettled(ids.map((id) => services.indexPatterns.get(id))).then((results) => {
-      if (!live) return;
-      setPatterns(results.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : [])));
-    });
+    Promise.allSettled(ids.map((id) => services.indexPatterns.get(id)))
+      .then(async (results) => {
+        const found = results.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []));
+        if (found.length > 0) return found;
+        // As the original: with none behind the panels, as on a new dashboard, the bars work on
+        // the default index pattern, and "Add filter" offers its fields
+        const fallback = await services.indexPatterns.getDefault().catch(() => undefined);
+        return fallback ? [fallback] : [];
+      })
+      .then((found) => {
+        if (live) setPatterns(found);
+      });
     return () => {
       live = false;
     };
   }, [patternIds]);
 
   // --- The page's state ---
-  const title = saved?.title ?? '';
+  // Changed, as the original counts it (its `isDirty`): the panels, the query or the filters, or
+  // the time while the dashboard keeps its own (not its options), changed after the page opened
+  // it, even if changed back since; a save or a discard clears it. A page that opens the
+  // dashboard again, by a reload or on the way back from an editor, starts unchanged, whatever its
+  // address carries. Being left, the original asks nothing: its address keeps the changes.
+  const [changed, setChanged] = useState(false);
+  const openedWith = useRef<ChangeMarks>();
+  const marks = useMemo<ChangeMarks>(
+    () => ({ panels, query, filters, ...(timeRestore ? { time: global.time, refreshInterval: global.refreshInterval } : {}) }),
+    [panels, query, filters, timeRestore, global.time, global.refreshInterval]
+  );
+  useEffect(() => {
+    if (!saved) return;
+    if (!openedWith.current) openedWith.current = openingMarks(marks, saved, cameWithGlobal.current);
+    else if (!changed && marksDiffer(marks, openedWith.current)) setChanged(true);
+  }, [saved, marks, changed]);
+  const dirty = editing && changed;
+
+  const trailTitle = savedId ? saved?.title ?? '' : 'New Dashboard';
   useBreadcrumbs([
     { text: 'Dashboards', to: appUrl(BASE, '/list') },
-    { text: !savedId ? 'New Dashboard' : editing ? `Editing ${title}` : title || 'Dashboard' },
+    { text: editing ? `Editing ${trailTitle}${dirty ? ' (unsaved)' : ''}` : trailTitle || 'Dashboard' },
   ]);
-
-  const dirty = useMemo(() => {
-    if (!saved) return false;
-    return (
-      JSON.stringify(draft.panels) !== JSON.stringify(saved.panels) || JSON.stringify(draft.options) !== JSON.stringify(saved.options)
-    );
-  }, [draft, saved]);
+  // The document's title as the original's: a saved dashboard's own title before the product's
+  // name; a new one leaves it as it was, which is the product's name when the page opens on it
+  const [titleBefore] = useState(() => (enteredAnotherApplication() ? services.boot.name : document.title));
+  const docTitle = savedId && saved ? [saved.title, services.boot.name].join(' - ') : titleBefore;
   useEffect(() => {
-    if (!editing || !dirty) return undefined;
-    setLeaveGuard(() => window.confirm('Leave this dashboard? Changes you made to it have not been saved.'));
-    return () => setLeaveGuard(undefined);
-  }, [editing, dirty]);
+    document.title = docTitle;
+  });
 
   useEffect(() => {
     setFullScreen(fullScreen);
     if (!fullScreen) return undefined;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') writeApp({ fullScreenMode: false }, true);
+      if (event.key === 'Escape') writeApp({ fullScreenMode: false });
     };
     document.addEventListener('keydown', onKey);
     return () => {
@@ -244,13 +450,18 @@ function DashboardPage({ savedId }: { savedId?: string }) {
   useAutoRefresh(global.refreshInterval, refresh);
 
   const input = useMemo<VisInput>(() => ({ time: global.time, query, filters }), [global.time, query, filters]);
+  // The dashboard's state as the original's container holds it: a change of it draws its grid again
+  const dashboardState = useMemo(
+    () => JSON.stringify({ panels, input, tick, refresh: global.refreshInterval, editing, options, expanded, fullScreen, title, description, timeRestore }),
+    [panels, input, tick, global.refreshInterval, editing, options, expanded, fullScreen, title, description, timeRestore]
+  );
   // Each time the page asks for its data, the panels take their colours in reading order
-  const readingOrder = [...draft.panels]
-    .sort((a, b) => a.gridData.y - b.gridData.y || a.gridData.x - b.gridData.x)
-    .map((panel) => panel.panelIndex)
-    .join('\n');
+  const turnOrder = readingOrder(panels).join('\n');
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const turns = useMemo(() => makeTurns(readingOrder === '' ? [] : readingOrder.split('\n')), [readingOrder, input, tick]);
+  const turns = useMemo(() => makeTurns(turnOrder === '' ? [] : turnOrder.split('\n')), [turnOrder, input, tick]);
+  // A panel not drawn yet, far from the window, holds up none after it: it takes its colours when
+  // it comes to be drawn, as the original's charts take theirs as they are drawn
+  const onWaiting = useCallback((id: string) => turns.get(id)?.done(), [turns]);
 
   const setFilters = useCallback(
     (next: Filter[]) => {
@@ -260,111 +471,208 @@ function DashboardPage({ savedId }: { savedId?: string }) {
     },
     [global.filters, appFilters, setGlobal, writeApp]
   );
+  // Added as the original's filter manager adds them: after the others, a filter that asks what
+  // one there asks taking its place (or, for a pinned one, changing it where it is). A
+  // visualization's filters are pinned when filters:pinnedByDefault asks; a saved search's stay
+  // the dashboard's own, as the original's search embeddable marks them
   const addFilters = useCallback(
-    (added: Filter[]) => {
-      const pinned = services.uiSettings.get('filters:pinnedByDefault', false);
-      setFilters(mergeFilters(filters, pinned ? added.map((filter) => ({ ...filter, $state: { store: 'globalState' as const } })) : added));
+    (added: Filter[], asGiven = false) => {
+      const pinned = !asGiven && services.uiSettings.get('filters:pinnedByDefault', false);
+      const incoming = pinned ? added.map((filter) => ({ ...filter, $state: { store: 'globalState' as const } })) : added;
+      setFilters(uniqueFilters([...filters, ...incoming]));
     },
     [filters, setFilters]
   );
   const setTime = useCallback((time: TimeRange) => setGlobal({ time }), [setGlobal]);
 
-  const updatePanels = useCallback((change: (panels: PanelState[]) => PanelState[]) => {
-    setDraft((current) => ({ ...current, panels: change(current.panels) }));
-  }, []);
+  // The grid hands its layout back in reading order of the places it had, and the container takes
+  // the panels in that order
   const onLayoutChange = useCallback(
-    (layout: GridItem[]) => {
-      updatePanels((panels) =>
-        panels.map((panel) => {
-          const item = layout.find((candidate) => candidate.i === panel.panelIndex);
-          return item ? { ...panel, gridData: item } : panel;
-        })
-      );
+    (layout: GridItem[], settled?: boolean) => {
+      const current = panelsNow.current;
+      const next = current.map((panel) => {
+        const item = layout.find((candidate) => candidate.i === panel.panelIndex);
+        return item ? { ...panel, gridData: item } : panel;
+      });
+      setPanels(next, readingOrder(current), settled);
     },
-    [updatePanels]
+    [setPanels]
   );
   const onConfig = useCallback(
     (panelIndex: string, config: Record<string, unknown>) => {
-      updatePanels((panels) => panels.map((panel) => (panel.panelIndex === panelIndex ? { ...panel, embeddableConfig: config } : panel)));
+      updatePanels((current) => current.map((panel) => (panel.panelIndex === panelIndex ? { ...panel, embeddableConfig: config } : panel)));
     },
     [updatePanels]
   );
   const onData = useCallback((panelIndex: string, data: PanelData) => {
     panelData.current[panelIndex] = data;
   }, []);
-  const onAction = useCallback(
-    (action: 'expand' | 'inspect' | 'remove' | 'replace' | 'rename', panelIndex: string) => {
-      if (action === 'expand') setExpanded((current) => (current === panelIndex ? undefined : panelIndex));
-      else if (action === 'remove') {
-        updatePanels((panels) => {
-          const kept = panels.filter((panel) => panel.panelIndex !== panelIndex);
-          const layout = compact(kept.map((panel) => panel.gridData));
-          return kept.map((panel, index) => ({ ...panel, gridData: layout[index] }));
+
+  /** A message that a panel came, in place of the one before it, as the original's flyouts tell it */
+  const toastAdded = useCallback((name: string) => {
+    if (lastToast.current) services.toasts.dismiss(lastToast.current);
+    lastToast.current = services.toasts.success(`${name} was added`);
+  }, []);
+
+  const clonePanel = useCallback(
+    async (panelIndex: string) => {
+      const panel = panelsNow.current.find((candidate) => candidate.panelIndex === panelIndex);
+      const object = panel ? objects[`${panel.type}:${panel.id}`]?.object : undefined;
+      if (!panel || !object) return;
+      try {
+        // The panel's object is copied, titled as a copy, and the copy goes beside the panel
+        const objectTitle = String((object.attributes as { title?: string }).title ?? '');
+        const similar = await services.savedObjects.find({
+          type: panel.type,
+          perPage: 0,
+          fields: ['title'],
+          searchFields: ['title'],
+          search: `"${cloneBase(objectTitle)}"`,
         });
-        setExpanded(undefined);
-      } else {
-        if (action === 'rename') {
-          const panel = draft.panels.find((candidate) => candidate.panelIndex === panelIndex);
-          const loaded = panel ? objects[`${panel.type}:${panel.id}`] : undefined;
-          setDraftTitle(panel?.title ?? (loaded?.object?.attributes as { title?: string } | undefined)?.title ?? '');
-        }
-        setDialog({ kind: action, panel: panelIndex });
+        const copy = await services.savedObjects.create(
+          panel.type,
+          { ...object.attributes, title: cloneTitle(objectTitle, similar.total) },
+          { references: object.references }
+        );
+        const current = panelsNow.current;
+        const { place, moved } = placeBeside(
+          current.map((candidate) => candidate.gridData),
+          panelIndex
+        );
+        const id = newPanelIndex();
+        const added: PanelState = {
+          panelIndex: id,
+          gridData: { x: place.x, y: place.y, w: panel.gridData.w, h: panel.gridData.h, i: id },
+          type: panel.type,
+          id: copy.id,
+          embeddableConfig: panel.embeddableConfig,
+          ...(panel.title !== undefined ? { title: panel.title } : {}),
+        };
+        // The copy comes in place of a placeholder the grid packs with the others, and last
+        const placed = [...current.map((candidate, index) => ({ ...candidate, gridData: moved[index] })), added];
+        const settled = settle(placed, current.map((candidate) => candidate.panelIndex));
+        setPanels(
+          settled.panels,
+          settled.order.filter((key) => key !== id)
+        );
+        services.toasts.success('Cloned panel');
+      } catch (failure) {
+        services.toasts.error(failure, 'The panel could not be cloned');
       }
     },
-    [updatePanels, draft.panels, objects]
+    [objects, setPanels]
   );
 
-  const addPanel = (object: SavedObject<{ title: string }>) => {
-    updatePanels((panels) => {
-      const panelIndex = nextPanelIndex(panels);
-      const place = findPlace(panels.map((panel) => panel.gridData));
-      return [
-        ...panels,
-        { panelIndex, type: object.type, id: object.id, embeddableConfig: {}, gridData: { i: panelIndex, ...place, ...DEFAULT_PANEL } },
-      ];
-    });
-    services.toasts.success(`${object.attributes.title || 'The panel'} was added`);
+  const onAction = useCallback(
+    (action: PanelAction, panelIndex: string) => {
+      if (action === 'expand') writeApp({ expandedPanelId: expanded === panelIndex ? undefined : panelIndex });
+      else if (action === 'remove') {
+        const remaining = panelsNow.current.filter((panel) => panel.panelIndex !== panelIndex);
+        const settled = settle(remaining, remaining.map((panel) => panel.panelIndex));
+        setPanels(settled.panels, settled.order);
+        if (expanded === panelIndex) writeApp({ expandedPanelId: undefined }, true);
+      } else if (action === 'clone') void clonePanel(panelIndex);
+      else setDialog({ kind: action, panel: panelIndex });
+    },
+    [writeApp, setPanels, expanded, clonePanel]
+  );
+
+  const addPanel = (object: FoundObject, name: string) => {
+    const current = panelsNow.current;
+    const panelIndex = newPanelIndex();
+    const place = findPlace(current.map((panel) => panel.gridData));
+    const added: PanelState = {
+      panelIndex,
+      gridData: { x: place.x, y: place.y, w: DEFAULT_PANEL.w, h: DEFAULT_PANEL.h, i: panelIndex },
+      type: object.type,
+      id: object.id,
+      embeddableConfig: {},
+    };
+    const settled = settle([...current, added], current.map((panel) => panel.panelIndex));
+    setPanels(settled.panels, settled.order);
+    toastAdded(name);
   };
 
-  const save = async ({ title: newTitle, description, asNew }: { title: string; description: string; asNew: boolean }) => {
+  const replacePanel = (panelIndex: string, object: FoundObject, name: string) => {
+    const current = panelsNow.current;
+    const old = current.find((panel) => panel.panelIndex === panelIndex);
+    if (!old) return;
+    // In the original's way: a new panel in the old one's place, after the others
+    const id = newPanelIndex();
+    const replacement: PanelState = { panelIndex: id, gridData: { ...old.gridData, i: id }, type: object.type, id: object.id, embeddableConfig: {} };
+    setPanels([...current.filter((panel) => panel.panelIndex !== panelIndex), replacement]);
+    toastAdded(name);
+    setDialog(undefined);
+  };
+
+  const save = async (result: DashboardSaveResult): Promise<void> => {
+    if (!saved) return;
     const dashboard: Dashboard = {
-      ...draft,
-      title: newTitle,
-      description,
-      query,
+      ...saved,
+      title: result.title,
+      description: result.description,
+      panels: panelsNow.current,
+      options: heldOptions,
+      query: heldQuery,
       filters: appFilters.filter((filter) => !isPinned(filter)),
-      timeRestore: storeTime,
-      timeFrom: storeTime ? global.time.from : undefined,
-      timeTo: storeTime ? global.time.to : undefined,
-      refreshInterval: storeTime ? global.refreshInterval : undefined,
+      timeRestore: result.timeRestore,
+      timeFrom: result.timeRestore ? global.time.from : undefined,
+      timeTo: result.timeRestore ? global.time.to : undefined,
+      refreshInterval: result.timeRestore ? global.refreshInterval : undefined,
     };
     const { attributes, references } = dashboardToSavedObject(dashboard);
-    const object =
-      saved?.id && !asNew
-        ? await services.savedObjects.update('dashboard', saved.id, attributes, { references })
-        : await services.savedObjects.create('dashboard', attributes, { references });
-    const stored = { ...dashboard, id: object.id, version: object.version };
-    setSaved(stored);
-    setDraft(stored);
+    let object: SavedObject<DashboardAttributes>;
+    try {
+      object = await services.savedObjects.create<DashboardAttributes>('dashboard', attributes, {
+        id: saved.id && !result.asNew ? saved.id : undefined,
+        overwrite: true,
+        references,
+      });
+    } catch (failure) {
+      setDialog(undefined);
+      services.toasts.danger(`Dashboard '${result.title}' was not saved. Error: ${errorMessage(failure)}`);
+      return;
+    }
     setDialog(undefined);
-    services.toasts.success(`Dashboard “${newTitle}” was saved`);
-    setLeaveGuard(undefined);
+    services.toasts.success(`Dashboard '${result.title}' was saved`);
+    const shown: Partial<UrlAppState> = { title: result.title, description: result.description, timeRestore: result.timeRestore, viewMode: 'view' };
     if (object.id !== savedId) {
-      navigate(appUrl(BASE, `/view/${encodeURIComponent(object.id)}`, { _g: currentGlobalParam() }), { force: true });
-    } else writeApp({ viewMode: 'view' });
+      const { panels: _panels, ...rest } = decodeState<UrlAppState>(getLocation().hashParams._a);
+      navigate(
+        appUrl(BASE, `/view/${encodeURIComponent(object.id)}`, { _g: currentGlobalParam(), _a: { ...rest, ...shown } }),
+        { force: true }
+      );
+      return;
+    }
+    // What was saved, read back as a dashboard is read; it is not changed any more
+    setSaved(dashboardFromSavedObject({ id: object.id, attributes, references, version: object.version }));
+    setViewPanels(undefined);
+    openedWith.current = undefined;
+    setChanged(false);
+    writeApp(shown);
   };
 
-  const clone = async () => {
+  const discard = () => {
     if (!saved) return;
-    const { attributes, references } = dashboardToSavedObject({ ...saved, title: draftTitle.trim() || `${saved.title} Copy` });
-    try {
-      const object = await services.savedObjects.create('dashboard', attributes, { references });
-      setDialog(undefined);
-      services.toasts.success(`Dashboard “${attributes.title}” was created`);
-      navigate(appUrl(BASE, `/view/${encodeURIComponent(object.id)}`, { _g: currentGlobalParam() }));
-    } catch (failure) {
-      services.toasts.error(failure, 'The dashboard could not be cloned');
-    }
+    setDialog(undefined);
+    setViewPanels(undefined);
+    openedWith.current = undefined;
+    setChanged(false);
+    held.current = { query: saved.query ?? defaultQuery, options: restoredOptions(saved.options) };
+    // In place of the step being discarded, as the original writes it
+    writeApp(
+      {
+        viewMode: 'view',
+        panels: undefined,
+        filters: saved.filters,
+        query: held.current.query,
+        options: held.current.options,
+        timeRestore: saved.timeRestore,
+      },
+      true
+    );
+    const own = ownTime(saved);
+    if (own.time) setGlobal(own);
   };
 
   // --- What is drawn ---
@@ -389,50 +697,92 @@ function DashboardPage({ savedId }: { savedId?: string }) {
 
   const navItems: TopNavItem[] = editing
     ? [
-        { id: 'save', label: 'Save', emphasize: true, icon: 'save', onClick: () => setDialog({ kind: 'save' }), testId: 'dashboardSaveMenuItem' },
+        {
+          id: 'options',
+          label: 'Options',
+          onClick: () => setOptionsOpen((open) => !open),
+          testId: 'dashboardOptionsButton',
+          wrap: (button) => (
+            <Popover open={optionsOpen} onClose={() => setOptionsOpen(false)} position="downCenter" className="dshOptionsPopover" button={button}>
+              <OptionsMenu
+                options={options}
+                onChange={(next) => {
+                  held.current.options = { ...heldOptions, ...next };
+                  writeApp({ options: next });
+                }}
+              />
+            </Popover>
+          ),
+        },
+        { id: 'share', label: 'Share', onClick: () => setDialog({ kind: 'share' }), testId: 'shareTopNavButton' },
+        { id: 'add', label: 'Add', onClick: () => setDialog({ kind: 'add' }), testId: 'dashboardAddPanelButton' },
         {
           id: 'cancel',
           label: 'Cancel',
-          onClick: () => {
-            if (dirty) setDialog({ kind: 'discard' });
-            else if (savedId) writeApp({ viewMode: 'view' });
-            else navigate(appUrl(BASE, '/list'));
-          },
+          onClick: () => (dirty ? setDialog({ kind: 'discard' }) : writeApp({ viewMode: 'view' })),
           testId: 'dashboardViewOnlyMode',
         },
-        { id: 'add', label: 'Add', onClick: () => setDialog({ kind: 'add' }), testId: 'dashboardAddPanelButton' },
-        { id: 'options', label: 'Options', onClick: () => setDialog({ kind: 'options' }), testId: 'dashboardOptionsButton' },
-        { id: 'share', label: 'Share', onClick: () => setDialog({ kind: 'share' }), testId: 'shareTopNavButton' },
+        { id: 'save', label: 'Save', onClick: () => setDialog({ kind: 'save' }), testId: 'dashboardSaveMenuItem' },
+        {
+          id: 'addNew',
+          label: 'Create new',
+          emphasize: true,
+          icon: 'plus',
+          onClick: () => setDialog({ kind: 'create' }),
+          testId: 'dashboardAddNewPanelButton',
+        },
       ]
     : [
         { id: 'fullScreen', label: 'Full screen', onClick: () => writeApp({ fullScreenMode: true }), testId: 'dashboardFullScreenMode' },
         { id: 'share', label: 'Share', onClick: () => setDialog({ kind: 'share' }), testId: 'shareTopNavButton' },
+        { id: 'clone', label: 'Clone', onClick: () => setDialog({ kind: 'clone' }), testId: 'dashboardClone' },
         {
-          id: 'clone',
-          label: 'Clone',
-          onClick: () => {
-            setDraftTitle(`${saved.title} Copy`);
-            setDialog({ kind: 'clone' });
-          },
-          testId: 'dashboardClone',
+          id: 'edit',
+          label: 'Edit',
+          emphasize: true,
+          icon: 'pencil',
+          onClick: () => writeApp({ viewMode: 'edit', panels: panelsToUrl(panelsNow.current) }),
+          testId: 'dashboardEditMode',
+          // As the original's (`eui-hideFor--s eui-hideFor--xs`): not in a window narrower than
+          // 768 pixels, where the panels are stacked and the grid cannot be edited
+          hideFor: ['xs', 's'],
         },
-        { id: 'edit', label: 'Edit', emphasize: true, icon: 'pencil', onClick: () => writeApp({ viewMode: 'edit' }), testId: 'dashboardEditMode' },
       ];
 
-  const layout = draft.panels.map((panel) => panel.gridData);
-  const inspected = dialog?.kind === 'inspect' ? draft.panels.find((panel) => panel.panelIndex === dialog.panel) : undefined;
-  const inspectedTitle = inspected
-    ? (inspected.title ?? (objects[`${inspected.type}:${inspected.id}`]?.object?.attributes as { title?: string } | undefined)?.title ?? '')
-    : '';
+  const layout = panels.map((panel) => panel.gridData);
+  const panelOf = (panelIndex: string) => panels.find((panel) => panel.panelIndex === panelIndex);
+  const objectTitleOf = (panel: PanelState | undefined) =>
+    panel ? ((objects[`${panel.type}:${panel.id}`]?.object?.attributes as { title?: string } | undefined)?.title ?? '') : '';
+  const inspected = dialog?.kind === 'inspect' ? panelOf(dialog.panel) : undefined;
+  const renamed = dialog?.kind === 'rename' ? panelOf(dialog.panel) : undefined;
+  const replaced = dialog?.kind === 'replace' ? panelOf(dialog.panel) : undefined;
+  const bars = dashboardBars(location.hashParams, {
+    headerShown: HEADER_SHOWN,
+    fullScreen,
+    hasFilters: appFilters.some((filter) => !isPinned(filter)),
+  });
 
   return (
     <div className={`dshPage${fullScreen ? ' dshPage--fullScreen' : ''}`} data-test-subj="dashboardViewport">
-      {!fullScreen && <TopNav items={navItems} />}
-      {!fullScreen && (
+      {bars.topMenu && (bars.inlineMenu ? <InlineTopNav items={navItems} /> : <TopNav items={navItems} />)}
+      {!bars.queryInput && !bars.datePicker ? (
+        bars.filterBar && (
+          // The filters alone, without the row of the query and the time, as the original's bar has them
+          <div className="shlSearchBar" data-test-subj="globalQueryBar">
+            <FilterBar filters={filters} onChange={setFilters} indexPatterns={patterns} />
+          </div>
+        )
+      ) : (
         <SearchBar
+          showQuery={bars.queryInput}
+          showTime={bars.datePicker}
+          showFilters={bars.filterBar}
           indexPatterns={patterns}
           query={query}
-          onQuerySubmit={(next) => writeApp({ query: next })}
+          onQuerySubmit={(next) => {
+            held.current.query = next;
+            writeApp({ query: next });
+          }}
           filters={filters}
           onFiltersChange={setFilters}
           time={global.time}
@@ -444,40 +794,24 @@ function DashboardPage({ savedId }: { savedId?: string }) {
           onSavedQueryChange={onSavedQueryChange}
         />
       )}
-      {draft.panels.length === 0 ? (
-        <div className="dshEmpty">
-          <EmptyPrompt
-            icon="dashboard"
-            title="This dashboard is empty. Let’s fill it up!"
-            actions={
-              editing ? (
-                <div className="atlRow">
-                  <Button variant="primary" icon="plus" onClick={() => setDialog({ kind: 'add' })} testId="emptyDashboardAddPanelButton">
-                    Add an existing object
-                  </Button>
-                  <Button to="/app/visualize#/create">Create new</Button>
-                </div>
-              ) : (
-                <Button variant="primary" icon="pencil" onClick={() => writeApp({ viewMode: 'edit' })}>
-                  Edit dashboard
-                </Button>
-              )
-            }
-          >
-            {editing
-              ? 'Add a visualization or a saved search you already have, or create a new visualization.'
-              : 'Edit the dashboard to add panels to it.'}
-          </EmptyPrompt>
-        </div>
+      {panels.length === 0 ? (
+        <EmptyDashboard
+          editing={editing}
+          onAdd={() => setDialog({ kind: 'add' })}
+          onCreate={() => setDialog({ kind: 'create' })}
+          onEdit={() => writeApp({ viewMode: 'edit', panels: [] })}
+        />
       ) : (
         <DashboardGrid
           layout={layout}
-          useMargins={draft.options.useMargins}
+          useMargins={options.useMargins === true}
           editing={editing && !fullScreen}
-          expanded={expanded}
+          dashboardState={dashboardState}
+          expanded={expanded && panelOf(expanded) ? expanded : undefined}
+          onWaiting={onWaiting}
           onLayoutChange={onLayoutChange}
           renderPanel={(item, handlers) => {
-            const panel = draft.panels.find((candidate) => candidate.panelIndex === item.i);
+            const panel = panelOf(item.i);
             if (!panel) return null;
             return (
               <DashboardPanel
@@ -487,8 +821,9 @@ function DashboardPage({ savedId }: { savedId?: string }) {
                 tick={tick}
                 turn={turns.get(panel.panelIndex)}
                 editing={editing && !fullScreen}
-                hideTitle={draft.options.hidePanelTitles}
+                hideTitle={options.hidePanelTitles === true}
                 expanded={expanded === panel.panelIndex}
+                container={container}
                 dragging={handlers.dragging}
                 onDragStart={handlers.onDragStart}
                 onResizeStart={handlers.onResizeStart}
@@ -503,50 +838,24 @@ function DashboardPage({ savedId }: { savedId?: string }) {
           }}
         />
       )}
-      {fullScreen && (
-        <Button className="dshExitFullScreen" icon="collapse" onClick={() => writeApp({ fullScreenMode: false }, true)} testId="exitFullScreenModeText">
-          Exit full screen
-        </Button>
-      )}
+      {fullScreen && <ExitFullScreen onExit={() => writeApp({ fullScreenMode: false })} />}
 
       {dialog?.kind === 'save' && (
-        <SaveModal
-          objectType="dashboard"
-          title={saved.title}
-          description={saved.description}
-          showDescription
+        <DashboardSaveModal
+          title={title}
+          description={description}
+          timeRestore={timeRestore}
           existing={Boolean(saved.id)}
           onSave={save}
           onClose={() => setDialog(undefined)}
-        >
-          <Switch
-            checked={storeTime}
-            onChange={setStoreTime}
-            label="Store time with dashboard"
-            testId="storeTimeWithDashboard"
-          />
-          <p className="atlSubdued atlSmall">This changes the time filter to the currently selected time each time this dashboard is loaded.</p>
-        </SaveModal>
+        />
       )}
       {dialog?.kind === 'clone' && (
-        <Modal
-          title="Clone dashboard"
+        <CloneModal
+          title={`${title} Copy`}
+          onClone={(newTitle) => save({ title: newTitle, description, asNew: true, timeRestore })}
           onClose={() => setDialog(undefined)}
-          footer={
-            <>
-              <Button variant="empty" onClick={() => setDialog(undefined)}>
-                Cancel
-              </Button>
-              <Button variant="primary" onClick={clone} testId="cloneConfirmButton">
-                Confirm clone
-              </Button>
-            </>
-          }
-        >
-          <FormRow label="Enter a new name for your dashboard" full>
-            <TextField value={draftTitle} onChange={setDraftTitle} testId="clonedDashboardTitle" />
-          </FormRow>
-        </Modal>
+        />
       )}
       {dialog?.kind === 'share' && (
         <ShareModal
@@ -555,117 +864,73 @@ function DashboardPage({ savedId }: { savedId?: string }) {
           onClose={() => setDialog(undefined)}
         />
       )}
-      {dialog?.kind === 'options' && (
-        <Modal
-          title="Options"
-          onClose={() => setDialog(undefined)}
-          footer={
-            <Button variant="primary" onClick={() => setDialog(undefined)}>
-              Done
-            </Button>
-          }
-        >
-          <div className="atlStack">
-            <Switch
-              checked={draft.options.useMargins}
-              onChange={(useMargins) => setDraft((current) => ({ ...current, options: { ...current.options, useMargins } }))}
-              label="Use margins between panels"
-              testId="dashboardMarginsCheckbox"
-            />
-            <Switch
-              checked={!draft.options.hidePanelTitles}
-              onChange={(show) => setDraft((current) => ({ ...current, options: { ...current.options, hidePanelTitles: !show } }))}
-              label="Show panel titles"
-              testId="dashboardPanelTitlesCheckbox"
-            />
-          </div>
-        </Modal>
+      {dialog?.kind === 'create' && (
+        // As the original's visualization factory opens it from a dashboard: the editor is told the
+        // application and the dashboard it came from, to go back there with what it saves
+        <NewVisModal onClose={() => setDialog(undefined)} {...createNewState(container)} />
       )}
       {dialog?.kind === 'discard' && (
         <ConfirmModal
           title="Discard changes to dashboard?"
           confirmLabel="Discard changes"
           cancelLabel="Continue editing"
-          danger
+          focusCancel
+          narrow
           onCancel={() => setDialog(undefined)}
-          onConfirm={() => {
-            setDraft(saved);
-            setDialog(undefined);
-            setLeaveGuard(undefined);
-            if (savedId) writeApp({ viewMode: 'view' });
-            else navigate(appUrl(BASE, '/list'), { force: true });
-          }}
+          onConfirm={discard}
         >
           Once you discard your changes, there's no getting them back.
         </ConfirmModal>
       )}
-      {(dialog?.kind === 'add' || dialog?.kind === 'replace') && (
-        <Flyout
-          title={dialog.kind === 'add' ? 'Add panels' : 'Replace panel'}
-          onClose={() => setDialog(undefined)}
-          testId="dashboardAddPanel"
-          footer={
-            <Button to="/app/visualize#/create" icon="plus">
-              Create new
-            </Button>
-          }
-        >
-          <SavedObjectFinder
-            types={FINDER_TYPES}
-            onChoose={(object) => {
-              if (dialog.kind === 'add') addPanel(object);
-              else if (dialog.kind === 'replace') {
-                const replaced = dialog.panel;
-                updatePanels((panels) =>
-                  panels.map((panel) =>
-                    panel.panelIndex === replaced ? { ...panel, type: object.type, id: object.id, title: undefined, embeddableConfig: {} } : panel
-                  )
-                );
-                setDialog(undefined);
-              }
-            }}
-          />
+      {dialog?.kind === 'add' && (
+        <Flyout title="Add panels" onClose={() => setDialog(undefined)} testId="dashboardAddPanel" className="dshPanelFlyout" mask>
+          <PanelFinder types={FINDER_TYPES} onChoose={addPanel}>
+            <CreateNewMenu onCreate={() => setDialog({ kind: 'create' })} />
+          </PanelFinder>
         </Flyout>
       )}
-      {dialog?.kind === 'rename' && (
-        <Modal
-          title="Customize panel"
+      {dialog?.kind === 'replace' && replaced && (
+        <Flyout
+          title={`Replace panel ${replaced.title ?? objectTitleOf(replaced)} with:`}
           onClose={() => setDialog(undefined)}
-          footer={
-            <>
-              <Button
-                variant="empty"
-                onClick={() => {
-                  updatePanels((panels) => panels.map((panel) => (panel.panelIndex === dialog.panel ? { ...panel, title: undefined } : panel)));
-                  setDialog(undefined);
-                }}
-              >
-                Reset
-              </Button>
-              <Button
-                variant="primary"
-                onClick={() => {
-                  updatePanels((panels) => panels.map((panel) => (panel.panelIndex === dialog.panel ? { ...panel, title: draftTitle } : panel)));
-                  setDialog(undefined);
-                }}
-                testId="saveNewTitleButton"
-              >
-                Save
-              </Button>
-            </>
-          }
+          testId="dashboardReplacePanel"
+          className="dshPanelFlyout"
+          mask
         >
-          <FormRow label="Panel title" full>
-            <TextField value={draftTitle} onChange={setDraftTitle} testId="customEmbeddablePanelTitleInput" />
-          </FormRow>
-        </Modal>
+          <PanelFinder types={FINDER_TYPES} onChoose={(object, name) => replacePanel(replaced.panelIndex, object, name)} />
+        </Flyout>
+      )}
+      {renamed && (
+        <CustomizePanelModal
+          title={renamed.title}
+          defaultTitle={objectTitleOf(renamed)}
+          // The panel's own setting, or else the dashboard's, which the original's panels inherit
+          hidden={(renamed.embeddableConfig.hidePanelTitles as boolean | undefined) ?? options.hidePanelTitles}
+          onClose={() => setDialog(undefined)}
+          onSave={(newTitle, hidden) => {
+            updatePanels((current) =>
+              current.map((panel) => {
+                if (panel.panelIndex !== renamed.panelIndex) return panel;
+                const { title: _title, ...rest } = panel;
+                // Changed in its place among the panel's settings, or added after them, as the original does
+                const config = { ...panel.embeddableConfig };
+                if (hidden === undefined) delete config.hidePanelTitles;
+                else config.hidePanelTitles = hidden;
+                return { ...rest, embeddableConfig: config, ...(newTitle !== undefined ? { title: newTitle } : {}) };
+              })
+            );
+            setDialog(undefined);
+          }}
+        />
       )}
       {inspected && (
         <Inspector
-          title={inspectedTitle}
+          title={inspected.title ?? objectTitleOf(inspected)}
           requests={panelData.current[inspected.panelIndex]?.requests ?? []}
           table={panelData.current[inspected.panelIndex]?.table}
           vega={panelData.current[inspected.panelIndex]?.vega}
+          context={panelData.current[inspected.panelIndex]?.context}
+          onFilter={addFilters}
           onClose={() => setDialog(undefined)}
         />
       )}
@@ -673,3 +938,53 @@ function DashboardPage({ savedId }: { savedId?: string }) {
   );
 }
 
+const NO_PANELS: PanelState[] = [];
+
+/** The dashboard's menu in the page, where the original's goes when there is no header to hold it */
+function InlineTopNav({ items }: { items: TopNavItem[] }) {
+  return (
+    <div className="dshTopNav" data-test-subj="top-nav">
+      {items.map((item) => {
+        const button = (
+          <Button
+            key={item.id}
+            variant={item.emphasize ? 'default' : 'empty'}
+            icon={item.icon}
+            onClick={item.onClick}
+            to={item.to}
+            disabled={item.disabled}
+            title={item.title}
+            testId={item.testId ?? `topNav-${item.id}`}
+            className={item.hideFor?.map((size) => `shlTopNav__item--hideFor-${size}`).join(' ') || undefined}
+          >
+            {item.label}
+          </Button>
+        );
+        return item.wrap ? <Fragment key={item.id}>{item.wrap(button)}</Fragment> : button;
+      })}
+    </div>
+  );
+}
+
+/** The original's "Create new" of the "Add panels" flyout: a button and the kinds it creates */
+function CreateNewMenu({ onCreate }: { onCreate: () => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover
+      open={open}
+      onClose={() => setOpen(false)}
+      position="downRight"
+      button={
+        <Button variant="primary" icon="plus" onClick={() => setOpen(!open)} className="dshFinder__create" testId="createNew">
+          Create new
+        </Button>
+      }
+    >
+      <ContextMenu
+        small
+        onDone={() => setOpen(false)}
+        panels={[{ id: 'create', items: [{ label: 'Visualization', onClick: onCreate, testId: 'createNew-visualization' }] }]}
+      />
+    </Popover>
+  );
+}

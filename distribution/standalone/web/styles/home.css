@@ -76,6 +76,7 @@
   padding: var(--space-8) var(--space-4);
 }
 
+/* A heading only read aloud takes the font around it, as the original's reset gives every heading */
 .homScreenReaderOnly {
   position: absolute;
   width: 1px;
@@ -83,6 +84,7 @@
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+  font: inherit;
 }
 
 /* The product's panel stands 24 px over the header's line, as the original's solutions do */
@@ -138,7 +140,8 @@
   box-shadow: var(--shadow-card);
 }
 
-/* Its left half in the accent, with the product's mark in a white disc, its name and a subtitle */
+/* Its left half in the accent, with the product's mark in a disc, its name and a subtitle, all in
+   the colour of the surface as the original's (white in the light theme, black in the dark one) */
 .homSolutionPanel__header {
   display: flex;
   flex: 1 1 0%;
@@ -146,7 +149,7 @@
   justify-content: center;
   padding: var(--space-4);
   background: var(--color-accent);
-  color: var(--color-on-accent);
+  color: var(--color-surface);
   text-align: center;
 }
 
@@ -547,50 +550,232 @@
   }
 }
 
-/* --- The overviews ----------------------------------------------------------------------------- */
+/* --- The overviews, measured on the original in the Atlas theme ------------------------------ */
 
-.homPage {
-  max-width: 1120px;
+/* The product's: its header has the product's mark beside its name, and nothing reaches over it */
+.homHeader--noOverlap .homHeader__inner {
+  padding-bottom: var(--space-8);
 }
 
-.homLead {
-  margin: var(--space-1) 0 var(--space-6);
-}
-
-.homCards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+.homHeader__brand {
+  display: flex;
+  flex: 1 1 0%;
+  align-items: flex-start;
   gap: var(--space-4);
+  min-width: 0;
 }
 
+.homHeader__logo {
+  flex: none;
+  width: 40px;
+  height: 40px;
+}
+
+/* Its main applications side by side, then room as tall as the original's spacer */
+.homApps {
+  padding-bottom: var(--space-6);
+}
+
+.homApps__group {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-6);
+}
+
+.homApps__item {
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* A card that opens an application: the theme's clickable panel, its title over a line or two */
 .homCard {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-5);
+  padding: var(--space-4);
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
   box-shadow: var(--shadow-card);
   color: var(--color-text-primary);
-  transition:
-    transform var(--duration-normal) var(--ease-out-quint),
-    box-shadow var(--duration-normal) var(--ease-out-quint);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out-quint);
 }
 
 .homCard:hover {
-  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
   box-shadow: var(--shadow-md);
-  text-decoration: none;
 }
 
-.homCard__icon {
-  display: inline-flex;
+.homCard:focus-within {
+  box-shadow: 0 0 0 4px var(--color-focus-ring);
+}
+
+.homCard:active {
+  transform: scale(0.99);
+}
+
+.homCard--centered {
+  text-align: center;
+}
+
+.homCard__link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.homCard:hover .homCard__link,
+.homCard__link:focus-visible {
+  text-decoration: underline;
+}
+
+.homCard__link:focus-visible {
+  outline-offset: 2px;
+}
+
+.homCard__description {
+  margin-top: var(--space-2);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+/* A new instance's: what to begin with and a way to add data, beside a picture of the product */
+.homGettingStarted {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-md);
-  background: var(--color-accent-tint);
-  color: var(--color-accent);
+  gap: var(--space-6);
+}
+
+.homGettingStarted__content,
+.homGettingStarted__graphic {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+.homGettingStarted__text {
+  margin: var(--space-4) 0 var(--space-8);
+  line-height: 1.5;
+}
+
+.homGettingStarted__apps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+  margin-bottom: var(--space-8);
+}
+
+.homGettingStarted__app {
+  display: flex;
+  flex: 0 1 calc(50% - var(--space-3));
+  min-width: 0;
+}
+
+.homGettingStarted__icon.atlIcon {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin-right: var(--space-4);
+  color: var(--color-text-primary);
+}
+
+.homGettingStarted__appContent {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.homGettingStarted__description {
+  margin-top: var(--space-2);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+/* The theme's small filled button, which grows brighter under the pointer */
+.atlButton.homGettingStarted__add {
+  gap: var(--space-2);
+  min-width: 112px;
+  border: 1px solid transparent;
+  box-shadow: var(--shadow-sm);
+  transition:
+    filter var(--duration-fast) ease-out,
+    transform var(--duration-fast) ease-out;
+}
+
+.atlButton.homGettingStarted__add:hover,
+.atlButton.homGettingStarted__add:focus {
+  background: var(--color-accent);
+  filter: brightness(1.1);
+}
+
+.homGettingStarted__graphic img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+/* Management's: a page as wide as the original's, its cards three a row */
+.homManagement {
+  display: flex;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-4);
+}
+
+.homManagement__body {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.homManagement__title {
+  margin-bottom: var(--space-6);
+}
+
+/* A third of the row less the gutters, as the original's grid counts it */
+.homManagement__grid {
+  display: flex;
+  flex-wrap: wrap;
+  margin: calc(-1 * var(--space-3));
+}
+
+.homManagement__item {
+  display: flex;
+  flex: 0 1 calc(33.3% - var(--space-6));
+  flex-direction: column;
+  min-width: 1px;
+  margin: var(--space-3);
+}
+
+@media (max-width: 767px) {
+  .homApps__group,
+  .homGettingStarted {
+    flex-direction: column;
+  }
+
+  .homGettingStarted {
+    align-items: stretch;
+  }
+
+  .homGettingStarted__content,
+  .homGettingStarted__graphic {
+    flex-basis: auto;
+  }
+
+  .homManagement__grid {
+    margin-right: 0;
+    margin-left: 0;
+  }
+
+  .homManagement__item {
+    flex-basis: 100%;
+    margin-right: 0;
+    margin-left: 0;
+  }
 }

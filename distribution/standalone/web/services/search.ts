@@ -36,6 +36,13 @@ export const totalOf = (response: SearchResponse | undefined): number => {
 export interface RequestRecord {
   name: string;
   index: string;
+  /**
+   * The id of the index pattern the search was made for: given it, the inspector's statistics name
+   * the index pattern and its id, as the original's do; a search of no index pattern has none
+   */
+  indexPatternId?: string;
+  /** What the inspector says of the request under its name, as the original's description */
+  description?: string;
   body: unknown;
   response?: unknown;
   error?: string;
@@ -43,10 +50,26 @@ export interface RequestRecord {
   tookMs?: number;
 }
 
+/**
+ * The preference a search names, as the courier settings of the original make it: the id of this
+ * visit of the page for "sessionId", the custom preference for "custom", none for "none"
+ */
+export function requestPreference(setting: unknown, custom: unknown, sessionId: string): string | undefined {
+  if (setting === 'sessionId') return sessionId;
+  if (setting !== 'custom' || custom === undefined || custom === null || custom === '') return undefined;
+  return String(custom);
+}
+
+export interface SearchOptions {
+  maxConcurrentShardRequests: number;
+  /** Which shard copies answer: courier:setRequestPreference and courier:customRequestPreference */
+  preference?: string;
+}
+
 export class SearchService {
   constructor(
     private readonly http: Http,
-    private readonly options: () => { maxConcurrentShardRequests: number }
+    private readonly options: () => SearchOptions
   ) {}
 
   /** One request to OpenSearch: any method, any path; the answer whatever its status below 400 */
@@ -69,11 +92,12 @@ export class SearchService {
     body: Record<string, unknown>,
     options: { signal?: AbortSignal; record?: RequestRecord } = {}
   ): Promise<SearchResponse> {
-    const { maxConcurrentShardRequests } = this.options();
+    const { maxConcurrentShardRequests, preference } = this.options();
     const params = new URLSearchParams({ ignore_unavailable: 'true', track_total_hits: 'true' });
     if (maxConcurrentShardRequests > 0) {
       params.set('max_concurrent_shard_requests', String(maxConcurrentShardRequests));
     }
+    if (preference !== undefined) params.set('preference', preference);
     const record = options.record;
     const started = Date.now();
     try {
@@ -83,6 +107,10 @@ export class SearchService {
         body,
         { signal: options.signal }
       );
+      // As the original's search strategy answers (shimHitsTotal): the total of the hits is a
+      // number, in what the page reads and in what Inspect shows
+      const total = response.hits?.total;
+      if (total !== null && typeof total === 'object') response.hits.total = total.value;
       if (record) {
         record.response = response;
         record.tookMs = Date.now() - started;

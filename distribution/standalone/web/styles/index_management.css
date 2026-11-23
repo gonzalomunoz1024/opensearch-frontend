@@ -2,72 +2,126 @@
 
 /* Index Management: the menu of its lists beside its pages. Class prefix: ism. */
 
+/* As the plugin's page: a 16 px margin, the menu 200 px wide and 16 px from the page, which has
+   25 px around it (the plugin's own padding) */
 .ismFrame {
   display: flex;
-  align-items: flex-start;
   flex: 1 1 auto;
   min-width: 0;
+  padding: var(--space-4);
+  background: var(--color-surface);
 }
 
 .ismNav {
-  flex: 0 0 216px;
-  position: sticky;
-  top: var(--header-height);
-  padding: var(--space-6) var(--space-4);
+  flex: none;
+  width: 200px;
+  margin-right: var(--space-4);
+  font-size: var(--font-size-s);
+  line-height: 1.5;
 }
 
 .ismNav__group + .ismNav__group {
-  margin-top: var(--space-6);
+  margin-top: var(--space-8);
+}
+
+/* The name of an application, then its lists: as the theme's side navigation, a row of 21 px with
+   2 px above and below, its hover 8 px wider on each side */
+.ismNav__title,
+.ismNav__link {
+  display: block;
+  width: calc(100% + 16px);
+  margin-left: calc(-1 * var(--space-2));
+  padding: 2px var(--space-2);
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ismNav__title {
-  display: block;
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--space-2);
+  padding-top: 0;
+  padding-bottom: 0;
   color: var(--color-text-primary);
   font-size: var(--font-size-m);
   font-weight: var(--font-weight-semibold);
-  text-decoration: none;
+  line-height: 20px;
 }
 
 .ismNav ul {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
+/* A list under another: a line at its left with a tick to each */
 .ismNav ul.ismNav__inner {
-  margin-top: 2px;
-  padding-left: var(--space-4);
+  width: 100%;
+  margin-left: var(--space-2);
 }
 
-.ismNav__link {
-  display: block;
-  padding: var(--space-1) 0;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-s);
-  text-decoration: none;
+.ismNav__inner > li {
+  position: relative;
 }
 
-.ismNav__link:hover {
+.ismNav__inner > li::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  background: var(--color-border-light);
+}
+
+.ismNav__inner > li:last-of-type::after {
+  height: 12px;
+}
+
+.ismNav__inner .ismNav__link {
+  position: relative;
+  width: 100%;
+  margin-left: 0;
+}
+
+.ismNav__inner .ismNav__link::after {
+  content: '';
+  position: absolute;
+  top: 12px;
+  left: 0;
+  width: 4px;
+  height: 1px;
+  background: var(--color-border-light);
+}
+
+.ismNav__link:hover,
+.ismNav__link:focus,
+.ismNav__title:hover,
+.ismNav__title:focus {
   color: var(--color-text-primary);
 }
 
 .ismNav__link--selected,
-.ismNav__link--selected:hover {
+.ismNav__link--selected:hover,
+.ismNav__link--selected:focus {
   color: var(--color-accent);
   font-weight: var(--font-weight-medium);
 }
 
 .ismBody {
-  flex: 1 1 auto;
+  flex: 1 1 100%;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  padding: var(--space-6);
+  padding: 25px;
+}
+
+/* A page the plugin's frame leaves to its own padding (index.tsx names them) */
+.ismBody--bare {
+  padding: 0;
 }
 
 /* --- The panel around a list or a part of a form ------------------------------------------------ */
@@ -281,17 +335,19 @@
   overflow-wrap: anywhere;
 }
 
-@media (max-width: 900px) {
+/* As the theme's page on a narrow screen: the menu above the page */
+@media (max-width: 767px) {
   .ismFrame {
     flex-direction: column;
-    align-items: stretch;
   }
 
   .ismNav {
-    position: static;
-    flex: none;
+    width: auto;
+    margin: 0 0 var(--space-4);
   }
+}
 
+@media (max-width: 900px) {
   .ismDetails {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
@@ -303,11 +359,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  padding: 0 var(--space-5);
-}
-
-.ismPage--details {
-  padding: 0 var(--space-6);
 }
 
 .ismPage--loading {
@@ -407,104 +458,508 @@
   margin: var(--space-2) 0;
 }
 
-.ismIndent {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-5);
+/* The flyout that writes a state of a policy, as the plugin's: half the window, between 424 and
+   600 px wide, under the header, 24 px around its title and its form, no cross, and its form
+   fading into its edges */
+.ismSf.atlFlyout {
+  top: var(--header-height);
+  width: 50vw;
+  min-width: 424px;
+  max-width: 600px;
 }
 
-/* The two ways to write a policy */
-.ismChoices {
+.ismSf .atlFlyout__header {
+  padding: var(--space-6);
+}
+
+.ismSf .atlFlyout__header h2 {
+  overflow: visible;
+  white-space: normal;
+  text-overflow: clip;
+}
+
+.ismSf .atlFlyout__body {
+  padding: var(--space-6);
+  font-size: var(--font-size-s);
+  mask-image: linear-gradient(to bottom, rgb(255 0 0 / 10%) 0%, red 7.5px, red calc(100% - 7.5px), rgb(255 0 0 / 10%) 100%);
+}
+
+.ismSf .atlFlyout__footer {
+  padding: var(--space-4) var(--space-6);
+}
+
+/* What is under the flyout: one button at each end, or both at the right; Cancel has no padding,
+   as the plugin's flush button */
+.ismSfFoot {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ismSfFoot--end {
+  justify-content: flex-end;
+}
+
+.ismSfFoot__cancel.atlButton {
+  padding-inline: 0;
+}
+
+.ismSfFoot--end .ismSfFoot__cancel.atlButton {
+  margin-right: var(--space-4);
+}
+
+/* The headings in the flyout: 17 px, as tight as the theme's titles, and 7 px over a field of the
+   state itself */
+.ismSfTitle {
+  margin: 0;
+  font-size: var(--font-size-l);
+  font-weight: var(--font-weight-semibold);
+  line-height: 22px;
+  letter-spacing: -0.022em;
+}
+
+.ismSfTitle--field {
+  margin-bottom: 7px;
+}
+
+/* What an action or a transition is, in the thin 12 px type the plugin writes it in */
+.ismSfIntro {
+  font-size: var(--font-size-xs);
+  font-weight: 200;
+  line-height: 18px;
+}
+
+.ismSfRow__error {
+  padding-top: var(--space-1);
+  color: var(--color-critical);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+/* A switch alone on a line of the body's 14 px, sitting on it as the component library's does: the
+   switch's baseline is where its track's middle meets the middle of small letters, which leaves
+   the line 16.2 px tall with the switch 0.2 px down */
+.ismSfSwitch {
+  line-height: 1;
+}
+
+.ismSfSwitch .atlSwitch__track {
+  font-size: inherit;
+  line-height: 0;
+}
+
+.ismSfSwitch .atlSwitch__track::before {
+  content: "";
+  display: inline-block;
+  height: 16px;
+  vertical-align: middle;
+}
+
+.ismSfOrder {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--space-4);
+  gap: var(--space-6);
 }
 
-.ismChoice {
+.ismSfRule {
+  width: 100%;
+  height: 1px;
+  margin: var(--space-6) 0;
+  border: 0;
+  background: var(--color-border-light);
+}
+
+/* The plugin writes these two itself, the same in both modes: grey thin text of 15 px, and a pale
+   box around what says that nothing is added yet */
+.ismSfGrey {
+  margin: 0;
+  color: grey;
+  font-size: 15px;
+  font-weight: 200;
+  line-height: 21px;
+}
+
+.ismSfNone {
+  margin: 0;
+  padding: 5px;
+  background: #f5f7fa;
+  line-height: 21px;
+}
+
+/* An action or a transition of the state in a panel: what moves it, what it does, and the round
+   buttons that delete and edit it; 10 px between two */
+.ismSfItems {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: 10px;
+}
+
+.ismSfItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
   padding: var(--space-4);
   border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.ismSfItem__handle {
+  display: flex;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  cursor: grab;
+}
+
+.ismSfItem__text {
+  flex: 1 1 0;
+  min-width: 0;
+  line-height: 1;
+}
+
+/* The orange box of a warning, without a title */
+.ismSfWarning {
+  padding: var(--space-4);
   border-radius: var(--radius-md);
+  background: var(--color-warning-callout-fill);
+}
+
+.ismSfWarning p {
+  margin: 0;
+  line-height: 21px;
+}
+
+/* The aliases of an action: a field of 400 px with how many more it takes under it */
+.ismSfCombo {
+  display: block;
+  max-width: 400px;
+}
+
+.ismSfLimit {
+  display: block;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+/* A list that writes its choices with capitals, and one that does not list its empty choice */
+.ismSfCapital {
+  text-transform: capitalize;
+}
+
+.ismSfNoBlank option[value=""] {
+  display: none;
+}
+
+/* What is folded away under an action's settings: an arrow that turns and a line of text, then the
+   settings 28 px in from both sides and 24 px apart */
+.ismSfMore__button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  line-height: 21px;
+  text-align: left;
   cursor: pointer;
 }
 
-.ismChoice--selected {
-  border-color: var(--color-accent);
+.ismSfMore__button:hover,
+.ismSfMore__button:focus {
+  text-decoration: underline;
+}
+
+.ismSfMore__arrow {
+  display: inline-flex;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0 var(--space-2) 0 var(--space-1);
+  border-radius: 8px;
+}
+
+.ismSfMore__arrow .atlIcon {
+  transition: transform var(--duration-normal) var(--ease-out-quint);
+}
+
+.ismSfMore--open .ismSfMore__arrow .atlIcon {
+  transform: rotate(90deg);
+}
+
+.ismSfMore__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: 5px 28px 29px;
+}
+
+.ismSfMore__body[hidden] {
+  display: none;
+}
+
+/* The two ways to write a policy, in the plugin's dialog of 600 px: a line of what is asked and each
+   way in a panel, 24 px apart, with 4 px more than the dialog's own padding around them */
+.ismChoiceModal {
+  max-width: 600px;
+}
+
+.ismChoiceModal .atlModal__footer {
+  gap: var(--space-6);
+}
+
+.ismChoiceBody {
+  padding: var(--space-1);
+}
+
+.ismChoiceBody > p {
+  margin: 0 0 var(--space-4);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+.ismChoices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-6);
 }
 
 .ismChoice__help {
+  padding-top: var(--space-1);
+  color: var(--color-text-tertiary);
   font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
+  line-height: 18px;
 }
 
-/* States */
+/* A radio button as the component library draws it: the circle 3 px down a line of 24 px, the label
+   24 px in and over the circle, so that a click on the circle is one on the label */
+.ismRadio {
+  position: relative;
+}
+
+.ismRadio__input {
+  position: absolute;
+  top: 3px;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: var(--color-surface) center no-repeat;
+  transition:
+    background-color var(--duration-fast) ease-in,
+    border-color var(--duration-fast) ease-in;
+  appearance: none;
+}
+
+.ismRadio__input:checked {
+  border-color: var(--color-accent);
+  background-color: var(--color-accent);
+  background-image: radial-gradient(circle, var(--color-surface) 0 2.5px, transparent 3.64px);
+}
+
+.ismRadio__input:disabled {
+  border-color: var(--color-border);
+  background-color: var(--color-border);
+}
+
+.ismRadio__input:checked:disabled {
+  background-image: radial-gradient(circle, rgb(94 94 98) 0 2.5px, transparent 3.64px);
+}
+
+:root.themeDark .ismRadio__input:checked:disabled {
+  background-image: radial-gradient(circle, rgb(175 175 176) 0 2.5px, transparent 3.64px);
+}
+
+.ismRadio__input:focus,
+.ismRadio__input:active:not(:disabled) {
+  border-color: var(--color-accent);
+  outline: none;
+  animation: ismFocusRing var(--duration-slow) var(--ease-out-quint) forwards;
+}
+
+@keyframes ismFocusRing {
+  from {
+    box-shadow: 0 0 0 6px transparent;
+  }
+
+  to {
+    box-shadow: 0 0 0 3px var(--color-focus-ring);
+  }
+}
+
+.ismRadio__label {
+  position: relative;
+  z-index: 1;
+  display: inline-block;
+  padding-left: var(--space-6);
+  font-size: var(--font-size-s);
+  line-height: 24px;
+  cursor: pointer;
+}
+
+.ismRadio__input:disabled ~ .ismRadio__label {
+  color: var(--color-text-tertiary);
+  cursor: not-allowed;
+}
+
+/* A policy's states, each an accordion as the plugin's: its name and counts in the button, the buttons
+   that change it at the right, and, opened, its actions and transitions in small panels */
+/* The title in a row of its own, 2 px out of it on every side, as the plugin's */
+.ismStates > h2 {
+  margin: -2px;
+}
+
+.ismStates__description {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 350;
+  line-height: 18px;
+}
+
+.ismDocs__icon {
+  margin-left: var(--space-1);
+}
+
 .ismState {
+  padding: 15px;
   border-bottom: 1px solid var(--color-border-light);
-  padding: var(--space-3) var(--space-2);
+}
+
+.ismState__trigger {
+  display: flex;
+  align-items: center;
+}
+
+.ismState__button {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  line-height: 21px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ismState__arrow {
+  display: inline-flex;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0 var(--space-2) 0 var(--space-1);
+  border-radius: 8px;
+}
+
+.ismState__arrow .atlIcon {
+  transition: transform var(--duration-normal) var(--ease-out-quint);
+}
+
+.ismState--open .ismState__arrow .atlIcon {
+  transform: rotate(90deg);
 }
 
 .ismState__title {
-  display: inline-flex;
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.ismState__name {
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-semibold);
+  line-height: 21px;
+}
+
+.ismState__initial {
+  padding: 0 10px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.ismCount {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.ismCount__badge {
+  display: inline-block;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 var(--space-1);
+  border-radius: 999px;
+  background: var(--color-surface-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: 16px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.ismState__extra {
+  display: flex;
+  flex: none;
   align-items: center;
   gap: var(--space-4);
 }
 
-.ismState__initial {
-  padding: 0 var(--space-3);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-xs);
-}
-
-.ismCount {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
-}
-
-.ismCount b {
-  display: inline-block;
-  min-width: 16px;
-  padding: 0 var(--space-1);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-tertiary);
-  text-align: center;
-  font-weight: var(--font-weight-medium);
+/* The component library's small icon buttons are round */
+.ismRoundButton {
+  border-radius: 50%;
 }
 
 .ismState__body {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
+  gap: var(--space-6);
+  padding: var(--space-6);
 }
 
-.ismState__body h5,
-.ismTemplates h5 {
+.ismState__body h5 {
   margin: 0;
   font-size: var(--font-size-s);
   font-weight: var(--font-weight-semibold);
+  line-height: 20px;
 }
 
-.ismState__body p {
-  margin: 0;
+.ismState__none {
+  font-size: var(--font-size-s);
+  line-height: 21px;
 }
 
 .ismChips {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3);
+  gap: var(--space-6);
 }
 
 .ismChip {
   margin: 0;
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-2);
   border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   background: var(--color-surface);
+  box-shadow: var(--shadow-card);
   font-size: var(--font-size-s);
+  line-height: 21px;
 }
 
 .ismChip dt {
@@ -512,31 +967,102 @@
 }
 
 .ismChip dd {
-  margin: 0 0 var(--space-1);
+  margin: 0;
 }
 
+.ismChip dd + dt {
+  margin-top: 14px;
+}
+
+/* The initial state: a select with its name before it, in one box */
 .ismInitial {
   display: flex;
-  align-items: center;
   max-width: 300px;
-  margin-bottom: var(--space-3);
+  height: var(--control-height);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  overflow: hidden;
 }
 
 .ismInitial__label {
+  display: flex;
   flex: none;
-  padding: 0 var(--space-3);
+  align-items: center;
+  padding: var(--space-2);
+  background: var(--color-border-light);
+  color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
+  line-height: 14px;
   white-space: nowrap;
 }
 
-.ismTemplates {
-  display: grid;
-  grid-template-columns: minmax(0, 400px) 120px auto;
-  gap: var(--space-3) var(--space-5);
+.ismInitial .ismInitial__select {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+}
+
+/* A policy with no states yet: the plugin's empty prompt */
+.ismStates__empty {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: start;
-  padding: var(--space-3) 0 var(--space-3) var(--space-3);
+  max-width: 36em;
+  margin: 0 auto;
+  padding: var(--space-6);
+  text-align: center;
+}
+
+.ismStates__empty h3 {
+  font-size: var(--font-size-l);
+  font-weight: var(--font-weight-semibold);
+  line-height: 22px;
+}
+
+.ismStates__empty p {
+  color: var(--color-text-secondary);
+  line-height: 21px;
+}
+
+/* A policy's ISM templates: a row of names over a row of fields for each template */
+.ismTemplates {
+  padding: 10px 0 0 10px;
+}
+
+.ismTemplates__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.ismTemplates__row + .ismTemplates__row {
+  margin-top: var(--space-3);
+}
+
+.ismTemplates__row h5 {
+  margin: 0;
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+.ismTemplates__patterns {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 400px;
+}
+
+.ismTemplates__priority {
+  flex: none;
+  width: 234px;
+}
+
+.ismTemplates__empty {
+  max-width: 37em;
 }
 
 .ismDraggables {
@@ -574,6 +1100,1223 @@
   max-width: 1200px;
 }
 
+/* --- Policies, managed indexes, rollup jobs and transform jobs, as the plugin draws them -------------- */
+
+.ismSpacer {
+  flex: none;
+}
+
+.ismSpacer--xs {
+  height: var(--space-1);
+}
+
+.ismSpacer--s {
+  height: var(--space-2);
+}
+
+.ismSpacer--m {
+  height: var(--space-4);
+}
+
+.ismSpacer--l {
+  height: var(--space-6);
+}
+
+.ismSpacer--xl {
+  height: var(--space-8);
+}
+
+.ismRuleXs {
+  flex: none;
+  width: 100%;
+  height: 1px;
+  margin: var(--space-2) 0;
+  border: 0;
+  background: var(--color-border-light);
+}
+
+/* The panel of a list: the plugin's ContentPanel */
+.ismLp {
+  padding: var(--space-4) 0;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.ismLp__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-6);
+  padding: 0 var(--space-4);
+}
+
+.ismLp__title {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.ismLp__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+/* The panel of the lists of jobs: the title and the buttons in a row, the list under them */
+.ismJp__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+  padding: 0 10px;
+}
+
+.ismJp__title {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.ismJp__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* The list of transform jobs: the panel has nothing at its sides, and a line 12 px under the title */
+.atlPanel.ismJp--wide {
+  padding-right: 0;
+  padding-left: 0;
+}
+
+.ismJp--wide .ismJp__header {
+  margin-bottom: 0;
+}
+
+.ismRuleXs.ismJp__rule {
+  margin: var(--space-3) 0;
+}
+
+/* The table of a list of jobs, laid out on what its cells hold as the plugin's
+   (`tableLayout="auto"`), its figures of one width: the columns it cuts stay on one line, so the
+   table runs past its panel, and past the window, where they are long, as it does there */
+.ismJobsTable .ismTable__scroll {
+  overflow: visible;
+}
+
+.ismJobsTable .atlTable {
+  font-feature-settings: "calt", "kern", "liga", "tnum";
+}
+
+/* Its boxes are as wide as they need: 12 px on either side of each */
+.ismJobsTable .atlTable .atlTable__check {
+  padding-right: var(--space-3);
+}
+
+/* A ticked row of the plugin's tables, as the theme marks it (its last word on it: the same shade
+   under the pointer or not) */
+:is(.ismJobsTable, .ismFixed) .ismTable__row--selected,
+:is(.ismJobsTable, .ismFixed) .ismTable__row--selected:hover {
+  background: #e6f2ff;
+}
+
+:root.themeDark :is(.ismJobsTable, .ismFixed) .ismTable__row--selected,
+:root.themeDark :is(.ismJobsTable, .ismFixed) .ismTable__row--selected:hover {
+  background: #021426;
+}
+
+/* "Actions" of a list of jobs, as the plugin hangs its small context menu: 8 px around it, the
+   theme's popover 112 px wide at least, Delete in the theme's danger text */
+.ismActions {
+  display: inline-flex;
+}
+
+.atlPopover.ismActionsPopover {
+  min-width: 112px;
+  padding: var(--space-2);
+}
+
+.atlPopover.ismActionsPopover--plain {
+  padding: 0;
+}
+
+.ismActionsPopover--plain .atlContextMenu__item {
+  height: 37px;
+}
+
+/* The JSON of a transform job: the component library's small code */
+.ismJsonSmall .ismJobJson .ismCodeBlock__code,
+.ismJsonSmall .ismJobJson .ismCodeBlock__pre {
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+.ismActionsPopover .atlContextMenu {
+  min-width: 0;
+}
+
+.ismActionsPopover .atlContextMenu__item--danger {
+  color: var(--color-critical-button-text);
+}
+
+/* The plugin's confirmation dialogs (EuiConfirmModal): the theme's buttons of 40 px, and its bold
+   (`b, strong` of the theme) at 600 */
+.ismConfirmModal .atlModal__footer > .atlButton {
+  height: 40px;
+}
+
+.ismConfirmModal strong {
+  font-weight: var(--font-weight-semibold);
+}
+
+/* The page of one rollup or transform job, as the plugin pads it */
+.ismJd {
+  padding: 5px 50px;
+}
+
+/* Its name, whether it is enabled and its buttons: a row 10 px in, its parts 24 px apart */
+.ismJdHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  padding: 0 10px;
+}
+
+.ismJdHeader__title {
+  flex: none;
+  min-width: 0;
+}
+
+.ismJdHeader__health {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+.ismJdHeader__health .atlHealth {
+  line-height: 21px;
+}
+
+.ismJdHeader__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* The title of a panel in an item of the plugin's row: no offset, level with the top of its
+   buttons (the row stretches its items) */
+.ismTp__header.ismTp__header--item {
+  align-items: flex-start;
+  margin: 0;
+}
+
+.ismTp__header--item > .ismTp__actions {
+  margin: 0;
+}
+
+/* Terms over their values, as the theme's flex grid of three or four columns with its 24 px
+   gutter: each item a quarter or a third less the gutter, wider where a long word holds it open */
+.ismInfoGrid {
+  display: flex;
+  flex-wrap: wrap;
+  margin: -12px;
+}
+
+.ismInfoGrid__item {
+  flex: 0 1 calc(25% - 24px);
+  margin: 12px;
+}
+
+.ismInfoGrid--3 > .ismInfoGrid__item {
+  flex-basis: calc(33.3% - 24px);
+}
+
+.ismInfoGrid dt,
+.ismInfoGrid dd,
+.ismInfoGrid--xs dd {
+  margin: 0;
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+.ismInfoGrid dt {
+  font-weight: var(--font-weight-semibold);
+}
+
+.ismInfoGrid--xs dt,
+.ismInfoGrid--xs dd {
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+/* A job's JSON as the plugin's copyable code block: the code at 14 px on lines of 21, 16 px in and
+   44 px off the right where the round buttons are, at most 600 px high */
+.ismJobJson {
+  position: relative;
+}
+
+.ismJobJson .ismCodeBlock__code {
+  font-size: var(--font-size-s);
+}
+
+.ismJobJson .ismCodeBlock__pre {
+  max-height: 600px;
+  font-size: var(--font-size-s);
+  padding: var(--space-4) 44px var(--space-4) var(--space-4);
+  line-height: 21px;
+}
+
+.ismJobJson__controls {
+  position: absolute;
+  top: 17px;
+  right: 17px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.ismJobJson__control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.ismJobJson__control:hover,
+.ismJobJson__control:focus-visible {
+  background: var(--color-surface-secondary);
+}
+
+/* In full screen the block covers the window over a mask, its code 32 px in */
+.ismJobJsonFull {
+  position: fixed;
+  inset: 0;
+  z-index: 6000;
+}
+
+.ismJobJson--full,
+.ismJobJson--full .ismCodeBlock {
+  height: 100%;
+}
+
+.ismJobJson--full .ismCodeBlock__pre {
+  height: 100%;
+  max-height: none;
+  padding: var(--space-8);
+  box-sizing: border-box;
+}
+
+.ismJobJson--full .ismJobJson__controls {
+  top: 5px;
+  right: 5px;
+}
+
+/* The page that changes a job, as the plugin pads it, and its buttons at the right, 8 px apart */
+.ismJobEdit {
+  padding: 25px 50px;
+}
+
+.ismJobEdit__buttons {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* A field's name and "– optional" beside it, 4 px apart: the rollup's a small subdued line in the
+   middle of the name's height, the transform's a heading of its own */
+.ismOptional {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.ismOptional--heading {
+  align-items: stretch;
+}
+
+/* The plugin's subdued colour does not reach a heading in small text: it keeps the text's own */
+.ismOptional--heading .ismOptional__text {
+  color: var(--color-text-primary);
+}
+
+.ismOptional__text {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+/* The plugin's compressed text area: three lines of 21 px, 8 px in (7 inside the kit's border),
+   79 px high; set on the line of its row, which leaves 2 px under it */
+.ismPr__field--area {
+  line-height: 14px;
+}
+
+.atlField.ismJobTextArea {
+  display: inline-block;
+  box-sizing: border-box;
+  width: 100%;
+  height: 79px;
+  padding: 7px;
+  line-height: 21px;
+  vertical-align: baseline;
+  resize: vertical;
+}
+
+/* What the plugin writes under a pair of fields, as wide as a field */
+.ismPr__help--block {
+  max-width: 400px;
+}
+
+/* A number with what is wrong with it under it, beside its unit */
+.ismPaired__row {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* A title and its number in brackets, two headings 4 px apart */
+.ismCounted {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.ismCounted h3 {
+  margin: 0;
+  font-size: var(--font-size-l);
+  line-height: 22px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.022em;
+}
+
+/* A panel of a form or of details: its title, a line, what it holds */
+.ismTp__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1);
+  margin: -2px;
+}
+
+.ismTp__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 2px;
+}
+
+/* A title with "– optional" after it is a row of items, which the plugin's row keeps in place */
+.ismTp__header--optional {
+  justify-content: flex-start;
+  margin: 0;
+}
+
+.ismTp__optional {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+/* Where the plugin puts it in a title, it is as tight as the theme's titles */
+.ismTp__optional--title {
+  letter-spacing: -0.022em;
+}
+
+.ismTp__description {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 350;
+  line-height: 18px;
+}
+
+/* The search box over a list and the pages beside it */
+.ismLs {
+  display: flex;
+  gap: var(--space-6);
+  padding: 0 5px;
+}
+
+.ismLs__search {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.ismLs__pages {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+
+.ismLs__pages .atlPagination {
+  padding: 0;
+}
+
+/* A table whose columns share the width alike, as the plugin's tables do, with figures of one width
+   (its hyphens are wider so) */
+.ismFixed .atlTable {
+  table-layout: fixed;
+  font-feature-settings: "calt", "kern", "liga", "tnum";
+}
+
+/* A link in a cell, as the plugin's: a button, which takes none of the table's figures, on a line
+   of its own height */
+.ismTableLink {
+  display: inline-block;
+  max-width: none;
+  font-feature-settings: normal;
+  line-height: normal;
+  text-align: left;
+  user-select: text;
+}
+
+/* The one as wide as its cell, cut with an ellipsis */
+.ismTableLink--fill {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ismCapitalize {
+  text-transform: capitalize;
+}
+
+/* The search box and what stands beside it, in the middle of their row */
+.ismLs--center {
+  align-items: center;
+}
+
+/* The search bar's box and its filters after it, 8 px apart */
+.ismLs__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ismLs__box {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* The component library's search field is cleared with its own small button, not the browser's */
+.ismLs input::-webkit-search-cancel-button,
+.ismLs input::-webkit-search-decoration {
+  appearance: none;
+}
+
+/* The button that clears it: a grey dot of 12 px with a cross in the surface's colour, 8 px in, the
+   text kept 32 px off the right */
+.ismLs__clear {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  margin-left: var(--space-2);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-text-tertiary);
+  color: var(--color-surface);
+  cursor: pointer;
+}
+
+/* In dark the theme's medium shade is the lighter grey of the secondary text */
+:root.themeDark .ismLs__clear {
+  background: var(--color-text-secondary);
+}
+
+/* The theme draws its cross with a line of 4 around it, which makes it bold */
+.ismLs__clear .atlIcon {
+  width: 6px;
+  height: 6px;
+  stroke: currentcolor;
+  stroke-width: 4px;
+}
+
+/* The search bar's group of filters: one box on the field's surface, its button inside its line */
+.ismFilterGroup {
+  display: inline-flex;
+  flex: none;
+  overflow: hidden;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+}
+
+.ismFilterButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 32px;
+  padding: 0 var(--space-2);
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 21px;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) ease-out;
+}
+
+/* Open, under the pointer or with the focus, it is tinted as the theme's empty buttons are while
+   pressed */
+.ismFilterButton--open,
+.ismFilterButton:hover,
+.ismFilterButton:focus {
+  background: color-mix(in srgb, var(--color-text-secondary) var(--tint-opacity), transparent);
+}
+
+/* The name keeps the width it has in the theme's bold, so that it does not move when it is set so */
+.ismFilterButton__text {
+  display: inline-flex;
+  flex-direction: column;
+  text-align: center;
+}
+
+.ismFilterButton__text::after {
+  content: attr(data-text);
+  height: 0;
+  overflow: hidden;
+  font-weight: var(--font-weight-semibold);
+  visibility: hidden;
+}
+
+/* How many are chosen: the theme's notification badge, a pill of 20 px whose text is in the light
+   theme's ink in both themes, as the theme picks a dark text for its blue */
+.ismFilterButton__count {
+  min-width: 24px;
+  padding: 0 var(--space-1);
+  border-radius: 999px;
+  background: var(--color-accent);
+  color: #1d1d1f;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+  text-align: center;
+}
+
+/* Its list: 300 px wide, a row of 30 px for each value, a line under each */
+.ismFilterPopover {
+  width: 300px;
+}
+
+.ismFilterSearch {
+  padding: var(--space-2);
+}
+
+.ismFilterItems {
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.ismFilterItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-1) var(--space-3);
+  border: 0;
+  border-bottom: 1px solid rgb(239 239 242);
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-s);
+  line-height: 21px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ismFilterItem:hover,
+.ismFilterItem:focus {
+  background: var(--color-surface-secondary);
+  color: var(--color-accent);
+  outline: none;
+}
+
+.ismFilterItem .atlIcon {
+  flex: none;
+}
+
+.ismFilterItem__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* What the list says while it loads or when it has nothing: in the middle of 64 px */
+.ismFilterNote {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 64px;
+}
+
+.ismFilterNote__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  text-align: center;
+}
+
+.ismFilterNote__error {
+  color: var(--color-critical);
+}
+
+/* --- Policy managed indexes and Change policy: the plugin's own 25 px beside the frame's ----------- */
+
+.ismManaged,
+.ismChange {
+  padding: 0 25px;
+}
+
+/* Refresh and Change policy over the panel, at its right, 24 px apart */
+.ismManaged__top {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-6);
+}
+
+/* The plugin's dialogs that may be as wide as 1000 px: a policy, a managed index's info, a confirmation */
+.atlModal.ismModal.ismWideModal {
+  max-width: 1000px;
+}
+
+/* The plugin puts most of its dialogs in a mask of its own, over the one the component library's
+   dialog brings: the page behind is darkened twice and blurred twice (two blurs of 4 px) */
+.atlScrim:has(> .ismMasked) {
+  background-image: linear-gradient(var(--scrim), var(--scrim));
+}
+
+.atlScrim:has(> .ismMasked)::before {
+  backdrop-filter: blur(5.66px);
+}
+
+/* A policy's buttons: Copy at the left, the others 24 px apart at the right */
+.ismMiPolicyModal .atlModal__footer {
+  gap: var(--space-6);
+}
+
+.ismMiPolicyModal__copy {
+  margin-right: auto;
+}
+
+/* The plugin gives the code itself, inside the block's 24 px, a width of 600 px at least */
+.ismMiCode .ismCodeBlock__code {
+  min-width: 600px;
+}
+
+/* A field under a 17 px name, as the plugin's compressed form rows lay one out */
+.ismPr {
+  display: flex;
+  flex-direction: column;
+  max-width: 400px;
+}
+
+.ismPr + .ismPr {
+  margin-top: var(--space-4);
+}
+
+.ismPr__label {
+  margin-bottom: var(--space-1);
+}
+
+.ismPr__title {
+  margin: 0;
+  font-size: var(--font-size-l);
+  font-weight: var(--font-weight-semibold);
+  line-height: 22px;
+  letter-spacing: -0.022em;
+}
+
+.ismPr__field > .atlField {
+  width: 100%;
+}
+
+.ismPr__help,
+.ismPr__error {
+  padding-top: var(--space-1);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+.ismPr__help {
+  color: var(--color-text-tertiary);
+}
+
+.ismPr__error {
+  /* the theme's form error, measured #ff3b30 in both modes */
+  color: var(--color-critical);
+}
+
+/* What the panel of the new policy says under its title: the theme's smallest text */
+.ismChange__note {
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+/* Its radios are small: their labels are the theme's smallest text, a line of 18 px each, the row
+   no taller than the label */
+.ismChange__radios .ismRadio,
+.ismChange__radios .ismRadio__label {
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+.ismCell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* What a list says when it has no rows: the plugin's empty prompt in the table's one cell */
+.ismFixed .ismTable__empty,
+.ismJobsTable .ismTable__empty {
+  display: block;
+  max-width: none;
+  padding: 0;
+}
+
+.ismPrompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 45em;
+  margin: 0 auto;
+  padding: var(--space-6);
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.ismPrompt p {
+  line-height: 21px;
+}
+
+.ismPrompt__actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-4);
+}
+
+/* The page of one policy: its name and buttons over its settings, templates and states */
+.ismPolicyPage {
+  padding: 5px 50px;
+}
+
+.ismDetailsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+}
+
+.ismDetailsHeader__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ismPolicySettings {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-6);
+}
+
+.ismPolicySettings dl,
+.ismPolicySettings dt,
+.ismPolicySettings dd {
+  margin: 0;
+  font-size: var(--font-size-s);
+  line-height: 21px;
+  overflow-wrap: break-word;
+}
+
+.ismPolicySettings dt {
+  font-weight: var(--font-weight-semibold);
+}
+
+.ismLoadingCenter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 100px;
+}
+
+/* The page that writes a policy with forms */
+.ismPolicyEditor {
+  padding: 25px 50px;
+}
+
+.ismPolicyEditor__intro {
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+.ismSmallText {
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+/* A compressed form row with a 17 px name over the field and the help under it */
+.ismFormRow {
+  display: flex;
+  flex-direction: column;
+  max-width: 400px;
+}
+
+.ismFormRow__label {
+  margin-bottom: var(--space-1);
+  font-size: var(--font-size-l);
+  font-weight: var(--font-weight-semibold);
+  line-height: 22px;
+}
+
+.ismFormRow__error,
+.ismFormRow__help {
+  padding-top: var(--space-1);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+.ismFormRow__error {
+  color: var(--color-critical);
+}
+
+.ismFormRow__help {
+  color: var(--color-text-tertiary);
+}
+
+/* A field's name at 17 px, set as tight as the theme's titles, and what it is for in 14 px light
+   type, as the plugin's own labels */
+.ismLabel__title {
+  margin: 0 0 5px;
+  font-size: var(--font-size-l);
+  font-weight: var(--font-weight-semibold);
+  line-height: 22px;
+  letter-spacing: -0.022em;
+}
+
+/* In the red the theme writes for a label in error */
+.ismLabel__title--invalid {
+  color: var(--color-critical-button-text);
+}
+
+/* "– optional" follows the name at once, slanted and as heavy as it */
+.ismLabel__optional {
+  color: var(--color-text-secondary);
+}
+
+.ismLabel__optional em {
+  font-style: italic;
+}
+
+.ismLabel__help {
+  margin: 0 0 5px;
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+.ismLabel__help > span {
+  font-size: var(--font-size-s);
+  font-weight: 300;
+}
+
+/* A field as wide as the plugin's compressed form rows */
+.ismField400 {
+  max-width: 400px;
+}
+
+/* The compressed text area: 8 px in from its sides, at least 150 px tall, and 2 px over what
+   follows, as the plugin's form row holds it on a line of text */
+.ismTextArea.atlField {
+  min-height: 150px;
+  margin-bottom: 2px;
+  padding: var(--space-2);
+  line-height: 21px;
+}
+
+/* A channel, the button that asks for the channels again and the one that manages them */
+.ismChannel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 592px;
+}
+
+.ismChannel__select {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* A button that is only its icon but drawn as a button, 12 px either side of it */
+.ismRefreshButton.atlButton--icon {
+  width: auto;
+  padding: 0 12px;
+}
+
+.ismCallOutText {
+  margin-bottom: 18px;
+}
+
+/* The buttons under a form, at its right */
+.ismFormButtons {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* What lies under the plugin's code editor, which is drawn after it, until the Tab key comes to it:
+   then it comes over the editor, white at 70 % as the theme writes it in both modes. A click on
+   the editor goes to the editor. */
+.ismAceBox {
+  position: relative;
+}
+
+.ismAceHint {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: rgb(255 255 255 / 70%);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-s);
+  line-height: 21px;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.ismAceHint p {
+  margin: 0;
+}
+
+.ismAceHint:focus {
+  z-index: 1000;
+  border: 2px solid var(--color-accent);
+  outline: none;
+  opacity: 1;
+}
+
+.ismAceHint.ismAceHint--inactive {
+  display: none;
+}
+
+/* JSON as the plugin's code editor shows it. Light: Ace's "github" theme in Ace's own fonts, the
+   numbers of the lines in a grey gutter as wide as the last number shown needs (50 px for two
+   digits), bold brackets and keywords, a line at the 80th column. Dark: Ace's dark theme as the
+   Atlas theme colours it, in the Atlas code font, with a line at the left of the gutter. Lines are
+   as tall as the font makes them, which is what Ace measures, and the line of the cursor lies on
+   a band. */
+.ismAce.atlCodeEditor {
+  --ace-edge: 0px;
+  --code-gutter: calc(var(--ace-gutter-width, 50px) + 4px + var(--ace-edge));
+  --ace-edge-color: transparent;
+  --ace-gutter: #e8e8e8;
+  --ace-gutter-text: #aaaaaa;
+  --ace-gutter-active: color-mix(in srgb, #000000 7%, var(--ace-gutter));
+  --ace-background: #ffffff;
+  --ace-active: #f5f5f5;
+  --ace-text: #000000;
+  --ace-key: #000000;
+  --ace-string: #dd1144;
+  --ace-number: #009999;
+  --ace-constant: #000000;
+  --ace-strong: 700;
+  --ace-margin: #e8e8e8;
+  --ace-cursor: #000000;
+  --ace-selection: rgb(0 110 255 / 29%);
+  /* Ace's dots: a white pixel over a grey one, from the middle of the run up and down */
+  --ace-guide: linear-gradient(#ffffff 50%, #d3d3d3 50%) right center / 1px 2px repeat-y;
+  /* Ace's own drawing of its mark to fold a block, and the colour of its box around a bracket */
+  --ace-fold: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAANElEQVR42mWKsQ0AMAzC8ixLlrzQjzmBiEjp0A6WwBCSPgKAXoLkqSot7nN3yMwR7pZ32NzpKkVoDBUxKAAAAABJRU5ErkJggg==');
+  --ace-bracket: rgb(192 192 192);
+  border: 0;
+  border-radius: 0;
+  background:
+    linear-gradient(var(--ace-edge-color), var(--ace-edge-color)) 0 0 / var(--ace-edge) 100% no-repeat,
+    linear-gradient(var(--ace-gutter), var(--ace-gutter)) 0 0 / calc(var(--ace-gutter-width, 50px) + var(--ace-edge)) 100% no-repeat,
+    var(--ace-background);
+  color: var(--ace-text);
+  font-family: Monaco, Menlo, 'Ubuntu Mono', Consolas, source-code-pro, monospace;
+  font-size: var(--font-size-s);
+  line-height: normal;
+}
+
+:root.themeDark .ismAce.atlCodeEditor {
+  --ace-edge: 1px;
+  --ace-edge-color: var(--color-border);
+  --ace-gutter: var(--color-surface);
+  --ace-gutter-text: var(--color-text-secondary);
+  --ace-gutter-active: color-mix(in srgb, var(--color-border) 70%, var(--ace-gutter));
+  --ace-background: var(--color-surface-secondary);
+  --ace-active: color-mix(in srgb, var(--color-border) 70%, var(--ace-background));
+  --ace-text: var(--color-text-primary);
+  --ace-key: rgb(94 171 198);
+  --ace-string: rgb(77 184 103);
+  --ace-number: var(--ace-key);
+  --ace-constant: rgb(150 152 249);
+  --ace-strong: 400;
+  --ace-margin: var(--color-border);
+  --ace-cursor: #ffffff;
+  --ace-selection: rgb(10 132 255 / 30%);
+  --ace-guide: linear-gradient(to left, var(--color-text-tertiary) 1px, transparent 1px);
+  /* The mark to fold a block stays Ace's light one, as the theme leaves it */
+  --ace-bracket: var(--color-border-light);
+  font-family: var(--font-family-code);
+}
+
+/* While the text has the focus, the band of the line is Ace's yellow (the dark theme keeps its own) */
+.ismAce.atlCodeEditor:focus-within {
+  --ace-active: rgb(255 255 204);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.ismAce .atlCodeEditor__paint,
+.ismAce .atlCodeEditor__input {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.ismAce .atlCodeEditor__input {
+  caret-color: var(--ace-cursor);
+}
+
+.ismAce .atlCodeEditor__input::selection {
+  background: var(--ace-selection);
+}
+
+.ismAce .atlCodeEditor__body {
+  background: linear-gradient(var(--ace-margin), var(--ace-margin)) calc(var(--code-gutter) + 80ch) 0 / 1px 100% no-repeat;
+}
+
+.ismAce .atlCodeEditor__line {
+  padding-left: var(--code-gutter);
+  background: transparent;
+}
+
+.ismAce .atlCodeEditor__line::before {
+  width: calc(var(--ace-gutter-width, 50px) - 13px + var(--ace-edge));
+  margin-right: 17px;
+  background: linear-gradient(90deg, var(--ace-edge-color) var(--ace-edge), var(--ace-gutter) var(--ace-edge));
+  box-shadow: 13px 0 0 var(--ace-gutter);
+  color: var(--ace-gutter-text);
+}
+
+.ismAce .atlCodeEditor__line--marked {
+  background: var(--ace-active);
+}
+
+.ismAce .atlCodeEditor__line--marked::before {
+  background: linear-gradient(90deg, var(--ace-edge-color) var(--ace-edge), var(--ace-gutter-active) var(--ace-edge));
+  box-shadow: 13px 0 0 var(--ace-gutter-active);
+}
+
+/* The numbers, and the marks beside them, stay over what a long line scrolls under them, as Ace's
+   gutter does; what is drawn in layers stays inside the editor */
+.ismAce.atlCodeEditor {
+  isolation: isolate;
+}
+
+.ismAce .atlCodeEditor__line::before {
+  z-index: 1;
+}
+
+/* Ace's mark to fold a block away, beside the number of a line that opens one: 11 pixels a pixel
+   after the number, in the 13 pixels Ace keeps there */
+.ismAce .tokFold {
+  position: sticky;
+  z-index: 1;
+  left: calc(var(--ace-gutter-width, 50px) - 12px + var(--ace-edge));
+  display: inline-block;
+  box-sizing: border-box;
+  width: 11px;
+  height: 1lh;
+  margin: 0 5px 0 -16px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: var(--ace-fold) no-repeat center;
+  vertical-align: top;
+}
+
+/* Ace's box around the bracket that pairs with the one before the cursor: as big as the place of
+   the bracket, a pixel up and to the left, rounded, over the band of the line and under its text */
+.ismAce .atlCodeEditor__line:has(> .tokBracket) {
+  isolation: isolate;
+}
+
+.ismAce .tokBracket {
+  position: relative;
+  display: inline-block;
+  width: 0;
+  height: 1lh;
+  vertical-align: top;
+}
+
+.ismAce .tokBracket::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: -1px;
+  left: -1px;
+  box-sizing: border-box;
+  width: 1ch;
+  height: 1lh;
+  border: 1px solid var(--ace-bracket);
+  border-radius: 3px;
+}
+
+.ismAce .tokKey {
+  color: var(--ace-key);
+}
+
+.ismAce .tokString {
+  color: var(--ace-string);
+}
+
+.ismAce .tokNumber {
+  color: var(--ace-number);
+}
+
+.ismAce .tokKeyword {
+  color: var(--ace-constant);
+  font-weight: var(--ace-strong);
+}
+
+.ismAce .tokParen {
+  font-weight: var(--ace-strong);
+}
+
+.ismAce .tokIndent {
+  background: var(--ace-guide);
+}
 
 /* --- A form that describes an index ------------------------------------------------------------- */
 
@@ -1187,74 +2930,228 @@
 
 /* --- Rollup jobs and transform jobs --------------------------------------------------------------- */
 
-/* A form in steps: the steps at the left, the step that is open beside them */
-.ismWizard {
+/*
+ * A form in steps, as the plugin's: a box padded 5 px and 50 px holding a large-gutter flex group
+ * (-12 px, its items 12 px in), the steps as wide as their titles, the open step taking the rest
+ * as a column; the buttons in a row of their own, padded the same, 8 px apart
+ */
+.ismJobWizard {
+  padding: 5px 50px;
+}
+
+.ismJobWizard__row {
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-6);
+  align-items: stretch;
+  margin: -12px;
 }
 
-.ismWizard__steps {
+.ismJobWizard__steps {
   flex: 0 0 auto;
-  width: 290px;
+  min-width: 1px;
   max-width: 300px;
-  padding-left: var(--space-3);
+  margin: 12px;
+  padding-left: 10px;
 }
 
-.ismWizard__body {
-  flex: 1 1 0;
-  min-width: 0;
+.ismJobWizard__body {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  flex: 1 1 0%;
+  min-width: 1px;
+  margin: 12px;
 }
 
-.ismSteps {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.ismSteps__step {
-  position: relative;
+.ismJobWizard__buttons {
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-4);
-  min-height: 88px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  /* a small-gutter flex group: 4 px out, its items 4 px in */
+  margin-top: -4px;
+  padding: 9px 50px;
 }
 
-/* The line from a step to the next one */
-.ismSteps__step:not(:last-child)::before {
-  content: '';
-  position: absolute;
-  left: 11px;
-  top: 28px;
-  bottom: 4px;
-  border-left: 2px solid var(--color-border-light);
+/* The small steps: a 24 px circle 16 px left of a 15 px title, and 48 px of empty content */
+.ismJobStep:not(:last-of-type) {
+  background-image: linear-gradient(
+    90deg,
+    transparent 0,
+    transparent 15px,
+    var(--color-border-light) 15px,
+    var(--color-border-light) 17px,
+    transparent 17px,
+    transparent 100%
+  );
+  background-position: -4px 32px;
+  background-repeat: no-repeat;
 }
 
-.ismSteps__number {
-  flex: 0 0 auto;
+.ismJobStep__titleWrapper {
+  display: flex;
+}
+
+.ismJobStep__number {
+  display: inline-block;
+  flex-shrink: 0;
   width: 24px;
   height: 24px;
-  border-radius: 50%;
-  background: var(--color-accent);
-  color: var(--color-on-accent);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
+  margin-right: 16px;
+  border-radius: 24px;
+  background-color: var(--color-accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
   line-height: 24px;
   text-align: center;
+  vertical-align: top;
 }
 
-.ismSteps__title {
+:root.themeDark .ismJobStep__number {
+  color: #000;
+}
+
+.ismJobStep--disabled .ismJobStep__number {
+  background-color: #f1f1f1;
+  color: #6a6a6f;
+}
+
+:root.themeDark .ismJobStep--disabled .ismJobStep__number {
+  background-color: #424245;
+  color: #afafb3;
+}
+
+.ismJobStep__title {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.ismJobStep__content {
+  margin: 8px 0 8px 12px;
+  padding: 16px 16px 32px 28px;
+}
+
+/* A tick box on a line of 24 px, its box 3 px from the top, as the plugin's compressed ones */
+.ismCheckRow {
+  display: flex;
+  align-items: center;
+  height: 24px;
+}
+
+.ismCheckRow .atlCheckbox input {
+  position: relative;
+  top: -1px;
+}
+
+/* The interval of a rollup's date histogram: a number of 100 px (or "Every 1") and its unit, 24 px
+   apart in 300 px, straight under their title */
+.ismIntervalPair {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  max-width: 276px;
+}
+
+.ismIntervalPair > .atlField.ismIntervalPair__number {
+  flex: none;
+  width: 100px;
+}
+
+.ismIntervalPair > .ismIntervalPair__unit {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.ismIntervalPair__every {
+  flex: none;
+  margin: 0;
   font-size: var(--font-size-s);
-  font-weight: var(--font-weight-semibold);
-  line-height: 24px;
+  line-height: 21px;
 }
 
-.ismSteps__step--disabled .ismSteps__number {
-  background: var(--color-surface-tertiary);
-  color: var(--color-text-secondary);
+/* The top of the panel of a rollup's further aggregations: the title, "– optional" and a line of
+   help at the left, in the middle of the 56 px its button takes at the right, 10 px in */
+.ismAggHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.ismAggHead__text {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ismAggHead__button {
+  flex: none;
+  padding: 0 10px 24px;
+}
+
+.ismAggTitle {
+  display: flex;
+  gap: 4px;
+}
+
+.ismAggTitle h2 {
+  margin: 0;
+}
+
+/* The top of the panel of a rollup's metrics: the title beside its three buttons, then the help
+   on three fifths of the width, 12 px under them and 8 px over the rule */
+.ismMetHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  height: 32px;
+}
+
+.ismMetHead__buttons {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+
+.ismMetHelp {
+  width: calc((100% - 24px) * 0.6);
+  margin-top: 12px;
+}
+
+.ismMetBody {
+  padding-left: 10px;
+}
+
+/* A table of the fields chosen, laid out on what its cells hold; with none, the plugin's line and
+   button in its one cell: 24 px over the line and under it, the button in the middle */
+.ismAggTable {
+  padding-top: 1px;
+}
+
+.ismAggTable .ismTable__empty {
+  display: block;
+  max-width: none;
+  padding: 24px 0 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+.ismAggTable .ismTable__empty p {
+  margin: 0 0 24px;
+}
+
+.ismAggTable--padded .ismTable__empty p {
+  margin-bottom: 29px;
+}
+
+.ismAggTable--padded .ismTable__empty {
+  padding-bottom: 5px;
 }
 
 .ismFormPanel__header {
@@ -1328,7 +3225,7 @@
   display: grid;
   grid-template-columns: 200px minmax(0, 152px);
   gap: var(--space-6);
-  align-items: center;
+  align-items: start;
 }
 
 .ismPaired--interval {
@@ -1340,42 +3237,122 @@
   font-size: var(--font-size-xs);
 }
 
+/* "Move up" at the left and "Move down" at the right of their cell, 24 px apart, each breaking
+   where the table leaves it no room */
 .ismMoves {
   display: flex;
   justify-content: space-between;
-  gap: var(--space-3);
-  min-width: 140px;
+  gap: var(--space-6);
+}
+
+.ismMoves .atlLinkButton {
+  line-height: normal;
+  text-align: left;
+}
+
+/* What takes a field out again: the plugin's bare 16 px icon */
+.ismAggTable .atlButton.ismRowDelete {
+  width: 16px;
+  min-width: 0;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  vertical-align: middle;
+}
+
+/* A metric's icon is the table's action of its row: pale until the pointer is on the row */
+.ismAggTable:not(.ismAggTable--padded) .atlButton.ismRowDelete {
+  opacity: 0.7;
+}
+
+.ismAggTable:not(.ismAggTable--padded) tr:hover .atlButton.ismRowDelete,
+.ismAggTable:not(.ismAggTable--padded) .atlButton.ismRowDelete:focus {
+  opacity: 1;
+}
+
+/* where the plugin's icon sits on the line of an aggregation */
+.ismAggTable--padded .atlButton.ismRowDelete {
+  position: relative;
+  top: -1.7px;
+}
+
+/* A box of a metric in the middle of its 42 px row, as the plugin's */
+.ismAggTable td > .atlCheckbox {
+  position: relative;
+  top: 2.5px;
+}
+
+/* The tables of a job's aggregations and metrics in their own panels, as its page and the review
+   show them: the table 1 px down, its pages straight under it */
+.ismAggPanel .ismTable {
+  padding-top: 1px;
+}
+
+.ismAggPanel .ismTable .atlPagination {
+  padding: 0;
+}
+
+/* The pages under such a table, straight in its panel */
+.ismAggTable .atlPagination {
+  padding: 0;
+}
+
+/* The method of a field is as wide as its own text, not as its column */
+.ismAggTable select.atlField {
+  width: auto;
+}
+
+/* The dialog that adds fields to a job: the plugin's, 768 px wide and padded 5 px and 30 px around
+   the dialog's own parts, its table of two equal columns scrolling in its body */
+.atlModal.ismAddFieldsModal {
+  max-width: 768px;
+  max-height: calc(75vh + 12px);
+  padding: 5px 30px;
 }
 
 .ismAddFields {
-  max-height: 60vh;
-  overflow: auto;
+  padding-top: 1px;
 }
 
-/* What a job is doing: a mark in the colour of its state and a word */
+/* What a job is doing, as the plugin writes it: a 12 px icon level with the top of the smallest
+   text, 4 px apart, each in the theme's colour of its kind (the icon in the graphic shade, the
+   text in the text shade) */
 .ismJobStatus {
-  display: inline-flex;
+  display: flex;
   align-items: flex-start;
   gap: var(--space-1);
   font-size: var(--font-size-xs);
+  line-height: 18px;
 }
 
 .ismJobStatus .atlIcon {
   flex: 0 0 auto;
   width: 12px;
   height: 12px;
-  margin-top: 3px;
 }
 
 .ismJobStatus--critical {
-  color: var(--color-critical-text);
+  color: var(--color-critical-button-text);
+}
+
+.ismJobStatus--critical .atlIcon {
+  color: var(--color-critical);
 }
 
 .ismJobStatus--healthy {
-  color: var(--color-healthy-text);
+  color: var(--color-success-text);
 }
 
+.ismJobStatus--healthy .atlIcon {
+  color: var(--color-healthy-graphic);
+}
+
+/* The plugin writes "Initializing" in a blue of its own, whatever the theme */
 .ismJobStatus--accent {
+  color: #006bb4;
+}
+
+.ismJobStatus--accent .atlIcon {
   color: var(--color-accent);
 }
 
@@ -1404,17 +3381,18 @@
 
 /* --- A grid of sample data ------------------------------------------------------------------------ */
 
+/* A grid of sample data, as the component library's data grid with all its borders and a shaded
+   header: the row of controls in a border of its own, then cells 34 px high, 6 px in, each with a
+   line at its right and under it, and the first of a row with one at its left as well */
 .ismGrid {
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-sm);
   background: var(--color-surface);
 }
 
 .ismGrid__toolbar {
   display: flex;
   align-items: center;
-  padding: var(--space-1) var(--space-2);
-  border-bottom: 1px solid var(--color-border-light);
+  padding: var(--space-1) var(--space-1) var(--space-1) 6px;
+  border: 1px solid var(--color-border-light);
 }
 
 .ismGrid__selector {
@@ -1422,7 +3400,7 @@
   align-items: center;
   gap: var(--space-2);
   height: 24px;
-  padding: 0 var(--space-2);
+  padding: 0 9px;
   border: 0;
   border-radius: var(--radius-sm);
   background: none;
@@ -1443,15 +3421,18 @@
 /* The columns share the width there is, and none is narrower than 100px: the page gives the least width */
 .ismGrid__table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   table-layout: fixed;
   font-size: var(--font-size-s);
+  line-height: 21px;
 }
 
 .ismGrid__table th,
 .ismGrid__table td {
+  box-sizing: border-box;
   height: 34px;
-  padding: 0 var(--space-2);
+  padding: 6px;
   border-right: 1px solid var(--color-border-light);
   border-bottom: 1px solid var(--color-border-light);
   text-align: left;
@@ -1460,19 +3441,18 @@
   text-overflow: ellipsis;
 }
 
+.ismGrid__table th:first-child,
+.ismGrid__table td:first-child {
+  border-left: 1px solid var(--color-border-light);
+}
+
+.ismGrid__table td {
+  font-feature-settings: "calt", "kern", "liga", "tnum";
+}
+
 .ismGrid__table th {
-  height: 44px;
   background: var(--color-surface-secondary);
   font-weight: var(--font-weight-semibold);
-}
-
-.ismGrid__table th:last-child,
-.ismGrid__table td:last-child {
-  border-right: 0;
-}
-
-.ismGrid__table tbody tr:last-child td {
-  border-bottom: 0;
 }
 
 .ismGrid__table--highlight tbody tr:hover {
@@ -1480,8 +3460,30 @@
 }
 
 .ismGrid .atlPagination {
-  padding: var(--space-2) var(--space-3);
-  border-top: 1px solid var(--color-border-light);
+  margin-top: 0;
+  padding: var(--space-1) 0 0;
+}
+
+/* The panel that defines a transform: its title 16 px in, what it holds 10 px in */
+.ismDefineHead {
+  padding: 0 var(--space-4);
+}
+
+.ismDefineBody {
+  padding: 10px;
+}
+
+.ismDefineNote {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+/* With a sentence under the title of an empty look at the result: 16 px between them */
+.ismPreviewEmpty.ismPreviewEmpty--text p {
+  margin-top: var(--space-4);
+  line-height: 21px;
 }
 
 .ismGrid__heading {
@@ -1493,6 +3495,7 @@
 }
 
 .ismGrid__heading b {
+  flex: 0 1 auto;
   min-width: 0;
   font-weight: var(--font-weight-semibold);
 }
@@ -1502,34 +3505,40 @@
   color: var(--color-accent);
 }
 
-/* The mark that opens what a field can become: a plus in a filled circle */
+/* The button that opens what a field can become: OUI's plus in a filled circle, as an icon button
+   draws it; written into a sentence, in the sentence's colour */
 .ismGridAdd {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   border: 0;
-  border-radius: 50%;
-  background: var(--color-accent);
-  color: var(--color-on-accent);
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--color-accent-button-text);
   cursor: pointer;
 }
 
-.ismGridAdd .atlIcon {
-  width: 10px;
-  height: 10px;
-  stroke-width: 2.5;
+.ismGridAdd:focus-visible,
+.ismGridAdd:hover,
+.ismGridAdd[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
 }
 
-.ismGridAdd:focus-visible,
-.ismGridAdd:hover {
-  box-shadow: 0 0 0 4px var(--color-accent-tint);
+/* A heading with that button is as high as it, the name at its top */
+.ismGrid__heading:has(.ismGridAdd) {
+  gap: var(--space-6);
+  align-items: flex-start;
+  min-height: 32px;
 }
 
 .ismGridAdd--inline {
+  width: 16px;
+  height: 16px;
+  color: inherit;
   vertical-align: -3px;
   cursor: default;
 }
@@ -1569,20 +3578,40 @@
 
 /* --- The menus of a transform job's fields --------------------------------------------------------- */
 
-.ismOptionsMenu {
-  min-width: 248px;
+/* As the component library's small context menu: 256 px wide, nothing around it, a title of 33 px
+   over a line, rows of 37 px; a panel with a form is 350 px wide */
+.atlMenu.ismOptionsMenu {
+  width: 256px;
+  padding: 0;
+}
+
+.atlMenu.ismOptionsMenu--wide {
+  width: 350px;
+}
+
+.ismOptionsMenu .atlMenu__item {
+  height: 37px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: 0;
+  line-height: 21px;
 }
 
 /* A panel with an editor is wider than a popover usually gets to be */
-.ismOptionsPopover,
-.ismFilterPopover {
+.ismOptionsPopover {
   max-width: calc(100vw - 16px);
 }
 
+.atlPopover.ismOptionsPopover {
+  padding: 0;
+  overflow: hidden;
+}
+
 .ismMenuTitle {
-  padding: var(--space-2);
+  padding: 6px var(--space-2);
+  border-bottom: 1px solid var(--color-border-light);
   font-size: var(--font-size-s);
   font-weight: var(--font-weight-semibold);
+  line-height: 20px;
 }
 
 .ismMenuBack {
@@ -1590,44 +3619,58 @@
   align-items: center;
   gap: var(--space-2);
   width: 100%;
-  padding: var(--space-2);
+  padding: 6px var(--space-2);
   border: 0;
   border-bottom: 1px solid var(--color-border-light);
   background: none;
   color: var(--color-text-primary);
   font-size: var(--font-size-s);
   font-weight: var(--font-weight-semibold);
+  line-height: 20px;
   text-align: left;
   cursor: pointer;
 }
 
+/* A form in a menu, as the plugin's panel in a panel: 16 px inside a line, 16 px over its
+   buttons, which are 16 px apart */
 .ismMenuPanel {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-3);
+  gap: var(--space-4);
+  padding: 17px;
+}
+
+.ismMenuPanel .ismButtons {
+  gap: var(--space-4);
 }
 
 .ismMenuPanel--editor {
   width: 38vw;
 }
 
-.ismMenuPanel--date {
-  width: 326px;
-}
-
 .ismDateInterval {
   display: grid;
   grid-template-columns: 100px minmax(0, 1fr);
-  gap: var(--space-2) var(--space-4);
+  gap: var(--space-3) var(--space-6);
   align-items: center;
   font-size: var(--font-size-s);
 }
 
 .ismDateInterval h4 {
   margin: 0;
-  font-size: var(--font-size-xs);
+  font-size: 15px;
   font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+.ismDateInterval .atlField {
+  width: 100%;
+}
+
+/* A heading of a column with a button after its name is as high as the button, the name at its top */
+.ismGrid__heading:has(.atlButton) {
+  align-items: flex-start;
+  min-height: 32px;
 }
 
 /* Values typed one after the other into one field */
@@ -1689,45 +3732,53 @@
 
 /* --- The filter of a transform job's source -------------------------------------------------------- */
 
+/* The filter as the component library's badge (22 px high, 8 px in, its cross 4 px after the text)
+   and, straight after it, the small empty button that opens its editor: one line of 28 px */
 .ismFilterRow {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  margin-top: var(--space-2);
+  height: 28px;
 }
 
 .ismFilterBadge {
   display: inline-flex;
   align-items: center;
-  max-width: 300px;
-  min-height: 20px;
-  border-radius: 10px;
+  box-sizing: border-box;
+  max-width: 100%;
+  height: 22px;
+  padding: 1px var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   background: var(--color-surface-secondary);
   font-size: var(--font-size-xs);
+  line-height: 18px;
 }
 
 .ismFilterBadge button {
   display: inline-flex;
   align-items: center;
-  min-height: 20px;
+  padding: 0;
   border: 0;
   background: none;
-  color: var(--color-text-secondary);
+  color: inherit;
   cursor: pointer;
 }
 
 .ismFilterBadge__text {
   min-width: 0;
-  padding: 0 0 0 var(--space-2);
   overflow: hidden;
   font-family: inherit;
   font-size: inherit;
+  line-height: inherit;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .ismFilterBadge__clear {
-  padding: 0 var(--space-2) 0 var(--space-1);
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin-left: var(--space-1);
 }
 
 .ismFilterBadge .atlIcon {
@@ -1735,22 +3786,83 @@
   height: 12px;
 }
 
+.ismFilterEdit {
+  height: 28px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--color-accent-button-text);
+  font: inherit;
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 21px;
+  cursor: pointer;
+}
+
+.ismFilterEdit:hover {
+  text-decoration: underline;
+}
+
+.ismFilterEdit:focus {
+  outline: none;
+  background: var(--color-accent-callout-fill);
+}
+
+/* What the filter is for, and where to read more: the smallest text, the first in 400 px */
+.ismFilterHelp {
+  max-width: 400px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+.ismFilterHelp--link {
+  max-width: none;
+  color: inherit;
+}
+
+.ismFilterError {
+  color: var(--color-critical);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+/* The editor of the filter in its popover, as the plugin's: two fifths of the window wide, 16 px
+   around, a title over a line, the editor in a compressed row (at most 400 px), the buttons 24 px
+   under it at the right, Cancel without padding */
+.atlPopover.ismDslPopover {
+  max-width: calc(100vw - 16px);
+  padding: var(--space-4);
+}
+
 .ismFilterEditor {
   width: 40vw;
 }
 
 .ismFilterEditor__title {
+  margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-4)) var(--space-4);
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--color-border-light);
   font-size: var(--font-size-s);
   font-weight: var(--font-weight-semibold);
+  line-height: 20px;
 }
 
-.ismFilterEditor__body {
+.ismFilterEditor__code {
+  height: 40vh;
+}
+
+.ismFilterEditor__buttons {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-4);
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.ismFilterEditor__buttons .atlButton--empty {
+  min-width: 0;
+  padding: 0;
 }
 
 /* --- What a transform job would write --------------------------------------------------------------- */
@@ -1763,25 +3875,30 @@
 }
 
 .ismPreviewEmpty {
-  padding: var(--space-5) var(--space-4);
+  max-width: 504px;
+  margin: 0 auto;
+  padding: var(--space-6);
   text-align: center;
   font-size: var(--font-size-s);
 }
 
 .ismPreviewEmpty h4 {
-  margin: 0 0 var(--space-3);
-  font-size: var(--font-size-s);
+  margin: 0;
+  font-size: 15px;
+  line-height: 20px;
+  letter-spacing: -0.0196em;
   font-weight: var(--font-weight-semibold);
 }
 
 .ismPreviewEmpty p {
-  margin: 0;
+  margin: var(--space-3) 0 0;
   color: var(--color-text-secondary);
 }
 
 .ismPreviewTitle {
   margin: 0;
   font-size: var(--font-size-s);
+  line-height: 20px;
   font-weight: var(--font-weight-semibold);
 }
 
@@ -1795,106 +3912,410 @@
 
 /* What a transform job is doing: a dot in the colour of its state and a word */
 .ismTransformStatus {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: var(--space-1);
-  font-size: var(--font-size-xs);
 }
 
+.ismTransformStatus__text {
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+/* The component library's small "dot" icon: 6 px of colour in the middle of 12 px */
 .ismTransformStatus__dot {
-  width: 8px;
-  height: 8px;
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border: 3px solid transparent;
   border-radius: 50%;
-  background: var(--color-text-secondary);
+  background: var(--color-text-secondary) content-box;
 }
 
 .ismTransformStatus__dot--critical {
-  background: var(--color-critical);
+  background-color: var(--color-critical);
 }
 
 .ismTransformStatus__dot--healthy {
-  background: var(--color-healthy);
+  background-color: var(--color-healthy-graphic);
 }
 
+/* The plugin's own grey for a job that was stopped, whatever the theme */
 .ismTransformStatus__dot--pale {
-  background: var(--color-border);
+  background-color: #dddddd;
+}
+
+/* Why a transform job failed, in the component library's dialog: as wide as what it says, between
+   400 and 768 px */
+.atlModal.ismErrorModal,
+.atlModal.ismModal.ismFitModal {
+  width: auto;
+  min-width: 400px;
+  max-width: 768px;
+}
+
+.ismErrorModal .atlModal__body {
+  line-height: 21px;
+}
+
+/* What a job is doing under its term in a grid: the plugin's row of dot and word is 2 px taller */
+.ismInfoGrid .ismTransformStatus {
+  margin-bottom: 2px;
+}
+
+/* What folds away under a job's settings, as the component library's accordion: a row 20 px high,
+   the arrow 4 px in and 8 px before the title, which turns down when it is open */
+.ismAcc__button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ismAcc__button:hover .ismAcc__title {
+  text-decoration: underline;
+}
+
+.ismAcc__arrow {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0 var(--space-2) 0 var(--space-1);
+  transition: transform var(--duration-fast) ease;
+}
+
+.ismAcc__button[aria-expanded="true"] .ismAcc__arrow {
+  transform: rotate(90deg);
+}
+
+.ismAcc__title {
+  margin: 0;
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.ismAcc__text {
+  line-height: 21px;
+}
+
+.ismAcc__button:hover .ismAcc__text {
+  text-decoration: underline;
+}
+
+/* A heading as the label of a compressed row */
+.ismSr__heading {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 15px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+.ismAcc__title--l {
+  font-size: var(--font-size-l);
+  line-height: 22px;
+  letter-spacing: -0.022em;
+}
+
+/* A compressed form row with a plain label */
+.ismSr {
+  display: flex;
+  flex-direction: column;
+  max-width: 400px;
+}
+
+.ismSr__label {
+  margin-bottom: var(--space-1);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 18px;
+}
+
+.ismSr--invalid .ismSr__label {
+  color: var(--color-critical-button-text);
+}
+
+.ismSr .ismPr__field > .atlField {
+  width: 100%;
+}
+
+/* A tick box beside ordinary text: a line of 21 px */
+.ismCheckRow.ismCheckRow--text {
+  height: 21px;
+}
+
+/* How often a transform job runs: a number of 200 px and its unit in what is left of 400 px,
+   24 px apart, the unit level with the number */
+.ismTsInterval {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-6);
+  max-width: 376px;
+}
+
+.ismTsInterval__number {
+  flex: 0 0 200px;
+  width: 200px;
+}
+
+.ismTsInterval__unit {
+  flex: 1 1 0;
+  min-width: 0;
+  margin-top: 22px;
+}
+
+.ismTsInterval__unit .atlField {
+  width: 100%;
+}
+
+/* A name over what it is, where a job's page only shows it */
+.ismPlainRow h3 {
+  margin: 0 0 7px;
+}
+
+.ismPlainRow p {
+  margin: 0;
+  line-height: 21px;
+}
+
+.ismAcc__body {
+  padding: 10px;
 }
 
 /* --- Notification settings ------------------------------------------------------------------------ */
 
-.ismSettingsPage {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  /* The bar of unsaved changes does not cover the last row */
-  padding-bottom: 72px;
+/* As the plugin's page: a title of 28 px over a small sentence, the button at the right */
+.ismNs--changed {
+  /* The bar of what is not saved does not cover the last row: the page is as much longer as the
+     plugin's gets with its bar */
+  padding-bottom: 129px;
 }
 
-.ismSettingsPage__header {
+.ismNs__header {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
+  gap: var(--space-6);
 }
 
-.ismSettingsPage__header .atlButton {
+.ismNs__headText {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.ismNs__header .atlButton {
   flex: 0 0 auto;
 }
 
-.ismSettingsPage__description {
-  margin: var(--space-1) 0 0;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
-}
-
-.ismNotificationDefaults {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.ismNotificationDefaults .atlCallOut ul {
-  margin: var(--space-1) 0 0;
-  padding-left: var(--space-5);
-}
-
-.ismNotificationDefaults .ismLabeled--across h3 {
+.ismNs__title {
   margin: 0;
-  font-size: inherit;
-  font-weight: inherit;
+  font-size: 28px;
+  letter-spacing: -0.022em;
+  font-weight: var(--font-weight-semibold);
+  line-height: 34px;
 }
 
-.ismNotificationDefaults .ismLabeled--across > .ismLabeled__body {
-  max-width: none;
-}
-
-.ismNotificationDefaults__row {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  width: 100%;
-}
-
-/* The names of the fields of a row are small beside the name of the row */
-.ismNotificationDefaults__row .ismLabeled__title {
+.ismNs__description {
+  padding-bottom: var(--space-1);
+  color: var(--color-text-tertiary);
   font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
+  line-height: 18px;
 }
 
-.ismNotificationDefaults__row .ismNotifications__channels--invalid .ismLabeled__title {
-  color: var(--color-critical);
+.ismNs__errors {
+  margin: 0 0 0 21px;
+  padding: 0;
+  list-style: disc;
+  line-height: 21px;
 }
 
-.ismNotificationDefaults__ticks {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 200px));
-  gap: var(--space-3);
+/* A kind of operation: its name and what it is in the left half, its fields in the right half,
+   24 px between the halves and 36 px between two kinds */
+.ismNsGroup {
+  display: flex;
+  gap: var(--space-6);
+}
+
+.ismNsGroup + .ismNsGroup {
+  margin-top: 36px;
+}
+
+.ismNsGroup__about,
+.ismNsGroup__fields {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.ismNsGroup__title {
+  margin: 0;
+  letter-spacing: -0.022em;
+  font-size: var(--font-size-l);
+  font-weight: var(--font-weight-semibold);
+  line-height: 22px;
+}
+
+.ismNsGroup__description {
+  padding-top: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+.ismNsGroup__fields {
+  padding-top: 11px;
+}
+
+.ismNsGroup__ticks {
+  display: flex;
+  gap: var(--space-6);
+}
+
+.ismNsGroup__ticks .atlCheckbox {
+  flex: 1 1 0;
+  min-height: 24px;
+  line-height: 24px;
+}
+
+/* The box 3 px under the top of its line, as the component library's */
+.ismNsGroup__ticks .atlCheckbox input {
+  position: relative;
+  top: -1px;
+}
+
+/* The notifications of one operation, in the form that starts it: 24 px under what is before */
+.ismNc {
+  margin-top: var(--space-6);
+}
+
+/* In a panel of their own (shrink, split) nothing is before them */
+.ismAccordionPanel__body .ismNc {
+  margin-top: 0;
+}
+
+.ismNc__title {
+  margin: 0;
+  letter-spacing: -0.022em;
+  font-size: var(--font-size-l);
+  font-weight: var(--font-weight-semibold);
+  line-height: 22px;
+}
+
+.ismNc__defaults {
+  display: flex;
+  gap: var(--space-6);
+}
+
+.ismNc__defaults > .ismSr {
+  flex: 1 1 0;
+}
+
+.ismNc__list {
+  margin: 0;
+  padding: 0;
+  list-style: inside disc;
+  text-indent: 1.5em;
+}
+
+.ismNc__badges {
+  line-height: 1.5;
+}
+
+.ismNc__tick {
+  display: flex;
+  height: 24px;
+}
+
+.ismNc__tick .atlCheckbox {
+  min-height: 24px;
+  line-height: 24px;
+}
+
+.ismNc__tick .atlCheckbox input {
+  position: relative;
+  top: -1px;
+}
+
+/* The field of 292 px and the button beside it are wider together than their row */
+.ismNc__channels {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-6);
+}
+
+.ismNc__channels .atlButton {
+  flex: 0 0 auto;
+}
+
+/* The bar of what is not saved yet, as the component library's bottom bar */
+.ismNsBar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 800;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: #1c1c1e;
+  color: #ffffff;
+}
+
+.ismNsBar__text {
+  flex: 1 1 0;
+  font-size: var(--font-size-s);
+  line-height: 16px;
+}
+
+.ismNsBar__block {
+  display: inline-block;
+  width: 4px;
+  height: 16px;
+  margin-right: var(--space-2);
+  background: var(--color-warning);
+  vertical-align: bottom;
+}
+
+.ismNsBar__block--danger {
+  background: var(--color-critical);
+}
+
+.ismNsBar .atlButton--ghost {
+  color: #ffffff;
 }
 
 /* --- Snapshot Management ------------------------------------------------------------------------ */
 
-.ismSnapshotFlyout {
+/* A flyout of Snapshot Management, as the plugin's: under the header, 600 px wide, its head, its
+   body and its foot 24 px in from the sides */
+.ismSnapshotFlyout.atlFlyout {
+  top: var(--header-height);
   width: min(600px, 100vw);
+}
+
+/* Its mask, where it has one (restoring), as the plugin's: under the header, and the page behind it
+   blurred as well as dimmed */
+.atlFlyoutMask:has(+ .ismSnapshotFlyout) {
+  top: var(--header-height);
+  backdrop-filter: blur(4px);
+}
+
+.ismSnapshotFlyout .atlFlyout__header,
+.ismSnapshotFlyout .atlFlyout__body {
+  padding: var(--space-6);
+}
+
+.ismSnapshotFlyout .atlFlyout__footer {
+  padding: var(--space-4) var(--space-6);
+  background: var(--color-surface);
 }
 
 .ismFlyoutFooter {
@@ -1902,113 +4323,472 @@
   width: 100%;
 }
 
-.ismSnapshotForm {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
+/* Cancel, flush as the plugin's: no padding inside its border, 8 px more before the button beside it,
+   its word on a line of 21 px as OUI's empty button sets it */
+.ismFlyoutFooter__cancel {
+  padding-inline: 0;
+  margin-right: var(--space-2);
+  border: 1px solid transparent;
+  line-height: 1.5;
 }
 
-.ismSnapshotForm h3,
-.ismSnapshotForm h5 {
-  margin: 0;
+.ismSnapshotPolicyPage__footer > .atlButton--empty {
+  line-height: 1.5;
+}
+
+/* The button that acts is never narrower than the plugin's, and has its clear 1 px border */
+.ismFlyoutFooter > .atlButton--primary {
+  min-width: 112px;
+  border: 1px solid transparent;
+}
+
+/* The plugin's dialogs that ask before deleting (OUI's confirmation modal): as wide as their words,
+   from 400 px up to 768 px; a large title; text in lines of 21 px with a line's space under a
+   paragraph; the theme's buttons 40 px high, the one that deletes inside a clear border */
+.atlModal.ismConfirm {
+  width: auto;
+  min-width: min(400px, 100%);
+  max-width: min(768px, 100%);
+}
+
+.ismConfirm .atlModal__title {
+  font-size: 22px;
+  line-height: 28px;
+  letter-spacing: -0.021em;
+}
+
+.ismConfirm__body {
   font-size: var(--font-size-s);
+  line-height: 1.5;
+}
+
+.ismConfirm__body p {
+  margin: 0 0 1.5em;
+}
+
+.ismConfirm__body strong {
   font-weight: var(--font-weight-semibold);
 }
 
-.ismSnapshotForm .ismLabeled + .ismLabeled {
-  margin-top: 0;
+.ismConfirm .atlModal__footer > .atlButton {
+  height: 40px;
+  line-height: 1.5;
 }
 
-.ismSnapshotForm .ismLabeled__field > .atlField,
-.ismSnapshotForm .ismLabeled__field > span,
-.ismSnapshotForm .ismLabeled__field > .atlSelect {
+.ismConfirm .atlModal__footer > .atlButton--dangerFill {
+  border: 1px solid transparent;
+}
+
+/* The keyboard's ring stands 2 px off the plugin's buttons */
+.ismConfirm .atlModal__footer > .atlButton:focus-visible,
+.ismListPanel__actions .atlButton:focus-visible,
+.ismSnapshotPolicyPage__actions .atlButton:focus-visible,
+.ismPolicyPanel__header .atlButton:focus-visible,
+.ismSnapshotPolicy__channels > .atlButton:focus-visible,
+.ismSnapshotForm__repository > .atlButton:focus-visible,
+.ismSnapshotPolicyPage__footer > .atlButton:focus-visible,
+.ismFlyoutFooter > .atlButton:focus-visible {
+  outline-offset: 2px;
+}
+
+/* A form of Snapshot Management is laid out as the plugin's: its parts one under the other, with
+   the plugin's spacers between them */
+.ismSnapshotForm {
+  display: flow-root;
+  line-height: 1.5;
+}
+
+.ismSnapshotForm h3,
+.ismSnapshotForm h4,
+.ismSnapshotForm h5 {
+  margin: 0;
+}
+
+.ismSpacer {
+  flex: none;
+}
+
+.ismSpacer--xs {
+  height: var(--space-1);
+}
+
+.ismSpacer--s {
+  height: var(--space-2);
+}
+
+.ismSpacer--m {
+  height: var(--space-4);
+}
+
+.ismSpacer--l {
+  height: var(--space-6);
+}
+
+.ismSpacer--xxl {
+  height: calc(var(--space-8) + var(--space-2));
+}
+
+.ismSnapField__label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.ismSnapField__optional {
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+/* What a field means: the plugin's small light span, set outside any text block, so on lines as
+   high as the page's 14 px font (the words sit 1 px lower in them than in a line of their own) */
+.ismSnapField__helpLine,
+.ismSnapshotPolicy__noteLine {
+  font-size: var(--font-size-s);
+  line-height: 1;
+}
+
+.ismSnapField__help {
+  font-size: var(--font-size-xs);
+  font-weight: 200;
+}
+
+/* What a part of a form is for, where the plugin says more than a few words: its small subdued
+   text, 5 px above and below a paragraph in light letters */
+.ismSnapHelp {
+  padding: 5px 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}
+
+.ismSnapHelp > p {
+  margin: 0;
+  font-weight: 200;
+}
+
+/* A link that leaves the product, as the plugin's in the pages of Snapshot Management: part of
+   its line, the small arrow 4 px after its words */
+.ismListPanel .ismExternal,
+.ismSnapshotPolicyPage .ismExternal,
+.ismSnapshotFlyout .ismExternal {
+  display: inline;
+  white-space: normal;
+}
+
+.ismListPanel .ismExternal > .atlIcon,
+.ismSnapshotPolicyPage .ismExternal > .atlIcon,
+.ismSnapshotFlyout .ismExternal > .atlIcon {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-left: var(--space-1);
+  vertical-align: middle;
+}
+
+/* JSON to change, as the plugin's code editor draws it with the theme's colours: nine tenths of
+   nine tenths of the width (the plugin sizes its editor twice), lines of 18 px with 4 px before
+   the text, a white gutter with a line at its left as wide as its numbers need, and the line of
+   the cursor on a band that crosses the gutter */
+.ismSnapEditor {
+  --ism-ace-gutter-line: #e9e9eb;
+  --ism-ace-guide: #86868b;
+  --ism-ace-key: #037098;
+  --ism-ace-language: #5256e1;
+  --ism-ace-string: #087824;
+  --ism-ace-comment: #41705a;
+  --ism-ace-band: color-mix(in srgb, var(--color-border) 70%, transparent);
+  position: relative;
+  width: 90%;
+}
+
+/* The dark theme's: its line and guides in the theme's border and faint text, ace's dark words */
+.themeDark .ismSnapEditor {
+  --ism-ace-gutter-line: var(--color-border);
+  --ism-ace-guide: var(--color-text-tertiary);
+  --ism-ace-key: hsl(196deg 47.83% 57.37%);
+  --ism-ace-language: rgb(149.7 152.3 249.3);
+  --ism-ace-string: rgb(76.9 183.8 103.5);
+  --ism-ace-comment: hsl(151deg 20.13% 59.2%);
+}
+
+.ismSnapEditor .atlCodeEditor {
+  /* The gutter: a pixel of line, then the numbers with 20 px before and 13 after them */
+  --ism-ace-gutter: calc(34px + var(--ism-ace-digits, 1) * 1ch);
+  --code-gutter: calc(var(--ism-ace-gutter) + 4px);
+  --ism-ace-gutter-paint: linear-gradient(
+    to right,
+    var(--ism-ace-gutter-line) 0,
+    var(--ism-ace-gutter-line) 1px,
+    var(--color-surface) 1px,
+    var(--color-surface) var(--ism-ace-gutter),
+    var(--color-surface-secondary) var(--ism-ace-gutter)
+  );
+  width: 90%;
+  border: 0;
+  border-radius: 0;
+  background: var(--ism-ace-gutter-paint);
+}
+
+/* The original's gutter ends on a whole pixel */
+@supports (width: round(up, 1px, 1px)) {
+  .ismSnapEditor .atlCodeEditor {
+    --ism-ace-gutter: calc(1px + round(up, 33px + var(--ism-ace-digits, 1) * 1ch, 1px));
+  }
+}
+
+.ismSnapEditor .atlCodeEditor:focus-within {
+  border: 0;
+  box-shadow: none;
+}
+
+.ismSnapEditor .atlCodeEditor__paint {
+  padding: 0;
+}
+
+.ismSnapEditor .atlCodeEditor__line {
+  padding: 0 4px 0 var(--code-gutter);
+  background: transparent;
+}
+
+.ismSnapEditor .atlCodeEditor__line::before {
+  box-sizing: border-box;
+  width: var(--code-gutter);
+  margin: 0 0 0 calc(-1 * var(--code-gutter));
+  padding-right: 17px;
+  background: var(--ism-ace-gutter-paint);
+  color: var(--color-text-secondary);
+}
+
+.ismSnapEditor .atlCodeEditor__line--marked {
+  background: var(--ism-ace-band);
+}
+
+.ismSnapEditor .atlCodeEditor__line--marked::before {
+  background:
+    linear-gradient(var(--ism-ace-band), var(--ism-ace-band)),
+    var(--ism-ace-gutter-paint);
+}
+
+.ismSnapEditor .atlCodeEditor__input {
+  padding: 0 4px 0 var(--code-gutter);
+}
+
+.ismSnapEditor .tokKey,
+.ismSnapEditor .tokNumber {
+  color: var(--ism-ace-key);
+}
+
+.ismSnapEditor .tokString {
+  color: var(--ism-ace-string);
+}
+
+.ismSnapEditor .tokBoolean,
+.ismSnapEditor .tokEscape {
+  color: var(--ism-ace-language);
+}
+
+.ismSnapEditor .tokComment {
+  color: var(--ism-ace-comment);
+}
+
+/* The guide of an indent: a line at the right of each tab of it, the whole height of the line */
+.ismSnapEditor .tokGuide {
+  display: inline-block;
+  height: 1lh;
+  vertical-align: top;
+  background: linear-gradient(
+    to left,
+    var(--ism-ace-guide) 0,
+    var(--ism-ace-guide) 1px,
+    transparent 1px,
+    transparent 100%
+  );
+}
+
+/* The hint the Tab key stops on: unseen under the text, which a click reaches, until it has the
+   focus */
+.ismSnapEditor__hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: color-mix(in srgb, var(--color-surface) 70%, transparent);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-s);
+  line-height: 1.5;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.ismSnapEditor__hint > p {
+  margin: 0;
+}
+
+.ismSnapEditor__hint:focus {
+  z-index: 1;
+  border: 2px solid var(--color-accent);
+  outline: none;
+  opacity: 1;
+}
+
+.ismSnapEditor__hint--inactive {
+  display: none;
+}
+
+.ismSnapField__body > .atlField,
+.ismSnapField__body > span,
+.ismSnapField__body > .atlSelect {
   width: 100%;
   max-width: 400px;
 }
 
-.ismSnapshotForm__note {
-  margin: calc(var(--space-2) * -1) 0 0;
+/* A text area as OUI's compressed one: its words 8 px in from the edge of its ring, three lines
+   high, and the 2 px under it that its line leaves */
+.ismSnapField__body > textarea.atlField {
+  margin-bottom: 2px;
+  padding: 7px;
+}
+
+.ismSnapField__error {
+  max-width: 400px;
+  padding-top: var(--space-1);
+  color: var(--color-critical);
   font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+/* What a field asks for, under it, as the plugin's help text */
+.ismSnapshotForm__help {
+  margin: 0;
+  padding-top: var(--space-1);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}
+
+/* The plugin's compressed ticks and radios: the box 3 px down a line of 24 px */
+.ismSnapshotForm .atlRadio,
+.ismSnapshotForm .atlCheckbox {
+  align-items: flex-start;
+  line-height: 24px;
+}
+
+.ismSnapshotForm .atlRadio input,
+.ismSnapshotForm .atlCheckbox input {
+  flex: none;
+  margin-top: 3px;
+}
+
+/* The lines of a text area, 21 px as the plugin's */
+.ismSnapshotForm textarea.atlField {
+  line-height: 1.5;
+}
+
+/* The label of a field in a form row: a small heading over what it means, in light letters */
+.ismSmallLabel__title {
+  color: var(--color-text-primary);
+}
+
+.ismSmallLabel__help {
+  display: block;
+  padding-bottom: 5px;
+  font-weight: 200;
+}
+
+/* An accordion of a form, as the plugin's: its heading on a line of its own, the arrow 4 px in */
+.ismSnapshotForm__accordion .atlAccordion__button {
+  gap: var(--space-2);
+  padding: 0;
+  font-weight: var(--font-weight-regular);
+  line-height: 1.5;
+}
+
+.ismSnapshotForm__accordion .atlAccordion__arrow {
+  margin-left: var(--space-1);
 }
 
 .ismSnapshotForm__repository {
   display: flex;
   align-items: flex-end;
-  gap: var(--space-3);
+  gap: var(--space-6);
 }
 
-.ismSnapshotForm__repository > .ismLabeled {
+.ismSnapshotForm__repository > .ismSnapField {
   flex: 0 1 400px;
   min-width: 0;
-}
-
-.ismSnapshotForm__small {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  max-width: 400px;
-}
-
-.ismSnapshotForm__label {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-}
-
-.ismSnapshotForm__minor {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
 }
 
 .ismTickLabel {
   display: flex;
   flex-direction: column;
-  gap: 2px;
 }
 
-.ismTickLabel small {
+.ismTickLabel__title {
+  line-height: 1.5;
+}
+
+.ismTickLabel__help {
   font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
+  font-weight: 200;
+  line-height: 1.5;
 }
 
+/* Ticks one under the other, with the plugin's spacers between them */
 .ismTicks {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-}
-
-.ismTicks--inset {
-  padding: var(--space-3) var(--space-1) 0;
-}
-
-.ismTicks .atlCheckbox {
   align-items: flex-start;
+}
+
+.ismTicks > .ismSpacer {
+  align-self: stretch;
+}
+
+/* The restore's advanced options, 10 px in as the plugin has them */
+.ismTicks--inset {
+  padding: 10px;
+}
+
+.ismTicks--inset > .atlFormRow {
+  align-self: stretch;
+}
+
+.ismTicks__text {
+  margin: 0;
+  padding: 5px 0;
+  font-size: var(--font-size-xs);
+  font-weight: 200;
+  line-height: 1.5;
 }
 
 .ismRestoreSummary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-4);
+  gap: var(--space-6);
 }
 
 .ismRestoreSummary p {
   margin: 0;
 }
 
-.ismIndexList__title {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
+/* The title of a list of indices, as the plugin's: a large arrow back, a space, and the words */
 .ismIndexList__back {
   display: inline-flex;
+  vertical-align: middle;
   padding: 0;
   border: 0;
   background: none;
   color: var(--color-accent);
   cursor: pointer;
+}
+
+.ismIndexList__back .atlIcon {
+  padding-bottom: 5px;
 }
 
 .ismToastAction {
@@ -2028,58 +4808,242 @@
   overflow-wrap: anywhere;
 }
 
-.ismFilterGroup {
-  display: inline-flex;
+/* The panel around a list, as the plugin's: its padding is 16 px above and below, and 16 px at the
+   sides of the heading and of the list, which a rule the width of the panel divides */
+.ismListPanel {
+  padding: var(--space-4) 0;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.ismListPanel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-6);
+  padding: 0 var(--space-4);
+}
+
+/* Never narrower than its title, as the plugin's: on a narrow screen the buttons go past the panel */
+.ismListPanel__heading {
+  flex: 1 1 0;
+}
+
+.ismListPanel__heading h1 {
+  margin: 0;
+}
+
+.ismListPanel__description {
+  margin: 0;
+  padding: 5px 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  font-weight: 200;
+  line-height: 1.5;
+}
+
+.ismListPanel__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+/* Its buttons, those over a policy's page and the one beside a panel's title, as the plugin's
+   small buttons: at least 112 px wide, the icon 8 px from the words, and a clear 1 px border round
+   them (the danger button keeps its own) */
+.ismListPanel__actions .atlButton,
+.ismSnapshotPolicyPage__actions .atlButton,
+.ismPolicyPanel__header .atlButton {
+  min-width: 112px;
   gap: var(--space-2);
 }
 
-.ismTabbed {
+.ismListPanel__actions .atlButton:not(.atlButton--danger),
+.ismSnapshotPolicyPage__actions .atlButton:not(.atlButton--danger),
+.ismPolicyPanel__header .atlButton:not(.atlButton--danger) {
+  border: 1px solid transparent;
+}
+
+.ismListPanel__rule {
+  height: 1px;
+  margin: var(--space-2) 0;
+  border: 0;
+  background: var(--color-border-light);
+}
+
+.ismListPanel__body {
+  padding: 0 var(--space-4);
+}
+
+.ismListPanel .ismSearchRow {
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  padding: 0;
+  border: 0;
+}
+
+/* The search box of the snapshot policies, as the plugin's, has the table right under it */
+.ismListPanel .ismSearchRow--alone {
+  margin-bottom: 0;
+}
+
+/* The search box as OUI's: the magnifier 8 px in from its edge, the words 32 px */
+.ismListPanel .ismSearchRow .atlFieldGroup {
+  padding-left: calc(var(--space-2) - 1px);
+}
+
+.ismListPanel .ismSearchRow .atlFieldGroup > input {
+  padding-left: var(--space-2);
+}
+
+/* The columns share the width as the plugin's table does: what no column claims, in equal parts;
+   and its figures are of one width, as in OUI's tables */
+.ismListPanel .atlTable,
+.ismPolicyPanel .atlTable {
+  table-layout: fixed;
+  font-feature-settings: 'calt' 1, 'kern' 1, 'liga' 1, 'tnum' 1;
+}
+
+/* OUI's table keeps a caption for screen readers over its header, 1 px high */
+.ismListPanel .ismTable__scroll,
+.ismPolicyPanel .ismTable__scroll {
+  padding-top: 1px;
+}
+
+/* A tick box stands in the middle of its row as a block, as OUI's, and does not sit on the line of
+   the words (which made the rows 3 px higher) */
+.ismListPanel .atlTable__check .atlCheckbox {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
 }
 
-/* What a snapshot is: the names of its facts are as dark as the facts */
-.ismSnapshotDetails {
+/* A link that is a button, as OUI's: on a line of the font's own height, its figures as the font
+   draws them */
+.ismListPanel .atlTable .atlLinkButton,
+.ismPolicyPanel .atlTable .atlLinkButton {
+  font-feature-settings: normal;
+  line-height: normal;
+}
+
+/* OUI lays out what a cell holds in a flex box, which stands in the middle of the row: a link that
+   is a button and a status with its dot are blocks so, and not set on the line of the words (where
+   they made a row 2 px higher) */
+.ismListPanel .atlTable td > .atlLinkButton,
+.ismPolicyPanel .atlTable td > .atlLinkButton {
+  display: block;
+}
+
+.ismListPanel .atlTable td > .atlHealth {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
 }
 
-.ismSnapshotDetails .ismDetails {
-  gap: var(--space-5);
+.ismListPanel .atlTable .atlLinkButton {
+  text-align: left;
 }
 
-.ismSnapshotDetails .ismDetail dt {
-  color: inherit;
-  font-size: var(--font-size-s);
+/* The pager, as the plugin's, 16 px under the table (the kit's margin) and no further in */
+.ismListPanel .ismTable .atlPagination {
+  padding: 0;
+}
+
+/* The filters as the plugin's group of them: one box, the buttons parted by thin lines */
+.ismFilterGroup {
+  display: inline-flex;
+  flex: none;
+  overflow: hidden;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+}
+
+.ismFilterGroup > * + * {
+  border-left: 1px solid var(--color-border-light);
+}
+
+.ismFilterGroup__button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 48px;
+  height: var(--control-height);
+  padding: 0 var(--space-2);
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.5;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* As the theme's text buttons: a grey wash under the pointer */
+.ismFilterGroup__button:hover,
+.ismFilterGroup__button:focus-visible {
+  background: color-mix(in srgb, var(--color-text-secondary) var(--tint-opacity), transparent);
+}
+
+.ismFilterGroup__button--active .ismFilterGroup__name {
   font-weight: var(--font-weight-semibold);
 }
 
-.ismSnapshotForm__minor .ismLabeled {
-  max-width: 400px;
+/* A short name stands in the middle of the 48 px the plugin's filter button keeps for it */
+.ismFilterGroup__name {
+  min-width: 48px;
+  text-align: center;
+}
+
+.ismFilterGroup__name::after {
+  content: attr(data-text);
+  display: block;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: var(--font-weight-semibold);
+}
+
+.ismFilterGroup__button .ismFilterCount {
+  margin-left: 0;
+}
+
+/* The two tabs over the list of snapshots, as the theme draws the plugin's small tabs */
+.ismTabbed {
+  display: flex;
+  flex-direction: column;
+}
+
+.ismTabbed > .atlTabs {
+  gap: var(--space-1);
+  border-bottom: 0;
+}
+
+.ismTabbed > .atlTabs > .atlTab {
+  padding: var(--space-1) 10px;
+  border-radius: var(--radius-sm);
+  line-height: 1.5;
+}
+
+.ismTabbed > .atlTabs > .atlTab[aria-selected="true"] {
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  cursor: default;
+}
+
+.ismTabbed > .atlTabs > .atlTab[aria-selected="true"]::after {
+  display: none;
 }
 
 /* --- A snapshot policy: its form and what it shows ------------------------------------------------- */
 
-.ismSnapshotPolicy .ismSnapshotForm h3 {
-  font-size: var(--font-size-l);
-  line-height: 1.3;
-}
-
-.ismSnapshotPolicy .ismLabeled__title i,
-.ismSnapshotFlyout .ismLabeled__title i {
-  font-size: var(--font-size-s);
-  font-weight: var(--font-weight-regular);
-  color: var(--color-text-secondary);
-}
-
-.ismCron {
+/* Radios one under the other, as the plugin's radio group */
+.ismRadioStack {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  align-items: flex-start;
 }
 
+/* When a policy runs: the time and the time zone side by side, 24 px apart */
 .ismCron__row {
   display: flex;
   align-items: flex-start;
@@ -2100,21 +5064,52 @@
 
 .ismCron__text {
   margin: 0;
-  font-size: var(--font-size-s);
 }
 
+/* A schedule at the end of an accordion keeps 12 px under it: the bottom margin of the plugin's flex
+   group, which EUI's accordion measures into its height */
+.ismSnapshotForm__accordion .ismCron__row:last-child {
+  margin-bottom: var(--space-3);
+}
+
+/* What a cron expression is, under its field: the plugin's help text around a paragraph of small
+   text, whose line is the 21 px of text at 14 px */
+.ismCron__help {
+  margin: 0;
+  padding: calc(var(--space-1) + 5px) 0 5px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 200;
+  line-height: calc(var(--font-size-s) * 1.5);
+}
+
+/* The days of the week on one line, running past the 400 px of the time as the plugin's do */
 .ismCron__days {
   display: flex;
   gap: var(--space-3);
-  margin-top: var(--space-2);
   white-space: nowrap;
 }
 
 .ismCron__monthly {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-3);
+  gap: var(--space-4);
   width: 100%;
+}
+
+/* The time of day as the plugin's date picker: its clock 16 px, 12 px in from the edge, and the
+   time 32 px in */
+.ismTimeField.atlFieldGroup {
+  padding-left: calc(var(--space-3) - 1px);
+}
+
+.ismTimeField.atlFieldGroup > .atlIcon {
+  width: 16px;
+  height: 16px;
+}
+
+.ismTimeField.atlFieldGroup > input {
+  padding-left: 0;
 }
 
 .ismTimeList {
@@ -2127,20 +5122,15 @@
   color: var(--color-surface);
 }
 
+/* The maximum age, a number as wide as the plugin's beside a unit of 100 px, 24 px apart */
 .ismSnapshotPolicy__age {
   display: grid;
-  grid-template-columns: 236px 100px;
+  grid-template-columns: 234px 100px;
   gap: var(--space-6);
-  width: 100%;
-}
-
-.ismSnapshotPolicy__more {
-  padding-top: var(--space-3);
 }
 
 .ismSnapshotPolicy__text {
   margin: 0;
-  font-size: var(--font-size-s);
 }
 
 .ismSnapshotPolicy__counts {
@@ -2149,39 +5139,208 @@
   gap: var(--space-6);
 }
 
-.ismSnapshotPolicy__counts > .ismLabeled {
-  flex: 0 0 236px;
+.ismSnapshotPolicy__counts > .ismSnapField {
+  flex: 0 0 234px;
 }
 
+.ismSnapshotPolicy__counts .ismSnapField__body > .atlField {
+  max-width: none;
+}
+
+/* "Configure when to check…": the plugin's span, grey in its own words, on a line of 14 px */
+.ismSnapshotPolicy__note {
+  color: grey;
+  font-size: var(--font-size-xs);
+  font-weight: 200;
+}
+
+/* The channel, its refresh and the channels' page, 8 px apart on the plugin's 600 px less the
+   margins of its flex group */
 .ismSnapshotPolicy__channels {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  width: 100%;
+  max-width: calc(600px - var(--space-2));
 }
 
+.ismSnapshotPolicy__channels > .atlSelect,
 .ismSnapshotPolicy__channels > select {
   flex: 1 1 auto;
   min-width: 0;
 }
 
-.ismSnapshotPolicy__channels > button {
-  flex: 0 0 auto;
-  min-width: 32px;
+.ismSnapshotPolicy__channels > .atlButton {
+  flex: none;
 }
 
-.ismPage--form.ismSnapshotPolicy .ismLabeled:has(.ismSnapshotPolicy__channels) > .ismLabeled__body {
-  max-width: 600px;
+/* The buttons beside a field and at the foot of the page, as the plugin's small buttons: the icon
+   8 px from the words, a clear 1 px border round them, the one that acts at least 112 px wide */
+.ismSnapshotPolicy__channels > .atlButton,
+.ismSnapshotForm__repository > .atlButton,
+.ismSnapshotPolicyPage__footer > .atlButton {
+  gap: var(--space-2);
+  border: 1px solid transparent;
 }
 
+/* Beside a field, whose lines are of 21 px, the words keep the page's line, where they stand as
+   the plugin's do */
+.ismSnapshotPolicy__channels > .atlButton,
+.ismSnapshotForm__repository > .atlButton {
+  line-height: 1.43;
+}
+
+.ismSnapshotPolicyPage__footer > .atlButton--primary {
+  min-width: 112px;
+}
+
+/* The refresh is the plugin's button with only an icon in it, not a square icon button */
+.ismSnapshotPolicy__channels > .atlButton--icon {
+  width: auto;
+  padding: 0 var(--space-3);
+}
+
+/* "Advanced settings – optional" beside the button that opens them */
 .ismSnapshotPolicy__fold {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
 }
 
-.ismSnapshotPolicy .ismDetail dt {
-  color: inherit;
-  font-size: var(--font-size-s);
+/* The page of a snapshot policy, as the plugin's: 5 px and 50 px in from the page, its panels 24 px
+   apart. The frame gives these pages no padding of its own. */
+.ismSnapshotPolicyPage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: 5px 50px;
+}
+
+.ismSnapshotPolicyPage__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+  padding: 0 10px;
+}
+
+.ismSnapshotPolicyPage__header h1 {
+  margin: 0;
+}
+
+.ismSnapshotPolicyPage__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* The page that makes or changes a policy: its parts one under the other, as the plugin's spacers
+   set them */
+.ismSnapshotPolicyPage--form {
+  display: block;
+}
+
+.ismSnapshotPolicyPage--form > h1 {
+  margin: 0;
+}
+
+.ismSnapshotPolicyPage__subtitle {
+  margin: 0;
+  padding: 5px 0;
+  color: var(--color-text-secondary);
+  font-weight: 200;
+  line-height: 1.5;
+}
+
+.ismSnapshotPolicyPage__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.ismPolicyPanel {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+/* As the plugin's, the title stands 2 px out of the panel's padding, unless a button is beside it */
+.ismPolicyPanel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1);
+  margin: -2px;
+}
+
+.ismPolicyPanel__header--action {
+  margin: 0;
+}
+
+.ismPolicyPanel__header h2 {
+  margin: 0;
+}
+
+.ismPolicyPanel__rule {
+  height: 1px;
+  margin: var(--space-2) 0;
+  border: 0;
+  background: var(--color-border-light);
+}
+
+/* Three to a row as OUI's grid of thirds: each 33.3 % of the grid and its outer gutters, less a
+   gutter (so the third column starts a little to the left of a true third) */
+.ismPolicyFacts {
+  display: grid;
+  grid-template-columns: repeat(3, calc((100% + var(--space-6)) * 0.333 - var(--space-6)));
+  gap: var(--space-6);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.ismPolicyFacts--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ismPolicyFacts--one {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Two grids one under the other are 12 px apart, as the plugin's, whose margins overlap */
+.ismPolicyFacts + .ismPolicyFacts {
+  margin-top: var(--space-3);
+}
+
+.ismPolicyFacts dt {
   font-weight: var(--font-weight-semibold);
+}
+
+.ismPolicyFacts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* "None", a paragraph of the plugin's text, keeps the line of space under it */
+.ismPolicyFacts dd > p {
+  margin: 0 0 1.5em;
+}
+
+/* "Advanced settings" opens as the plugin's accordion: a plain line with the arrow 4 px in */
+.ismPolicyPanel .ismPolicyFacts + .atlAccordion {
+  margin-top: var(--space-2);
+}
+
+.ismPolicyPanel .atlAccordion__button {
+  gap: var(--space-2);
+  padding: 0;
+  font-weight: var(--font-weight-regular);
+  line-height: 1.5;
+}
+
+.ismPolicyPanel .atlAccordion__arrow {
+  margin-left: var(--space-1);
+}
+
+.ismPolicyPanel .atlAccordion .ismPolicyFacts {
+  margin-top: var(--space-2);
 }

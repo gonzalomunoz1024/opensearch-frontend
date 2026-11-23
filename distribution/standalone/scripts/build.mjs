@@ -68,6 +68,11 @@ rmSync(dist, { recursive: true, force: true });
 
 // The server: run by Node as it is, with no packages of its own
 const serverFiles = transpileTree('server') + transpileTree('common');
+// The DQL parser of the browser side, which the server also reads the filter of a saved objects
+// search with
+for (const file of ['web/lib/kuery.ts']) {
+  write(join(dist, file.replace(/\.ts$/, '.js')), transpile(readFileSync(join(root, file), 'utf8'), join(root, file)));
+}
 write(
   join(dist, 'package.json'),
   JSON.stringify({ name: pkg.name, version: pkg.version, private: true, type: 'commonjs' }, null, 2)
@@ -119,11 +124,13 @@ for (const file of walk(join(root, 'web', 'static'))) {
 }
 
 // The licences of what is bundled into the browser scripts travel with the build: React's,
-// Leaflet's, and those of Vega, Vega-Lite and the packages their builds hold (not the ones of
-// their command line tools, which no browser build holds)
+// Leaflet's, markdown-it's with the packages it uses, and those of Vega, Vega-Lite and the
+// packages their builds hold (not the ones of their command line tools, which no browser build
+// holds)
 const COMMAND_LINE_ONLY = new Set([
   'ansi-regex',
   'ansi-styles',
+  'argparse',
   'cliui',
   'commander',
   'emoji-regex',
@@ -158,10 +165,11 @@ const follow = (name) => {
   bundled.add(name);
   Object.keys(found.entry.dependencies ?? {}).forEach(follow);
 };
-['vega', 'vega-lite', 'leaflet'].forEach(follow);
+['vega', 'vega-lite', 'leaflet', 'markdown-it'].forEach(follow);
 for (const name of [...bundled].sort()) {
   const directory = join(root, installed.get(name)?.path ?? join('node_modules', name));
-  const licence = ['LICENSE', 'LICENSE.md', 'LICENSE.txt', 'license']
+  // punycode.js calls its licence LICENSE-MIT.txt
+  const licence = ['LICENSE', 'LICENSE.md', 'LICENSE.txt', 'LICENSE-MIT.txt', 'license']
     .map((file) => join(directory, file))
     .find((file) => existsSync(file));
   if (licence) write(join(dist, 'licenses', `${name}.txt`), readFileSync(licence));

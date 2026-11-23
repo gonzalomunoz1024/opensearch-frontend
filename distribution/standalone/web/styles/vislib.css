@@ -1,0 +1,720 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/*
+ * The classic charts (vislib of OpenSearch Dashboards): its layout of a chart and its legend, the
+ * axes, the marks, the legend and its popover, and the tooltip, as the theme draws them. The
+ * axes' lines are #ddd and the shade of the end zones a tenth of black, as vislib and the theme
+ * write them.
+ */
+
+/* Not a containing block: the legend's toggle sits in the corner of what holds the chart */
+.visLib {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: row;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* A chart of a split fills its part, as a chart fills the room it is given */
+.visSplit__body > .visLib {
+  position: absolute;
+  inset: 0;
+}
+
+.visLib--legend-left {
+  flex-direction: row-reverse;
+}
+
+.visLib--legend-right {
+  flex-direction: row;
+}
+
+.visLib--legend-top {
+  flex-direction: column-reverse;
+}
+
+.visLib--legend-bottom {
+  flex-direction: column;
+}
+
+.visLib--legend-top .visLib__legend,
+.visLib--legend-bottom .visLib__legend {
+  max-height: 50px;
+}
+
+.visLib__chart {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.visWrapper {
+  position: relative;
+  display: flex;
+  flex: 1 1 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 10px 0;
+  overflow: hidden;
+}
+
+.visWrapper svg {
+  overflow: visible;
+}
+
+.visWrapper .visAxis__svg,
+.visWrapper .chart,
+.visWrapper > .chart-title {
+  position: absolute;
+}
+
+.visWrapper .chart > svg {
+  display: block;
+}
+
+.visWrapper .axis {
+  shape-rendering: crispEdges;
+  stroke-width: 1px;
+}
+
+.visWrapper .axis line,
+.visWrapper .axis path {
+  fill: none;
+  shape-rendering: crispEdges;
+}
+
+.visWrapper .tick text {
+  fill: var(--color-text-secondary);
+  font-family: var(--font-family);
+}
+
+.visWrapper .axis-title text {
+  fill: var(--color-text-secondary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* A title beside the chart takes a pixel even when it has no text */
+.visWrapper .y-axis-title {
+  min-width: 1px;
+}
+
+/* The values written in a heat map's squares, in the page's own text */
+.visWrapper .square text {
+  font-family: var(--font-family);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-regular);
+}
+
+.visWrapper rect {
+  opacity: 1;
+}
+
+.visWrapper rect:hover {
+  opacity: 0.8;
+}
+
+.visWrapper circle {
+  opacity: 0;
+}
+
+.visWrapper circle:hover {
+  opacity: 1;
+  stroke-width: 8px;
+  stroke-opacity: 0.8;
+}
+
+.visWrapper .line circle {
+  opacity: 1;
+}
+
+.visWrapper .line circle:hover {
+  stroke-width: 8px;
+  stroke-opacity: 0.8;
+}
+
+.visWrapper .grid > path {
+  stroke: color-mix(in srgb, var(--color-text-secondary) 20%, transparent);
+}
+
+.visWrapper .brush .extent {
+  shape-rendering: crispEdges;
+  fill: rgb(0 0 0 / 10%);
+}
+
+.visWrapper .endzone {
+  pointer-events: none;
+  fill: rgb(0 0 0 / 10%);
+}
+
+:root.themeDark .visWrapper .brush .extent,
+:root.themeDark .visWrapper .endzone {
+  fill: rgb(255 255 255 / 10%);
+}
+
+.visWrapper .visAreaChart__overlapArea {
+  opacity: 0.8;
+}
+
+.visWrapper .series > path,
+.visWrapper .series > rect {
+  stroke-opacity: 1;
+  stroke-width: 0;
+}
+
+.visWrapper .series > path {
+  fill-opacity: 0.8;
+}
+
+.visColumnChart__barLabel {
+  font-family: var(--font-family);
+  font-size: 8pt;
+  pointer-events: none;
+}
+
+.visColumnChart__barLabel--stack {
+  dominant-baseline: central;
+  text-anchor: middle;
+}
+
+.visColumnChart__bar-label--dark {
+  fill: #000;
+}
+
+.visColumnChart__bar-label--light {
+  fill: #fff;
+}
+
+/* What vislib's handler shows in place of the charts when they cannot be drawn: the message in the
+   middle of their room, in a box as wide as its longest word at least, in the page's text. The
+   charts stay out of sight in the same room, measuring it. */
+.visLib__chart--failed {
+  position: relative;
+}
+
+.visLib__chart--failed > .visWrapper {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+}
+
+.visLib__chart > .visError {
+  flex: 1 1 0;
+  flex-direction: row;
+  gap: 0;
+  height: auto;
+  padding: 0;
+  overflow: visible;
+  color: var(--color-text-primary);
+}
+
+.visLib__chart > .visError h4 {
+  margin: 0;
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-regular);
+  line-height: 1;
+}
+
+/* A pie's room (vislib's pie layout): the chart in a column, five pixels in from its edges */
+
+.visWrapper__column {
+  display: flex;
+  flex: 1 0 0;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.visWrapper__chart {
+  display: flex;
+  flex: 1 0 0;
+  min-width: 0;
+  min-height: 0;
+  margin: 5px;
+  overflow: visible;
+}
+
+.visWrapper__chart > .chart {
+  position: static;
+  flex: 1 1 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: visible;
+}
+
+/* The charts of a split: side by side or one under another, five pixels from each other, a title
+   under each column or beside each row */
+
+.visWrapper__splitCharts--column {
+  display: flex;
+  flex: 1 0 20px;
+  flex-direction: row;
+  min-width: 0;
+  min-height: 0;
+}
+
+.visWrapper__splitCharts--column > .visWrapper__chart {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.visWrapper__splitCharts--row {
+  display: flex;
+  flex: 1 1 100%;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.visWrapper__splitCharts--row > .visWrapper__chart {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.visWrapper .chart-title text {
+  fill: var(--color-text-secondary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-chart);
+}
+
+/* A gauge's room (vislib's gauge layout): the titles of a split beside and under the chart, which
+   a gauge leaves empty, and the gauges on lines as high as the text, their name under them */
+
+.visAxis__splitTitles--y {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 12px;
+}
+
+.visAxis__splitTitles--x {
+  display: flex;
+  flex-direction: row;
+  min-width: 16px;
+  min-height: 1px;
+  max-height: 16px;
+}
+
+.visWrapper__alerts {
+  position: relative;
+}
+
+.visWrapper .chart:has(> .chart-title) {
+  line-height: 1;
+}
+
+/* A title's line is as high as its text, as every line of the original's page is (EUI's reset) */
+.visWrapper .chart-title {
+  flex: 1 1 100%;
+  min-width: 14px;
+  min-height: 14px;
+  line-height: 1;
+}
+
+.visWrapper .chart-label {
+  fill: var(--color-text-secondary);
+  font-family: var(--font-family);
+}
+
+.visGauge__meter--outline {
+  stroke: var(--color-border-light);
+}
+
+.visWrapper .slice {
+  stroke: var(--color-surface);
+  stroke-width: 2px;
+}
+
+.visWrapper .slice:hover {
+  opacity: 0.8;
+}
+
+.visWrapper .label-line {
+  fill: none;
+  stroke: color-mix(in srgb, var(--color-text-secondary) 20%, transparent);
+  stroke-width: 2px;
+}
+
+.visWrapper .label-text {
+  fill: var(--color-text-secondary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-regular);
+}
+
+/* The legend */
+
+.visLegend {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+}
+
+.visLegend__toggleTooltipAnchor {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+}
+
+.visLegend__toggle {
+  display: flex;
+  padding: var(--space-1);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: opacity var(--duration-fast) ease-in, background-color var(--duration-fast) ease-in;
+}
+
+.visLegend__toggle:focus {
+  outline: none;
+}
+
+.visLegend__toggle:focus-visible {
+  background-color: var(--color-accent-tint);
+}
+
+.visLegend__toggle--isOpen {
+  background-color: color-mix(in srgb, var(--color-text-primary) 10%, transparent);
+  opacity: 1;
+}
+
+.visLegend__list {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 150px;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.visLib--legend-left .visLegend__list {
+  margin-bottom: var(--space-6);
+}
+
+.visLib--legend-bottom .visLegend__list {
+  margin-left: var(--space-6);
+}
+
+.visLib--legend-top .visLegend__list,
+.visLib--legend-bottom .visLegend__list {
+  flex-flow: row wrap;
+  width: auto;
+}
+
+.visLib--legend-top .visLegend__value,
+.visLib--legend-bottom .visLegend__value {
+  flex-grow: 0;
+  max-width: 150px;
+}
+
+.visLegend__anchor {
+  display: block;
+}
+
+.visLegend__button {
+  display: inline-block;
+  max-width: 100%;
+  height: 24px;
+  margin: 0 var(--space-2) 0 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-primary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.5;
+  text-align: left;
+  white-space: nowrap;
+  vertical-align: middle;
+  overflow: hidden;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) ease-out;
+}
+
+.visLegend__button:hover,
+.visLegend__button:focus {
+  background-color: color-mix(in srgb, var(--color-text-secondary) 10%, transparent);
+  outline: none;
+}
+
+.visLegend__buttonContent {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 100%;
+}
+
+.visLegend__dot {
+  display: block;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+}
+
+/* The name stretches to the dot's height and its line sits at the top, as the original's */
+.visLegend__buttonText {
+  display: flex;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.visLegend__valueTitle {
+  display: block;
+  overflow: hidden;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+.visLegend__popover {
+  position: fixed;
+  z-index: 2000;
+  padding: var(--space-2);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  box-shadow: inset 0 0.5px 0 var(--material-highlight), 0 0 0 1px var(--material-keyline), var(--shadow-lg);
+}
+
+.visLegend__popover:focus {
+  outline: none;
+}
+
+.visLegend__filters {
+  display: flex;
+  width: 100%;
+  padding: 2px;
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface-secondary);
+}
+
+/* The theme's segmented control: its pieces 10px round, as it writes them */
+.visLegend__filter {
+  display: inline-flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  height: var(--control-height-s);
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: color var(--duration-fast) ease-in, transform var(--duration-fast) ease-in;
+}
+
+.visLegend__filter + .visLegend__filter {
+  margin-left: -1px;
+}
+
+.visLegend__filter:hover,
+.visLegend__filter:focus {
+  color: var(--color-text-primary);
+  outline: none;
+}
+
+.visLegend__filter:active {
+  transform: scale(0.97);
+}
+
+.visLegend__spacer {
+  height: var(--space-2);
+}
+
+.visLegend__valueColorPicker {
+  width: 240px;
+  line-height: 0;
+}
+
+.visLegend__valueColorPickerDot {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+  cursor: pointer;
+}
+
+.visLegend__valueColorPickerDot:hover {
+  transform: scale(1.4);
+}
+
+.visLegend__valueColorPickerDot:focus {
+  outline: none;
+  background-color: var(--color-accent-tint);
+}
+
+.visLegend__valueColorPickerDot-isSelected {
+  border: var(--space-1) solid;
+  border-radius: 100%;
+}
+
+/* On a dashboard the toggle sits in the corner of the panel's body, past its padding, and shows
+   while the panel is pointed at, or edited */
+.dshPanel .visLegend__toggleTooltipAnchor {
+  bottom: calc(-1 * var(--space-2));
+  left: calc(-1 * var(--space-2));
+}
+
+.dshPanel .visLegend__toggle {
+  border-top-left-radius: 0;
+  border-bottom-right-radius: 0;
+  opacity: 0;
+}
+
+.dshPanel .visLegend__toggle:focus,
+.dshPanel:hover .visLegend__toggle,
+.dshPanel--editing .visLegend__toggle {
+  opacity: 1;
+}
+
+/* The tooltip */
+
+.visTooltip {
+  position: fixed;
+  z-index: 9000;
+  max-width: 320px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-text-primary);
+  box-shadow: var(--shadow-lg);
+  color: var(--color-surface);
+  font-family: var(--font-family);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.visTooltip > * {
+  margin: var(--space-2) var(--space-2) 0;
+}
+
+.visTooltip > :last-child {
+  margin-bottom: var(--space-2);
+}
+
+.visTooltip table {
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+.visTooltip td,
+.visTooltip th {
+  padding: var(--space-1);
+  text-align: left;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+}
+
+.visTooltip__labelContainer,
+.visTooltip__valueContainer {
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+}
+
+.visTooltip__label {
+  color: color-mix(in srgb, var(--color-surface) 80%, var(--color-text-primary));
+  font-weight: var(--font-weight-medium);
+}
+
+/* The original's tooltip stays dark in the dark theme: white on the secondary surface, its labels
+   the light grey they are in the light one */
+:root.themeDark .visTooltip {
+  background-color: var(--color-surface-secondary);
+  color: var(--color-full-shade);
+}
+
+:root.themeDark .visTooltip__label {
+  color: color-mix(in srgb, var(--color-full-shade) 80%, var(--color-surface-secondary));
+}
+
+.visTooltip__header {
+  display: flex;
+  align-items: center;
+  margin: 0 0 var(--space-2);
+  padding: var(--space-1) var(--space-2);
+}
+
+.visTooltip__header:last-child {
+  margin-bottom: 0;
+}
+
+.visTooltip__header + * {
+  margin-top: var(--space-2);
+}
+
+.visTooltip__headerIcon {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  margin-right: var(--space-2);
+  fill: currentColor;
+}
+
+.visTooltip__headerText {
+  flex: 1 1 100%;
+}
+
+/* "Select filters to apply": as wide as what it offers, from 400 px, as the original's dialog */
+.atlModal.visFilterChoice {
+  width: auto;
+  min-width: min(400px, 100%);
+  max-width: 768px;
+}
+
+/* The dialog takes the focus when it opens, as the original's, which draws no ring around it */
+.atlModal.visFilterChoice:focus {
+  outline: none;
+}
+
+/* Each as wide as a form row of the original's at most, a long one going on to a second line */
+.visFilterChoice__row {
+  display: flex;
+  max-width: 400px;
+}
+
+.visFilterChoice__row + .visFilterChoice__row {
+  margin-top: var(--space-4);
+}
+
+/* Its switches are the original's compressed ones */
+.visFilterChoice .atlSwitch {
+  align-items: flex-start;
+  line-height: 16px;
+}
+
+.visFilterChoice .atlSwitch__track {
+  width: 28px;
+  height: 16px;
+  border-radius: 8px;
+}
+
+.visFilterChoice .atlSwitch__track::after {
+  width: 12px;
+  height: 12px;
+}
+
+.visFilterChoice .atlSwitch__track[aria-checked="true"] {
+  background: var(--color-accent);
+}
+
+.visFilterChoice .atlSwitch__track[aria-checked="true"]::after {
+  transform: translateX(12px);
+}
+
+.visFilterChoice__negate {
+  color: var(--color-critical-text);
+}

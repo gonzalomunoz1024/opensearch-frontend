@@ -10,15 +10,7 @@ import { Button } from '../../components/basic';
 import { SearchField } from '../../components/form';
 import { searchItems } from '../../lib/search_syntax';
 import { useBreadcrumbs } from '../../shell/state';
-import {
-  ContentPanel,
-  DeleteModal,
-  FilterButton,
-  LocalTable,
-  ism,
-  toasts,
-  type TableColumn,
-} from './common';
+import { LocalTable, ism, toasts, type TableColumn } from './common';
 import { CRUMBS } from './routes';
 import {
   distinct,
@@ -28,20 +20,28 @@ import {
   withFieldValues,
   type Repository,
 } from './snapshot_model';
-import { CreateRepositoryFlyout } from './snapshot_parts';
+import {
+  CreateRepositoryFlyout,
+  DeleteDialog,
+  FilterGroup,
+  GroupFilter,
+  ListPanel,
+} from './snapshot_parts';
 
 const COLUMNS: Array<TableColumn<Repository>> = [
   {
     field: 'id',
     name: 'Repository name',
     sortable: true,
+    width: '15%',
     render: (row) => <span title={row.id}>{truncate(row.id, 30)}</span>,
   },
-  { field: 'type', name: 'Type', sortable: true, render: (row) => row.type },
+  { field: 'type', name: 'Type', sortable: true, width: '10%', render: (row) => row.type },
   {
     field: 'snapshotCount',
     name: 'Snapshot count',
     sortable: true,
+    width: '80%',
     render: (row) => row.snapshotCount,
   },
 ];
@@ -81,15 +81,14 @@ export function Repositories() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The dialog has closed already, as the plugin's: each deletion is told as it is done
   const remove = async () => {
     for (const repository of selected) {
       const answer = await ism.delete(`_repositores/${encodeURIComponent(repository.id)}`);
       if (answer.ok) toasts.success(`Deleted repository ${repository.id}.`);
       else toasts.danger(answer.error || 'There was a problem deleting the repository.');
     }
-    if (!here.current) return;
-    setDialog(undefined);
-    await load();
+    if (here.current) await load();
   };
 
   const filter = (types: string[]) => {
@@ -104,16 +103,15 @@ export function Repositories() {
   ) as unknown as Repository[];
   return (
     <>
-      <ContentPanel
+      <ListPanel
         title="Repositories"
         description="Repositories are remote storage locations used to store snapshots."
         actions={
           <>
-            <Button size="s" icon="refresh" onClick={() => void load()} testId="refreshButton">
+            <Button icon="refresh" onClick={() => void load()} testId="refreshButton">
               Refresh
             </Button>
             <Button
-              size="s"
               variant="danger"
               disabled={selected.length === 0}
               onClick={() => setDialog('delete')}
@@ -121,7 +119,7 @@ export function Repositories() {
             >
               Delete
             </Button>
-            <Button size="s" variant="primary" icon="plus" onClick={() => setDialog('create')}>
+            <Button variant="primary" icon="plus" onClick={() => setDialog('create')}>
               Create repository
             </Button>
           </>
@@ -130,6 +128,7 @@ export function Repositories() {
         <div className="ismSearchRow">
           <div className="atlGrow">
             <SearchField
+              compact
               value={text}
               onChange={(value) => {
                 setText(value);
@@ -142,12 +141,14 @@ export function Repositories() {
               aria-label="Search repository"
             />
           </div>
-          <FilterButton
-            name="Type"
-            options={distinct(repositories.map((row) => row.type)).map((value) => ({ value }))}
-            selected={fieldValues(text, 'type')}
-            onChange={filter}
-          />
+          <FilterGroup>
+            <GroupFilter
+              name="Type"
+              options={distinct(repositories.map((row) => row.type))}
+              selected={fieldValues(text, 'type')}
+              onChange={filter}
+            />
+          </FilterGroup>
         </div>
         <LocalTable
           columns={COLUMNS}
@@ -158,7 +159,7 @@ export function Repositories() {
           onSelect={setSelected}
           empty={loading ? 'Loading repositories...' : 'No items found'}
         />
-      </ContentPanel>
+      </ListPanel>
       {dialog === 'create' && (
         <CreateRepositoryFlyout
           onClose={() => setDialog(undefined)}
@@ -169,14 +170,14 @@ export function Repositories() {
         />
       )}
       {dialog === 'delete' && (
-        <DeleteModal
-          title="Delete repository"
-          onClose={() => setDialog(undefined)}
-          onDelete={remove}
-        >
-          Delete "<strong>{selected.map((row) => row.id).join(', ')}</strong>" permanently?{' '}
-          {snapshotCountsWarning(selected)}
-        </DeleteModal>
+        <DeleteDialog
+          type="repository"
+          ids={selected.map((row) => row.id).join(', ')}
+          warning={snapshotCountsWarning(selected)}
+          confirm
+          onCancel={() => setDialog(undefined)}
+          onDelete={() => void remove()}
+        />
       )}
     </>
   );

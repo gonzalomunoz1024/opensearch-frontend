@@ -5,20 +5,23 @@
  * the index pattern or the saved search it is drawn from), and the editor.
  */
 
-import { useMemo, useState } from 'react';
-import { Badge, cx } from '../../components/basic';
+import { useEffect, useMemo, useState } from 'react';
+import { Badge, Button, cx } from '../../components/basic';
 import { SearchField } from '../../components/form';
 import { Icon, type IconName } from '../../components/icon';
 import { Modal } from '../../components/overlay';
 import { appUrl } from '../../lib/url';
 import { VIS_TYPES, visIcon, visType, type VisType } from '../../lib/vis';
 import { navigate, navigateHash, useLocation } from '../../router';
-import { Listing, type Listed } from '../../shell/listing';
+import { services } from '../../services';
+import { Listing, ListingEmpty, type Listed, type ListingColumn } from '../../shell/listing';
 import { SavedObjectFinder } from '../../shell/saved_objects_ui';
 import { currentGlobalParam, useBreadcrumbs } from '../../shell/state';
 import { canDraw } from '../../vis/visualization';
 import { VIS_BUILDER_APP, VIS_BUILDER_TITLE, VIS_BUILDER_TYPE, visBuilderEditUrl } from '../vis_builder/model';
 import { VISUALIZE, VisEditor } from './editor';
+import { visualizeRoute } from './routes';
+import { editorStateFor, type ContainerInfo } from './state_transfer';
 import '../../styles/visualize.css';
 
 const SOURCE_TYPES = [
@@ -52,25 +55,37 @@ const typeOf = (object: Listed): string => {
 const editUrl = (object: Listed) =>
   object.type === VIS_BUILDER_TYPE ? visBuilderEditUrl(object.id) : appUrl(VISUALIZE, `/edit/${encodeURIComponent(object.id)}`);
 
+// Such a one the original lists under a button, not a link
+const opensElsewhere = (object: Listed) => object.type === VIS_BUILDER_TYPE;
+
 const typeTitle = (type: string) => (type === VIS_BUILDER_TYPE ? VIS_BUILDER_TITLE : (visType(type)?.title ?? type));
+
+/** visualize:enableLabs: whether the kinds still being tried out (the input controls) are offered and listed */
+const labsEnabled = () => services.uiSettings.get<boolean>('visualize:enableLabs', true) !== false;
+
+/** Without the labs, the list leaves out what was made of an experimental kind, as the original's */
+const isNotLab = (object: Listed) => visType(typeOf(object))?.stage !== 'experimental';
 
 export function Visualize() {
   const { hashPath, hashParams } = useLocation();
-  const edit = /^\/edit\/(.+)$/.exec(hashPath);
-  if (edit) return <VisEditor key={edit[1]} savedId={decodeURIComponent(edit[1])} />;
-  if (hashPath === '/create' && hashParams.type) {
-    return <VisEditor key={`create:${hashParams.type}:${hashParams.indexPattern ?? ''}:${hashParams.savedSearchId ?? ''}`} />;
+  const route = visualizeRoute(hashPath);
+  if (route.page === 'edit') return <VisEditor key={route.id} savedId={decodeURIComponent(route.id)} />;
+  if (route.page === 'create') {
+    return <VisEditor key={`create:${hashParams.type ?? ''}:${hashParams.indexPattern ?? ''}:${hashParams.savedSearchId ?? ''}`} />;
   }
-  return <VisualizeList creating={hashPath === '/create'} />;
+  return <VisualizeList creating={route.page === 'new'} />;
 }
 
 function VisualizeList({ creating }: { creating: boolean }) {
   useBreadcrumbs([{ text: 'Visualize' }]);
   const [dialog, setDialog] = useState(creating);
+  // As the original's: `/new` opens the dialog, and the list without it closes it, Back and Forward too
+  useEffect(() => setDialog(creating), [creating]);
   return (
     <>
       <Listing
         title="Visualizations"
+        headingId="visualizeListingHeading"
         entity="visualization"
         entities="visualizations"
         types={[VIS_BUILDER_TYPE, 'visualization']}
@@ -78,32 +93,34 @@ function VisualizeList({ creating }: { creating: boolean }) {
         createLabel="Create visualization"
         onCreate={() => setDialog(true)}
         linkTo={editUrl}
+        titleTestId={visTitleTestId}
+        titleAsButton={opensElsewhere}
         editTo={editUrl}
-        extraColumns={[
-          {
-            id: 'type',
-            name: 'Type',
-            width: 170,
-            render: (object) => {
-              const type = typeOf(object);
-              return (
-                <span className="atlRow">
-                  <Icon name={type === VIS_BUILDER_TYPE ? 'visBuilder' : (visIcon(type) as IconName)} />
-                  {typeTitle(type)}
-                </span>
-              );
-            },
-            sortValue: (object) => typeTitle(typeOf(object)),
-          },
-        ]}
-        emptyBody="You can create different visualizations based on your data."
-        testId="visualizeLandingPage"
+        typeColumn={VIS_TYPE_COLUMN}
+        padding="l"
+        deleteErrors={{ title: 'Error deleting visualization', per: 'each' }}
+        noItems={
+          <ListingEmpty
+            icon="visualize"
+            headingId="visualizeListingHeading"
+            title="Create your first visualization"
+            actions={
+              <Button variant="primary" icon="plus" onClick={() => setDialog(true)} testId="createVisualizationPromptButton">
+                Create new visualization
+              </Button>
+            }
+          >
+            <p>You can create different visualizations based on your data.</p>
+          </ListingEmpty>
+        }
+        keep={labsEnabled() ? undefined : isNotLab}
       />
       {dialog && (
         <NewVisModal
           onClose={() => {
             setDialog(false);
-            if (creating) navigateHash('/', { _g: currentGlobalParam() }, { replace: true });
+            // Come by `/new`, the address becomes the landing page's, in an entry of its own
+            if (creating) navigateHash('/', { _g: currentGlobalParam() });
           }}
         />
       )}
@@ -111,8 +128,38 @@ function VisualizeList({ creating }: { creating: boolean }) {
   );
 }
 
-/** "New Visualization": every kind there is, then what an aggregation-based one is drawn from */
-export function NewVisModal({ onClose }: { onClose: () => void }) {
+const visTitleTestId = (title: string) => `visListingTitleLink-${title.split(' ').join('-')}`;
+
+const VIS_TYPE_COLUMN: ListingColumn = {
+  field: 'typeTitle',
+  name: 'Type',
+  value: (object) => typeTitle(typeOf(object)),
+  render: (object) => {
+    const type = typeOf(object);
+    return (
+      <span className="vzeListType">
+        <Icon name={type === VIS_BUILDER_TYPE ? 'visBuilder' : (visIcon(type) as IconName)} />
+        {typeTitle(type)}
+      </span>
+    );
+  },
+};
+
+/**
+ * "New Visualization": every kind there is, then what an aggregation-based one is drawn from. An
+ * application that opens it (a dashboard's "Create new") names itself and its container: the
+ * editor is opened with them, to come back to it.
+ */
+export function NewVisModal({
+  onClose,
+  originatingApp,
+  containerInfo,
+}: {
+  onClose: () => void;
+  originatingApp?: string;
+  containerInfo?: ContainerInfo;
+}) {
+  const state = editorStateFor(originatingApp, containerInfo);
   const [filter, setFilter] = useState('');
   const [hovered, setHovered] = useState<VisType>();
   const [chosen, setChosen] = useState<VisType>();
@@ -120,13 +167,16 @@ export function NewVisModal({ onClose }: { onClose: () => void }) {
   const shown = useMemo(() => {
     const text = filter.trim().toLowerCase();
     // In the order of the letters' codes, as OpenSearch Dashboards lists them: TSVB before Tag Cloud
-    const list = [...VIS_TYPES, ...ALIASES].sort((a, b) => (a.title < b.title ? -1 : a.title > b.title ? 1 : 0));
+    const labs = labsEnabled();
+    const list = [...VIS_TYPES, ...ALIASES]
+      .filter((type) => labs || type.stage !== 'experimental')
+      .sort((a, b) => (a.title < b.title ? -1 : a.title > b.title ? 1 : 0));
     return text ? list.filter((type) => type.title.toLowerCase().includes(text) || type.name.includes(text)) : list;
   }, [filter]);
 
   const create = (type: VisType, source: { indexPattern?: string; savedSearchId?: string } = {}) => {
     onClose();
-    navigate(appUrl(VISUALIZE, '/create', { type: type.name, ...source, _g: currentGlobalParam() }), { force: true });
+    navigate(appUrl(VISUALIZE, '/create', { type: type.name, ...source, _g: currentGlobalParam() }), { force: true, state });
   };
 
   if (chosen) {
@@ -149,7 +199,16 @@ export function NewVisModal({ onClose }: { onClose: () => void }) {
     <Modal title="New Visualization" onClose={onClose} wide>
       <div className="vzeNew" data-test-subj="visNewDialogTypes">
         <div className="vzeNew__types">
-          <SearchField value={filter} onChange={setFilter} placeholder="Filter" aria-label="Filter for a visualization type" autoFocus testId="filterVisType" />
+          {/* The original's compressed search field: 32 px, its magnifier 12 px */}
+          <SearchField
+            compact
+            value={filter}
+            onChange={setFilter}
+            placeholder="Filter"
+            aria-label="Filter for a visualization type"
+            autoFocus
+            testId="filterVisType"
+          />
           <span className="atlScreenReaderOnly" aria-live="polite">
             {filter ? `${shown.length} ${shown.length === 1 ? 'type' : 'types'} found` : ''}
           </span>
@@ -170,7 +229,7 @@ export function NewVisModal({ onClose }: { onClose: () => void }) {
                     onClick={() => {
                       if (alias) {
                         onClose();
-                        navigate(alias.open(), { force: true });
+                        navigate(alias.open(), { force: true, state });
                         return;
                       }
                       if (!drawn) return;

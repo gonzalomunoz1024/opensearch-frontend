@@ -207,12 +207,6 @@
   background: var(--color-surface-secondary);
 }
 
-/* The theme's tooltip is 256 px wide at most, and breaks a word longer than that */
-.homSampleDataTip.atlTooltip {
-  max-width: 256px;
-  overflow-wrap: break-word;
-}
-
 /* On a narrow screen the cards are one a row */
 @media (max-width: 767px) {
   .homSampleDataSetCards {

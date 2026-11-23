@@ -5,32 +5,29 @@
  * the dialog that creates an alias or changes its indexes.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button, CallOut } from '../../components/basic';
 import { ComboBox } from '../../components/combo_box';
-import { FormRow, TextField } from '../../components/form';
-import { Modal, type MenuItem } from '../../components/overlay';
+import { TextField } from '../../components/form';
+import { Flyout, type MenuItem } from '../../components/overlay';
 import { useBreadcrumbs } from '../../shell/state';
 import {
   ActionsMenu,
-  ContentPanel,
   ExternalLink,
-  FilterButton,
   LocalTable,
-  Names,
-  PanelButton,
   SearchRow,
   Table,
-  TypeToConfirmModal,
   go,
   ism,
   toasts,
   useListQuery,
   type TableColumn,
 } from './common';
+import { ContentPanel, ContentPanelActions, ListEmpty, TitleHelp } from './content_panel';
+import { FormRow } from './form_row';
+import { aliasIndexesError, aliasNameError } from './index_model';
 import {
   INDEX_NAMING_MESSAGE,
-  INDEX_NAMING_PATTERN,
   SYSTEM_ALIAS,
   SYSTEM_INDEX,
   aliasActions,
@@ -41,53 +38,63 @@ import {
   type AliasRow,
 } from './model';
 import { ClearCacheModal, FlushModal, RefreshModal } from './operations';
+import { ModalButtons, ModalNames, PluginModal, TypeTheWord } from './plugin_modal';
 import { CRUMBS, ROUTES } from './routes';
 
 const ALIAS_DOCS = 'https://opensearch.org/docs/latest/opensearch/index-alias/';
 const STATUS_OPTIONS = ['open', 'closed', 'hidden', 'none', 'all'];
 
-/** The names of a few and a way to see the rest */
+/**
+ * The first three of some names and, when there are more, a link that opens them all in a flyout,
+ * ten to a page: how the plugin's lists show the indexes of an alias and the patterns of a template.
+ */
 export function FewNames({
   names,
   title,
+  hint,
   column,
+  field,
   testId,
 }: {
   names: string[];
-  /** What the dialog with all of them is called */
-  title: string;
+  /** What the flyout with all of them is called, in the pieces the plugin writes it in */
+  title: ReactNode;
+  /** What the title says when pointed at */
+  hint: string;
   column: string;
+  /** The column's field, which names its header's test id */
+  field: string;
   testId: string;
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <>
+    <div>
       <span>{names.slice(0, 3).join(', ')}</span>
       {names.length > 3 && (
-        <>
-          {' '}
-          <button
-            type="button"
-            className="atlLinkButton"
-            onClick={() => setOpen(true)}
-            data-test-subj={`${names.length - 3} more`}
-          >
-            {names.length - 3} more
-          </button>
-        </>
+        <button
+          type="button"
+          className="atlLinkButton ismCellLink ismFewNames__more"
+          onClick={() => setOpen(!open)}
+          data-test-subj={`${names.length - 3} more`}
+        >
+          {names.length - 3} more
+        </button>
       )}
       {open && (
-        <Modal title={`${title} (${names.length})`} onClose={() => setOpen(false)}>
+        <Flyout title={<span title={hint}>{title}</span>} onClose={() => setOpen(false)}>
           <div data-test-subj={testId}>
             <LocalTable
-              columns={[{ field: 'name', name: column, render: (row: { name: string }) => row.name }]}
+              fixed
+              caption
+              columns={[{ field, name: column, render: (row: { name: string }) => row.name }]}
               rows={names.map((name) => ({ name }))}
               rowId={(row) => row.name}
+              pageSizes={[10, 25, 50]}
             />
           </div>
-        </Modal>
+        </Flyout>
       )}
-    </>
+    </div>
   );
 }
 
@@ -110,8 +117,14 @@ function IndexSelect({
     const mine = (turn.current += 1);
     setLoading(true);
     const [indices, streams] = await Promise.all([
-      ism.call<Array<{ index: string }>>('cat.indices', text ? { format: 'json', index: `${text}*` } : { format: 'json' }),
-      ism.request<{ data_streams?: Array<{ name: string; indices: Array<{ index_name: string }> }> }>('GET', '/_data_stream'),
+      ism.call<Array<{ index: string }>>(
+        'cat.indices',
+        text ? { format: 'json', index: `${text}*` } : { format: 'json' }
+      ),
+      ism.request<{ data_streams?: Array<{ name: string; indices: Array<{ index_name: string }> }> }>(
+        'GET',
+        '/_data_stream'
+      ),
     ]);
     if (mine !== turn.current) return;
     // The indexes behind a data stream and the system's own cannot be given an alias here
@@ -126,47 +139,60 @@ function IndexSelect({
     );
     setLoading(false);
   };
+  // Asked half a second after the last key, as the plugin's RemoteSelect
+  const timer = useRef<number | undefined>(undefined);
   useEffect(() => {
     void search('');
+    return () => window.clearTimeout(timer.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return (
     <ComboBox
+      compact
       fullWidth
       allowCustom
-      placeholder="Select indexes or input index patterns."
+      placeholder="Select indexes"
       options={[...new Set([...options, ...value])].map((name) => ({ value: name, label: name }))}
       selected={value}
       onChange={onChange}
-      onSearch={search}
+      onSearch={(text) => {
+        window.clearTimeout(timer.current);
+        timer.current = window.setTimeout(() => void search(text), 500);
+      }}
       loading={loading}
       invalid={invalid}
-      testId="form-name-indexArray"
     />
   );
 }
 
-function CreateAlias({ alias, onClose, onSuccess }: { alias?: AliasRow; onClose: () => void; onSuccess: () => void }) {
+function CreateAlias({
+  alias,
+  onClose,
+  onSuccess,
+}: {
+  alias?: AliasRow;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
   const isEdit = Boolean(alias);
-  const [name, setName] = useState(alias?.alias ?? '');
-  const [indexes, setIndexes] = useState<string[]>(alias?.indexArray ?? []);
-  const [submitted, setSubmitted] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const nameError = !name ? 'Alias name is required.' : INDEX_NAMING_PATTERN.test(name) ? '' : 'Invalid alias name.';
-  const indexError = indexes.length === 0 ? 'At least one index should be selected.' : '';
+  const [name, setName] = useState(alias?.alias);
+  const [indexes, setIndexes] = useState<string[] | undefined>(alias?.indexArray);
+  // A field says what is wrong with it once it was changed, and both do once the form was sent
+  const [errors, setErrors] = useState<{ alias?: string; indexArray?: string }>({});
 
   const submit = async () => {
-    setSubmitted(true);
-    if ((!isEdit && nameError) || indexError) return;
-    setBusy(true);
+    const found = { alias: aliasNameError(name), indexArray: aliasIndexesError(indexes) };
+    setErrors(found);
+    if (found.alias || found.indexArray) return;
+    const chosen = indexes ?? [];
     let result: { ok: boolean; error?: string };
     if (alias) {
-      const actions = aliasActions(alias.indexArray, indexes, name);
-      result = actions.length === 0 ? { ok: true } : await ism.call('indices.updateAliases', { body: { actions } });
+      const actions = aliasActions(alias.indexArray, chosen, name ?? '');
+      result =
+        actions.length === 0 ? { ok: true } : await ism.call('indices.updateAliases', { body: { actions } });
     } else {
-      result = await ism.call('indices.putAlias', { index: indexes, name });
+      result = await ism.call('indices.putAlias', { index: chosen, name });
     }
-    setBusy(false);
     if (result.ok) {
       toasts.success(`${name} has been successfully ${isEdit ? 'updated' : 'created'}`);
       onSuccess();
@@ -176,53 +202,127 @@ function CreateAlias({ alias, onClose, onSuccess }: { alias?: AliasRow; onClose:
   };
 
   return (
-    <Modal
-      title={`${isEdit ? 'Update' : 'Create'} alias`}
+    <PluginModal
+      title={<>{isEdit ? 'Update' : 'Create'} alias</>}
       onClose={onClose}
       footer={
-        <>
-          <Button variant="empty" size="s" onClick={onClose} testId="cancelCreateAliasButton">
+        <div>
+          <Button className="ismAliasCancel" onClick={onClose} testId="cancelCreateAliasButton">
             Cancel
           </Button>
-          <Button variant="primary" size="s" loading={busy} onClick={submit} testId="createAliasButton">
+          <Button variant="primary" onClick={() => void submit()} testId="createAliasButton">
             {isEdit ? 'Save changes' : 'Create alias'}
           </Button>
-        </>
+        </div>
       }
     >
-      <div className="ismDialog">
-        {alias && matchesAny(alias.alias, SYSTEM_ALIAS) && (
-          <CallOut tone="warning">
+      {alias && matchesAny(alias.alias, SYSTEM_ALIAS) && (
+        <>
+          <CallOut tone="warning" size="s">
             This alias may contain critical system data. Changing system aliases may break OpenSearch.
           </CallOut>
-        )}
-        <FormRow label="Alias name" help={INDEX_NAMING_MESSAGE} error={submitted && !isEdit ? nameError || undefined : undefined} full>
+          <div className="ismSpacer ismSpacer--l" />
+        </>
+      )}
+      <div>
+        <FormRow
+          title="Alias name"
+          help={INDEX_NAMING_MESSAGE}
+          helpAt="bottom"
+          error={errors.alias}
+          testId="form-name-alias"
+        >
           <TextField
             compact
             placeholder="Specify alias name"
             disabled={isEdit}
-            value={name}
-            onChange={setName}
-            invalid={submitted && !isEdit && Boolean(nameError)}
-            testId="form-name-alias"
+            value={name ?? ''}
+            onChange={(value) => {
+              setName(value);
+              setErrors((before) => ({ ...before, alias: aliasNameError(value) }));
+            }}
+            invalid={Boolean(errors.alias)}
           />
         </FormRow>
         <FormRow
-          label="Indexes or index patterns"
+          title="Indexes or index patterns"
           help="Specify one or more indexes or index patterns to be part of the alias."
-          error={submitted ? indexError || undefined : undefined}
-          full
+          error={errors.indexArray}
+          testId="form-name-indexArray"
         >
-          <IndexSelect value={indexes} onChange={setIndexes} invalid={submitted && Boolean(indexError)} />
+          <IndexSelect
+            value={indexes ?? []}
+            onChange={(value) => {
+              setIndexes(value);
+              setErrors((before) => ({ ...before, indexArray: aliasIndexesError(value) }));
+            }}
+            invalid={Boolean(errors.indexArray)}
+          />
         </FormRow>
       </div>
-    </Modal>
+      <div className="ismSpacer ismSpacer--l" />
+    </PluginModal>
+  );
+}
+
+/** The plugin's DeleteAliasModal: "delete" typed before the aliases go */
+function DeleteAliasModal({
+  aliases,
+  onClose,
+  onDelete,
+}: {
+  aliases: AliasRow[];
+  onClose: () => void;
+  onDelete: () => void;
+}) {
+  const [value, setValue] = useState('');
+  const names = aliases.map((item) => item.alias);
+  const confirm = async () => {
+    const result = await ism.call('indices.deleteAlias', {
+      index: aliases.flatMap((item) => item.indexArray ?? []),
+      name: names,
+    });
+    if (result.ok) {
+      toasts.success(`Delete [${names.join(', ')}] successfully`);
+      onDelete();
+    } else {
+      toasts.danger(result.error || '');
+    }
+  };
+  return (
+    <PluginModal
+      title="Delete aliases"
+      onClose={onClose}
+      footer={
+        <ModalButtons
+          label="Delete"
+          danger
+          disabled={value !== 'delete'}
+          onCancel={onClose}
+          onConfirm={() => void confirm()}
+          confirmTestId="deleteConfirmButton"
+        />
+      }
+    >
+      {names.some((name) => matchesAny(name, SYSTEM_ALIAS)) && (
+        <>
+          <CallOut tone="warning" size="s">
+            These aliases may contain critical system data. Deleting system aliases may break OpenSearch.
+          </CallOut>
+          <div className="ismSpacer ismSpacer--l" />
+        </>
+      )}
+      <p>The following alias will be permanently deleted. This action cannot be undone.</p>
+      <ModalNames names={names} />
+      <div className="ismSpacer ismSpacer--l" />
+      <TypeTheWord word="delete" value={value} onChange={setValue} testId="deleteInput" />
+    </PluginModal>
   );
 }
 
 // --- The list ---------------------------------------------------------------------------------------------
 
-type Dialog = 'create' | 'delete' | 'clearCache' | 'flush' | 'refresh';
+type Dialog = 'create' | 'edit' | 'delete' | 'clearCache' | 'flush' | 'refresh';
 
 export function Aliases() {
   useBreadcrumbs([CRUMBS.INDEX_MANAGEMENT, CRUMBS.ALIASES]);
@@ -231,6 +331,7 @@ export function Aliases() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<AliasRow[]>([]);
   const [dialog, setDialog] = useState<Dialog>();
+  // The alias whose name was clicked; the menu's Edit changes the ticked one
   const [editing, setEditing] = useState<AliasRow>();
   const turn = useRef(0);
 
@@ -247,9 +348,7 @@ export function Aliases() {
     if (answer.ok && answer.response) {
       const grouped = groupAliases(answer.response);
       setAll(grouped);
-      setSelected((before) =>
-        before.flatMap((item) => grouped.filter((remote) => remote.alias === item.alias))
-      );
+      setSelected((before) => before.flatMap((item) => grouped.filter((remote) => remote.alias === item.alias)));
     } else {
       toasts.danger(answer.error);
     }
@@ -264,7 +363,10 @@ export function Aliases() {
   const names = selected.map((item) => item.alias);
   const operands = selected.map((item) => ({ name: item.alias, indices: item.indexArray }));
   const none = selected.length === 0;
-  const close = () => setDialog(undefined);
+  const close = () => {
+    setDialog(undefined);
+    setEditing(undefined);
+  };
 
   const columns: Array<TableColumn<AliasRow>> = [
     {
@@ -272,7 +374,15 @@ export function Aliases() {
       name: 'Alias name',
       sortable: true,
       render: (row) => (
-        <button type="button" className="atlLinkButton" onClick={() => setEditing(row)} data-test-subj={`aliasDetail-${row.alias}`}>
+        <button
+          type="button"
+          className="atlLinkButton ismCellLink"
+          onClick={() => {
+            setEditing(row);
+            setDialog('edit');
+          }}
+          data-test-subj={`aliasDetail-${row.alias}`}
+        >
           {row.alias}
         </button>
       ),
@@ -280,19 +390,37 @@ export function Aliases() {
     {
       field: 'writeIndex',
       name: 'Write index',
-      render: (row) => (row.writeIndex ? <a href={`#${ROUTES.INDEX_DETAIL}/${row.writeIndex}`}>{row.writeIndex}</a> : '-'),
+      render: (row): ReactNode =>
+        row.writeIndex ? <a href={`#${ROUTES.INDEX_DETAIL}/${row.writeIndex}`}>{row.writeIndex}</a> : '-',
     },
     {
       field: 'indexArray',
       name: 'Index name',
       render: (row) => (
-        <FewNames names={row.indexArray} title={`Indices in ${row.alias}`} column="Index" testId="indices-table" />
+        <FewNames
+          names={row.indexArray}
+          title={
+            <>
+              Indices in {row.alias} ({row.indexArray.length})
+            </>
+          }
+          hint={`Indices in ${row.alias} (${row.indexArray.length})`}
+          column="Index"
+          field="index"
+          testId="indices-table"
+        />
       ),
     },
   ];
 
   const items: MenuItem[] = [
-    { id: 'edit', label: 'Edit', disabled: selected.length !== 1, testId: 'editAction', onClick: () => setEditing(selected[0]) },
+    {
+      id: 'edit',
+      label: 'Edit',
+      disabled: selected.length !== 1,
+      testId: 'editAction',
+      onClick: () => setDialog('edit'),
+    },
     {
       id: 'forceMerge',
       label: 'Force merge',
@@ -307,54 +435,75 @@ export function Aliases() {
       testId: 'rolloverAction',
       onClick: () => go(none ? ROUTES.ROLLOVER : `${ROUTES.ROLLOVER}/${names[0]}`),
     },
-    { id: 'clearCache', label: 'Clear cache', disabled: none, testId: 'ClearCacheAction', separated: true, onClick: () => setDialog('clearCache') },
+    {
+      id: 'clearCache',
+      label: 'Clear cache',
+      disabled: none,
+      testId: 'ClearCacheAction',
+      separated: true,
+      onClick: () => setDialog('clearCache'),
+    },
     { id: 'flush', label: 'Flush', disabled: none, testId: 'Flush Action', onClick: () => setDialog('flush') },
     { id: 'refresh', label: 'Refresh', disabled: none, testId: 'refreshAction', onClick: () => setDialog('refresh') },
-    { id: 'delete', label: 'Delete', disabled: none, testId: 'deleteAction', separated: true, onClick: () => setDialog('delete') },
+    {
+      id: 'delete',
+      label: 'Delete',
+      disabled: none,
+      testId: 'deleteAction',
+      separated: true,
+      onClick: () => setDialog('delete'),
+    },
   ];
-
-  const deleteAliases = async () => {
-    const result = await ism.call('indices.deleteAlias', {
-      index: selected.flatMap((item) => item.indexArray),
-      name: names,
-    });
-    if (result.ok) {
-      toasts.success(`Delete [${names.join(',')}] successfully`);
-      close();
-      await load();
-    } else {
-      toasts.danger(result.error || '');
-    }
-  };
 
   const filtered = query.search !== '' || query.status !== '';
   return (
     <ContentPanel
-      title="Aliases"
-      description={
+      bodyStyles={{ padding: 'initial' }}
+      title={
         <>
-          An alias is a virtual index name that can point to one or more indexes. If your data is spread across
-          multiple indexes, you can create and query an alias instead of keeping track of which indexes to query.{' '}
-          <ExternalLink href={ALIAS_DOCS} />
+          <h1 className="ismContentPanel__title">Aliases</h1>
+          <TitleHelp half>
+            An alias is a virtual index name that can point to one or more indexes. If your data is spread across
+            multiple indexes, you can create and query an alias instead of keeping track of which indexes to query.{' '}
+            <ExternalLink href={ALIAS_DOCS} />
+          </TitleHelp>
         </>
       }
       actions={
-        <>
-          <ActionsMenu items={items} />
-          <PanelButton text="Create alias" variant="primary" icon="plus" onClick={() => setDialog('create')} />
-        </>
+        <ContentPanelActions
+          actions={[
+            { text: '', children: <ActionsMenu items={items} size="m" /> },
+            {
+              text: 'Create alias',
+              buttonProps: { variant: 'primary', icon: 'plus', onClick: () => setDialog('create') },
+            },
+          ]}
+        />
       }
     >
-      <SearchRow search={query.search} onSearch={(search) => setQuery({ search, from: 0 })}>
-        <FilterButton
-          name="Status"
-          options={STATUS_OPTIONS.map((value) => ({ value }))}
-          selected={query.status ? query.status.split(',') : []}
-          onChange={(values) => setQuery({ status: values.join(','), from: 0 })}
-        />
+      <SearchRow
+        className="ismIndexControls"
+        clearable
+        search={query.search}
+        onSearch={(search) => setQuery({ search, from: 0 })}
+        placeholder="Search..."
+      >
+        <div className="ismAliasStatus">
+          <ComboBox
+            compact
+            fullWidth
+            placeholder="Status"
+            options={STATUS_OPTIONS.map((value) => ({ value, label: value }))}
+            selected={query.status ? query.status.split(',') : []}
+            onChange={(values) => setQuery({ status: values.join(','), from: 0 })}
+          />
+        </div>
       </SearchRow>
+      <hr className="ismContentPanel__rule" />
       <div data-test-subj="aliases-table">
         <Table
+          fixed
+          caption
           columns={columns}
           rows={rows}
           total={all.length}
@@ -365,22 +514,23 @@ export function Aliases() {
           onSelect={setSelected}
           loading={loading}
           empty={
-            <div className="ismEmpty">
-              <p>
-                {filtered
+            <ListEmpty
+              text={
+                filtered
                   ? 'There are no aliases matching your applied filters. Reset your filters to view your aliases.'
-                  : 'You have no aliases.'}
-              </p>
+                  : 'You have no aliases.'
+              }
+            >
               {filtered ? (
-                <Button variant="primary" size="s" onClick={() => setQuery({ search: '', status: '' })}>
+                <Button variant="primary" onClick={() => setQuery({ search: '', status: '' })}>
                   Reset filters
                 </Button>
               ) : (
-                <Button variant="primary" size="s" onClick={() => setDialog('create')}>
+                <Button variant="primary" icon="plus" onClick={() => setDialog('create')}>
                   Create alias
                 </Button>
               )}
-            </div>
+            </ListEmpty>
           }
         />
       </div>
@@ -393,35 +543,25 @@ export function Aliases() {
           }}
         />
       )}
-      {editing && (
+      {dialog === 'edit' && (
         <CreateAlias
-          alias={editing}
-          onClose={() => setEditing(undefined)}
+          alias={editing ?? selected[0]}
+          onClose={close}
           onSuccess={() => {
-            setEditing(undefined);
+            close();
             void load();
           }}
         />
       )}
       {dialog === 'delete' && (
-        <TypeToConfirmModal
-          title="Delete aliases"
-          label="Delete"
-          word="delete"
-          danger
+        <DeleteAliasModal
+          aliases={selected}
           onClose={close}
-          onConfirm={deleteAliases}
-          inputTestId="deleteInput"
-          confirmTestId="deleteConfirmButton"
-        >
-          {names.some((name) => matchesAny(name, SYSTEM_ALIAS)) && (
-            <CallOut tone="warning">
-              These aliases may contain critical system data. Deleting system aliases may break OpenSearch.
-            </CallOut>
-          )}
-          <p>The following alias will be permanently deleted. This action cannot be undone.</p>
-          <Names names={names} />
-        </TypeToConfirmModal>
+          onDelete={() => {
+            close();
+            void load();
+          }}
+        />
       )}
       {dialog === 'clearCache' && <ClearCacheModal items={operands} target="aliases" onClose={close} />}
       {dialog === 'flush' && <FlushModal items={operands} target="aliases" onClose={close} />}

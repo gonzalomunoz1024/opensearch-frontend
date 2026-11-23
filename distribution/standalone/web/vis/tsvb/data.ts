@@ -7,11 +7,12 @@
  * split into several series, the last value or the value over the whole time range.
  */
 
-import { resolveInterval, resolveTimeRange, UNIT_MS, parseInterval, type AbsoluteRange } from '../../lib/dates';
-import { DEFAULT_FORMAT_SETTINGS } from '../../lib/field_formats';
+import { resolveInterval, resolveTimeRange, scaledDateFormat, UNIT_MS, parseInterval, type AbsoluteRange } from '../../lib/dates';
+import { DEFAULT_FORMAT_SETTINGS, type FormatSettings } from '../../lib/field_formats';
 import { evaluateMath, type MathValue } from '../../lib/math_expression';
 import { formatNumber } from '../../lib/numeral';
 import { buildQuery, type BoolQuery } from '../../lib/query';
+import { compileTemplate } from '../../lib/template';
 import type { IndexPattern, Query } from '../../lib/types';
 import { services } from '../../services';
 import type { RequestRecord } from '../../services/search';
@@ -27,7 +28,8 @@ export interface TsvbMetric {
   unit?: string;
   window?: number | string;
   lag?: number | string;
-  percentiles?: Array<{ id?: string; value?: number | string; mode?: string }>;
+  /** A percentile's: its value, drawn as a line or as a band down to another, filled so solid */
+  percentiles?: Array<{ id?: string; value?: number | string; mode?: string; percentile?: number | string; shade?: number | string }>;
   values?: Array<number | string>;
   value?: number | string;
   numerator?: Query | string;
@@ -70,11 +72,13 @@ export interface TsvbSeries {
   fill?: number | string;
   stacked?: 'none' | 'stacked' | 'stacked_within_series' | 'percent';
   separate_axis?: number;
-  axis_position?: 'left' | 'right';
+  axis_position?: 'left' | 'right' | 'hidden';
+  axis_scale?: string;
   axis_min?: number | string;
   axis_max?: number | string;
   steps?: number;
   hidden?: boolean;
+  hide_in_legend?: number;
   offset_time?: string;
   override_index_pattern?: number;
   series_index_pattern?: string;
@@ -160,13 +164,27 @@ export interface TsvbParams {
   isModelInvalid?: boolean;
 }
 
+/** [time in milliseconds, value], and for a band the value of its lower edge */
+export type TsvbPoint = [number, number | null, (number | null)?];
+
+/** How a series that is a band is drawn: filled this solid, its edges named so after its label */
+export interface TsvbBand {
+  fill: number;
+  upper: string;
+  lower: string;
+}
+
 export interface TsvbSeriesData {
   id: string;
   seriesId: string;
   label: string;
+  /** The colour the series was given, none for a part of a split the chart colours by its label */
   color: string;
-  /** [time in milliseconds, value] */
-  data: Array<[number, number | null]>;
+  /** A term's name as OpenSearch writes it, when it writes one (a date or a yes or no) */
+  labelFormatted?: string;
+  data: TsvbPoint[];
+  /** A band from each point's lower value up to its value, instead of a line */
+  band?: TsvbBand;
   /** The value the panels that show one number show: the last bucket's, or 0 when it has none */
   last: number | null;
   series: TsvbSeries;
@@ -175,7 +193,8 @@ export interface TsvbSeriesData {
 
 export interface TsvbAnnotationData {
   annotation: TsvbAnnotation;
-  marks: Array<{ time: number; text: string }>;
+  /** A mark for each bucket of the automatic interval with documents: its start, and its latest documents, the latest first */
+  marks: Array<{ time: number; docs: unknown[] }>;
 }
 
 export interface TsvbData {
@@ -208,6 +227,34 @@ const asQuery = (value: Query | string | undefined): Query | undefined => {
  * named format takes its pattern from the advanced settings, as the product's field formats do; a
  * series that names none is written with the product's own default.
  */
+/**
+ * A series' value template filled in as the product's tick formatter fills it: `{{value}}` is the
+ * formatted value, HTML-escaped as Handlebars escapes it, and a template that cannot be filled in
+ * gives the value alone
+ */
+export function valueTemplate(template: string | undefined): (value: unknown) => string {
+  const fill = compileTemplate(template || '{{value}}');
+  return (value) => {
+    try {
+      return fill({ value });
+    } catch {
+      return String(value);
+    }
+  };
+}
+
+/**
+ * The format of the time axis, of its tooltips and of the annotations' times, as the original's
+ * createXaxisFormatter chooses it: the last rule of dateFormat:scaled that the interval reaches,
+ * and dateFormat when none does
+ */
+export function timeAxisPattern(
+  intervalMs: number,
+  settings: Pick<FormatSettings, 'scaledDateRules' | 'dateFormat'> = services ? services.formatSettings() : DEFAULT_FORMAT_SETTINGS
+): string {
+  return scaledDateFormat(intervalMs, settings.scaledDateRules, settings.dateFormat);
+}
+
 export function seriesFormatter(formatter: string | undefined, template?: string): (value: number | null) => string {
   const settings = services ? services.formatSettings() : DEFAULT_FORMAT_SETTINGS;
   const pattern =
@@ -219,6 +266,7 @@ export function seriesFormatter(formatter: string | undefined, template?: string
           ? settings.numberPattern
           : formatter || '0,0.[00]';
   const duration = /^(ms|s|m|h|d|w|M|Y|ps|ns|us),(ms|s|m|h|d|w|M|Y|humanize),(\d*)$/.exec(formatter ?? '');
+  const fill = valueTemplate(template);
   return (value) => {
     if (value === null || value === undefined || Number.isNaN(value)) return '-';
     let text: string;
@@ -227,7 +275,7 @@ export function seriesFormatter(formatter: string | undefined, template?: string
       const ms = value * (scale[duration[1]] ?? 1);
       text = duration[2] === 'humanize' ? `${(ms / 1000).toFixed(0)}s` : `${(ms / (scale[duration[2]] ?? 1)).toFixed(Number(duration[3] || 0))}${duration[2]}`;
     } else text = formatNumber(value, pattern);
-    return template ? template.replace(/\{\{\s*value\s*\}\}/g, text) : text;
+    return fill(text);
   };
 }
 
@@ -247,12 +295,14 @@ function rgbOf(color: string): [number, number, number] {
 }
 
 /**
- * The colours of the terms a series is split by. "rainbow" is a fixed list; "gradient", the
- * default, starts at the colour of the series and darkens in equal steps, each as large as the
- * brightness of the colour allows for the number of terms.
+ * The colours of the terms a series is split by. "rainbow" is a fixed list; "gradient" starts at
+ * the colour of the series and darkens in equal steps, each as large as the brightness of the
+ * colour allows for the number of terms; the default gives none, and a chart colours the terms by
+ * their names instead.
  */
 export function splitColors(color: string, size: number, mode: string | undefined): string[] {
   if (mode === 'rainbow') return RAINBOW;
+  if (mode !== 'gradient') return [];
   const [r, g, b] = rgbOf(color).map((channel) => channel / 255);
   const linear = (channel: number) => (channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
   const luminosity = 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
@@ -314,6 +364,9 @@ const METRIC_NAMES: Record<string, string> = {
   sum_of_squares_bucket: 'Overall Sum of Sq.',
 };
 
+// The metrics named after the metric they are worked out from, as the product's calculateLabel names them
+const OF_METRIC = ['cumulative_sum', 'derivative', 'moving_average', 'avg_bucket', 'sum_bucket', 'min_bucket', 'max_bucket', 'std_deviation_bucket', 'variance_bucket', 'sum_of_squares_bucket', 'serial_diff', 'positive_only'];
+
 /** The name a series goes by when it was given none: its last metric, as TSVB words it */
 export function metricLabel(series: TsvbSeries, metric: TsvbMetric | undefined = series.metrics?.[series.metrics.length - 1]): string {
   if (!metric) return 'Unknown';
@@ -322,10 +375,15 @@ export function metricLabel(series: TsvbSeries, metric: TsvbMetric | undefined =
   if (metric.type === 'math') return 'Math';
   if (metric.type === 'series_agg') return `Series Agg (${String((metric as { function?: string }).function ?? 'sum')})`;
   if (metric.type === 'filter_ratio') return 'Filter Ratio';
+  if (metric.type === 'positive_rate') return `Positive Rate of ${metric.field ?? ''}`;
   if (metric.type === 'static') return `Static Value of ${String((metric as { value?: unknown }).value ?? '')}`;
   const name = METRIC_NAMES[metric.type ?? ''] ?? metric.type ?? 'Unknown';
-  const target = (series.metrics ?? []).find((other) => other.id === metric.field);
-  return `${name} of ${target ? metricLabel(series, target) : (metric.field ?? '')}`;
+  if (!OF_METRIC.includes(metric.type)) return `${name} of ${metric.field ?? ''}`;
+  // The metric it is worked out from, which a percentile's "<id>[50.0]" names by its id first
+  const field = metric.field ?? '';
+  const target = (series.metrics ?? []).find((other) => field.startsWith(other.id));
+  const percentile = target?.type === 'percentile' ? /\[([0-9.]+)\]$/.exec(field) : null;
+  return `${name} of ${target ? metricLabel(series, target) : 'Unknown'}${percentile ? ` (${percentile[1]})` : ''}`;
 }
 
 /**
@@ -357,6 +415,30 @@ export function splitParts(params: TsvbParams, data: TsvbData): Array<{ key: str
   });
 }
 
+/**
+ * The rows of a Top N in the product's order: series by series, the parts of each by their last
+ * value, largest first unless the series sorts its terms the other way, and as they came when it
+ * sorts them by their key; the parts of a series that sorts largest first and are level come in
+ * the reverse of the order they came in, as the product's reversed sort leaves them
+ */
+export function topNRows(params: TsvbParams, series: TsvbSeriesData[]): TsvbSeriesData[] {
+  return (params.series ?? []).flatMap((model) => {
+    const rows = series.filter((item) => item.id.split(':')[0] === model.id);
+    if (model.terms_order_by === '_key') return rows;
+    const sorted = [...rows].sort((a, b) => (a.last ?? 0) - (b.last ?? 0));
+    return (model.terms_direction || 'desc') === 'desc' ? sorted.reverse() : sorted;
+  });
+}
+
+/**
+ * The name of a term: the term as OpenSearch keys it, or the series' label with the term in place
+ * of the first {{key}} it holds
+ */
+export function termLabel(series: TsvbSeries, key: string): string {
+  const label = series.label ?? '';
+  return /{{\s*key\s*}}/.test(label) ? label.replace(/{{\s*key\s*}}/, () => key) : key;
+}
+
 /** The colour a value gets from a panel's rules: the last rule that holds */
 export function ruleFor(rules: ColorRule[] | undefined, value: number | null): ColorRule | undefined {
   if (value === null || !rules) return undefined;
@@ -370,6 +452,18 @@ export function ruleFor(rules: ColorRule[] | undefined, value: number | null): C
   }
   return found;
 }
+
+/** The colour rule of a metric's panel: the last one its first series' last value meets, 0 without one */
+export const metricRule = (params: TsvbParams, data: Pick<TsvbData, 'series'>): ColorRule | undefined =>
+  ruleFor(params.background_color_rules, data.series[0]?.last ?? 0);
+
+/**
+ * The background of a metric's panel: its colour rule's, and no other. The product's metric does
+ * not take the panel's background colour, which its options do not offer and which a panel
+ * switched from another type keeps.
+ */
+export const metricBackground = (params: TsvbParams, data: Pick<TsvbData, 'series'>): string | undefined =>
+  metricRule(params, data)?.background_color || undefined;
 
 async function patternFor(title: string): Promise<IndexPattern | undefined> {
   try {
@@ -410,26 +504,29 @@ function sortBy(metric: TsvbMetric): { key: string; path: string; agg: Dsl } | u
   return undefined;
 }
 
-function metricAggs(metrics: TsvbMetric[], indexPattern: IndexPattern | undefined): Dsl {
+/** The aggregations a series' metrics ask of each of its buckets, as the product asks them */
+export function metricAggs(metrics: TsvbMetric[], indexPattern: IndexPattern | undefined): Dsl {
   const aggs: Dsl = {};
-  const config = services.queryConfig();
   for (const metric of metrics) {
     if (BASIC[metric.type] && metric.field) aggs[metric.id] = { [BASIC[metric.type]]: { field: metric.field } };
     else if (EXTENDED[metric.type] && metric.field) aggs[metric.id] = extendedStats(metric);
-    else if (metric.type === 'percentile' && metric.field) {
-      const percents = (metric.percentiles ?? []).map((item) => toNumber(item.value, NaN)).filter((value) => !Number.isNaN(value));
-      aggs[metric.id] = { percentiles: { field: metric.field, percents: percents.length ? percents : [50] } };
-    } else if (metric.type === 'percentile_rank' && metric.field) {
-      const values = (metric.values ?? (metric.value !== undefined ? [metric.value] : [])).map((value) => toNumber(value, 0));
-      aggs[metric.id] = { percentile_ranks: { field: metric.field, values: values.length ? values : [0] } };
+    else if (metric.type === 'percentile' && metric.field && Array.isArray(metric.percentiles)) {
+      // Each percentile, one with no value as 0, and when one is a band the percentiles the bands
+      // fill down to, as the product asks for them
+      const entries = metric.percentiles;
+      let percents: unknown[] = entries.map((item) => (item.value ? Number(item.value) : 0));
+      if (entries.some((item) => item.mode === 'band')) percents = percents.concat(entries.filter((item) => item.percentile).map((item) => item.percentile));
+      aggs[metric.id] = { percentiles: { field: metric.field, percents } };
+    } else if (metric.type === 'percentile_rank' && metric.field && Array.isArray(metric.values)) {
+      aggs[metric.id] = { percentile_ranks: { field: metric.field, values: metric.values.map((value) => (value === '' || value === null || value === undefined ? 0 : value)) } };
     } else if (metric.type === 'filter_ratio') {
       const inner = metric.metric_agg && metric.metric_agg !== 'count' && metric.field ? { metric: { [metric.metric_agg]: { field: metric.field } } } : undefined;
       aggs[`${metric.id}-numerator`] = {
-        filter: buildQuery(indexPattern, asQuery(metric.numerator) ?? { query: '*', language: 'lucene' }, [], config),
+        filter: buildQuery(indexPattern, asQuery(metric.numerator) ?? { query: '*', language: 'lucene' }, [], services.queryConfig()),
         ...(inner ? { aggs: inner } : {}),
       };
       aggs[`${metric.id}-denominator`] = {
-        filter: buildQuery(indexPattern, asQuery(metric.denominator) ?? { query: '*', language: 'lucene' }, [], config),
+        filter: buildQuery(indexPattern, asQuery(metric.denominator) ?? { query: '*', language: 'lucene' }, [], services.queryConfig()),
         ...(inner ? { aggs: inner } : {}),
       };
     } else if (metric.type === 'positive_rate' && metric.field) {
@@ -447,10 +544,66 @@ function metricAggs(metrics: TsvbMetric[], indexPattern: IndexPattern | undefine
   return aggs;
 }
 
-interface TimeBucket {
+export interface TimeBucket {
   key: number;
   doc_count: number;
   [agg: string]: unknown;
+}
+
+/** The key OpenSearch gives a percentile or a percentile rank, as the product writes it: "50.0" for 50 */
+const toPercentileNumber = (value: unknown): string => (/\d+\.\d+/.test(String(value)) ? String(value) : `${String(value)}.0`);
+
+/**
+ * A percentile's or a percentile rank's value in a bucket: the one under the key, or, as OpenSearch
+ * finds the one another aggregation names, the one whose key is the same number
+ */
+function percentileAt(bucket: TimeBucket, id: string, key: string, byNumber = false): number | null {
+  const values = (bucket[id] as { values?: Record<string, unknown> } | undefined)?.values ?? {};
+  let found = values[key];
+  if (found === undefined && byNumber) {
+    const name = Object.keys(values).find((candidate) => Number(candidate) === Number(key));
+    found = name === undefined ? undefined : values[name];
+  }
+  return typeof found === 'number' && Number.isFinite(found) ? found : null;
+}
+
+/** How many standard deviations a bound is from the mean: the metric's sigma, or OpenSearch's 2 */
+function sigmaOf(metric: TsvbMetric): number {
+  const sigma = parseInt(String(metric.sigma ?? ''), 10);
+  return metric.sigma && !Number.isNaN(sigma) ? sigma : 2;
+}
+
+/** The statistics of a series' values that the overall aggregations give, as OpenSearch's extended stats bucket does */
+function overall(metric: TsvbMetric, source: Array<number | null>) {
+  const values = source.filter((value): value is number => value !== null);
+  if (values.length === 0) return undefined;
+  const total = values.reduce((sum, value) => sum + value, 0);
+  const mean = total / values.length;
+  const variance = values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length;
+  const deviation = Math.sqrt(variance);
+  const sigma = sigmaOf(metric);
+  return {
+    values,
+    total,
+    mean,
+    variance,
+    deviation,
+    upper: mean + sigma * deviation,
+    lower: mean - sigma * deviation,
+  };
+}
+
+/**
+ * The values of the metric another one is worked out from: one of the percentiles of a percentile
+ * or a percentile rank when it names it in brackets, as in "<id>[50.0]", or else the metric's own
+ */
+function namedValues(id: string | undefined, buckets: TimeBucket[], computed: Map<string, Array<number | null>>): Array<number | null> {
+  if (!id) return [];
+  const keyed = /^(.*)\[([^\]]*)\]$/.exec(id);
+  if (keyed && buckets.some((bucket) => typeof (bucket[keyed[1]] as { values?: unknown } | undefined)?.values === 'object')) {
+    return buckets.map((bucket) => percentileAt(bucket, keyed[1], keyed[2], true));
+  }
+  return computed.get(id.split('[')[0]) ?? [];
 }
 
 // One measure's values over the buckets: read from the answer, or worked out from other measures
@@ -459,9 +612,9 @@ function metricValues(
   buckets: TimeBucket[],
   computed: Map<string, Array<number | null>>,
   intervalMs: number,
-  all: Record<string, MathValue>
+  table: boolean
 ): Array<number | null> {
-  const from = (id: string | undefined): Array<number | null> => (id ? (computed.get(id.split('[')[0]) ?? []) : []);
+  const from = (id: string | undefined) => namedValues(id, buckets, computed);
   const numeric = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null);
   switch (metric.type) {
     case 'count':
@@ -484,11 +637,11 @@ function metricValues(
       });
     }
     case 'percentile':
-    case 'percentile_rank':
-      return buckets.map((bucket) => {
-        const values = (bucket[metric.id] as { values?: Record<string, number> } | undefined)?.values ?? {};
-        return numeric(Object.values(values)[0]);
-      });
+    case 'percentile_rank': {
+      // Named alone by another metric, a percentile is its first one, and a rank its first value
+      const first = metric.type === 'percentile' ? metric.percentiles?.[0]?.value : metric.values?.[0];
+      return buckets.map((bucket) => percentileAt(bucket, metric.id, toPercentileNumber(first), true));
+    }
     case 'filter_ratio':
       return buckets.map((bucket) => {
         const read = (part: string) => {
@@ -516,7 +669,8 @@ function metricValues(
     case 'derivative':
     case 'positive_rate': {
       const source = metric.type === 'positive_rate' ? buckets.map((bucket) => numeric((bucket[`${metric.id}-max`] as { value?: number } | undefined)?.value)) : from(metric.field);
-      const unit = metric.unit ? parseInterval(metric.unit)?.ms : metric.type === 'positive_rate' ? UNIT_MS.s : undefined;
+      // Without a unit of its own, a rate is the change over a bucket, as the product asks for it
+      const unit = metric.unit ? parseInterval(metric.unit)?.ms : undefined;
       return source.map((value, index) => {
         const before = index > 0 ? source[index - 1] : null;
         if (value === null || before === null) return null;
@@ -557,20 +711,19 @@ function metricValues(
     case 'std_deviation_bucket':
     case 'variance_bucket':
     case 'sum_of_squares_bucket': {
-      // One value for the whole series, which every bucket then carries
-      const values = from(metric.field).filter((value): value is number => value !== null);
+      // One value for the whole series, which every bucket then carries; a standard deviation
+      // set to one of its bounds gives that bound
+      const stats = overall(metric, from(metric.field));
       let result: number | null = null;
-      if (values.length) {
-        const total = values.reduce((sum, value) => sum + value, 0);
-        const mean = total / values.length;
-        const variance = values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length;
-        if (metric.type === 'avg_bucket') result = mean;
-        else if (metric.type === 'max_bucket') result = Math.max(...values);
-        else if (metric.type === 'min_bucket') result = Math.min(...values);
-        else if (metric.type === 'sum_bucket') result = total;
-        else if (metric.type === 'variance_bucket') result = variance;
-        else if (metric.type === 'std_deviation_bucket') result = Math.sqrt(variance);
-        else result = values.reduce((sum, value) => sum + value ** 2, 0);
+      if (stats) {
+        if (metric.type === 'avg_bucket') result = stats.mean;
+        else if (metric.type === 'max_bucket') result = Math.max(...stats.values);
+        else if (metric.type === 'min_bucket') result = Math.min(...stats.values);
+        else if (metric.type === 'sum_bucket') result = stats.total;
+        else if (metric.type === 'variance_bucket') result = stats.variance;
+        else if (metric.type === 'std_deviation_bucket') {
+          result = metric.mode === 'upper' ? stats.upper : metric.mode === 'lower' ? stats.lower : stats.deviation;
+        } else result = stats.values.reduce((sum, value) => sum + value ** 2, 0);
       }
       return buckets.map(() => result);
     }
@@ -579,15 +732,24 @@ function metricValues(
       const variables = metric.variables ?? [];
       // A script of the Bucket Script aggregation is arithmetic over params.*, which is what is worked out here
       const script = (metric.script ?? '').replace(/;\s*$/, '');
+      // Math as the product works it out: nothing without variables, `params._all` holding the
+      // values of each variable under its name, no value where a variable has none, and a script
+      // that cannot be worked out failing the panel (a table, whose Math the product never works
+      // out, has no value instead)
+      const math = metric.type === 'math';
+      if (math && variables.length === 0) return buckets.map(() => null);
+      const named = variables.flatMap((variable) => (variable.name ? [[variable.name, from(variable.field)] as const] : []));
+      const timestamps = buckets.map((bucket) => bucket.key);
+      const all: Record<string, MathValue> = Object.fromEntries(named.map(([name, values]) => [name, { values: values.map((value) => value ?? NaN), timestamps }]));
       return buckets.map((bucket, index) => {
+        if (math && named.some(([, values]) => values[index] === null || values[index] === undefined)) return null;
         const params: Record<string, MathValue> = { _index: index, _timestamp: bucket.key, _interval: intervalMs, _all: all };
-        for (const variable of variables) {
-          if (variable.name) params[variable.name] = from(variable.field)[index];
-        }
+        for (const [name, values] of named) params[name] = values[index];
         try {
           const value = evaluateMath(script, { params });
           return Number.isFinite(value) ? value : null;
-        } catch {
+        } catch (failure) {
+          if (math && !table) throw new MathScriptError(failure);
           return null;
         }
       });
@@ -597,18 +759,73 @@ function metricValues(
   }
 }
 
-function seriesValues(series: TsvbSeries, buckets: TimeBucket[], intervalMs: number): Array<[number, number | null]> {
+/** What a split of a series draws: a line, or one of the lines or the band its last metric makes */
+export interface SeriesLine {
+  /** What tells it from the split's other lines, after the split's id */
+  key?: string;
+  /** What it adds to the split's label */
+  suffix: string;
+  points: TsvbPoint[];
+  band?: TsvbBand;
+}
+
+/**
+ * The lines a split of a series draws, as the product's processors make them from its last
+ * metric: one for each percentile, each named by its value, or a band down to the percentile it
+ * fills to; one for each percentile rank; a band between the bounds of a standard deviation set to
+ * draw them; otherwise one line. A table shows one number per series: the last percentile or rank,
+ * and no band.
+ */
+export function seriesLines(series: TsvbSeries, buckets: TimeBucket[], intervalMs: number, table = false): SeriesLine[] {
   const metrics = series.metrics ?? [];
   const computed = new Map<string, Array<number | null>>();
-  const all: Record<string, MathValue> = {};
-  for (const metric of metrics) {
-    const values = metricValues(metric, buckets, computed, intervalMs, all);
-    computed.set(metric.id, values);
-    all[metric.id] = { values: values.map((value) => value ?? NaN), timestamps: buckets.map((bucket) => bucket.key) };
-  }
+  for (const metric of metrics) computed.set(metric.id, metricValues(metric, buckets, computed, intervalMs, table));
   const last = metrics[metrics.length - 1];
+  const at = (key: string): TsvbPoint[] => buckets.map((bucket) => [bucket.key, last ? percentileAt(bucket, last.id, key) : null]);
+  if (last?.type === 'percentile') {
+    const entries = Array.isArray(last.percentiles) ? last.percentiles : [];
+    if (table) {
+      const entry = entries[entries.length - 1];
+      return entry ? [{ suffix: '', points: at(toPercentileNumber(entry.value)) }] : [];
+    }
+    return entries.map((entry) => {
+      const value = entry.value ? entry.value : 0;
+      const key = String(entry.id);
+      if (entry.mode !== 'band') return { key, suffix: ` (${value})`, points: at(toPercentileNumber(value)) };
+      const lower = toPercentileNumber(entry.percentile);
+      const fill = Number(entry.shade);
+      return {
+        key,
+        suffix: '',
+        points: buckets.map((bucket) => [bucket.key, percentileAt(bucket, last.id, toPercentileNumber(value)), percentileAt(bucket, last.id, lower)]),
+        band: { fill: Number.isFinite(fill) ? fill : 0, upper: ` (${value})`, lower: ` (${String(entry.percentile)})` },
+      };
+    });
+  }
+  if (last?.type === 'percentile_rank') {
+    const ranks = Array.isArray(last.values) ? last.values : [];
+    // The product writes a rank's key twice over, so that a rank left empty has none
+    if (table) return [{ suffix: '', points: at(toPercentileNumber(toPercentileNumber(ranks[ranks.length - 1]))) }];
+    return ranks.map((rank) => ({ key: String(rank), suffix: ` (${rank || 0})`, points: at(toPercentileNumber(toPercentileNumber(rank))) }));
+  }
+  if (last?.mode === 'band' && (last.type === 'std_deviation' || last.type === 'std_deviation_bucket')) {
+    if (table) return [];
+    const numeric = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+    const sibling = last.type === 'std_deviation_bucket' ? overall(last, namedValues(last.field, buckets, computed)) : undefined;
+    return [
+      {
+        suffix: '',
+        points: buckets.map((bucket) => {
+          if (last.type === 'std_deviation_bucket') return [bucket.key, sibling?.upper ?? null, sibling?.lower ?? null];
+          const bounds = (bucket[last.id] as { std_deviation_bounds?: Record<string, unknown> } | undefined)?.std_deviation_bounds;
+          return [bucket.key, numeric(bounds?.upper), numeric(bounds?.lower)];
+        }),
+        band: { fill: 0.5, upper: ' - upper', lower: ' - lower' },
+      },
+    ];
+  }
   const values = last ? (computed.get(last.id) ?? []) : [];
-  return buckets.map((bucket, index) => [bucket.key, values[index] ?? null]);
+  return [{ suffix: '', points: buckets.map((bucket, index) => [bucket.key, values[index] ?? null]) }];
 }
 
 interface Plan {
@@ -618,6 +835,8 @@ interface Plan {
   range: AbsoluteRange;
   intervalMs: number;
   intervalExpression: string;
+  /** Whether the buckets follow the calendar, as the product asks for one unit of its own interval */
+  calendar: boolean;
   entireRange: boolean;
   dropLast: boolean;
 }
@@ -654,13 +873,58 @@ function histogram(plan: Plan, shift: number, inner: Dsl): Dsl {
   return {
     date_histogram: {
       field: plan.timeField,
-      fixed_interval: `${Math.max(1, Math.round(plan.intervalMs))}ms`,
+      ...(plan.calendar ? { calendar_interval: plan.intervalExpression } : { fixed_interval: `${Math.max(1, Math.round(plan.intervalMs))}ms` }),
       min_doc_count: 0,
       time_zone: services.timeZone() ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
       extended_bounds: { min: from, max: to },
     },
     aggs: inner,
   };
+}
+
+/** What the product says when a panel's interval would cut the time range into too many buckets */
+export const TOO_MUCH_DATA = 'Your query attempted to fetch too much data. Reducing the time range or changing the interval used usually fixes the issue.';
+
+/**
+ * A panel the product does not ask for, as its interval would cut the time range into more
+ * buckets than the setting metrics:max_buckets allows: the failure of its request, not of a search
+ */
+export class TooMuchDataError extends Error {
+  constructor() {
+    super(TOO_MUCH_DATA);
+    this.name = 'TooMuchDataError';
+  }
+}
+
+/**
+ * A Math aggregation whose script cannot be worked out: as in the product, which works Math out
+ * after its request, the failure of the panel's request, not of a search
+ */
+export class MathScriptError extends Error {
+  constructor(failure: unknown) {
+    super(failure instanceof Error ? failure.message : String(failure));
+    this.name = 'MathScriptError';
+  }
+}
+
+/** The most buckets a panel's interval may cut its time range into: the setting metrics:max_buckets */
+const maxBuckets = (): number => services.uiSettings.get<number>('metrics:max_buckets', 2000);
+
+/**
+ * Whether a panel's own interval cuts a time range into more buckets than allowed, as the product
+ * checks before it asks for anything: an automatic interval, or one of at least so much, never
+ * does, and nor does one it cannot read
+ */
+export function tooManyBuckets(interval: string | undefined, durationMs: number, max: number): boolean {
+  if (!interval || interval === 'auto' || interval.startsWith('>=')) return false;
+  const parsed = parseInterval(interval);
+  return parsed !== undefined && Math.floor(durationMs / parsed.ms) > max;
+}
+
+/** Fails a panel whose interval would cut the time range into too many buckets */
+function checkBuckets(params: TsvbParams, input: VisInput) {
+  const range = resolveTimeRange(input.time, { weekStart: services.weekStart() });
+  if (range && tooManyBuckets(params.interval, range.to.getTime() - range.from.getTime(), maxBuckets())) throw new TooMuchDataError();
 }
 
 async function planFor(params: TsvbParams, series: TsvbSeries | undefined, input: VisInput): Promise<Plan> {
@@ -684,9 +948,14 @@ async function planFor(params: TsvbParams, series: TsvbSeries | undefined, input
   let intervalMs = auto.ms;
   let expression = auto.expression;
   const fixed = parseInterval(atLeast ? atLeast[1] : requested);
-  if (fixed && (!atLeast || fixed.ms > auto.ms)) {
+  // The panel's own interval holds when it is at least the automatic one; one minute, hour, day,
+  // week, month or year of it is a calendar interval (dateHistogramInterval), the automatic one
+  // never is
+  let calendar = false;
+  if (fixed && (!atLeast || fixed.ms >= auto.ms)) {
     intervalMs = fixed.ms;
     expression = fixed.expression;
+    calendar = !entireRange && /^1[mhdwMy]$/.test(expression);
   }
   if (entireRange) {
     intervalMs = Math.max(1, duration);
@@ -699,6 +968,7 @@ async function planFor(params: TsvbParams, series: TsvbSeries | undefined, input
     range,
     intervalMs,
     intervalExpression: expression,
+    calendar,
     entireRange,
     // The last bucket is still filling, so a line would dip at its end; the panel's choice holds,
     // or else the series' own
@@ -706,14 +976,15 @@ async function planFor(params: TsvbParams, series: TsvbSeries | undefined, input
   };
 }
 
-function finish(points: Array<[number, number | null]>, plan: Plan, shift: number): Array<[number, number | null]> {
-  let data = points.map(([time, value]) => [time + shift, value] as [number, number | null]);
-  if (plan.dropLast && data.length > 1) data = data.slice(0, -1);
+function finish(points: TsvbPoint[], plan: Plan, shift: number): TsvbPoint[] {
+  let data = points.map(([time, ...values]): TsvbPoint => [time + shift, ...values]);
+  // Even an only bucket, as the product drops it
+  if (plan.dropLast) data = data.slice(0, -1);
   return data;
 }
 
-/** The value of the last bucket, or 0 when it has none: a 0 counts as none, as in the product */
-export function getLastValue(data: Array<[number, number | null]>): number {
+/** The value of the last bucket (a band's upper one), or 0 when it has none: a 0 counts as none, as in the product */
+export function getLastValue(data: TsvbPoint[]): number {
   const last = data[data.length - 1];
   return (last && last[1]) || 0;
 }
@@ -778,17 +1049,31 @@ async function fetchSeries(
   const build = (container: Record<string, unknown>): TsvbSeriesData[] => {
     const found = container[series.id] as { buckets?: unknown; timeseries?: { buckets: TimeBucket[] } } | undefined;
     if (!found) return [];
-    const make = (id: string, label: string, color: string, node: { timeseries?: { buckets: TimeBucket[] } }): TsvbSeriesData => {
-      const data = finish(seriesValues(series, node.timeseries?.buckets ?? [], plan.intervalMs), plan, shift);
-      return { id, seriesId: series.id, label, color, data, last: getLastValue(data), series, format };
-    };
+    // A split draws one line, or a line for each percentile or rank of the metric, or a band
+    const make = (id: string, label: string, color: string, node: { timeseries?: { buckets: TimeBucket[] } }, labelFormatted?: string): TsvbSeriesData[] =>
+      seriesLines(series, node.timeseries?.buckets ?? [], plan.intervalMs, Boolean(pivot)).map((line) => {
+        const data = finish(line.points, plan, shift);
+        return {
+          id: line.key === undefined ? id : `${id}:${line.key}`,
+          seriesId: series.id,
+          label: `${label}${line.suffix}`,
+          color,
+          ...(labelFormatted ? { labelFormatted } : {}),
+          data,
+          ...(line.band ? { band: line.band } : {}),
+          last: getLastValue(data),
+          series,
+          format,
+        };
+      });
     if (mode === 'terms' && Array.isArray(found.buckets)) {
       const list = found.buckets as Array<{ key: string | number; key_as_string?: string; timeseries?: { buckets: TimeBucket[] } }>;
-      const tones = splitColors(base, list.length, series.split_color_mode);
-      return list.map((bucket, index) => {
-        const term = bucket.key_as_string ?? String(bucket.key);
-        // A term goes by its own name, and by a colour of its own among its neighbours
-        return make(`${series.id}:${term}`, term, tones[index % tones.length], bucket);
+      // A Top N draws every term in the colour of its series; other panels give each the colour
+      // its split gives it, if any
+      const tones = params.type === 'top_n' ? [] : splitColors(base, list.length, series.split_color_mode);
+      return list.flatMap((bucket, index) => {
+        const key = String(bucket.key);
+        return make(`${series.id}:${key}`, termLabel(series, key), params.type === 'top_n' ? base : tones[index] ?? '', bucket, bucket.key_as_string);
       });
     }
     if (mode === 'filters' && found.buckets && !Array.isArray(found.buckets)) {
@@ -796,71 +1081,123 @@ async function fetchSeries(
       return (series.split_filters ?? []).flatMap((item) => {
         const bucket = byId[item.id];
         const text = typeof item.filter === 'string' ? item.filter : typeof item.filter?.query === 'string' ? item.filter.query : '';
-        return bucket ? [make(`${series.id}:${item.id}`, item.label || text || item.id, item.color || base, bucket)] : [];
+        return bucket ? make(`${series.id}:${item.id}`, item.label || text || '*', item.color || '', bucket) : [];
       });
     }
-    return [make(series.id, series.label || metricLabel(series), base, found)];
+    return make(series.id, series.label || metricLabel(series), base, found);
   };
 
   const aggregations = (response.aggregations ?? {}) as Record<string, unknown>;
   if (pivot) {
     const rows = ((aggregations.pivot as { buckets?: Array<Record<string, unknown> & { key: string | number; key_as_string?: string }> })?.buckets ?? []).map(
-      (bucket) => ({ key: bucket.key_as_string ?? String(bucket.key), made: build(bucket) })
+      (bucket) => ({ key: String(bucket.key), made: build(bucket) })
     );
     return { plan, groups: rows };
   }
   return { plan, groups: [{ key: '', made: build(aggregations) }] };
 }
 
-async function fetchAnnotations(params: TsvbParams, input: VisInput, range: AbsoluteRange, signal?: AbortSignal): Promise<TsvbAnnotationData[]> {
+/** Whether the product asks for an annotation: one shown, with an index, a time field, fields, an icon and a template */
+export const isAnnotationAsked = (annotation: TsvbAnnotation): boolean =>
+  Boolean(annotation.index_pattern && annotation.time_field && annotation.fields && annotation.icon && annotation.template && !annotation.hidden);
+
+/** The time of the last point of all the series, as the product finds it: none without series */
+export function lastSeriesTime(series: Array<{ data: TsvbPoint[] }>): number | null {
+  let last: number | null = null;
+  for (const item of series) {
+    const point = item.data[item.data.length - 1];
+    if (point) last = Math.max(last ?? 0, point[0]);
+  }
+  return last;
+}
+
+/** The interval of an annotation's buckets, as the product asks for it: in seconds, or in milliseconds for a fraction of one */
+export function annotationInterval(bucketMs: number): { expression: string; seconds: number } {
+  const seconds = bucketMs / 1000;
+  return { expression: Number.isInteger(seconds) ? `${seconds}s` : `${bucketMs}ms`, seconds: Math.max(seconds, 1) };
+}
+
+/**
+ * The annotations of a panel, as the product asks for them: the documents in each bucket of the
+ * automatic interval (whatever the panel's), the five latest of each, up to a bucket before the
+ * end of the time range; a bucket with documents makes one mark, at its start, unless it starts
+ * after the last point of the series. A search that fails fails the panel, as there.
+ */
+async function fetchAnnotations(
+  params: TsvbParams,
+  input: VisInput,
+  range: AbsoluteRange,
+  lastTime: number | null,
+  signal?: AbortSignal
+): Promise<TsvbAnnotationData[]> {
   const results: TsvbAnnotationData[] = [];
-  for (const annotation of params.annotations ?? []) {
-    if (annotation.hidden || !annotation.index_pattern || !annotation.time_field) continue;
-    try {
-      const indexPattern = await patternFor(annotation.index_pattern);
-      const queries: Query[] = [];
+  const bucket = annotationInterval(resolveInterval('auto', range.to.getTime() - range.from.getTime(), { targetBuckets: 100, maxBuckets: 200 }).ms);
+  const end = range.to.getTime() - bucket.seconds * 1000;
+  const config = { ...services.queryConfig(), ignoreFilterIfFieldNotInIndex: true };
+  for (const annotation of (params.annotations ?? []).filter(isAnnotationAsked)) {
+    const index = annotation.index_pattern ?? '';
+    const timeField = annotation.time_field ?? '';
+    const indexPattern = await patternFor(index);
+    const global = !annotation.ignore_global_filters;
+    const query = buildQuery(indexPattern, global && input.query ? [input.query] : [], global ? input.filters : [], config);
+    query.bool.must.push({
+      range: { [timeField]: { gte: range.from.toISOString(), lte: new Date(end).toISOString(), format: 'strict_date_optional_time' } },
+    });
+    if (annotation.query_string) {
       const own = asQuery(annotation.query_string);
-      if (own) queries.push(own);
-      if (!annotation.ignore_global_filters && input.query) queries.push(input.query);
-      const panel = asQuery(params.filter);
-      if (!annotation.ignore_panel_filters && panel) queries.push(panel);
-      const query = buildQuery(indexPattern, queries, annotation.ignore_global_filters ? [] : input.filters, {
-        ...services.queryConfig(),
-        ignoreFilterIfFieldNotInIndex: true,
-      });
-      query.bool.must.push({
-        range: { [annotation.time_field]: { gte: range.from.toISOString(), lte: range.to.toISOString(), format: 'strict_date_optional_time' } },
-      });
-      const fields = (annotation.fields ?? '').split(/[,\s]+/).filter(Boolean);
-      const response = await services.search.search(
-        annotation.index_pattern,
-        { size: 100, query, sort: [{ [annotation.time_field]: { order: 'desc' } }], _source: [annotation.time_field, ...fields] },
-        { signal }
-      );
-      const marks = response.hits.hits.flatMap((hit) => {
-        const source = (hit._source ?? {}) as Record<string, unknown>;
-        const read = (path: string) => path.split('.').reduce<unknown>((at, part) => (at as Record<string, unknown> | undefined)?.[part], source) ?? source[path];
-        const time = new Date(String(read(annotation.time_field as string))).getTime();
-        if (Number.isNaN(time)) return [];
-        const text = (annotation.template ?? '').replace(/\{\{\s*([\w.@-]+)\s*\}\}/g, (_, name: string) => String(read(name) ?? ''));
-        return [{ time, text }];
-      });
-      results.push({ annotation, marks });
-    } catch (failure) {
-      if ((failure as Error).name === 'AbortError') throw failure;
+      query.bool.must.push({ ...buildQuery(indexPattern, own ? [own] : [], [], config) });
     }
+    if (!annotation.ignore_panel_filters && params.filter) {
+      const panel = asQuery(params.filter);
+      query.bool.must.push({ ...buildQuery(indexPattern, panel ? [panel] : [], [], config) });
+    }
+    const fields = (annotation.fields ?? '').split(/[,\s]+/);
+    for (const field of fields) query.bool.must.push({ exists: { field } });
+    const response = await services.search.search(
+      index,
+      {
+        size: 0,
+        query,
+        aggs: {
+          [annotation.id]: {
+            date_histogram: {
+              field: timeField,
+              min_doc_count: 0,
+              time_zone: services.timeZone() ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+              extended_bounds: { min: range.from.getTime(), max: end },
+              fixed_interval: bucket.expression,
+            },
+            aggs: {
+              hits: { top_hits: { sort: [{ [timeField]: { order: 'desc' } }], _source: { includes: [...fields, timeField] }, size: 5 } },
+            },
+          },
+        },
+      },
+      { signal }
+    );
+    const buckets =
+      (response.aggregations?.[annotation.id] as { buckets?: Array<{ key: number; hits?: { hits?: { hits?: Array<{ _source?: unknown }> } } }> } | undefined)
+        ?.buckets ?? [];
+    const marks = buckets.flatMap((entry) => {
+      const docs = entry.hits?.hits?.hits ?? [];
+      if (docs.length === 0 || lastTime === null || entry.key > lastTime) return [];
+      return [{ time: entry.key, docs: docs.map((doc) => doc._source) }];
+    });
+    results.push({ annotation, marks });
   }
   return results;
 }
 
 export async function fetchTsvb(params: TsvbParams, input: VisInput, signal?: AbortSignal): Promise<TsvbData> {
+  checkBuckets(params, input);
   const requests: RequestRecord[] = [];
   const shown = (params.series ?? []).filter((series) => !series.hidden);
   const fetched = await Promise.all(shown.map((series) => fetchSeries(params, series, input, requests, signal)));
   const plan = fetched[0]?.plan ?? (await planFor(params, undefined, input));
-  const annotations = params.type === 'timeseries' || !params.type ? await fetchAnnotations(params, input, plan.range, signal) : [];
+  const series = fetched.flatMap((result) => result.groups.flatMap((group) => group.made));
+  const annotations = params.type === 'timeseries' || !params.type ? await fetchAnnotations(params, input, plan.range, lastSeriesTime(series), signal) : [];
   return {
-    series: fetched.flatMap((result) => result.groups.flatMap((group) => group.made)),
+    series,
     interval: { ms: plan.intervalMs, expression: plan.intervalExpression },
     range: plan.range,
     annotations,
@@ -905,6 +1242,7 @@ export function tableSort(params: TsvbParams, sort: TsvbTableSort | undefined): 
 export async function fetchTsvbTable(params: TsvbParams, input: VisInput, signal?: AbortSignal, sort?: TsvbTableSort): Promise<TsvbTableData> {
   // A table that groups by no field has no rows, and says it has no data, as the product's does
   // while its group-by field is still to be chosen
+  checkBuckets(params, input);
   if (!params.pivot_id) return { rows: [], requests: [] };
   const requests: RequestRecord[] = [];
   // Every series asks for the rows in the same order, so that they make the same rows

@@ -3,10 +3,10 @@
 /* The page that shows one transform job and what it is doing, and the page that changes its schedule. */
 
 import { useEffect, useState } from 'react';
-import { Accordion, Button } from '../../components/basic';
+import { Button } from '../../components/basic';
 import { useLocation } from '../../router';
 import { useBreadcrumbs } from '../../shell/state';
-import { ActionsMenu, Detail, Details, JSONModal, JsonEditor, go, ism, toasts } from './common';
+import { JsonEditor, go, ism, toasts } from './common';
 import {
   ConfigureTransform,
   Definitions,
@@ -14,13 +14,24 @@ import {
   TransformSchedule,
   previewTransform,
 } from './create_transform';
-import { FormPanel } from './job_parts';
+import {
+  Fold,
+  InfoGrid,
+  JobActionsMenu,
+  JobDetailsHeader,
+  JobDetailsPage,
+  JobEditPage,
+  JobJsonModal,
+  Spacer,
+  TitledPanel,
+} from './job_parts';
 import { INTERVAL_REQUIRED, intervalScheduleText } from './rollup_model';
 import { CRUMBS, ROUTES } from './routes';
 import {
   editedTransform,
   settingsItems,
   transformEditOf,
+  transformStatus,
   type TransformDocument,
   type TransformEdit,
   type TransformMetadata,
@@ -30,15 +41,6 @@ import { DeleteTransformModal, TransformStatusText, deleteTransform, switchTrans
 const loadTransform = (id: string) => ism.get<TransformDocument>(`transforms/${encodeURIComponent(id)}`);
 
 // --- One job ---------------------------------------------------------------------------------------
-
-/** Asks for the look at the result the first time it is opened */
-function PreviewOnOpen({ onOpen }: { onOpen: () => void }) {
-  useEffect(() => {
-    onOpen();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  return null;
-}
 
 export function TransformDetails() {
   const { hashParams } = useLocation();
@@ -87,78 +89,97 @@ export function TransformDetails() {
     if (found) setDocuments(found);
   };
 
+  const blank = { term: '', value: '' };
   return (
-    <div className="ismPage ismPage--form">
-      <header className="ismPageHeader ismPageHeader--center">
-        <h1 className="ismPageTitle">{transformId}</h1>
-        <ActionsMenu
-          testId="actionButton"
-          items={[
-            { id: 'enable', label: 'Enable job', testId: 'enableButton', disabled: enabled, onClick: () => void turn(true) },
-            { id: 'disable', label: 'Disable job', testId: 'disableButton', disabled: !enabled, onClick: () => void turn(false) },
-            { id: 'view', label: 'View JSON', testId: 'viewButton', onClick: () => setDialog('json') },
-            { id: 'delete', label: 'Delete', testId: 'deleteButton', danger: true, onClick: () => setDialog('delete') },
-          ]}
-        />
-      </header>
-
-      <FormPanel
-        title="General information"
+    <JobDetailsPage>
+      <JobDetailsHeader
+        title={transformId}
         actions={
-          <Button size="s" onClick={() => transformId && go(ROUTES.EDIT_TRANSFORM, { id: transformId })}>
+          <JobActionsMenu
+            plain
+            items={[
+              { id: 'enable', icon: 'empty', label: 'Enable job', testId: 'enableButton', disabled: enabled, onClick: () => void turn(true) },
+              { id: 'disable', icon: 'empty', label: 'Disable job', testId: 'disableButton', disabled: !enabled, onClick: () => void turn(false) },
+              { id: 'view', icon: 'empty', label: 'View JSON', testId: 'viewButton', onClick: () => setDialog('json') },
+              { id: 'delete', icon: 'empty', label: 'Delete', testId: 'deleteButton', danger: true, onClick: () => setDialog('delete') },
+            ]}
+          />
+        }
+      />
+
+      <TitledPanel
+        title="General information"
+        itemTitle
+        actions={
+          <Button onClick={() => transformId && go(ROUTES.EDIT_TRANSFORM, { id: transformId })} testId="EditButton">
             Edit
           </Button>
         }
       >
-        <div className="ismSmallDetails">
-          <Details columns={4}>
-            <Detail name="Name">{transformId}</Detail>
-            {/* The plugin says "Enabled on" of every job, and gives the time of its last change */}
-            <Detail name="State">Enabled on {new Date(transform?.updated_at ?? 1).toLocaleString()}</Detail>
-            <Detail name="Source index">{transform?.source_index}</Detail>
-            <Detail name="Schedule">
-              {transform ? intervalScheduleText(Boolean(transform.continuous), interval?.period ?? 2, interval?.unit ?? '') : ''}
-            </Detail>
-            <Detail name="Description">{transform?.description || '-'}</Detail>
-            <div />
-            <Detail name="Source index filter">{transform ? JSON.stringify(transform.data_selection_query) : ''}</Detail>
-            <Detail name="Pages per execution">{transform ? transform.page_size : 1000}</Detail>
-            <div />
-            <div />
-            <Detail name="Target index">{transform?.target_index}</Detail>
-          </Details>
-        </div>
-      </FormPanel>
+        <Spacer size="s" />
+        {/* The plugin leaves places of its grid empty: the third row has only its first and last */}
+        <InfoGrid
+          size="xs"
+          items={[
+            { term: 'Name', value: transformId },
+            // The plugin says "Enabled on" of every job, and gives the time of its last change
+            { term: 'State', value: `Enabled on ${new Date(transform?.updated_at ?? 1).toLocaleString()}` },
+            { term: 'Source index', value: transform?.source_index ?? '' },
+            {
+              term: 'Schedule',
+              value: transform ? intervalScheduleText(Boolean(transform.continuous), interval?.period ?? 2, interval?.unit ?? '') : '',
+            },
+            { term: 'Description', value: transform?.description || '-' },
+            blank,
+            { term: 'Source index filter', value: transform ? JSON.stringify(transform.data_selection_query) : '' },
+            { term: 'Pages per execution', value: transform ? transform.page_size : 1000 },
+            blank,
+            blank,
+            { term: 'Target index', value: transform?.target_index ?? '' },
+          ]}
+        />
+        <Spacer size="s" />
+      </TitledPanel>
+      <Spacer />
 
-      <FormPanel title="Transform Status">
-        <div className="ismSmallDetails">
-          <Details columns={4}>
-            <Detail name="Status">
-              <TransformStatusText metadata={metadata} />
-            </Detail>
-            <Detail name="Documents indexed">{stat('documents_indexed')}</Detail>
-            <Detail name="Document processed">{stat('documents_processed')}</Detail>
-            <Detail name="Indexed time (ms)">{stat('index_time_in_millis')}</Detail>
-            <div />
-            <div />
-            <Detail name="Page processed">{stat('pages_processed')}</Detail>
-            <Detail name="Search time (ms)">{stat('search_time_in_millis')}</Detail>
-          </Details>
-        </div>
-      </FormPanel>
+      <TitledPanel title="Transform Status" itemTitle>
+        <Spacer size="s" />
+        <InfoGrid
+          size="xs"
+          items={[
+            // As the plugin's, what a job is doing stands under the term as it is
+            {
+              term: 'Status',
+              value: transformStatus(metadata) ? <TransformStatusText metadata={metadata} /> : <dd>-</dd>,
+              bare: true,
+            },
+            { term: 'Documents indexed', value: stat('documents_indexed') },
+            { term: 'Document processed', value: stat('documents_processed') },
+            { term: 'Indexed time (ms)', value: stat('index_time_in_millis') },
+            { term: '', value: '', bare: true },
+            { term: '', value: '', bare: true },
+            { term: 'Page processed', value: stat('pages_processed') },
+            { term: 'Search time (ms)', value: stat('search_time_in_millis') },
+          ]}
+        />
+        <Spacer size="s" />
+      </TitledPanel>
+      <Spacer />
 
-      <FormPanel title="Transform Settings">
+      <TitledPanel title="Transform Settings" itemTitle>
+        <Spacer size="m" />
         <Definitions items={transform ? settingsItems(transform) : []} />
-        <Accordion title="Sample source index and transform result" initiallyOpen={false}>
-          <div className="ismAccordionBody">
-            <PreviewOnOpen onOpen={() => void preview()} />
+        <Spacer size="m" />
+        <Fold title="Sample source index and transform result" onOpen={() => void preview()}>
+          <div className="ismAcc__body">
+            <Spacer size="m" />
             <h5 className="ismPreviewTitle">Preview result based on sample data</h5>
             <PreviewTransform documents={documents} aggList={[]} isReadOnly />
           </div>
-        </Accordion>
-      </FormPanel>
+        </Fold>
+      </TitledPanel>
 
-      {dialog === 'json' && job && <JSONModal title={`View JSON of ${transformId}`} json={job} onClose={close} />}
+      {dialog === 'json' && job && <JobJsonModal small title={`View JSON of ${transformId}`} json={job} onClose={close} />}
       {dialog === 'delete' && (
         <DeleteTransformModal
           transformId={transformId}
@@ -171,7 +192,7 @@ export function TransformDetails() {
           }}
         />
       )}
-    </div>
+    </JobDetailsPage>
   );
 }
 
@@ -234,30 +255,33 @@ export function EditTransform() {
 
   const transform = job?.transform;
   return (
-    <div className="ismPage ismPage--form ismPage--edit">
-      <h1 className="ismPageTitle">Edit transform job</h1>
+    <JobEditPage title="Edit transform job">
       <ConfigureTransform
         isEdit
         transformId={job?._id ?? ''}
         description={edit.description}
         onChangeDescription={(description) => change({ description })}
       />
-      <FormPanel title="Indices">
-        <div className="ismRow">
-          <h3 className="ismRow__title">Source index</h3>
-          <p className="ismPlain">{transform?.source_index}</p>
+      <Spacer />
+      <TitledPanel title="Indices" itemTitle>
+        <div className="ismPlainRow">
+          <h3 className="ismPr__title">Source index</h3>
+          <p>{transform?.source_index}</p>
         </div>
-        <div className="ismRow">
-          <h3 className="ismRow__title">Source index filter</h3>
+        <Spacer size="m" />
+        <div className="ismPlainRow">
+          <h3 className="ismPr__title">Source index filter</h3>
           <div style={{ width: 400 }}>
             <JsonEditor value={transform ? (JSON.stringify(transform.data_selection_query) ?? '') : ''} height={100} readOnly />
           </div>
         </div>
-        <div className="ismRow">
-          <h3 className="ismRow__title">Target index</h3>
-          <p className="ismPlain">{transform?.target_index}</p>
+        <Spacer size="m" />
+        <div className="ismPlainRow">
+          <h3 className="ismPr__title">Target index</h3>
+          <p>{transform?.target_index}</p>
         </div>
-      </FormPanel>
+      </TitledPanel>
+      <Spacer />
       <TransformSchedule
         isEdit
         values={edit}
@@ -268,14 +292,15 @@ export function EditTransform() {
           setIntervalError(interval === undefined ? INTERVAL_REQUIRED : undefined);
         }}
       />
-      <div className="ismButtons">
-        <Button variant="empty" size="s" onClick={() => go(ROUTES.TRANSFORMS)} testId="editTransformCancelButton">
+      <Spacer />
+      <div className="ismJobEdit__buttons">
+        <Button variant="empty" onClick={() => go(ROUTES.TRANSFORMS)} testId="editTransformCancelButton">
           Cancel
         </Button>
-        <Button variant="primary" size="s" loading={busy} onClick={() => void submit()} testId="editTransformSaveButton">
+        <Button variant="primary" loading={busy} onClick={() => void submit()} testId="editTransformSaveButton">
           Save changes
         </Button>
       </div>
-    </div>
+    </JobEditPage>
   );
 }

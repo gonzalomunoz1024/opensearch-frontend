@@ -6,6 +6,9 @@
  * goes when it is added before or after another.
  */
 
+import type { CodeToken } from '../../components/code_editor';
+import { tokenizeJson } from '../../lib/json_text';
+
 export interface Transition {
   state_name: string;
   conditions?: {
@@ -428,6 +431,9 @@ const parses = (text: string): boolean => {
   }
 };
 
+/** Whether a part edited as text can be saved: it may be left empty, and is JSON otherwise */
+export const draftIsValid = (text: string | undefined): boolean => !text || parses(text);
+
 export function draftsAreValid(action: Action, drafts: Drafts): boolean {
   const type = actionType(action);
   if (type === 'allocation' || type === 'rollup') return parses(drafts.json ?? '');
@@ -459,4 +465,253 @@ export function withDrafts(action: Action, drafts: Drafts): Action {
     return { ...action, convert_index_to_remote: settings };
   }
   return action;
+}
+
+// --- JSON as the plugin's code editor colours it ---------------------------------------------------------
+
+/** The spaces of one step of indentation in the plugin's code editor (Ace's tab size) */
+const ACE_TAB_SIZE = 4;
+
+/**
+ * The runs of a JSON text with each brace and bracket a run of its own, of the kind `Paren`, as
+ * Ace's JSON mode makes them (its themes draw them bold), and the indentation of a line cut into
+ * steps of the kind `Indent`, which Ace draws with a guide at their right: as Ace does, every step
+ * but the one before the text, so that the guides run under the start of the outer lines' text.
+ * The other runs are left as they are.
+ */
+export function aceJsonTokens(text: string): CodeToken[][] {
+  return tokenizeJson(text).map((line) => {
+    const tokens = line.flatMap((token) => {
+      if (token.kind || !/[{}[\]]/.test(token.text)) return [token];
+      return token.text
+        .split(/([{}[\]])/)
+        .filter((piece) => piece !== '')
+        .map((piece) => (/^[{}[\]]$/.test(piece) ? { text: piece, kind: 'Paren' } : { text: piece }));
+    });
+    const [first, ...rest] = tokens;
+    if (!first || first.kind || !first.text.startsWith(' ')) return tokens;
+    // Where Ace's renderIndentGuide finds the last space of the indentation
+    const columns = first.text.search(/\s\S| \t|\t |\s$/);
+    const steps = Math.floor(Math.max(0, columns) / ACE_TAB_SIZE);
+    if (steps === 0) return tokens;
+    const after = first.text.slice(steps * ACE_TAB_SIZE);
+    return [
+      ...Array.from({ length: steps }, () => ({ text: ' '.repeat(ACE_TAB_SIZE), kind: 'Indent' })),
+      ...(after ? [{ text: after }] : []),
+      ...rest,
+    ];
+  });
+}
+
+/**
+ * How wide Ace draws the numbers of the lines, in pixels: as wide as the number of the last line
+ * it draws needs, so 42 px up to line 9, 50 px up to line 99 and 59 px beyond. Ace draws the lines
+ * in sight and one more.
+ */
+export function aceGutterWidth(lines: number, shownHeight: number, lineHeight: number, scrolled = 0): number {
+  const shown =
+    lineHeight > 0 ? Math.floor(scrolled / lineHeight) + Math.ceil(shownHeight / lineHeight) + 1 : lines;
+  const last = Math.max(1, Math.min(lines, shown));
+  return Math.ceil(33 + String(last).length * 8.43);
+}
+
+/**
+ * The line, counted from 0, that Ace draws on a band: the line of the cursor, or of a selection
+ * within one line; none while a selection spans lines.
+ */
+export function aceActiveLine(text: string, start: number, end: number): number | undefined {
+  const lineAt = (offset: number) => {
+    let line = 0;
+    for (let at = text.indexOf('\n'); at !== -1 && at < offset; at = text.indexOf('\n', at + 1)) line += 1;
+    return line;
+  };
+  const first = lineAt(Math.min(start, text.length));
+  return first === lineAt(Math.min(end, text.length)) ? first : undefined;
+}
+
+/**
+ * What a click on a line's number selects in Ace, as offsets in the text: the line the place is
+ * on with the break after it, or up to the end of the text on the last line.
+ */
+export function aceLineRange(text: string, offset: number): [number, number] {
+  const at = Math.max(0, Math.min(offset, text.length));
+  const start = at > 0 ? text.lastIndexOf('\n', at - 1) + 1 : 0;
+  const next = text.indexOf('\n', start);
+  return [start, next < 0 ? text.length : next + 1];
+}
+
+/**
+ * Whether Ace draws its mark to fold a block away beside a line, in the style the plugin's editors
+ * keep: where a brace, bracket or parenthesis opens and nothing closes after it on the line, even in
+ * a string, or where a comment opens and does not close.
+ */
+export function aceFoldsAt(line: string): boolean {
+  const region = /^\s*(\/\*|\/\/)#?region\b/.test(line);
+  if (/^\s*(\/\*).*\*\/\s*$/.test(line) && !region && !/^\s*(\/\*\*\*).*\*\/\s*$/.test(line)) return false;
+  return /([{[(])[^}\])]*$|^\s*(\/\*)/.test(line) || region;
+}
+
+const BRACKET_PAIRS: Record<string, string> = { '{': '}', '[': ']', '(': ')', '}': '{', ']': '[', ')': '(' };
+
+/** The kind of token whose brackets pair with one another in Ace: a run's own, or plain text */
+const bracketGroup = (kind?: string) =>
+  kind === 'Paren' || kind === 'String' || kind === 'Key' || kind === 'Comment' ? kind : 'Text';
+
+/**
+ * Where the bracket is, as line and column, that Ace draws a box around for a cursor at a line and
+ * column: the one that pairs with the bracket just before the cursor. As Ace's, the search counts only
+ * the brackets of the pair, in runs of the kind the first one is in, so that a brace in a string pairs
+ * only with one in a string.
+ */
+export function aceMatchingBracket(lines: CodeToken[][], row: number, column: number): [number, number] | undefined {
+  const runs: { row: number; column: number; text: string; group: string }[] = [];
+  lines.forEach((line, at) => {
+    let start = 0;
+    for (const token of line) {
+      if (token.text) runs.push({ row: at, column: start, text: token.text, group: bracketGroup(token.kind) });
+      start += token.text.length;
+    }
+  });
+  const index = runs.findIndex(
+    (run) => run.row === row && run.column < column && column <= run.column + run.text.length
+  );
+  if (column === 0 || index < 0) return undefined;
+  const first = runs[index];
+  const bracket = first.text[column - 1 - first.column];
+  const pair = BRACKET_PAIRS[bracket];
+  if (!pair) return undefined;
+  const step = '{[('.includes(bracket) ? 1 : -1;
+  let depth = 1;
+  let offset = column - 1 - first.column + step;
+  for (let at = index; at >= 0 && at < runs.length; at += step) {
+    const run = runs[at];
+    if (at !== index) offset = step > 0 ? 0 : run.text.length - 1;
+    if (run.group !== first.group) continue;
+    for (; offset >= 0 && offset < run.text.length; offset += step) {
+      if (run.text[offset] === pair) {
+        depth -= 1;
+        if (depth === 0) return [run.row, run.column + offset];
+      } else if (run.text[offset] === bracket) depth += 1;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * JSON as the plugin's editor draws it for a cursor at an offset: the runs of `aceJsonTokens`, with
+ * a run of the kind `Fold` and no text at the start of a line Ace draws its folding mark beside, and
+ * one of the kind `Bracket` just before the bracket Ace draws a box around.
+ */
+export function aceEditorTokens(text: string, cursor?: number): CodeToken[][] {
+  const lines = aceJsonTokens(text);
+  const texts = text.split('\n');
+  let match: [number, number] | undefined;
+  if (cursor !== undefined) {
+    const at = Math.max(0, Math.min(cursor, text.length));
+    const before = text.slice(0, at).split('\n');
+    match = aceMatchingBracket(lines, before.length - 1, before[before.length - 1].length);
+  }
+  return lines.map((line, row) => {
+    let tokens = line;
+    if (match && match[0] === row) {
+      const column = match[1];
+      let start = 0;
+      tokens = line.flatMap((token) => {
+        const from = start;
+        start += token.text.length;
+        if (column < from || column >= start) return [token];
+        const cut = column - from;
+        return [
+          ...(cut > 0 ? [{ ...token, text: token.text.slice(0, cut) }] : []),
+          { text: '', kind: 'Bracket' },
+          { ...token, text: token.text.slice(cut) },
+        ];
+      });
+    }
+    return aceFoldsAt(texts[row] ?? '') ? [{ text: '', kind: 'Fold' }, ...tokens] : tokens;
+  });
+}
+
+// --- Managed indexes ---------------------------------------------------------------------------------
+
+interface ManagedIndexMetaData {
+  policySeqNo?: number | null;
+  policyCompleted?: boolean;
+  state?: { name?: string };
+  action?: { name?: string; failed?: boolean };
+  retryInfo?: { failed?: boolean };
+  info?: Record<string, unknown>;
+}
+
+/** An index under a policy, as the list of managed indexes has it */
+export interface ManagedIndex {
+  index: string;
+  indexUuid: string;
+  dataStream: string | null;
+  policyId: string;
+  policy: Policy | null;
+  enabled: boolean;
+  managedIndexMetaData: ManagedIndexMetaData | null;
+}
+
+/** How the job of a managed index is doing */
+export function jobStatus(item: ManagedIndex): string {
+  const meta = item.managedIndexMetaData;
+  if (!meta) return 'Initializing';
+  if (meta.policyCompleted) return 'Completed';
+  if (meta.retryInfo?.failed || meta.action?.failed) return 'Failed';
+  return 'Running';
+}
+
+/** Whether the ticked indexes cannot be retried: none is ticked, or one of them has not failed */
+export function retryDisabled(items: ManagedIndex[]): boolean {
+  return (
+    items.length === 0 ||
+    items.some((item) => {
+      const meta = item.managedIndexMetaData;
+      return !meta || (!meta.retryInfo?.failed && !meta.action?.failed);
+    })
+  );
+}
+
+/**
+ * The states a retry may start from: those the policy of every ticked index has, in the order of
+ * the first one's; none when an index has no policy or no states.
+ */
+export function commonStates(items: Array<Pick<ManagedIndex, 'policy'>>): string[] {
+  let common: string[] | undefined;
+  for (const item of items) {
+    const names = item.policy?.states?.map((state) => state.name);
+    if (!names) return [];
+    common = common === undefined ? [...new Set(names)] : common.filter((name) => names.includes(name));
+    if (common.length === 0) return [];
+  }
+  return common ?? [];
+}
+
+/**
+ * What stays ticked when a list is drawn again, as the component library's table keeps it: the
+ * ticked rows it still shows, as they were when ticked. The same array when all of them are.
+ */
+export function stillListed<Row>(ticked: Row[], rows: Row[], id: (row: Row) => string): Row[] {
+  const shown = new Set(rows.map(id));
+  const kept = ticked.filter((row) => shown.has(id(row)));
+  return kept.length === ticked.length ? ticked : kept;
+}
+
+/** The options of a field that searches as it is typed in: what is typed, a * after it, first */
+export function withWildcard(search: string, names: string[]): string[] {
+  return [...(search.trim() ? [`${search}*`] : []), ...names];
+}
+
+/**
+ * The data streams the "Data streams" filter lists: once loaded, the chosen one first and the others
+ * after it; once something is typed in its search box, those that start with it, in their order.
+ */
+export function dataStreamChoices(names: string[], chosen: string[], typed?: string): string[] {
+  if (typed !== undefined) {
+    const start = typed.toLowerCase();
+    return names.filter((name) => name.toLowerCase().startsWith(start));
+  }
+  return [...names.filter((name) => chosen.includes(name)), ...names.filter((name) => !chosen.includes(name))];
 }

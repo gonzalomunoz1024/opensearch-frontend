@@ -51,12 +51,12 @@ function AnnotationRow({ row, fields, onChange, onAdd, onDelete }: { row: Annota
   const indexPattern = typeof model.index_pattern === 'string' ? model.index_pattern : '';
   return (
     <div className="tvbAnnotationsEditor">
-      <Row gap="l">
+      <Row gap="l" responsive={false}>
         <Item grow={false}>
           <TvbColorPicker disableTrash name="color" value={model.color} onChange={change} />
         </Item>
         <Item className="tvbAggRow__children">
-          <Row gap="m">
+          <Row gap="m" wrap responsive={false}>
             <Item>
               <Field label="Index name (required)" help={INDEX_HELP} full>
                 <TextInput value={model.index_pattern} label="Index name (required)" onChange={(text) => change({ index_pattern: text })} />
@@ -69,7 +69,7 @@ function AnnotationRow({ row, fields, onChange, onAdd, onDelete }: { row: Annota
             </Item>
           </Row>
           <Spacer size="m" />
-          <Row gap="m">
+          <Row gap="m" wrap responsive={false}>
             <Item>
               <Field label="Query string" full>
                 <QueryBarWrapper
@@ -94,7 +94,7 @@ function AnnotationRow({ row, fields, onChange, onAdd, onDelete }: { row: Annota
             </Item>
           </Row>
           <Spacer size="m" />
-          <Row gap="m">
+          <Row gap="m" wrap responsive={false}>
             <Item>
               <Field label="Icon (required)">
                 <IconSelect value={model.icon} onChange={pick('icon')} />
@@ -110,7 +110,10 @@ function AnnotationRow({ row, fields, onChange, onAdd, onDelete }: { row: Annota
                 label="Row template (required)"
                 help={
                   <>
-                    eg.<code className="tvbCode">{'{{field}}'}</code>
+                    eg.
+                    <span className="tvbCode">
+                      <code>{'{{field}}'}</code>
+                    </span>
                   </>
                 }
                 full

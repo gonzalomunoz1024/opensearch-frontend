@@ -1,25 +1,22 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
-/* The filters under the query: each a pill that can be pinned, inverted, switched off or edited. */
+/*
+ * The filters under the query, as the filter bar of OpenSearch Dashboards (its data plugin's
+ * filter_bar): a menu that changes all of them, a pill for each, with a menu that pins, edits,
+ * inverts, switches off or deletes it, and "Add filter". A pill says what its filter asks, written
+ * with the field's format, or why it cannot: a field the index pattern lacks, a pattern that is
+ * gone. A filter that cannot be read is switched off, as the original switches it off.
+ */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, FieldToken, IconButton, cx } from '../components/basic';
-import { ComboBox } from '../components/combo_box';
-import { FormRow, Select, TextArea, TextField } from '../components/form';
-import { Icon } from '../components/icon';
-import { Menu, Popover, type MenuItem } from '../components/overlay';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
+import { cx } from '../components/basic';
+import { Icon, type IconName } from '../components/icon';
+import { Popover, Tooltip } from '../components/overlay';
 import { fieldFormatter } from '../lib/field_formats';
-import {
-  customFilter,
-  describeFilter,
-  existsFilter,
-  phraseFilter,
-  phrasesFilter,
-  rangeFilter,
-} from '../lib/query';
-import type { Field, Filter, IndexPattern } from '../lib/types';
+import { filterMatchesIndex, mapFilter, uniqueFilters, withMappedMeta, type ValueText } from '../lib/query';
+import type { Filter, IndexPattern } from '../lib/types';
 import { services } from '../services';
-import { fetchFieldValues } from './query_bar';
+import { FilterEditor } from './filter_editor';
 
 export const isPinned = (filter: Filter) => filter.$state?.store === 'globalState';
 
@@ -31,423 +28,417 @@ export function splitFilters(filters: Filter[]) {
   };
 }
 
-const withStore = (filter: Filter, pinned: boolean): Filter => ({
+// --- What the original's helpers change of a filter ------------------------------------------------
+
+export const togglePinned = (filter: Filter): Filter => ({
   ...filter,
-  $state: { store: pinned ? 'globalState' : 'appState' },
+  $state: { ...filter.$state, store: isPinned(filter) ? 'appState' : 'globalState' },
 });
+export const toggleNegated = (filter: Filter): Filter => ({ ...filter, meta: { ...filter.meta, negate: !filter.meta.negate } });
+export const toggleDisabled = (filter: Filter): Filter => ({
+  ...filter,
+  meta: { ...filter.meta, disabled: !filter.meta.disabled },
+});
+const enableFilter = (filter: Filter) => (filter.meta.disabled ? toggleDisabled(filter) : filter);
+const disableFilter = (filter: Filter) => (filter.meta.disabled ? filter : toggleDisabled(filter));
+const pinFilter = (filter: Filter) => (isPinned(filter) ? filter : togglePinned(filter));
+const unpinFilter = (filter: Filter) => (isPinned(filter) ? togglePinned(filter) : filter);
 
-interface Operator {
-  id: string;
-  label: string;
-  type: 'phrase' | 'phrases' | 'range' | 'exists';
-  negate: boolean;
-  /** The kinds of field it applies to; all when left out */
-  fieldTypes?: string[];
-}
-
-const OPERATORS: Operator[] = [
-  { id: 'is', label: 'is', type: 'phrase', negate: false },
-  { id: 'is_not', label: 'is not', type: 'phrase', negate: true },
-  { id: 'is_one_of', label: 'is one of', type: 'phrases', negate: false },
-  { id: 'is_not_one_of', label: 'is not one of', type: 'phrases', negate: true },
-  { id: 'is_between', label: 'is between', type: 'range', negate: false, fieldTypes: ['number', 'date', 'ip'] },
-  { id: 'is_not_between', label: 'is not between', type: 'range', negate: true, fieldTypes: ['number', 'date', 'ip'] },
-  { id: 'exists', label: 'exists', type: 'exists', negate: false },
-  { id: 'does_not_exist', label: 'does not exist', type: 'exists', negate: true },
-];
-
-interface Draft {
-  indexId: string;
-  fieldName: string;
-  operator: string;
-  value: string;
-  values: string[];
-  from: string;
-  to: string;
-  alias: string;
-  useDsl: boolean;
-  dsl: string;
-}
-
-function clauseOf(filter: Filter): Record<string, unknown> {
-  const { meta: _meta, $state: _state, ...clause } = filter;
-  return clause;
-}
-
-function draftOf(filter: Filter | undefined, indexId: string): Draft {
-  const base: Draft = {
-    indexId: filter?.meta.index ?? indexId,
-    fieldName: '',
-    operator: 'is',
-    value: '',
-    values: [],
-    from: '',
-    to: '',
-    alias: filter?.meta.alias ?? '',
-    useDsl: false,
-    dsl: JSON.stringify(filter ? clauseOf(filter) : { query: { match_all: {} } }, null, 2),
+/** A filter with nothing in it yet, on an index pattern: what "Add filter" edits (buildEmptyFilter) */
+export function emptyFilter(pinned: boolean, index?: string): Filter {
+  return {
+    meta: { disabled: false, negate: false, alias: null, index },
+    $state: { store: pinned ? 'globalState' : 'appState' },
   };
-  if (!filter) return base;
-  const { meta } = filter;
-  const negate = Boolean(meta.negate);
-  const operator = OPERATORS.find((item) => item.type === meta.type && item.negate === negate);
-  if (!operator || !meta.key) return { ...base, useDsl: true };
-  const draft = { ...base, fieldName: meta.key, operator: operator.id };
-  if (meta.type === 'phrase') {
-    const params = meta.params as { query?: unknown } | undefined;
-    const fromQuery = (filter.query?.match_phrase as Record<string, unknown> | undefined)?.[meta.key];
-    const raw =
-      params?.query ??
-      (fromQuery && typeof fromQuery === 'object' ? (fromQuery as { query?: unknown }).query : fromQuery);
-    draft.value = raw === undefined ? '' : String(raw);
-  } else if (meta.type === 'phrases') {
-    draft.values = Array.isArray(meta.params) ? meta.params.map(String) : [];
-  } else if (meta.type === 'range') {
-    const params = (meta.params ?? filter.range?.[meta.key] ?? {}) as Record<string, unknown>;
-    draft.from = String(params.gte ?? params.gt ?? '');
-    draft.to = String(params.lt ?? params.lte ?? '');
+}
+
+// --- What a pill says ------------------------------------------------------------------------------
+
+export type FilterLabelStatus = '' | 'warn' | 'error';
+
+export interface FilterLabelConfig {
+  title: string;
+  status: FilterLabelStatus;
+  message?: string;
+}
+
+/**
+ * The value a pill shows (getDisplayValueFromFilter): written with the format of the field on the
+ * filter's index pattern. A field the pattern lacks cannot be written, and says so.
+ */
+export function displayValueOf(filter: Filter, indexPatterns: IndexPattern[]): string {
+  const mapped = mapFilter(filter);
+  if (typeof mapped.value !== 'function') return mapped.value ?? '';
+  const pattern = indexPatterns.find((candidate) => candidate.id === filter.meta.index);
+  let format: ValueText | undefined;
+  if (pattern && mapped.key) {
+    const field = pattern.fields.find((candidate) => candidate.name === mapped.key);
+    if (!field) throw new Error(`Field ${mapped.key} not found in index pattern ${pattern.title}`);
+    const formatter = fieldFormatter(pattern, field.name, services.formatSettings());
+    format = (value) => formatter(value).text;
   }
-  return draft;
+  return mapped.value(format);
 }
 
-function coerce(field: Field, value: string): unknown {
-  if (field.type === 'number' && value.trim() !== '' && !Number.isNaN(Number(value))) return Number(value);
-  if (field.type === 'boolean') return value === 'true';
-  return value;
+/**
+ * Whether a filter is about the index patterns of the page: one of them is its own, or has its
+ * field. Without patterns, every filter is.
+ */
+function isFilterApplicable(filter: Filter, indexPatterns: IndexPattern[]): boolean {
+  if (indexPatterns.length === 0) return true;
+  if (indexPatterns.some((pattern) => pattern.id === filter.meta.index)) return true;
+  return indexPatterns.some((pattern) => filterMatchesIndex(filter, pattern));
 }
 
-function FilterEditor({
-  filter,
-  indexPatterns,
-  onSave,
-  onCancel,
-}: {
-  filter?: Filter;
-  indexPatterns: IndexPattern[];
-  onSave: (filter: Filter) => void;
-  onCancel: () => void;
-}) {
-  const [draft, setDraft] = useState<Draft>(() => draftOf(filter, indexPatterns[0]?.id ?? ''));
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [typed, setTyped] = useState('');
-  const patch = (changes: Partial<Draft>) => setDraft((current) => ({ ...current, ...changes }));
-
-  const indexPattern = indexPatterns.find((pattern) => pattern.id === draft.indexId) ?? indexPatterns[0];
-  const fields = useMemo(
-    () =>
-      (indexPattern?.fields ?? [])
-        .filter((field) => !field.scripted && field.type !== '_source' && field.searchable !== false)
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    [indexPattern]
-  );
-  const field = fields.find((candidate) => candidate.name === draft.fieldName);
-  const operators = OPERATORS.filter((item) => !item.fieldTypes || (field && item.fieldTypes.includes(field.type)));
-  const operator = operators.find((item) => item.id === draft.operator) ?? operators[0];
-
-  useEffect(() => {
-    if (!field || !indexPattern || !operator || (operator.type !== 'phrase' && operator.type !== 'phrases')) {
-      setSuggestions([]);
-      return undefined;
-    }
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => {
-      void fetchFieldValues(indexPattern, field, typed, controller.signal).then((values) => {
-        if (!controller.signal.aborted) setSuggestions(values.map(String));
-      });
-    }, 150);
-    return () => {
-      window.clearTimeout(timer);
-      controller.abort();
-    };
-  }, [field, indexPattern, operator, typed]);
-
-  let dslError: string | undefined;
-  let dsl: Record<string, unknown> | undefined;
-  if (draft.useDsl) {
+/** What a pill says of its value, and whether something is wrong with it (getValueLabel) */
+export function filterLabelConfig(
+  filter: Filter,
+  indexPatterns: IndexPattern[],
+  indexPatternExists: boolean
+): FilterLabelConfig {
+  if (!indexPatternExists) {
+    return { status: 'error', title: 'Error', message: `Index pattern ${filter.meta.index} not found` };
+  }
+  if (isFilterApplicable(filter, indexPatterns)) {
     try {
-      const parsed = JSON.parse(draft.dsl) as unknown;
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) dsl = parsed as Record<string, unknown>;
-      else dslError = 'A filter is a JSON object';
+      return { status: '', title: displayValueOf(filter, indexPatterns) };
     } catch (error) {
-      dslError = (error as Error).message;
+      return { status: 'error', title: 'Error', message: (error as Error).message };
     }
   }
+  return { status: 'warn', title: 'Warning', message: `Field ${filter.meta.key} does not exist in current view` };
+}
 
-  const valid = draft.useDsl
-    ? Boolean(dsl)
-    : Boolean(
-        field &&
-          operator &&
-          (operator.type === 'exists' ||
-            (operator.type === 'phrase' && draft.value !== '') ||
-            (operator.type === 'phrases' && draft.values.length > 0) ||
-            (operator.type === 'range' && (draft.from !== '' || draft.to !== '')))
-      );
-
-  const build = (): Filter | undefined => {
-    const pinned = filter ? isPinned(filter) : services.uiSettings.get('filters:pinnedByDefault', false);
-    let built: Filter | undefined;
-    if (draft.useDsl) {
-      if (!dsl) return undefined;
-      // A filter written by hand is the clause itself: `{ "query": ... }`, `{ "range": ... }`
-      const keys = Object.keys(dsl);
-      built =
-        keys.length === 1 && keys[0] === 'query'
-          ? customFilter(dsl.query as Record<string, unknown>, indexPattern?.id)
-          : { ...customFilter({}, indexPattern?.id), query: undefined, ...dsl };
-      if (built.query === undefined) delete built.query;
-      built.meta.value = JSON.stringify(dsl);
-    } else if (field && operator) {
-      if (operator.type === 'phrase') built = phraseFilter(field, coerce(field, draft.value), indexPattern?.id);
-      else if (operator.type === 'phrases') {
-        built = phrasesFilter(
-          field,
-          draft.values.map((value) => coerce(field, value)),
-          indexPattern?.id
-        );
-      } else if (operator.type === 'range') {
-        built = rangeFilter(
-          field,
-          {
-            gte: draft.from === '' ? undefined : coerce(field, draft.from),
-            lt: draft.to === '' ? undefined : coerce(field, draft.to),
-          },
-          indexPattern?.id
-        );
-      } else built = existsFilter(field, indexPattern?.id);
-      built.meta.negate = operator.negate;
+/** The parts of a pill's text: what comes before its value, and the value (FilterLabel) */
+export function filterLabelParts(filter: Filter, valueLabel: string, status: FilterLabelStatus): { prefix: string; value?: string } {
+  const { meta } = filter;
+  if (meta.alias !== null && meta.alias !== undefined) {
+    return status ? { prefix: `${meta.alias}: `, value: valueLabel } : { prefix: meta.alias };
+  }
+  switch (meta.type) {
+    case 'exists':
+      return { prefix: `${meta.key}: `, value: 'exists' };
+    case 'phrases':
+      return { prefix: `${meta.key}: `, value: `is one of ${valueLabel}` };
+    case 'query_string':
+      return { prefix: '', value: valueLabel };
+    case 'geo_bounding_box':
+    case 'geo_polygon':
+    case 'phrase':
+    case 'range':
+      return { prefix: `${meta.key}: `, value: valueLabel };
+    default: {
+      const query = filter.query === undefined ? undefined : JSON.stringify(filter.query);
+      return { prefix: '', value: `${query || meta.value}` };
     }
-    if (!built) return undefined;
-    built.meta.alias = draft.alias.trim() === '' ? null : draft.alias.trim();
-    built.meta.disabled = filter?.meta.disabled ?? false;
-    return withStore(built, pinned);
+  }
+}
+
+function FilterLabel({ filter, valueLabel, status }: { filter: Filter; valueLabel: string; status: FilterLabelStatus }) {
+  const { prefix, value } = filterLabelParts(filter, valueLabel, status);
+  const negate = filter.meta.negate ? ' NOT ' : '';
+  return (
+    <>
+      {negate && !filter.meta.disabled ? <span className="shlFilter__not">{negate}</span> : negate}
+      {prefix}
+      {value !== undefined && (
+        <span className="shlFilter__value" data-test-subj="globalFilterLabelValue">
+          {value}
+        </span>
+      )}
+    </>
+  );
+}
+
+/** A pill's text as it reads: its spaces run together, as the text of the page reads */
+export function filterLabelText(filter: Filter, valueLabel: string, status: FilterLabelStatus): string {
+  const { prefix, value } = filterLabelParts(filter, valueLabel, status);
+  return `${filter.meta.negate ? ' NOT ' : ''}${prefix}${value ?? ''}`.replace(/\s+/g, ' ').trim();
+}
+
+// --- A menu as the original's context menu -----------------------------------------------------------
+
+interface FilterMenuItem {
+  name: string;
+  icon: IconName;
+  onClick: () => void;
+  testId: string;
+  /** It opens a panel of its own: an arrow says so */
+  panel?: boolean;
+  disabled?: boolean;
+}
+
+function FilterMenu({ title, items, testId }: { title?: string; items: FilterMenuItem[]; testId?: string }) {
+  const panel = useRef<HTMLDivElement>(null);
+  const focused = useRef<number | undefined>(undefined);
+  const buttons = () => [...(panel.current?.querySelectorAll<HTMLButtonElement>('.shlFilterMenu__item') ?? [])];
+
+  // The first item has the focus once the menu is open, as the original's
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => buttons()[0]?.focus({ preventScroll: true }));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const all = buttons();
+    if (all.length === 0) return;
+    let next: number | undefined;
+    if (event.key === 'ArrowDown') next = focused.current === undefined ? 0 : (focused.current + 1) % all.length;
+    else if (event.key === 'ArrowUp') {
+      next = focused.current === undefined ? all.length - 1 : (focused.current - 1 + all.length) % all.length;
+    } else if (event.key === 'ArrowRight' && focused.current !== undefined && items[focused.current]?.panel) {
+      event.preventDefault();
+      items[focused.current].onClick();
+      return;
+    }
+    if (next === undefined) return;
+    event.preventDefault();
+    focused.current = next;
+    all[next].focus();
   };
 
   return (
-    <form
-      className="shlFilterEditor atlStack"
-      onSubmit={(event) => {
-        event.preventDefault();
-        const built = build();
-        if (built) onSave(built);
-      }}
-      data-test-subj="filterEditor"
-    >
-      <div className="atlRow atlRowBetween">
-        <span className="atlTitleXxs">{filter ? 'Edit filter' : 'Add filter'}</span>
+    <div ref={panel} className="shlFilterMenu" data-test-subj={testId} onKeyDown={onKeyDown}>
+      {title && <div className="shlFilterMenu__title">{title}</div>}
+      {items.map((item, index) => (
         <button
+          key={item.testId}
           type="button"
-          className="atlLinkButton atlSmall"
-          onClick={() => patch({ useDsl: !draft.useDsl })}
-          data-test-subj="editQueryDSL"
+          className="shlFilterMenu__item"
+          disabled={item.disabled}
+          data-test-subj={item.testId}
+          onFocus={() => {
+            focused.current = focused.current === undefined && index === 0 ? undefined : index;
+          }}
+          onClick={item.onClick}
         >
-          {draft.useDsl ? 'Edit filter values' : 'Edit as Query DSL'}
+          <Icon name={item.icon} />
+          <span className="shlFilterMenu__text">{item.name}</span>
+          {item.panel && <Icon name="chevronRight" />}
         </button>
-      </div>
-      {indexPatterns.length > 1 && (
-        <FormRow label="Index pattern" full>
-          <Select
-            value={indexPattern?.id ?? ''}
-            onChange={(indexId) => patch({ indexId, fieldName: '' })}
-            options={indexPatterns.map((pattern) => ({ value: pattern.id, label: pattern.displayName || pattern.title }))}
-          />
-        </FormRow>
-      )}
-      {draft.useDsl ? (
-        <FormRow label="OpenSearch Query DSL" error={dslError} full>
-          <TextArea code rows={10} value={draft.dsl} onChange={(next) => patch({ dsl: next })} invalid={Boolean(dslError)} />
-        </FormRow>
-      ) : (
-        <>
-          <div className="atlRow atlRowTop">
-            <div className="atlGrow">
-              <FormRow label="Field" full>
-                <ComboBox
-                  single
-                  placeholder="Select a field first"
-                  options={fields.map((item) => ({
-                    value: item.name,
-                    label: item.name,
-                    prepend: <FieldToken type={item.type} />,
-                  }))}
-                  selected={draft.fieldName ? [draft.fieldName] : []}
-                  onChange={([fieldName]) => patch({ fieldName: fieldName ?? '', value: '', values: [], from: '', to: '' })}
-                  testId="filterFieldSuggestionList"
-                />
-              </FormRow>
-            </div>
-            <div style={{ width: 160 }}>
-              <FormRow label="Operator" full>
-                <Select
-                  value={operator?.id ?? ''}
-                  disabled={!field}
-                  placeholder={field ? undefined : 'Waiting'}
-                  onChange={(next) => patch({ operator: next })}
-                  options={operators.map((item) => ({ value: item.id, label: item.label }))}
-                  testId="filterOperatorList"
-                />
-              </FormRow>
-            </div>
-          </div>
-          {field && operator?.type === 'phrase' && (
-            <FormRow label="Value" full>
-              {field.type === 'boolean' ? (
-                <Select value={draft.value} onChange={(value) => patch({ value })} options={['true', 'false']} placeholder="Select a value" />
-              ) : field.type === 'string' ? (
-                <ComboBox
-                  single
-                  allowCustom
-                  placeholder="Enter a value"
-                  options={[...new Set([...suggestions, ...(draft.value ? [draft.value] : [])])].map((value) => ({ value, label: value }))}
-                  selected={draft.value ? [draft.value] : []}
-                  onChange={([value]) => patch({ value: value ?? '' })}
-                  onSearch={setTyped}
-                  testId="filterParamsComboBox"
-                />
-              ) : (
-                <TextField
-                  value={draft.value}
-                  onChange={(value) => patch({ value })}
-                  placeholder={field.type === 'date' ? 'A date, or an expression such as now-1d' : 'Enter a value'}
-                  inputMode={field.type === 'number' ? 'decimal' : undefined}
-                  testId="filterParams"
-                />
-              )}
-            </FormRow>
-          )}
-          {field && operator?.type === 'phrases' && (
-            <FormRow label="Values" full>
-              <ComboBox
-                allowCustom
-                placeholder="Select values"
-                options={[...new Set([...suggestions, ...draft.values])].map((value) => ({ value, label: value }))}
-                selected={draft.values}
-                onChange={(values) => patch({ values })}
-                onSearch={setTyped}
-                testId="filterParamsComboBox"
-              />
-            </FormRow>
-          )}
-          {field && operator?.type === 'range' && (
-            <div className="atlRow">
-              <FormRow label="From" full>
-                <TextField value={draft.from} onChange={(from) => patch({ from })} placeholder="Start of the range" />
-              </FormRow>
-              <FormRow label="To" full>
-                <TextField value={draft.to} onChange={(to) => patch({ to })} placeholder="End of the range" />
-              </FormRow>
-            </div>
-          )}
-        </>
-      )}
-      <FormRow label="Custom label" help="Shown on the filter in place of what it asks" full>
-        <TextField value={draft.alias} onChange={(alias) => patch({ alias })} />
-      </FormRow>
-      <div className="atlRow" style={{ justifyContent: 'flex-end' }}>
-        <Button variant="empty" onClick={onCancel} testId="cancelSaveFilter">
-          Cancel
-        </Button>
-        <Button variant="primary" type="submit" disabled={!valid} testId="saveFilter">
-          Save
-        </Button>
-      </div>
-    </form>
+      ))}
+    </div>
   );
 }
 
-function FilterPill({
+// --- A pill --------------------------------------------------------------------------------------------
+
+function FilterItem({
   filter,
   indexPatterns,
-  onChange,
+  onUpdate,
   onRemove,
 }: {
   filter: Filter;
   indexPatterns: IndexPattern[];
-  onChange: (filter: Filter) => void;
+  onUpdate: (filter: Filter) => void;
   onRemove: () => void;
 }) {
-  const [open, setOpen] = useState<'menu' | 'edit' | undefined>();
-  const close = useCallback(() => setOpen(undefined), []);
-  const { meta } = filter;
-  const pattern = indexPatterns.find((candidate) => candidate.id === meta.index) ?? indexPatterns[0];
-  const description = describeFilter(filter, (name, value) => {
-    const field = pattern?.fields.find((candidate) => candidate.name === name);
-    return field ? fieldFormatter(pattern, name, services.formatSettings())(value).text : String(value);
-  });
-  const pinned = isPinned(filter);
-  const text = meta.alias ? meta.alias : `${description.key}: ${description.value}`;
+  const [panel, setPanel] = useState<'menu' | 'edit' | undefined>();
+  const [indexPatternExists, setIndexPatternExists] = useState<boolean | undefined>(undefined);
+  const close = useCallback(() => setPanel(undefined), []);
+  const index = filter.meta.index;
 
-  const items: MenuItem[] = [
+  useEffect(() => {
+    let live = true;
+    // A filter without an index pattern is not checked
+    if (!index) setIndexPatternExists(true);
+    else {
+      services.indexPatterns.get(index).then(
+        (pattern) => live && setIndexPatternExists(Boolean(pattern)),
+        () => live && setIndexPatternExists(false)
+      );
+    }
+    return () => {
+      live = false;
+    };
+  }, [index]);
+
+  const mapped = useMemo(() => withMappedMeta(filter), [filter]);
+  const label = useMemo(
+    () => (indexPatternExists === undefined ? undefined : filterLabelConfig(filter, indexPatterns, indexPatternExists)),
+    [filter, indexPatterns, indexPatternExists]
+  );
+
+  // A filter that cannot be read is switched off, and drawn once it is
+  const errored = label?.status === 'error' && !filter.meta.disabled;
+  const updateRef = useRef(onUpdate);
+  updateRef.current = onUpdate;
+  useEffect(() => {
+    if (errored) updateRef.current({ ...filter, meta: { ...filter.meta, disabled: true } });
+  }, [errored, filter]);
+
+  // Nothing is drawn until it is known whether the index pattern is there
+  if (!label || errored) return null;
+
+  const { meta } = mapped;
+  const pinned = isPinned(filter);
+  const disabled = Boolean(meta.disabled) || label.status === 'error';
+  const hasValue = Boolean(mapFilter(filter).value);
+  const testId = [
+    'filter',
+    `filter-${disabled ? 'disabled' : 'enabled'}`,
+    meta.key ? `filter-key-${meta.key}` : '',
+    hasValue ? `filter-value-${label.status === '' ? label.title : label.status}` : '',
+    `filter-${pinned ? 'pinned' : 'unpinned'}`,
+    meta.negate ? 'filter-negated' : '',
+  ].join(' ');
+  let title = label.message || `Filter: ${filterLabelText(mapped, label.title, label.status)}. Select for more filter actions.`;
+  if (pinned) title = `Pinned ${title}`;
+  if (meta.disabled) title = `Disabled ${title}`;
+
+  const act = (change: () => void) => () => {
+    close();
+    change();
+  };
+  const items: FilterMenuItem[] = [
     {
-      label: pinned ? 'Unpin' : 'Pin across all apps',
+      name: pinned ? 'Unpin' : 'Pin across all apps',
       icon: 'pin',
-      onClick: () => onChange(withStore(filter, !pinned)),
+      onClick: act(() => onUpdate(togglePinned(filter))),
       testId: 'pinFilter',
     },
-    { label: 'Edit filter', icon: 'pencil', onClick: () => setOpen('edit'), testId: 'editFilter' },
+    { name: 'Edit filter', icon: 'pencil', panel: true, onClick: () => setPanel('edit'), testId: 'editFilter' },
     {
-      label: meta.negate ? 'Include results' : 'Exclude results',
+      name: meta.negate ? 'Include results' : 'Exclude results',
       icon: meta.negate ? 'plusCircle' : 'minusCircle',
-      onClick: () => onChange({ ...filter, meta: { ...meta, negate: !meta.negate } }),
+      onClick: act(() => onUpdate(toggleNegated(filter))),
       testId: 'negateFilter',
     },
     {
-      label: meta.disabled ? 'Re-enable' : 'Temporarily disable',
+      name: meta.disabled ? 'Re-enable' : 'Temporarily disable',
       icon: meta.disabled ? 'eye' : 'eyeClosed',
-      onClick: () => onChange({ ...filter, meta: { ...meta, disabled: !meta.disabled } }),
+      onClick: act(() => onUpdate(toggleDisabled(filter))),
       testId: 'disableFilter',
     },
-    { label: 'Delete', icon: 'trash', danger: true, onClick: onRemove, testId: 'deleteFilter' },
+    { name: 'Delete', icon: 'trash', onClick: act(onRemove), testId: 'deleteFilter' },
   ];
+
+  const badge = (
+    <span
+      className={cx(
+        'shlFilter',
+        disabled && 'shlFilter--disabled',
+        label.status === 'error' && 'shlFilter--error',
+        label.status === 'warn' && 'shlFilter--warning',
+        pinned && 'shlFilter--pinned',
+        meta.negate && 'shlFilter--excluded'
+      )}
+    >
+      <span className="shlFilter__content">
+        <button
+          type="button"
+          className="shlFilter__button"
+          title={title}
+          aria-label="Filter actions"
+          data-test-subj={testId}
+          onClick={(event: MouseEvent<HTMLButtonElement>) => {
+            // Shift and a click switches it off or on, as the original's
+            if (event.shiftKey) onUpdate(toggleDisabled(filter));
+            else setPanel(panel ? undefined : 'menu');
+          }}
+        >
+          <span>
+            <FilterLabel filter={mapped} valueLabel={label.title} status={label.status} />
+          </span>
+        </button>
+        <button
+          type="button"
+          className="shlFilter__remove"
+          aria-label="Delete"
+          title="Delete"
+          tabIndex={-1}
+          onClick={onRemove}
+        >
+          <Icon name="cross" />
+        </button>
+      </span>
+    </span>
+  );
 
   return (
     <Popover
-      open={open !== undefined}
+      open={panel !== undefined}
       onClose={close}
-      padded={open === 'edit'}
-      button={
-        <span
-          className={cx(
-            'shlFilter',
-            meta.negate && 'shlFilter--negated',
-            meta.disabled && 'shlFilter--disabled',
-            pinned && 'shlFilter--pinned'
-          )}
-          data-test-subj={`filter filter-key-${description.key} ${meta.negate ? 'filter-negated' : ''} ${
-            meta.disabled ? 'filter-disabled' : 'filter-enabled'
-          } ${pinned ? 'filter-pinned' : 'filter-unpinned'}`}
-        >
-          <button
-            type="button"
-            className="shlFilter__label"
-            title={`${meta.negate ? 'NOT ' : ''}${text}`}
-            onClick={() => setOpen(open ? undefined : 'menu')}
-          >
-            {meta.negate && <span className="shlFilter__prefix">NOT</span>}
-            <span className="atlTruncate">{text}</span>
-          </button>
-          <button type="button" className="shlFilter__remove" aria-label={`Delete ${text}`} onClick={onRemove}>
-            <Icon name="cross" />
-          </button>
-        </span>
-      }
+      offset={8}
+      buffer={16}
+      className="shlFilterPopover"
+      anchorClassName="shlFilters__pillAnchor"
+      button={badge}
     >
-      {open === 'edit' ? (
-        <FilterEditor
-          filter={filter}
-          indexPatterns={indexPatterns}
-          onCancel={close}
-          onSave={(next) => {
-            onChange(next);
-            close();
-          }}
-        />
+      {panel === 'edit' ? (
+        <div className="shlFilterPopover__editor">
+          <FilterEditor
+            filter={filter}
+            indexPatterns={indexPatterns}
+            onSubmit={(next) => {
+              close();
+              onUpdate(next);
+            }}
+            onCancel={close}
+          />
+        </div>
       ) : (
-        <Menu items={items.map((item) => (item.testId === 'editFilter' ? item : { ...item }))} onDone={() => setOpen((was) => (was === 'edit' ? was : undefined))} />
+        <FilterMenu items={items} />
       )}
     </Popover>
   );
 }
+
+// --- The menu of all the filters ----------------------------------------------------------------------
+
+function FilterOptions({ filters, onChange }: { filters: Filter[]; onChange: (filters: Filter[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  const all = (change: (filter: Filter) => Filter) => () => {
+    close();
+    onChange(filters.map(change));
+  };
+  const items: FilterMenuItem[] = [
+    { name: 'Enable all', icon: 'eye', onClick: all(enableFilter), testId: 'enableAllFilters' },
+    { name: 'Disable all', icon: 'eyeClosed', onClick: all(disableFilter), testId: 'disableAllFilters' },
+    { name: 'Pin all', icon: 'pin', onClick: all(pinFilter), testId: 'pinAllFilters' },
+    { name: 'Unpin all', icon: 'pin', onClick: all(unpinFilter), testId: 'unpinAllFilters' },
+    { name: 'Invert inclusion', icon: 'invert', onClick: all(toggleNegated), testId: 'invertInclusionAllFilters' },
+    { name: 'Invert enabled/disabled', icon: 'eye', onClick: all(toggleDisabled), testId: 'invertEnableDisableAllFilters' },
+    {
+      name: 'Remove all',
+      icon: 'trash',
+      onClick: () => {
+        close();
+        onChange([]);
+      },
+      testId: 'removeAllFilters',
+    },
+  ];
+  return (
+    <Popover
+      open={open}
+      onClose={close}
+      offset={8}
+      buffer={16}
+      className="shlFilterPopover"
+      anchorClassName="shlFilters__branchAnchor"
+      button={
+        <Tooltip content="Change all filters" position="bottom" delay="long">
+          <button
+            type="button"
+            className="shlFilters__actions"
+            aria-label="Change all filters"
+            data-test-subj="showFilterActions"
+            onClick={() => setOpen(!open)}
+          >
+            <Icon name="filter" />
+          </button>
+        </Tooltip>
+      }
+    >
+      <FilterMenu title="Filters" items={items} testId="filter-options-menu-panel" />
+    </Popover>
+  );
+}
+
+// --- The bar --------------------------------------------------------------------------------------------
 
 export interface FilterBarProps {
   filters: Filter[];
@@ -457,67 +448,88 @@ export interface FilterBarProps {
 
 export function FilterBar({ filters, onChange, indexPatterns }: FilterBarProps) {
   const [adding, setAdding] = useState(false);
-  const [optionsOpen, setOptionsOpen] = useState(false);
   const closeAdding = useCallback(() => setAdding(false), []);
-  const closeOptions = useCallback(() => setOptionsOpen(false), []);
 
-  const all = (change: (filter: Filter) => Filter) => onChange(filters.map(change));
-  const options: MenuItem[] = [
-    { label: 'Enable all', icon: 'eye', onClick: () => all((filter) => ({ ...filter, meta: { ...filter.meta, disabled: false } })) },
-    { label: 'Disable all', icon: 'eyeClosed', onClick: () => all((filter) => ({ ...filter, meta: { ...filter.meta, disabled: true } })) },
-    { label: 'Pin all', icon: 'pin', onClick: () => all((filter) => withStore(filter, true)) },
-    { label: 'Unpin all', icon: 'pin', onClick: () => all((filter) => withStore(filter, false)) },
-    { label: 'Invert inclusion', icon: 'minusCircle', onClick: () => all((filter) => ({ ...filter, meta: { ...filter.meta, negate: !filter.meta.negate } })) },
-    { label: 'Invert enabled/disabled', icon: 'eye', onClick: () => all((filter) => ({ ...filter, meta: { ...filter.meta, disabled: !filter.meta.disabled } })) },
-    { label: 'Remove all', icon: 'trash', danger: true, onClick: () => onChange([]) },
-  ];
+  // What changes is kept as the original's filter manager keeps it: read, and each filter once.
+  // Changes made at once, as pills that cannot be read switching off, each build on the last.
+  const latest = useRef(filters);
+  latest.current = filters;
+  const update = useCallback(
+    (next: Filter[]) => {
+      const settled = uniqueFilters(next.map(withMappedMeta));
+      latest.current = settled;
+      onChange(settled);
+    },
+    [onChange]
+  );
+  const updateAt = (at: number) => (filter: Filter) =>
+    update(latest.current.map((other, index) => (index === at ? filter : other)));
+
+  const pinnedByDefault = Boolean(services.uiSettings.get('filters:pinnedByDefault', false));
+  const newFilter = emptyFilter(pinnedByDefault, indexPatterns[0]?.id);
+
+  let addButton: ReactNode = (
+    <button
+      type="button"
+      className="shlFilters__add"
+      aria-label="Add filter"
+      data-test-subj="addFilter"
+      onClick={() => setAdding(true)}
+    >
+      <Icon name="plusCircle" />
+      Add filter
+    </button>
+  );
+  addButton = (
+    <Popover
+      open={adding}
+      onClose={closeAdding}
+      offset={8}
+      buffer={16}
+      className="shlFilterPopover"
+      button={addButton}
+    >
+      <div className="shlFilterPopover__editor">
+        <FilterEditor
+          key={JSON.stringify(newFilter)}
+          filter={newFilter}
+          indexPatterns={indexPatterns}
+          onSubmit={(filter) => {
+            setAdding(false);
+            update([...filters, filter]);
+          }}
+          onCancel={closeAdding}
+        />
+      </div>
+    </Popover>
+  );
 
   return (
     <div className="shlFilters" data-test-subj="globalFilterGroup">
-      <Popover
-        open={optionsOpen}
-        onClose={closeOptions}
-        button={
-          <IconButton
-            icon="filter"
-            label="Change all filters"
-            variant="empty"
-            className="shlFilters__actions"
-            onClick={() => setOptionsOpen(!optionsOpen)}
-            testId="showFilterActions"
-          />
-        }
-      >
-        <Menu items={options} title="Change all filters" onDone={closeOptions} />
-      </Popover>
-      {filters.map((filter, index) => (
-        <FilterPill
-          key={`${index}-${JSON.stringify(filter.meta.key)}-${JSON.stringify(filter.meta.value ?? filter.meta.params)}`}
-          filter={filter}
-          indexPatterns={indexPatterns}
-          onChange={(next) => onChange(filters.map((other, at) => (at === index ? next : other)))}
-          onRemove={() => onChange(filters.filter((_other, at) => at !== index))}
-        />
-      ))}
-      <Popover
-        open={adding}
-        onClose={closeAdding}
-        padded
-        button={
-          <Button variant="empty" icon="plusCircle" onClick={() => setAdding(!adding)} testId="addFilter" disabled={indexPatterns.length === 0}>
-            Add filter
-          </Button>
-        }
-      >
-        <FilterEditor
-          indexPatterns={indexPatterns}
-          onCancel={closeAdding}
-          onSave={(filter) => {
-            onChange([...filters, filter]);
-            closeAdding();
-          }}
-        />
-      </Popover>
+      <div className="shlFilters__branch">
+        <FilterOptions filters={filters} onChange={update} />
+      </div>
+      <div className="shlFilters__list" data-test-subj="globalFilterGroupFilterFlexItem">
+        <div className="shlFilters__items">
+          {filters.map((filter, index) => (
+            <div
+              // The pills are known by their place, as the original's
+              // eslint-disable-next-line react/no-array-index-key
+              key={index}
+              className="shlFilters__item"
+              data-test-subj="globalFilterBar"
+            >
+              <FilterItem
+                filter={filter}
+                indexPatterns={indexPatterns}
+                onUpdate={updateAt(index)}
+                onRemove={() => update(filters.filter((_other, at) => at !== index))}
+              />
+            </div>
+          ))}
+          <div className="shlFilters__item shlFilters__item--add">{addButton}</div>
+        </div>
+      </div>
     </div>
   );
 }

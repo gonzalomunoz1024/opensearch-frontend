@@ -4,22 +4,33 @@
 process.env.TZ = 'UTC';
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { AggEditor } from '../../web/apps/visualize/agg_editor';
+import { RangeControl } from '../../web/apps/visualize/editor_controls';
 import {
   addAgg,
   allowedAggs,
   axisName,
   changeAggType,
+  fallbackMetric,
+  firstOrderBy,
   newVis,
   nextAggId,
   nextAxisId,
+  orderByParams,
+  orderableMetric,
+  parentPipelineMetric,
   syncParams,
   visProblems,
 } from '../../web/apps/visualize/defaults';
 import { classicTimeTicks } from '../../web/charts/core';
-import { OTHER_KEY, buildAggsDsl, planOtherBucket, tabify, type AggConfig, type AggContext } from '../../web/lib/aggs';
+import { OTHER_KEY, buildAggsDsl, otherBucketAggs, planOtherBucket, responseAggs, tabify, type AggConfig, type AggContext } from '../../web/lib/aggs';
 import type { Field, IndexPattern } from '../../web/lib/types';
 import { visType } from '../../web/lib/vis';
+import { createServices, type BootData } from '../../web/services';
 
 const field = (name: string, type: string, more: Partial<Field> = {}): Field => ({
   name,
@@ -63,6 +74,27 @@ describe('a new visualization', () => {
   it('has no aggregations when its kind asks for none', () => {
     assert.deepEqual(newVis('markdown', {}).aggs, []);
   });
+
+  it('names the value axis of a horizontal bar chart LeftAxis-1, at the bottom, as the original', () => {
+    const [axis] = newVis('horizontal_bar', {}).params.valueAxes as Array<{ name: string; position: string }>;
+    assert.equal(axis.name, 'LeftAxis-1');
+    assert.equal(axis.position, 'bottom');
+  });
+});
+
+describe('the Options tab of a Markdown visualization', () => {
+  it("writes the font size as the original's RangeOption: the value beside the handle and in a field", () => {
+    // The tab's module loads the stylesheets of the maps, which a test cannot: its source is read
+    const source = readFileSync('web/apps/visualize/options.tsx', 'utf8');
+    const markdown = source.slice(source.indexOf('function MarkdownOptions('), source.indexOf('function JsonOptions('));
+    assert.match(markdown, /<RangeControl\s+min=\{8\}\s+max=\{36\}[^>]*\sshowInput\s/);
+    assert.match(markdown, /'Values must be on or between 8 and 36'/);
+    // The value beside the handle is the control's own, as RangeOption's showValue
+    assert.equal(/showValue=\{false\}/.test(markdown), false);
+    const out = renderToStaticMarkup(createElement(RangeControl, { min: 8, max: 36, value: 14, showInput: true, onChange: () => undefined }));
+    assert.match(out, /<output class="vzeRange__value"[^>]*>14(<!-- -->)?<\/output>/);
+    assert.match(out, /<input type="number"[^>]* min="8" max="36"[^>]* value="14"/);
+  });
 });
 
 describe('the aggregations a part of a chart accepts', () => {
@@ -86,37 +118,123 @@ describe('adding and changing aggregations', () => {
     assert.equal(nextAggId([count, { ...count, id: '7' }, { ...count, id: '3' }]), '8');
   });
 
-  it('adds a metric as a count and a bucket without a type', () => {
+  it('adds a metric and a bucket without a type, as the original adds one beside another', () => {
     const withMetric = addAgg([count], schemaOf('line', 'metric'));
-    assert.deepEqual(withMetric[1], { id: '2', enabled: true, type: 'count', schema: 'metric', params: {} });
+    assert.deepEqual(withMetric[1], { id: '2', enabled: true, type: '', schema: 'metric', params: {} });
     const withBucket = addAgg([count], schemaOf('line', 'segment'));
     assert.deepEqual(withBucket[1], { id: '2', enabled: true, type: '', schema: 'segment', params: {} });
   });
 
-  it('asks for a split chart before the other buckets', () => {
-    const terms: AggConfig = { id: '2', enabled: true, type: 'terms', schema: 'segment', params: { field: 'geo.dest', size: 5 } };
-    const next = addAgg([count, terms], schemaOf('line', 'split'));
+  it('adds a split chart after the other buckets, where a pie asks for it to come first', () => {
+    const terms: AggConfig = { id: '2', enabled: true, type: 'terms', schema: 'segment', params: { field: 'geo.dest', size: 5, orderBy: '1', order: 'desc' } };
+    const next = addAgg([count, terms], schemaOf('pie', 'split'));
     assert.deepEqual(
       next.map((agg) => agg.id),
-      ['1', '3', '2']
+      ['1', '2', '3']
     );
-    assert.deepEqual(next[1].params, { row: true });
+    const split = { ...next[2], type: 'terms', params: { field: 'geo.dest', size: 5, orderBy: '1', order: 'desc' } };
+    assert.equal(visProblems({ type: 'pie', aggs: [count, terms, split] }, logs)['3'], '"Split chart" aggs must run before all other buckets!');
+    assert.equal(visProblems({ type: 'line', aggs: [count, terms, split] }, logs)['3'], undefined);
   });
 
-  it('keeps the field and the label when the type changes and the field still fits', () => {
+  it('keeps the field when the type changes and the field still fits, and nothing else, as the original', () => {
     const average: AggConfig = { id: '1', enabled: true, type: 'avg', schema: 'metric', params: { field: 'bytes', customLabel: 'Size' } };
     const sum = changeAggType(average, 'sum', logs, [average]);
     assert.equal(sum.type, 'sum');
     assert.equal(sum.params?.field, 'bytes');
-    assert.equal(sum.params?.customLabel, 'Size');
+    assert.equal(sum.params?.customLabel, undefined);
   });
 
   it('drops a field the new type cannot be on', () => {
     const terms: AggConfig = { id: '2', enabled: true, type: 'terms', schema: 'segment', params: { field: 'geo.dest' } };
     const histogram = changeAggType(terms, 'histogram', logs, [count, terms]);
-    assert.equal(histogram.params?.field, 'bytes', 'the only number field is chosen');
+    assert.equal(histogram.params?.field, undefined, 'the field editor, not the type, picks the only field there is');
     const dates = changeAggType(terms, 'date_histogram', logs, [count, terms]);
     assert.equal(dates.params?.field, 'timestamp');
+  });
+});
+
+describe('what a terms bucket is ordered by, and what a parent pipeline works on', () => {
+  const average: AggConfig = { id: '2', enabled: true, type: 'avg', schema: 'metric', params: { field: 'bytes' } };
+  const median: AggConfig = { id: '3', enabled: true, type: 'median', schema: 'metric', params: { field: 'bytes' } };
+  const ranks: AggConfig = { id: '4', enabled: true, type: 'percentile_ranks', schema: 'metric', params: { field: 'bytes', values: [5000, 1.5] } };
+  const metrics = [count, average, median, ranks];
+
+  it('is ordered, when nothing says, by the first value that can order it: a percentile rank is one', () => {
+    assert.equal(firstOrderBy([median, ranks, average], context), '4.5000');
+    assert.equal(firstOrderBy(metrics, context), '1');
+    assert.equal(firstOrderBy([median], context), '_key');
+    const made = changeAggType({ id: '9', enabled: true, type: '', schema: 'segment', params: {} }, 'terms', logs, [median, ranks]);
+    assert.equal(made.params?.orderBy, '4.5000');
+  });
+
+  it('gives way to the alphabet when the metric is gone or cannot order the terms, as the original', () => {
+    assert.equal(fallbackMetric('1', metrics, orderableMetric, '_key'), undefined);
+    assert.equal(fallbackMetric('2', metrics, orderableMetric, '_key'), undefined);
+    assert.equal(fallbackMetric('7', metrics, orderableMetric, '_key'), '_key');
+    assert.equal(fallbackMetric('3', metrics, orderableMetric, '_key'), '_key');
+    // OpenSearch orders by one rank, not by all of them: the original offers each rank on its own
+    const values = metrics.flatMap((metric) => responseAggs(metric, context));
+    const usable = (item: { agg: AggConfig }) => orderableMetric(item.agg);
+    assert.deepEqual(
+      values.map((item) => item.id),
+      ['1', '2', '3', '4.5000', "4['1.5']"]
+    );
+    assert.equal(fallbackMetric('4.5000', values, usable, '_key'), undefined);
+    assert.equal(fallbackMetric("4['1.5']", values, usable, '_key'), undefined);
+    assert.equal(fallbackMetric('4', values, usable, '_key'), '_key');
+    assert.equal(fallbackMetric('3', values, usable, '_key'), '_key');
+    for (const kept of ['_key', 'custom', '']) assert.equal(fallbackMetric(kept, metrics, orderableMetric, '_key'), undefined, kept);
+  });
+
+  it("gives way to a custom metric when a parent pipeline's metric is gone or is one it cannot work on", () => {
+    assert.equal(fallbackMetric('2', metrics, parentPipelineMetric, 'custom'), undefined);
+    assert.equal(fallbackMetric('7', metrics, parentPipelineMetric, 'custom'), 'custom');
+    assert.equal(fallbackMetric('3', metrics, parentPipelineMetric, 'custom'), 'custom');
+    assert.equal(fallbackMetric('4', metrics, parentPipelineMetric, 'custom'), 'custom');
+    assert.equal(parentPipelineMetric({ ...average, type: 'top_hits' }), false);
+    assert.equal(parentPipelineMetric({ ...average, type: 'cumulative_sum' }), true);
+  });
+
+  it('keeps a custom metric only while the terms are ordered by one', () => {
+    const sum: AggConfig = { id: '2-orderAgg', enabled: true, type: 'sum', schema: 'orderAgg', params: { field: 'bytes' } };
+    assert.deepEqual(orderByParams('2', '_key', sum), { orderBy: '_key', orderAgg: undefined });
+    assert.deepEqual(orderByParams('2', '1', sum), { orderBy: '1', orderAgg: undefined });
+    assert.deepEqual(orderByParams('2', 'custom', sum), { orderBy: 'custom', orderAgg: sum });
+    assert.deepEqual(orderByParams('2', 'custom', undefined), { orderBy: 'custom', orderAgg: { id: '2-orderAgg', enabled: true, type: 'count', params: {}, schema: 'orderAgg' } });
+  });
+
+  it('lists the metrics as the original: "Metric: ..." each, with those that cannot be used switched off', () => {
+    const boot = { basePath: '', version: '3.9.0', name: 'test', settings: {}, settingsDefaults: {}, settingsOverrides: {} };
+    createServices(boot as unknown as BootData);
+    const derivative: AggConfig = { id: '5', enabled: true, type: 'derivative', schema: 'metric', params: { metricAgg: '2' } };
+    const terms: AggConfig = { id: '6', enabled: true, type: 'terms', schema: 'segment', params: { field: 'geo.dest', size: 5, order: 'desc', orderBy: '1' } };
+    const aggs = [...metrics, derivative, terms];
+    const draw = (agg: AggConfig) => renderToStaticMarkup(createElement(AggEditor, { agg, types: [agg.type], indexPattern: logs, aggs, context, onChange: () => undefined }));
+    const option = (value: string, label: string, disabled: boolean) => new RegExp(`<option value="${value}"(?: selected="")?${disabled ? ' disabled=""' : ''}>${label}</option>`);
+    const pipeline = draw(derivative);
+    assert.match(pipeline, option('1', 'Metric: Count', false));
+    assert.match(pipeline, option('2', 'Metric: Average bytes', false));
+    assert.match(pipeline, option('3', 'Metric: Median bytes', true));
+    assert.match(pipeline, option('4.5000', 'Metric: Percentile rank 5,000 of &quot;bytes&quot;', true));
+    assert.match(pipeline, option('4\\[&#x27;1.5&#x27;\\]', 'Metric: Percentile rank 1.5 of &quot;bytes&quot;', true));
+    assert.match(pipeline, option('custom', 'Custom metric', false));
+    const order = draw(terms);
+    assert.match(order, option('2', 'Metric: Average bytes', false));
+    assert.match(order, option('3', 'Metric: Median bytes', true));
+    assert.match(order, option('4.5000', 'Metric: Percentile rank 5,000 of &quot;bytes&quot;', false));
+    assert.match(order, option('4\\[&#x27;1.5&#x27;\\]', 'Metric: Percentile rank 1.5 of &quot;bytes&quot;', false));
+    // Each percentile and each bound of a standard deviation is listed, switched off
+    const more: AggConfig[] = [
+      { id: '7', enabled: true, type: 'percentiles', schema: 'metric', params: { field: 'bytes', percents: [50, 95] } },
+      { id: '8', enabled: true, type: 'std_dev', schema: 'metric', params: { field: 'bytes' } },
+    ];
+    const wide = renderToStaticMarkup(createElement(AggEditor, { agg: terms, types: ['terms'], indexPattern: logs, aggs: [...more, terms], context, onChange: () => undefined }));
+    assert.match(wide, option('7.50', 'Metric: 50th percentile of bytes', true));
+    assert.match(wide, option('7.95', 'Metric: 95th percentile of bytes', true));
+    assert.match(wide, option('8.std_lower', 'Metric: Lower Standard Deviation of bytes', true));
+    assert.match(wide, option('8.std_upper', 'Metric: Upper Standard Deviation of bytes', true));
+    assert.match(order, option('_key', 'Alphabetical', false));
   });
 });
 
@@ -133,14 +251,14 @@ describe('what keeps a chart from being drawn', () => {
     assert.equal(problems['3'], 'Select a field');
   });
 
-  it('leaves an aggregation that is switched off alone', () => {
+  it('names an aggregation without a type even when it is switched off, as the form of the original does', () => {
     const problems = visProblems({ type: 'line', aggs: [count, { id: '2', enabled: false, type: '', schema: 'segment', params: {} }] }, logs);
-    assert.deepEqual(problems, {});
+    assert.deepEqual(problems, { '2': 'Select an aggregation' });
   });
 
-  it('names a field the index pattern does not have', () => {
+  it('asks for a field the index pattern does not have to be chosen again', () => {
     const problems = visProblems({ type: 'line', aggs: [{ id: '1', enabled: true, type: 'avg', schema: 'metric', params: { field: 'gone' } }] }, logs);
-    assert.match(problems['1'], /gone/);
+    assert.equal(problems['1'], 'Select a field');
   });
 
   it('wants a histogram under a derivative', () => {
@@ -151,8 +269,8 @@ describe('what keeps a chart from being drawn', () => {
       schema: 'metric',
       params: { metricAgg: 'custom', customMetric: { id: '2-metric', enabled: true, type: 'count', params: {} } },
     };
-    const terms: AggConfig = { id: '3', enabled: true, type: 'terms', schema: 'segment', params: { field: 'geo.dest', size: 5 } };
-    assert.match(visProblems({ type: 'line', aggs: [derivative, terms] }, logs)['2'], /Date Histogram/);
+    const terms: AggConfig = { id: '3', enabled: true, type: 'terms', schema: 'segment', params: { field: 'geo.dest', size: 5, orderBy: '_key', order: 'desc' } };
+    assert.match(visProblems({ type: 'line', aggs: [derivative, terms] }, logs)['3'], /Date Histogram/);
     const dates: AggConfig = { id: '3', enabled: true, type: 'date_histogram', schema: 'segment', params: { field: 'timestamp', interval: 'auto' } };
     assert.deepEqual(visProblems({ type: 'line', aggs: [derivative, dates] }, logs), {});
   });
@@ -185,6 +303,20 @@ describe('the settings that follow the aggregations', () => {
     const named = { ...vis.params, valueAxes: (vis.params.valueAxes as Array<Record<string, unknown>>).map((axis) => ({ ...axis, title: { text: 'Traffic' } })) };
     const kept = syncParams({ ...vis, params: named, aggs: [average] }, context);
     assert.equal((kept.valueAxes as Array<{ title: { text: string } }>)[0].title.text, 'Traffic');
+  });
+
+  it('labels a pipeline after the metric it is on, as the original names its series', () => {
+    const vis = line();
+    const average: AggConfig = { id: '1', enabled: true, type: 'avg', schema: 'metric', params: { field: 'bytes', customLabel: 'Mean size' } };
+    const sum: AggConfig = { id: '3', enabled: true, type: 'cumulative_sum', schema: 'metric', params: { metricAgg: '1' } };
+    for (const given of [context, {}]) {
+      const params = syncParams({ ...vis, aggs: [average, sum] }, given);
+      const series = params.seriesParams as Array<{ data: { id: string; label: string } }>;
+      assert.deepEqual(
+        series.map((item) => item.data.label),
+        ['Mean size', 'Cumulative Sum of Mean size']
+      );
+    }
   });
 
   it('changes nothing when nothing changed', () => {
@@ -355,6 +487,41 @@ describe('the bucket of other values', () => {
     const plain = [count, dest({ otherBucket: false })];
     const response = { aggregations: { '2': { buckets: [{ key: 'CN', doc_count: 9 }] } } };
     assert.equal(planOtherBucket(plain, buildAggsDsl(plain, context), response, context), undefined);
+  });
+
+  it('asks for the rest of a terms aggregation under another in turn, under the rest of that one too', () => {
+    const outer = { ...dest(), id: '3', params: { ...dest().params, field: 'machine.os.keyword' } };
+    const aggs = [count, outer, dest()];
+    assert.deepEqual(otherBucketAggs(aggs).map((agg) => agg.id), ['3', '2']);
+    const dsl = buildAggsDsl(aggs, context);
+    const response = {
+      aggregations: { '3': { buckets: [{ key: 'osx', doc_count: 20, '2': { buckets: [{ key: 'CN', doc_count: 9 }] } }] } },
+    };
+    const first = planOtherBucket(aggs, dsl, response, context, '3');
+    if (!first) throw new Error('nothing is asked for the outer terms');
+    // The outer rest comes with the inner terms under it
+    first.apply({ 'other-filter': { buckets: { '': { doc_count: 15, '2': { buckets: [{ key: 'US', doc_count: 6 }] } } } } });
+    const second = planOtherBucket(aggs, dsl, response, context, '2');
+    if (!second) throw new Error('nothing is asked for the inner terms');
+    const filters = (second.aggs['other-filter'] as { filters: { filters: Record<string, { bool: Record<string, unknown[]> }> } }).filters.filters;
+    assert.deepEqual(Object.keys(filters), ['-osx', '-__other__']);
+    // Under the outer rest: none of the outer terms, then none of the inner ones there
+    assert.deepEqual(filters['-__other__'].bool.filter, [{ exists: { field: 'geo.dest' } }]);
+    assert.deepEqual(filters['-__other__'].bool.must_not, [
+      { bool: { should: [{ match_phrase: { 'machine.os.keyword': 'osx' } }], minimum_should_match: 1 } },
+      { match_phrase: { 'geo.dest': 'US' } },
+    ]);
+    second.apply({ 'other-filter': { buckets: { '-osx': { doc_count: 11 }, '-__other__': { doc_count: 9 } } } });
+    const table = tabify(aggs, response, context);
+    assert.deepEqual(
+      table.rows.map((row) => [row[table.columns[0].id], row[table.columns[1].id], row[table.columns[2].id]]),
+      [
+        ['osx', 'CN', 9],
+        ['osx', OTHER_KEY, 11],
+        [OTHER_KEY, 'US', 6],
+        [OTHER_KEY, OTHER_KEY, 9],
+      ]
+    );
   });
 });
 

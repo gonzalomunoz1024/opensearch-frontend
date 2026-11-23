@@ -7,7 +7,7 @@
  */
 
 import { formatDate } from '../../lib/dates';
-import { getLastValue, type TsvbParams, type TsvbSeriesData } from './data';
+import { getLastValue, valueTemplate, type TsvbParams, type TsvbSeriesData } from './data';
 
 // Lodash's snake case, which names the variables. Letters with accents first lose them, as lodash's
 // deburr writes them, and apostrophes go. A text of plain words is then split at what is not a
@@ -88,7 +88,7 @@ export function convertSeriesToVars(series: TsvbSeriesData[], params: TsvbParams
       const name = [snakeCase(row.label), snakeCase(model.var_name)].filter(Boolean).join('.');
       // A missing value is written as nothing in the series' template, as the product's formatter
       // writes it
-      const empty = (model.value_template || '{{value}}').replace(/\{\{\s*value\s*\}\}/g, '');
+      const empty = valueTemplate(model.value_template)(null);
       const format = (value: number | null) => (value === null || value === undefined ? empty : row.format(value));
       const lastValue = getLastValue(row.data);
       setPath(variables, name, {
@@ -99,6 +99,13 @@ export function convertSeriesToVars(series: TsvbSeriesData[], params: TsvbParams
         },
       });
       setPath(variables, `${snakeCase(row.label)}.label`, row.label);
+      // A term OpenSearch writes in words of its own (a date, true or false) is given as well, a
+      // date in the date format, as the product reads it with moment
+      if (row.labelFormatted) {
+        const time = new Date(row.labelFormatted);
+        const formatted = Number.isNaN(time.getTime()) ? row.labelFormatted : formatDate(time, dateFormat, zone);
+        setPath(variables, `${snakeCase(row.label)}.formatted`, formatted);
+      }
     }
   }
   return variables;

@@ -6,12 +6,13 @@
  */
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Badge, Button, CallOut, IconButton, cx } from '../../components/basic';
+import { Button, CallOut, IconButton, cx } from '../../components/basic';
 import { ComboBox, type ComboOption } from '../../components/combo_box';
-import { NumberField, Select, TextField } from '../../components/form';
+import { NumberField, Select, Switch, TextField } from '../../components/form';
 import { Icon } from '../../components/icon';
-import { MenuButton, Modal } from '../../components/overlay';
-import { ExternalLink, JsonEditor, Labeled, ism } from './common';
+import { Menu, Modal, Popover, Tooltip } from '../../components/overlay';
+import { ExternalLink, JsonEditor, ism } from './common';
+import { FormRow } from './form_row';
 import {
   INDEX_DYNAMIC_SETTINGS,
   MAPPING_TYPES,
@@ -22,6 +23,7 @@ import {
   flatten,
   mappingType,
   ordered,
+  parsedObject,
   propertiesOf,
   replicasError,
   shardsError,
@@ -135,16 +137,25 @@ export function settingsErrors(settings: Settings | undefined): Record<string, s
 
 const pretty = (value: unknown) => JSON.stringify(value, null, 2);
 
-/** An editor for JSON that keeps what is typed while it is not JSON yet */
+export const JSON_FORMAT_ERROR =
+  'Your input does not match the validation of json format, please fix the error line with error aside.';
+
+/**
+ * An editor for JSON, as the plugin's: what is typed is taken when the editor is left, if it is JSON
+ * then; until it is, the editor has a red border and says so under it.
+ */
 function ObjectEditor({
   value,
   onChange,
+  onChecked,
   readOnly,
-  height = 240,
+  height = 500,
   testId,
 }: {
   value: Record<string, unknown>;
   onChange?: (value: Record<string, unknown>) => void;
+  /** Told, each time the editor is left, whether what it has is JSON */
+  onChecked?: (ok: boolean) => void;
   readOnly?: boolean;
   height?: number;
   testId?: string;
@@ -161,27 +172,50 @@ function ObjectEditor({
       setBroken(false);
     }
   }, [value]);
+  const take = () => {
+    if (readOnly) return;
+    const parsed = parsedObject(text);
+    setBroken(!parsed);
+    onChecked?.(Boolean(parsed));
+    if (!parsed) return;
+    shown.current = pretty(parsed);
+    onChange?.(parsed);
+  };
   return (
-    <div className={cx('ismObjectEditor', broken && 'ismObjectEditor--broken')}>
-      <JsonEditor
-        value={text}
-        readOnly={readOnly}
-        height={height}
-        testId={testId}
-        onChange={(next) => {
-          setText(next);
-          try {
-            const parsed: unknown = JSON.parse(next);
-            if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('not an object');
-            shown.current = pretty(parsed);
-            setBroken(false);
-            onChange?.(parsed as Record<string, unknown>);
-          } catch {
-            setBroken(true);
-          }
-        }}
-      />
-      {broken && <div className="ismLabeled__error">Your input does not match the validation of json format, please fix the error line with error aside.</div>}
+    <div
+      className={cx('ismObjectEditor', broken && 'ismObjectEditor--broken')}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) take();
+      }}
+    >
+      <JsonEditor value={text} readOnly={readOnly} height={height} testId={testId} onChange={setText} />
+      {broken && <div className="ismCustomRow__error">{JSON_FORMAT_ERROR}</div>}
+    </div>
+  );
+}
+
+/** What there was beside what there is to be: the plugin's comparison of two JSON values */
+function DiffEditor({
+  original,
+  value,
+  onChange,
+  onChecked,
+}: {
+  original: Record<string, unknown>;
+  value: Record<string, unknown>;
+  onChange: (value: Record<string, unknown>) => void;
+  onChecked?: (ok: boolean) => void;
+}) {
+  return (
+    <div className="ismDiff">
+      <FormRow label="Original" help="The original value">
+        {null}
+      </FormRow>
+      <FormRow label="Modified" help="The value you modified">
+        {null}
+      </FormRow>
+      <ObjectEditor value={original} readOnly height={600} />
+      <ObjectEditor value={value} onChange={onChange} onChecked={onChecked} height={600} testId="advancedSettingsEditor" />
     </div>
   );
 }
@@ -196,6 +230,7 @@ export function AdvancedSettings({
   label = 'Specify advanced index settings',
   forTemplate,
   nested,
+  fullWidth = true,
   children,
 }: {
   value: Settings;
@@ -206,21 +241,40 @@ export function AdvancedSettings({
   forTemplate?: boolean;
   /** The value is more than settings: what is nested in it stays nested */
   nested?: boolean;
+  /** The row as wide as what holds it; without, the theme's 400 px, as a split or a shrink has it */
+  fullWidth?: boolean;
   title?: ReactNode;
   label?: ReactNode;
   children?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const [compare, setCompare] = useState(false);
+  // The switch is not moved while the editor holds what is not JSON: the editor says so instead
+  const json = useRef(true);
+  const checked = (ok: boolean) => {
+    json.current = ok;
+  };
+  const take = (next: Record<string, unknown>) => onChange(nested ? next : flatten(next));
+  const editor = (
+    <ObjectEditor
+      value={value}
+      readOnly={readOnly}
+      onChange={take}
+      onChecked={checked}
+      testId="advancedSettingsEditor"
+    />
+  );
   return (
-    <div className="ismAdvanced">
-      <button type="button" className="atlAccordion__button" aria-expanded={open} onClick={() => setOpen(!open)}>
-        <Icon name={open ? 'chevronDown' : 'chevronRight'} />
-        <span className="atlGrow">{title}</span>
+    <div className="ismAccordion">
+      <button type="button" className="ismAccordion__button" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <Icon name="chevronRight" className="ismAccordion__icon" />
+        <span>{typeof title !== 'string' ? title : forTemplate ? <h4>{title}</h4> : <h3>{title}</h3>}</span>
       </button>
       {open && (
-        <div className="ismAdvanced__body">
-          <Labeled
-            title={label}
+        <div className="ismAccordion__body">
+          <FormRow
+            label={label}
+            fullWidth={fullWidth}
             testId="formNameAdvancedSettings"
             help={
               children ?? (
@@ -239,20 +293,27 @@ export function AdvancedSettings({
             }
           >
             {isEdit && !readOnly ? (
-              // What the index has is at the left; what it is to have is at the right
-              <div className="ismDiff">
-                <ObjectEditor value={ordered(old ?? {})} readOnly />
-                <ObjectEditor value={value} onChange={(next) => onChange(flatten(next))} testId="advancedSettingsEditor" />
-              </div>
+              // The settings as they are, or, switched on, what the index has beside them
+              <>
+                <div className="ismSpacer ismSpacer--l" />
+                <Switch
+                  checked={compare}
+                  onChange={(next) => {
+                    if (json.current) setCompare(next);
+                  }}
+                  label="Compare previously saved settings"
+                />
+                <div className="ismSpacer ismSpacer--l" />
+                {compare ? (
+                  <DiffEditor original={ordered(old ?? {})} value={value} onChange={take} onChecked={checked} />
+                ) : (
+                  editor
+                )}
+              </>
             ) : (
-              <ObjectEditor
-                value={value}
-                readOnly={readOnly}
-                onChange={(next) => onChange(nested ? next : flatten(next))}
-                testId="advancedSettingsEditor"
-              />
+              editor
             )}
-          </Labeled>
+          </FormRow>
         </div>
       )}
     </div>
@@ -261,7 +322,14 @@ export function AdvancedSettings({
 
 /** A setting written out, for where it cannot be changed */
 function Plain({ value }: { value: unknown }) {
-  return <span className="ismPlain">{value ? String(value) : '-'}</span>;
+  const text = value ? String(value) : '-';
+  return (
+    <div>
+      <div className="ismReadonlyText" title={text}>
+        {text}
+      </div>
+    </div>
+  );
 }
 
 /** The settings every index has a field for, and the editor for all the rest */
@@ -274,6 +342,8 @@ export function SettingsFields({
   errors = {},
   withShards = true,
   forTemplate,
+  forDataStream,
+  forComponent,
   across = isEdit,
 }: {
   value: Settings | undefined;
@@ -285,6 +355,13 @@ export function SettingsFields({
   withShards?: boolean;
   /** The settings a template gives: every one of them can be set, and none has to be */
   forTemplate?: boolean;
+  /** The settings a data stream takes from its template, whose shards row is as wide as the page too */
+  forDataStream?: boolean;
+  /**
+   * With forTemplate, the settings a component template gives: named in the size of an index's, the
+   * two counts in rows as wide as the page with fields of the theme's own width
+   */
+  forComponent?: boolean;
   across?: boolean;
 }) {
   const settings = value ?? {};
@@ -301,11 +378,16 @@ export function SettingsFields({
     const now = settings[name];
     return now === undefined || now === '' ? undefined : Number(now);
   };
+  // A template's settings are named a size smaller (a component template's are not), 24 px apart, as the plugin's
+  const small = forTemplate && !forComponent;
   return (
-    <div className="ismForm">
+    <div className={cx('ismSettings', forTemplate && 'ismSettings--template')}>
       {withShards && (
-        <Labeled
+        <FormRow
           title="Number of primary shards"
+          small={small}
+          fullWidth={forTemplate && (forDataStream || forComponent)}
+          narrow={forComponent}
           across={across}
           testId={forTemplate ? 'form-row-template.settings.index.number_of_shards' : 'form-name-index.number_of_shards'}
           error={errors['index.number_of_shards']}
@@ -331,10 +413,13 @@ export function SettingsFields({
               invalid={Boolean(errors['index.number_of_shards'])}
             />
           )}
-        </Labeled>
+        </FormRow>
       )}
-      <Labeled
+      <FormRow
         title="Number of replicas"
+        small={small}
+        fullWidth={forTemplate}
+        narrow={forTemplate}
         across={across}
         testId={forTemplate ? 'form-row-template.settings.index.number_of_replicas' : 'form-name-index.number_of_replicas'}
         error={errors['index.number_of_replicas']}
@@ -351,9 +436,10 @@ export function SettingsFields({
             invalid={Boolean(errors['index.number_of_replicas'])}
           />
         )}
-      </Labeled>
-      <Labeled
+      </FormRow>
+      <FormRow
         title="Refresh interval"
+        small={small}
         across={across}
         testId={forTemplate ? 'form-row-template.settings.index.refresh_interval' : 'form-name-index.refresh_interval'}
         help={
@@ -372,7 +458,8 @@ export function SettingsFields({
             placeholder={forTemplate ? undefined : 'Can be set to -1 to disable refreshing.'}
           />
         )}
-      </Labeled>
+      </FormRow>
+      <div className={cx('ismSpacer', forTemplate ? 'ismSpacer--l' : 'ismSpacer--m')} />
       <AdvancedSettings
         value={settings}
         old={old}
@@ -391,6 +478,47 @@ type EditorMode = 'VISUAL' | 'JSON';
 
 const TYPE_OPTIONS = MAPPING_TYPES.map((item) => item.label);
 
+/**
+ * A menu that opens while the pointer is over its button or over the menu, as the plugin's popover
+ * that opens on hover; the button keeps its own click
+ */
+function HoverMenu({ button, items }: { button: ReactNode; items: Array<{ label: string; onClick: () => void }> }) {
+  const [open, setOpen] = useState(false);
+  const anchor = useRef<HTMLSpanElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    let last = 0;
+    // As the plugin's: the pointer is looked at ten times a second at most
+    const onMove = (event: MouseEvent) => {
+      const now = Date.now();
+      if (now - last < 100) return;
+      last = now;
+      const target = event.target as Node | null;
+      if (!target || (!anchor.current?.contains(target) && !panel.current?.contains(target))) setOpen(false);
+    };
+    window.addEventListener('mousemove', onMove);
+    return () => window.removeEventListener('mousemove', onMove);
+  }, [open]);
+  return (
+    <Popover
+      open={open}
+      onClose={() => undefined}
+      align="center"
+      button={
+        <span ref={anchor} className="ismHoverMenu__anchor" onMouseEnter={() => setOpen(true)}>
+          {button}
+        </span>
+      }
+    >
+      <div ref={panel}>
+        <Menu items={items.map((item) => ({ id: item.label, label: item.label, onClick: item.onClick }))} />
+      </div>
+    </Popover>
+  );
+}
+
+/** A field that can be changed: its name, its type and what the type asks for, 24 px apart */
 function FieldRow({
   field,
   id,
@@ -412,25 +540,28 @@ function FieldRow({
   onAddField: () => void;
   onAddObject: () => void;
 }) {
-  const [touched, setTouched] = useState(false);
-  const shown = showErrors || touched ? errors : {};
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const shown = (name: string) => (showErrors || touched[name] ? errors[name] : undefined);
   const types = TYPE_OPTIONS.includes(field.type) ? TYPE_OPTIONS : [...TYPE_OPTIONS, field.type];
-  const label = (text: string) => (showLabels ? <span className="ismField__label">{text}</span> : null);
+  const label = (text: string) => (showLabels ? <div className="ismCustomRow__label">{text}</div> : null);
   return (
-    <div className="ismField">
-      <div className="ismField__cell ismField__cell--name">
+    // The row's clicks stay in it: the tree's node around it opens and closes on its own
+    <div className="ismFieldRow" onClick={(event) => event.stopPropagation()}>
+      <div className="ismFieldRow__item ismFieldRow__item--name">
         {label('Field name')}
         <TextField
           compact
           value={field.fieldName}
-          onChange={(fieldName) => onChange({ ...field, fieldName })}
-          onBlur={() => setTouched(true)}
-          invalid={Boolean(shown.fieldName)}
+          onChange={(fieldName) => {
+            setTouched({ ...touched, fieldName: true });
+            onChange({ ...field, fieldName });
+          }}
+          invalid={Boolean(shown('fieldName'))}
           testId={`${id}-field-name`}
         />
-        {shown.fieldName && <span className="ismLabeled__error">{shown.fieldName}</span>}
+        {shown('fieldName') && <div className="ismCustomRow__error">{shown('fieldName')}</div>}
       </div>
-      <div className="ismField__cell ismField__cell--type">
+      <div className="ismFieldRow__item ismFieldRow__item--type">
         {label('Field type')}
         <Select
           compact
@@ -441,59 +572,75 @@ function FieldRow({
         />
       </div>
       {(mappingType(field.type)?.fields ?? []).map((option) => (
-        <div key={option.name} className="ismField__cell ismField__cell--type">
-          <span className="ismField__label">{option.label}</span>
+        <div key={option.name} className="ismFieldRow__item ismFieldRow__item--type">
+          <div className="ismCustomRow__label">{option.label}</div>
           <TextField
             compact
             value={String(field[option.name] ?? '')}
-            onChange={(next) => onChange({ ...field, [option.name]: next })}
-            invalid={Boolean(shown[option.name])}
+            onChange={(next) => {
+              setTouched({ ...touched, [option.name]: true });
+              onChange({ ...field, [option.name]: next });
+            }}
+            invalid={Boolean(shown(option.name))}
           />
-          {shown[option.name] && <span className="ismLabeled__error">{shown[option.name]}</span>}
+          {shown(option.name) && <div className="ismCustomRow__error">{shown(option.name)}</div>}
         </div>
       ))}
-      <div className="ismField__cell">
+      <div className="ismFieldRow__item">
         {label('Actions')}
-        <div className="ismField__actions">
+        <div className="ismFieldRow__actions">
           {mappingType(field.type)?.hasChildren && (
-            <MenuButton
+            <HoverMenu
+              button={
+                <IconButton
+                  icon="plusInCircleFilled"
+                  label="Add nested field"
+                  variant="empty"
+                  onClick={onAddField}
+                  testId={`${id}-add-sub-field`}
+                />
+              }
               items={[
-                { id: 'field', label: 'Add nested field', onClick: onAddField },
-                { id: 'object', label: 'Add nested object', onClick: onAddObject },
+                { label: 'Add nested field', onClick: onAddField },
+                { label: 'Add nested object', onClick: onAddObject },
               ]}
-              button={(toggle) => (
-                <IconButton icon="plusCircle" label="Add nested field" onClick={toggle} testId={`${id}-add-sub-field`} />
-              )}
             />
           )}
-          <span className="ismField__delete">
-            <IconButton icon="trash" label="Delete current field" onClick={onDelete} testId={`${id}-delete-field`} />
-          </span>
+          <Tooltip content="Delete current field">
+            <IconButton icon="trash" label="Delete current field" variant="dangerEmpty" onClick={onDelete} testId={`${id}-delete-field`} />
+          </Tooltip>
         </div>
       </div>
     </div>
   );
 }
 
+/** A field there is already: a dot, its name, and its type and settings as hollow badges */
 function ReadOnlyField({ field, id }: { field: MappingField; id: string }) {
   return (
-    <div className="ismField ismField--readonly">
-      <span className="ismField__dot" />
-      <span data-test-subj={`${id}-field-name`} title={field.fieldName}>
-        {field.fieldName}
+    <div className="ismReadonlyText">
+      <span className="ismFieldLine">
+        <Icon name="dot" size="s" />
+        <span data-test-subj={`${id}-field-name`} title={field.fieldName}>
+          {field.fieldName}
+        </span>
+        <span className="ismHollowBadge" title={field.type} data-test-subj={`${id}-field-type`}>
+          {field.type}
+        </span>
+        {(mappingType(field.type)?.fields ?? []).map((option) => (
+          <span key={option.name} className="ismHollowBadge" title={String(field[option.name] ?? '')}>
+            {option.label}: {String(field[option.name] ?? '')}
+          </span>
+        ))}
       </span>
-      <Badge title={field.type}>
-        <span data-test-subj={`${id}-field-type`}>{field.type}</span>
-      </Badge>
-      {(mappingType(field.type)?.fields ?? []).map((option) => (
-        <Badge key={option.name} title={String(field[option.name] ?? '')}>
-          {option.label}: {String(field[option.name] ?? '')}
-        </Badge>
-      ))}
     </div>
   );
 }
 
+/**
+ * The fields as the theme's tree: a node per field, its arrow when it has fields of its own, the
+ * fields it has 24 px further in. The nodes of an index's fields are open unless they cannot change.
+ */
 function FieldTree({
   fields,
   old,
@@ -516,45 +663,52 @@ function FieldTree({
 }) {
   const [closed, setClosed] = useState<Record<number, boolean>>({});
   return (
-    <ul className="ismTree">
+    <ul className={cx('ismTreeView', path.length > 0 && 'ismTreeView--nested')}>
       {fields.map((field, index) => {
         const here = [...path, index];
         const id = `mapping-visual-editor-${here.join('.properties.')}`;
         const fixed = readOnly || (isEdit && Boolean(old?.[index]));
         const showLabels = !fixed && !labelled.done;
         if (showLabels) labelled.done = true;
-        const isClosed = closed[index] ?? Boolean(readOnly);
-        const add = (type: string) =>
-          change(here, (inner) => [...inner, { fieldName: '', type }]);
+        const parent = Boolean(field.properties);
+        const isOpen = parent && !(closed[index] ?? Boolean(readOnly));
+        const toggle = () => {
+          if (parent) setClosed({ ...closed, [index]: isOpen });
+        };
+        const add = (type: string) => change(here, (inner) => [...inner, { fieldName: '', type }]);
+        const icon = (
+          <span className="ismTreeView__icon" style={parent ? undefined : { visibility: 'hidden' }}>
+            <Icon name={isOpen ? 'chevronDown' : 'chevronRight'} />
+          </span>
+        );
         return (
-          <li key={index} className="ismTree__item">
-            <div className="ismTree__row">
-              <button
-                type="button"
-                className="ismTree__toggle"
-                style={{ visibility: field.properties ? 'visible' : 'hidden' }}
-                aria-label={isClosed ? 'Expand' : 'Collapse'}
-                onClick={() => setClosed({ ...closed, [index]: !isClosed })}
-              >
-                <Icon name={isClosed ? 'chevronRight' : 'chevronDown'} />
+          <li key={index} className="ismTreeView__node">
+            {fixed ? (
+              <button type="button" className="ismTreeView__inner" aria-expanded={parent ? isOpen : undefined} onClick={toggle}>
+                {icon}
+                <span className="ismTreeView__label">
+                  <ReadOnlyField field={field} id={id} />
+                </span>
               </button>
-              {fixed ? (
-                <ReadOnlyField field={field} id={id} />
-              ) : (
-                <FieldRow
-                  field={field}
-                  id={id}
-                  errors={fieldErrors(field, fields.slice(0, index))}
-                  showErrors={showErrors}
-                  showLabels={showLabels}
-                  onChange={(next) => change(path, (inner) => inner.map((item, at) => (at === index ? next : item)))}
-                  onDelete={() => change(path, (inner) => inner.filter((_, at) => at !== index))}
-                  onAddField={() => add('text')}
-                  onAddObject={() => add('object')}
-                />
-              )}
-            </div>
-            {field.properties && !isClosed && (
+            ) : (
+              <div className="ismTreeView__inner" onClick={toggle}>
+                {icon}
+                <span className="ismTreeView__label">
+                  <FieldRow
+                    field={field}
+                    id={id}
+                    errors={fieldErrors(field, fields.slice(0, index))}
+                    showErrors={showErrors}
+                    showLabels={showLabels}
+                    onChange={(next) => change(path, (inner) => inner.map((item, at) => (at === index ? next : item)))}
+                    onDelete={() => change(path, (inner) => inner.filter((_, at) => at !== index))}
+                    onAddField={() => add('text')}
+                    onAddObject={() => add('object')}
+                  />
+                </span>
+              </div>
+            )}
+            {field.properties && isOpen && (
               <FieldTree
                 fields={field.properties}
                 old={isEdit ? old?.[index]?.properties : undefined}
@@ -606,8 +760,9 @@ export function MappingEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, JSON.stringify(whole)]);
 
+  // As the plugin's: the editor's type, 24 px, then the fields or their JSON
   return (
-    <div className="ismMappings">
+    <div className="ismMappingEditor">
       <div className="atlSegments" role="group" aria-label="Editor Type">
         <button
           type="button"
@@ -628,12 +783,16 @@ export function MappingEditor({
           {readOnly ? 'JSON' : 'JSON Editor'}
         </button>
       </div>
+      <div className="ismSpacer ismSpacer--l" />
       {mode === 'VISUAL' ? (
         <>
           {!fieldsArePlain(added) && (
-            <CallOut tone="warning" title="You have advanced configurations not supported by the visual editor">
-              To view or modify all of your configurations, switch to the JSON editor.
-            </CallOut>
+            <>
+              <CallOut tone="warning" size="s" title="You have advanced configurations not supported by the visual editor">
+                To view or modify all of your configurations, switch to the JSON editor.
+              </CallOut>
+              <div className="ismSpacer ismSpacer--l" />
+            </>
           )}
           {fields.length > 0 ? (
             <FieldTree
@@ -647,33 +806,38 @@ export function MappingEditor({
               change={change}
             />
           ) : (
-            <p className="ismMappings__none">You have no field mappings.</p>
+            <p className="ismReadonlyText ismMappingEditor__none">You have no field mappings.</p>
           )}
           {!readOnly && (
-            <div className="atlRow" style={{ gap: 'var(--space-2)' }}>
-              <Button size="s" onClick={() => setFields([...fields, { fieldName: '', type: 'text' }])} testId="createIndexAddFieldButton">
-                Add new field
-              </Button>
-              <Button size="s" onClick={() => setFields([...fields, { fieldName: '', type: 'object' }])} testId="createIndexAddObjectFieldButton">
-                Add new object
-              </Button>
-            </div>
+            <>
+              <div className="ismSpacer ismSpacer--l" />
+              <div className="ismMappingEditor__buttons">
+                <Button onClick={() => setFields([...fields, { fieldName: '', type: 'text' }])} testId="createIndexAddFieldButton">
+                  Add new field
+                </Button>
+                <Button onClick={() => setFields([...fields, { fieldName: '', type: 'object' }])} testId="createIndexAddObjectFieldButton">
+                  Add new object
+                </Button>
+              </div>
+            </>
           )}
         </>
       ) : (
         <>
           {isEdit && !readOnly && Object.keys(old ?? {}).length > 0 && (
-            <div>
-              <Button size="s" onClick={() => setPrevious(true)} testId="previousMappingsJsonButton">
+            <>
+              <Button onClick={() => setPrevious(true)} testId="previousMappingsJsonButton">
                 See previous mappings
               </Button>
-            </div>
+              <div className="ismSpacer ismSpacer--l" />
+            </>
           )}
           {readOnly ? (
-            <ObjectEditor value={whole} readOnly height={300} />
+            <ObjectEditor value={whole} readOnly height={600} />
           ) : (
-            <Labeled
-              title="Specify index mapping"
+            <FormRow
+              label="Specify index mapping"
+              fullWidth
               testId="mappingsJsonEditorFormRow"
               help={
                 <>
@@ -684,13 +848,13 @@ export function MappingEditor({
             >
               <ObjectEditor
                 value={whole}
-                height={300}
+                height={600}
                 testId="mappingsJsonEditor"
                 onChange={(next) =>
                   onChange({ ...next, properties: [...(isEdit ? oldFields : []), ...fieldsOf(next.properties)] })
                 }
               />
-            </Labeled>
+            </FormRow>
           )}
         </>
       )}
@@ -701,12 +865,12 @@ export function MappingEditor({
           onClose={() => setPrevious(false)}
           testId="previousMappingsJsonModal"
           footer={
-            <Button variant="primary" size="s" onClick={() => setPrevious(false)}>
+            <Button variant="primary" onClick={() => setPrevious(false)} testId="previousMappingsJsonModal-ok">
               OK
             </Button>
           }
         >
-          <JsonEditor value={pretty({ ...old, properties: propertiesOf(oldFields) })} readOnly height={400} />
+          <ObjectEditor value={{ ...old, properties: propertiesOf(oldFields) }} readOnly height={600} />
         </Modal>
       )}
     </div>

@@ -3,14 +3,15 @@
 /* What every page uses: made once when the page loads, from what the server put in it. */
 
 import type { MapConfig } from '../../common/map_config';
-import { DEFAULT_FORMAT_SETTINGS, type FormatSettings } from '../lib/field_formats';
+import { scaledDateRules, setDefaultTimeZone, setDefaultWeekStart } from '../lib/dates';
+import { DEFAULT_DATE_NANOS_FORMAT, DEFAULT_FORMAT_SETTINGS, type FormatSettings } from '../lib/field_formats';
 import type { QueryConfig } from '../lib/query';
 import type { FieldFormatSpec } from '../lib/types';
 import { Http } from './http';
 import { IndexPatterns } from './index_patterns';
 import { SavedObjectsClient } from './saved_objects';
 import { SavedQueryService } from './saved_queries';
-import { SearchService } from './search';
+import { requestPreference, SearchService } from './search';
 import { Toasts } from './toasts';
 import { UiSettingsClient } from './ui_settings';
 
@@ -24,6 +25,8 @@ export interface BootData {
   map: MapConfig;
   /** vis_type_vega.enableExternalUrls of the server's settings */
   visTypeVega?: { enableExternalUrls: boolean };
+  /** console.enabled of the server's settings: whether Dev Tools has its console */
+  console?: { enabled: boolean };
   /** home.disableWelcomeScreen of the server's settings */
   home?: { disableWelcomeScreen: boolean };
   /** Where the browser builds of Vega and Vega-Lite are, loaded when a Vega visualization is drawn */
@@ -52,6 +55,9 @@ export let services: Services;
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+// The id of this visit of the page, which searches name as their preference when it is "sessionId"
+const SESSION_ID = String(Date.now());
+
 export function createServices(boot: BootData): Services {
   const http = new Http(boot.basePath);
   const uiSettings = new UiSettingsClient(
@@ -65,12 +71,36 @@ export function createServices(boot: BootData): Services {
   const toasts = new Toasts();
   const search = new SearchService(http, () => ({
     maxConcurrentShardRequests: uiSettings.get<number>('courier:maxConcurrentShardRequests', 0),
+    preference: requestPreference(
+      uiSettings.get('courier:setRequestPreference'),
+      uiSettings.get('courier:customRequestPreference'),
+      SESSION_ID
+    ),
   }));
 
   const timeZone = () => {
     const zone = uiSettings.get<string>('dateFormat:tz', 'Browser');
     return zone && zone !== 'Browser' ? zone : undefined;
   };
+  // Date math counts on the clock of that zone, from the start and whenever the settings change,
+  // as the original makes it the default zone of its dates
+  const applyTimeZone = () => setDefaultTimeZone(timeZone());
+  applyTimeZone();
+  uiSettings.subscribe(applyTimeZone);
+
+  const weekStart = () => Math.max(0, DAYS.indexOf(uiSettings.get('dateFormat:dow', 'Sunday')));
+  // The weeks of a written date start on the day of the setting dateFormat:dow, as the original
+  // makes it the first day of the week of its dates
+  const applyWeekStart = () => setDefaultWeekStart(weekStart());
+  applyWeekStart();
+  uiSettings.subscribe(applyWeekStart);
+
+  // Where the page was loaded, as the original tells its formats when it starts: a link of the URL
+  // format that is not to an http or https address is made absolute from it
+  const parsedUrl =
+    typeof window === 'undefined' || !window.location
+      ? undefined
+      : { origin: window.location.origin, pathname: window.location.pathname, basePath: boot.basePath };
 
   let formats: { version: number; value: FormatSettings } | undefined;
   const formatSettings = () => {
@@ -90,6 +120,9 @@ export function createServices(boot: BootData): Services {
             'format:defaultTypeMap',
             DEFAULT_FORMAT_SETTINGS.defaultTypeMap
           ),
+          scaledDateRules: scaledDateRules(uiSettings.get('dateFormat:scaled')),
+          dateNanosFormat: uiSettings.get<string>('dateNanosFormat', DEFAULT_DATE_NANOS_FORMAT),
+          parsedUrl,
         },
       };
     }
@@ -119,12 +152,14 @@ export function createServices(boot: BootData): Services {
     formatSettings,
     queryConfig: () => ({
       queryStringOptions: uiSettings.get<Record<string, unknown>>('query:queryString:options', {}),
-      dateFormatTZ: timeZone(),
+      // "Browser" too: a date typed in a query is then read on the clock of the browser, as the
+      // original's getOpenSearchQueryConfig hands the setting on whatever it says
+      dateFormatTZ: uiSettings.get<string>('dateFormat:tz', 'Browser'),
       ignoreFilterIfFieldNotInIndex: uiSettings.get('courier:ignoreFilterIfFieldNotInIndex', false),
       allowLeadingWildcards: uiSettings.get('query:allowLeadingWildcards', true),
     }),
     timeZone,
-    weekStart: () => Math.max(0, DAYS.indexOf(uiSettings.get('dateFormat:dow', 'Sunday'))),
+    weekStart,
   };
   return services;
 }

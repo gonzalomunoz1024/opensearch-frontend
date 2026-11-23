@@ -18,8 +18,15 @@
 
 .vbdTop {
   flex: none;
-  padding-bottom: var(--space-2);
   border-bottom: 1px solid var(--color-border-light);
+}
+
+/* A button of the header that says why it cannot be pressed is inside what shows that: it stays
+   the header's main button, as wide and with its icon as far from its text */
+.shlHeader__actions > .atlTooltipAnchor > .atlButton:not(.atlButton--empty) {
+  gap: var(--space-2);
+  min-width: 112px;
+  border: 1px solid transparent;
 }
 
 .vbdLayout {
@@ -55,119 +62,259 @@
   background: var(--color-surface);
 }
 
+/* As the component library's scroll with shadows: what scrolls fades out over the last 7.5 px
+   at the top and at the bottom */
 .vbdSide__style {
   min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
+  mask-image: linear-gradient(to bottom, rgb(0 0 0 / 10%), #000 7.5px, #000 calc(100% - 7.5px), rgb(0 0 0 / 10%));
+  /* as the original's: its text, half a pixel in, is then drawn on the same pixels */
+  contain: paint;
 }
 
-/* The index pattern: a field with its name in front */
+/* The index pattern: a field with "Data Source" in front, as the original's form control layout
+   with a prepend: the button inside it rounded with a line at its right, its text cut where the
+   arrow begins */
 
 .vbdSource {
+  position: relative;
   display: flex;
   width: 100%;
   min-width: 0;
   height: 40px;
+  padding: 1px;
   border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-border) 5%, transparent);
   box-shadow: inset 0 0 0 1px var(--color-border-light);
   overflow: hidden;
+  cursor: pointer;
+}
+
+/* In dark the original's is the light text colour at 5 %, rgb(29 29 31 / 5%), not the border's */
+.themeDark .vbdSource {
+  background: rgb(29 29 31 / 5%);
 }
 
 .vbdSource__prepend {
   display: flex;
   flex: none;
   align-items: center;
-  margin: 1px 0 1px 1px;
-  padding: 0 var(--space-3);
+  padding: var(--space-3);
   border-radius: var(--radius-md) 0 0 var(--radius-md);
   background: var(--color-border-light);
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
+  line-height: 14px;
+  cursor: default;
 }
 
 .vbdSource__button {
   display: flex;
   flex: 1 1 auto;
-  gap: var(--space-1);
   align-items: center;
   min-width: 0;
-  padding: 0 var(--space-2);
-  border: 0;
+  padding: 0 var(--space-6) 0 0;
+  border: 1px solid transparent;
+  border-right-color: var(--color-border-light);
+  border-radius: var(--radius-md);
   background: none;
   color: var(--color-text-primary);
   font: inherit;
   font-size: var(--font-size-s);
   font-weight: var(--font-weight-medium);
+  line-height: 21px;
   text-align: left;
+  white-space: nowrap;
   cursor: pointer;
 }
 
+/* Under the pointer and with the focus, the original's text button: the secondary text's tint */
+.vbdSource__button:hover,
+.vbdSource__button:focus {
+  background: color-mix(in srgb, var(--color-text-secondary) var(--tint-opacity), transparent);
+}
+
 .vbdSource__button:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: -2px;
+  outline: 2px solid var(--color-accent);
+  outline-offset: 0;
 }
 
-.vbdSource__icon {
+.vbdSource__value {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 var(--space-2);
+}
+
+/* As the original's button text, a row: the icon at the top of the line, the name right after it
+   (the space between them collapses there), cut where the row ends, without an ellipsis */
+.vbdSource__text {
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.vbdSource__text > .atlIcon {
   flex: none;
-  color: var(--color-healthy-text);
 }
 
-.vbdSource__caret {
-  flex: none;
-  margin-left: auto;
+.vbdSource__icons {
+  position: absolute;
+  top: 0;
+  right: calc(var(--space-3) + 1px);
+  bottom: 0;
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+  pointer-events: none;
 }
 
-.vbdSourceList {
-  padding: var(--space-2);
+/* The list: a panel as wide as the original's fixed child (the left side less twice 32 px) and its
+   padding, the search in its title */
+
+.vbdSourceList.atlPopover {
+  width: calc(462px - 2 * var(--space-8) + 2 * var(--space-4));
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  /* the original's panel keeps the material's filter behind its opaque surface: a layer of its own */
+  backdrop-filter: saturate(180%) blur(24px);
 }
 
 .vbdSourceList__search {
-  padding-bottom: var(--space-2);
+  padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--color-border-light);
 }
 
+/* The original's search, as its field is drawn uncompressed: 40 px, the icon 12 px in */
+.vbdSourceList__search .atlFieldGroup {
+  height: 40px;
+  gap: var(--space-3);
+  padding: 0 calc(var(--space-3) - 1px);
+}
+
+.vbdSourceList__search .atlFieldGroup > input {
+  padding: 0;
+}
+
+/* The original's button that clears the search, not the browser's: a 16 px disc with a cross,
+   12 px from the outer edge */
+.vbdSourceList__search .atlFieldGroup > input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.vbdSourceList__clear {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-text-tertiary);
+  color: var(--color-surface);
+  cursor: pointer;
+}
+
+.vbdSourceList__clear > .atlIcon {
+  width: 8px;
+  height: 8px;
+  stroke: currentcolor;
+  stroke-width: 2;
+}
+
 .vbdSourceList__options {
-  max-height: 320px;
-  margin: var(--space-1) 0 0;
+  margin: 0;
   padding: 0;
   list-style: none;
   overflow-y: auto;
+  /* its ends fade, as the original's scrolling lists */
+  mask-image: linear-gradient(to bottom, rgb(0 0 0 / 10%), #000 7.5px, #000 calc(100% - 7.5px), rgb(0 0 0 / 10%));
+}
+
+/* As the original's selectable list: up to 7 options all shown, more in 6.5 rows, the half row
+   telling that the list scrolls */
+.vbdSourceList__options--more {
+  height: calc(6.5 * 32px);
 }
 
 .vbdSourceList__option {
   display: flex;
-  gap: var(--space-2);
   align-items: center;
-  width: 100%;
-  min-height: 32px;
-  padding: 0 var(--space-2);
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: none;
+  height: 32px;
+  padding: var(--space-1) var(--space-3);
   color: var(--color-text-primary);
-  font: inherit;
   font-size: var(--font-size-s);
-  text-align: left;
+  line-height: 21px;
   cursor: pointer;
 }
 
 .vbdSourceList__option:hover,
-.vbdSourceList__option:focus-visible {
-  background: var(--color-hover);
-  outline: none;
+.vbdSourceList__option--active {
+  background: var(--color-surface-secondary);
 }
 
-.vbdSourceList__option[aria-selected="true"] {
-  background: var(--color-hover);
+:root.themeDark .vbdSourceList__option:hover,
+:root.themeDark .vbdSourceList__option--active {
+  background: var(--color-surface-tertiary);
 }
 
-.vbdSourceList__message {
+/* The original's icon sits on the text's middle, 1.7 px under the row's */
+.vbdSourceList__icon {
+  position: relative;
+  top: 1.7px;
+  margin-right: var(--space-3);
+}
+
+.vbdSourceList__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The component library's badge on the active option: the Return key, in a hollow pill */
+.vbdSourceList__badge {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  margin-left: var(--space-3);
+  padding: 1px var(--space-2);
+  border: 1px solid var(--color-border-light);
+  border-radius: 999px;
+  color: var(--color-text-secondary);
+  line-height: 18px;
+}
+
+.vbdSourceList__loading {
   display: flex;
   justify-content: center;
+  padding: var(--space-4);
+}
+
+.vbdSourceList__error {
   margin: 0;
+  padding: var(--space-4);
+  font-size: var(--font-size-s);
+}
+
+/* As the component library's message for a search that finds nothing, in the panel's padding */
+.vbdSourceList__message {
+  margin: var(--space-4);
   padding: var(--space-2);
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
+  line-height: 18px;
+  text-align: center;
+}
+
+.vbdSourceList__message p {
+  margin: 0;
 }
 
 /* --- The fields ------------------------------------------------------------------------------- */
@@ -187,6 +334,35 @@
   padding: var(--space-2);
 }
 
+/* The original's button that clears the search, not the browser's: a 12 px disc with a cross,
+   8 px from the outer edge, which leaves the text 32 px short of the end */
+.vbdFields__search.atlFieldGroup > input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.vbdFields__clear {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  margin-right: -1px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-text-tertiary);
+  color: var(--color-surface);
+  cursor: pointer;
+}
+
+.vbdFields__clear > .atlIcon {
+  width: 6px;
+  height: 6px;
+  stroke: currentcolor;
+  stroke-width: 4;
+}
+
 .vbdFields__groups {
   margin: var(--space-2) calc(-1 * var(--space-2)) 0;
   padding: 0 var(--space-2);
@@ -196,6 +372,9 @@
 .vbdFields__group {
   padding: var(--space-1) 0;
 }
+
+/* A group of fields, as the original's accordion that can be dragged from: lines above and below,
+   its button in the accent */
 
 .vbdFieldGroup {
   margin-top: var(--space-1);
@@ -218,11 +397,14 @@
   gap: var(--space-2);
   align-items: center;
   height: var(--control-height);
-  padding: 0 var(--space-2) 0 0;
-  border: 0;
+  padding: var(--space-2) var(--space-2) var(--space-2) 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
   background: none;
-  color: var(--color-text-primary);
+  color: var(--color-accent-button-text);
   font: inherit;
+  font-weight: var(--font-weight-medium);
+  line-height: 21px;
   cursor: pointer;
 }
 
@@ -230,7 +412,20 @@
   text-decoration: underline;
 }
 
+/* Under the pointer and with the focus, the original's text button: the accent's tint */
+.vbdFieldGroup__toggle:hover,
+.vbdFieldGroup__toggle:focus {
+  background: var(--color-accent-tint);
+}
+
+.vbdFieldGroup__toggle:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* The title is a title's colour inside the accent's button, whose arrow keeps the accent */
 .vbdFieldGroup__title {
+  color: var(--color-text-primary);
   font-size: var(--font-size-s);
   font-weight: var(--font-weight-semibold);
   line-height: 20px;
@@ -244,6 +439,7 @@
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
   line-height: 20px;
   text-align: center;
 }
@@ -254,6 +450,11 @@
   padding-bottom: var(--space-1);
 }
 
+/* A group with no field is its title alone */
+.vbdFieldGroup__fields:empty {
+  padding-bottom: 0;
+}
+
 .vbdFields__item {
   margin: var(--space-1) 0;
 }
@@ -262,6 +463,8 @@
   margin-bottom: 0;
 }
 
+/* A field: a card with its token as tall as it is; the ring of the focus while it has the focus or
+   its values are shown */
 .vbdField {
   display: flex;
   gap: var(--space-2);
@@ -272,22 +475,19 @@
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-card);
   color: var(--color-text-primary);
   font: inherit;
   font-size: var(--font-size-s);
   text-align: left;
   cursor: grab;
+  transition: box-shadow var(--duration-fast) var(--ease-out-quint);
 }
 
-.vbdField:hover,
+.vbdField:focus,
 .vbdField--active {
-  border-color: var(--color-border);
-}
-
-.vbdField:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 1px;
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
+  outline: none;
 }
 
 .vbdField__token {
@@ -296,80 +496,121 @@
   width: 32px;
 }
 
+/* As the original's large token: as tall as the field, without its ring, the glyph 24 px */
 .vbdField__token .atlToken {
   width: 100%;
   height: 100%;
-  border-radius: calc(var(--radius-sm) - 1px);
-  font-size: var(--font-size-xs);
+  box-shadow: none;
+}
+
+/* The picture as tall as the token, as the original's: the glyph in its middle is then drawn on
+   whole pixels, not from half a pixel down */
+.vbdField__token .atlToken__glyph {
+  width: 24px;
+  height: 100%;
 }
 
 .vbdField__name {
+  flex: 1 1 auto;
   align-self: center;
   min-width: 0;
   padding: var(--space-2) var(--space-2) var(--space-2) 0;
   line-height: normal;
-  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
-/* The values of a field, at its right */
+/* The values of a field, at its right: a panel 8 px in, its title and its footer across it */
 
-.vbdFieldPopover {
+.vbdFieldPopover.atlPopover {
   min-width: 260px;
   max-width: 300px;
+  padding: var(--space-2);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  /* the title's focus ring stands out of the panel, as the original's */
+  overflow: visible;
+  /* the original's panel keeps the material's filter behind its opaque surface: a layer of its own,
+     on which its text, half a pixel in, is drawn on the same pixels */
+  backdrop-filter: saturate(180%) blur(24px);
 }
 
 .vbdFieldPopover__title {
-  padding: var(--space-3);
+  margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) var(--space-2);
+  padding: var(--space-3) var(--space-2);
   border-bottom: 1px solid var(--color-border-light);
   font-size: var(--font-size-s);
   font-weight: var(--font-weight-semibold);
+  line-height: 20px;
 }
 
-.vbdFieldDetails {
-  padding: var(--space-2) var(--space-3);
+/* The component library draws its focus round the title it gives the focus to */
+.vbdFieldPopover__title:focus {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
-.vbdFieldDetails p {
-  margin: 0;
+.vbdFieldDetails__error {
+  font-size: var(--font-size-xs);
+  line-height: 18px;
 }
 
+/* The original's spacer under each value, which the footer's margin adds to */
 .vbdBucket {
   display: flex;
   gap: var(--space-2);
-  align-items: center;
-  margin-bottom: var(--space-2);
+  align-items: stretch;
+  padding-bottom: var(--space-2);
 }
 
 .vbdBucket__value {
+  display: flex;
   flex: 1 1 auto;
+  flex-direction: column;
   min-width: 0;
 }
 
 .vbdBucket__text {
   display: flex;
+  flex: 1 1 auto;
   gap: var(--space-1);
   justify-content: space-between;
   font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+.vbdBucket__name {
+  flex: 1 1 auto;
 }
 
 .vbdBucket__percent {
   flex: none;
-  color: var(--color-healthy-text);
+  color: var(--color-success-text);
 }
 
+/* The component library's small progress bar in the healthy colour */
 .vbdBucket__bar {
+  display: block;
+  width: 100%;
   height: 4px;
-  margin-top: var(--space-1);
-  border-radius: 2px;
-  background: var(--color-surface-secondary);
+  border: 0;
+  border-radius: 999px;
+  background-color: var(--color-surface-secondary);
   overflow: hidden;
+  appearance: none;
 }
 
-.vbdBucket__bar span {
-  display: block;
-  height: 100%;
-  border-radius: 2px;
-  background: var(--color-healthy);
+.vbdBucket__bar::-webkit-progress-bar {
+  background-color: var(--color-surface-secondary);
+}
+
+.vbdBucket__bar::-webkit-progress-value {
+  border-radius: 999px;
+  background-color: var(--color-healthy);
+}
+
+.vbdBucket__bar::-moz-progress-bar {
+  border-radius: 999px;
+  background-color: var(--color-healthy);
 }
 
 .vbdBucket__actions {
@@ -377,16 +618,53 @@
   flex: none;
 }
 
-.vbdBucket__actions .atlButton {
-  color: var(--color-accent);
+.vbdFieldPopover__footer {
+  margin: var(--space-2) calc(-1 * var(--space-2)) calc(-1 * var(--space-2));
+  padding: var(--space-3) var(--space-2);
+  border-top: 1px solid var(--color-border-light);
+  color: var(--color-text-primary);
 }
 
-.vbdFieldPopover__footer {
-  padding: var(--space-3);
-  border-top: 1px solid var(--color-border-light);
-  color: var(--color-text-secondary);
+.vbdFieldPopover__footerText {
   font-size: var(--font-size-xs);
+  line-height: 18px;
   text-align: center;
+}
+
+.vbdFieldPopover__link {
+  line-height: normal;
+}
+
+/* The original's small icon button with a small icon: round, in the accent's text, or subdued */
+.vbdIconButton {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-height);
+  height: var(--control-height);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-accent-button-text);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out-quint);
+}
+
+.vbdIconButton:hover,
+.vbdIconButton:focus-visible {
+  background: var(--color-accent-tint);
+  outline: none;
+}
+
+.vbdIconButton--subdued {
+  color: var(--color-text-secondary);
+}
+
+.vbdIconButton--subdued:hover,
+.vbdIconButton--subdued:focus-visible {
+  background: color-mix(in srgb, var(--color-text-secondary) var(--tint-opacity), transparent);
 }
 
 /* --- The parts of the chart -------------------------------------------------------------------- */
@@ -399,6 +677,9 @@
   background: var(--color-surface-secondary);
   overflow-x: hidden;
   overflow-y: auto;
+  mask-image: linear-gradient(to bottom, rgb(0 0 0 / 10%), #000 7.5px, #000 calc(100% - 7.5px), rgb(0 0 0 / 10%));
+  /* as the original's: its text, half a pixel in, is then drawn on the same pixels */
+  contain: paint;
 }
 
 .vbdConfig__section {
@@ -437,11 +718,14 @@
     visibility 0s;
 }
 
+/* 32 px tall and 4 px of it under what follows, as the original's: its flex group's negative margin
+   goes through the title's bottom */
 .vbdConfig__title {
   display: flex;
   gap: var(--space-2);
   align-items: center;
-  padding: var(--space-2) var(--space-2) 0;
+  margin-bottom: calc(var(--space-1) * -1);
+  padding: var(--space-2) var(--space-2) var(--space-1);
 }
 
 .vbdConfig__title h2 {
@@ -451,9 +735,13 @@
   line-height: 20px;
 }
 
-.vbdConfig__title--secondary {
-  padding-bottom: var(--space-3);
-  border-bottom: 1px solid var(--color-border-light);
+/* The original's rule under the title of the panel that edits an aggregation */
+/* The original's rule with its small margin, 12 px in this theme */
+.vbdConfig__rule {
+  height: 1px;
+  margin: var(--space-3) 0;
+  border: 0;
+  background: var(--color-border-light);
 }
 
 .vbdConfig__back {
@@ -471,8 +759,18 @@
 }
 
 .vbdConfig__editor {
-  padding: var(--space-3);
+  padding: 0 var(--space-3);
 }
+
+/* The parameters the Visualize editor puts two in a row are one under the other here, as the
+   original's: 16 px above and below each */
+.vbdConfig__editor .visEditorAggParam--half {
+  display: block;
+  width: auto;
+  margin: var(--space-4) 0;
+}
+
+/* A part of the chart, as the original's compressed form row with a drop box in it */
 
 .vbdDropbox {
   padding-bottom: var(--space-4);
@@ -487,8 +785,13 @@
   border-bottom: none;
 }
 
-.vbdDropbox__label {
+.vbdDropbox__labelRow {
+  display: flex;
   margin-bottom: var(--space-1);
+}
+
+.vbdDropbox__label {
+  display: block;
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
@@ -502,6 +805,10 @@
   border-radius: var(--radius-sm);
   background: var(--color-border);
   overflow-x: hidden;
+}
+
+.vbdDropbox__droppable {
+  min-height: 1px;
 }
 
 .vbdDropbox__draggable {
@@ -520,7 +827,6 @@
   grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--space-2);
   align-items: center;
-  min-height: 50px;
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-lg);
@@ -533,8 +839,29 @@
 .vbdDropbox__text {
   min-width: 0;
   overflow: hidden;
-  text-align: left;
+  font-size: var(--font-size-s);
+  line-height: 21px;
   text-overflow: ellipsis;
+}
+
+.vbdDropbox__link {
+  color: var(--color-accent);
+  cursor: pointer;
+}
+
+/* The original's link under the pointer: its colour a tenth darker, #0062cc (in dark #006bd6) */
+.vbdDropbox__link:hover {
+  color: #0062cc;
+  text-decoration: underline;
+}
+
+.themeDark .vbdDropbox__link:hover {
+  color: #006bd6;
+}
+
+.vbdDropbox__hint {
+  font-size: var(--font-size-s);
+  line-height: 21px;
 }
 
 .vbdDropbox__target {
@@ -552,14 +879,6 @@
   border-style: dashed;
   border-color: color-mix(in srgb, var(--color-accent) 70%, var(--color-surface));
   background: color-mix(in srgb, var(--color-accent) 40%, var(--color-surface));
-}
-
-.vbdDropbox__target .atlButton:last-child {
-  color: var(--color-text-secondary);
-}
-
-.vbdDropbox__target[data-test-subj^="dropBoxAddField"] .atlButton:last-child {
-  color: var(--color-accent);
 }
 
 @keyframes vbdPopIn {
@@ -601,38 +920,57 @@
   min-height: 0;
 }
 
+/* The component library's resizable button: two short lines that run the full height under the
+   pointer, and the accent when it has the focus; the original moves it 6 px left */
 .vbdArea__resize {
   position: relative;
   z-index: 1;
   flex: none;
   width: 16px;
   margin: 0 -8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   cursor: col-resize;
+  transform: translateX(calc(-1 * var(--space-3) / 2));
 }
 
 .vbdArea__resize::before,
 .vbdArea__resize::after {
   position: absolute;
   top: 50%;
+  left: 50%;
   width: 1px;
-  height: 12px;
-  margin-top: -6px;
+  height: var(--space-3);
   background: var(--color-text-primary);
   content: "";
+  transition: height var(--duration-fast) var(--ease-out-quint);
 }
 
 .vbdArea__resize::before {
-  left: 6px;
+  transform: translate(-2px, -50%);
 }
 
 .vbdArea__resize::after {
-  left: 9px;
+  transform: translate(1px, -50%);
 }
 
-.vbdArea__resize:hover,
+.vbdArea__resize:hover::before,
+.vbdArea__resize:hover::after {
+  height: 100%;
+  background: var(--color-text-tertiary);
+  transition-delay: var(--duration-fast);
+}
+
 .vbdArea__resize:focus-visible {
-  background: linear-gradient(var(--color-accent), var(--color-accent)) center / 2px 100% no-repeat;
-  outline: none;
+  background: var(--color-accent-tint);
+  outline: 2px solid var(--color-accent);
+}
+
+.vbdArea__resize:focus-visible::before,
+.vbdArea__resize:focus-visible::after {
+  height: 100%;
+  background: var(--color-accent);
 }
 
 .vbdWorkspace {
@@ -651,107 +989,79 @@
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
+  box-shadow: var(--shadow-card);
   overflow: hidden;
 }
 
-/* The picture that says to drag a field */
+/* Data that could not be had: the canvas is empty until the next data, the chart keeps its size */
+.vbdCanvas__vis[hidden] {
+  display: flex;
+  visibility: hidden;
+}
+
+.vbdCanvas__vis {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: var(--space-2);
+}
+
+/* The prompt to drag a field, as the component library's empty prompt: at most 36 em wide, its
+   body in the subdued text, the picture as wide as the text above it */
 
 .vbdEmpty {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: min(100%, 431px);
+  min-height: 0;
+}
+
+.vbdEmpty__prompt {
+  max-width: 36em;
   margin: auto;
+  padding: var(--space-6);
   text-align: center;
 }
 
-.vbdEmpty h2 {
+.vbdEmpty__title {
   margin: 0 0 var(--space-4);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  line-height: 28px;
+  letter-spacing: -0.021em;
 }
 
-.vbdEmpty p {
-  margin: 0;
+.vbdEmpty__body {
+  color: var(--color-text-secondary);
   font-size: var(--font-size-s);
+  line-height: 21px;
 }
 
-.vbdPicture {
+.vbdEmpty__body p {
+  margin: 0;
+}
+
+.vbdEmpty__picture {
   position: relative;
-  width: 100%;
 }
 
-.vbdPicture svg {
+/* As a picture in the component library's text: a block as wide as the text, a line below it */
+.vbdEmpty__fields {
   display: block;
-}
-
-.vbdPicture__fields {
   width: 100%;
+  margin-bottom: 21px;
 }
 
-.vbdPicture__hand {
+.vbdEmpty__hand {
   position: absolute;
   top: 34.5%;
   left: 0;
+  display: block;
   width: 50%;
-  filter: drop-shadow(var(--shadow-md));
   animation: vbdDrag 15s ease-in-out infinite forwards;
-}
-
-.vbdPicture__box,
-.vbdPicture__carried {
-  fill: var(--color-surface-secondary);
-  stroke: var(--color-text-primary);
-}
-
-.vbdPicture__box {
-  stroke-width: 2.56;
-}
-
-.vbdPicture__carried {
-  stroke-width: 4;
-}
-
-.vbdPicture__line,
-.vbdPicture__plus,
-.vbdPicture__divider,
-.vbdPicture__heavy {
-  stroke: var(--color-text-primary);
-  stroke-linecap: round;
-}
-
-.vbdPicture__line,
-.vbdPicture__plus {
-  stroke-width: 2.56;
-}
-
-.vbdPicture__divider {
-  stroke-width: 3;
-}
-
-.vbdPicture__heavy {
-  stroke-width: 4;
-}
-
-.vbdPicture__text {
-  fill: var(--color-text-secondary);
-}
-
-.vbdPicture__number {
-  fill: var(--color-healthy-text);
-}
-
-.vbdPicture__date {
-  fill: none;
-  stroke: var(--color-accent);
-  stroke-width: 1.5;
-}
-
-.vbdPicture__palm {
-  fill: var(--color-surface);
-}
-
-.vbdPicture__outline {
-  fill: var(--color-text-primary);
 }
 
 @keyframes vbdDrag {
@@ -774,66 +1084,65 @@
 
 /* The kind of chart and its settings */
 
+/* As the original's compressed super select: one line, the icon 8 px in from the outer edge and
+   set on the middle of the text as there, its arrow 12 px and 8 px from the right */
 .vbdPicker {
-  display: flex;
-  gap: var(--space-2);
-  align-items: center;
+  position: relative;
+  display: block;
   width: 100%;
+  padding: 0 calc(var(--space-8) - 1px) 0 calc(var(--space-2) - 1px);
+  overflow: hidden;
+  line-height: calc(var(--control-height) - 2px);
   text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   cursor: pointer;
 }
 
+.vbdPicker[aria-expanded='true'] {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
+}
+
+.vbdPicker__icon {
+  display: inline-block;
+  margin-right: var(--space-2);
+  vertical-align: middle;
+}
+
 .vbdPicker__caret {
-  margin-left: auto;
+  position: absolute;
+  top: 50%;
+  right: calc(var(--space-2) - 1px);
+  margin-top: -6px;
+  pointer-events: none;
+}
+
+/* The list: hung 4 px under the control as wide as it, square where it meets the control, on the
+   plain surface, its rows 37 px tall */
+.vbdPicker__panel.atlPopover {
+  min-width: 0;
+  max-width: none;
+  padding: 0;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  background-color: var(--color-surface);
+}
+
+.vbdPicker__panel.atlPopover[data-placement='top'] {
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
 }
 
 .vbdPicker__list {
   margin: 0;
-  padding: var(--space-1);
+  padding: 0;
   list-style: none;
 }
 
 .vbdPicker__option {
   display: flex;
-  gap: var(--space-2);
   align-items: center;
   width: 100%;
   padding: var(--space-2) var(--space-3);
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: none;
-  color: var(--color-text-primary);
-  font: inherit;
-  font-size: var(--font-size-s);
-  line-height: 1.5;
-  text-align: left;
-  cursor: pointer;
-}
-
-.vbdPicker__option:hover,
-.vbdPicker__option:focus-visible {
-  background: var(--color-hover);
-  outline: none;
-}
-
-.vbdPicker__check {
-  display: flex;
-  width: 16px;
-  color: var(--color-accent);
-}
-
-.vbdOption {
-  padding: var(--space-3);
-  border-bottom: 1px solid var(--color-border-light);
-  background: var(--color-surface);
-}
-
-.vbdOption__title {
-  display: flex;
-  gap: var(--space-2);
-  align-items: center;
-  width: 100%;
-  padding: 0 0 0 var(--space-1);
   border: 0;
   background: none;
   color: var(--color-text-primary);
@@ -844,60 +1153,109 @@
   cursor: pointer;
 }
 
-.vbdOption__panel {
+.vbdPicker__option:hover,
+.vbdPicker__option:focus {
+  background: var(--color-surface-secondary);
+}
+
+/* The theme's keyboard focus, 2 px out: the panel cuts it to a line above and below the row */
+.vbdPicker__option:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+:root.themeDark .vbdPicker__option:hover,
+:root.themeDark .vbdPicker__option:focus {
+  background: var(--color-surface-tertiary);
+}
+
+.vbdPicker__text {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vbdPicker__check {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  margin-top: var(--space-2);
+  flex: none;
+  width: 16px;
+  margin-right: var(--space-2);
+}
+
+/* A group of settings: the original's accordion on the surface, 12 px in, a rule under it */
+.vbdOption {
+  padding: var(--space-3);
+  background: var(--color-surface);
+}
+
+.vbdOption__title {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-s);
+  line-height: 21px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.vbdOption__title:hover span {
+  text-decoration: underline;
+}
+
+.vbdOption__arrow {
+  margin: 0 var(--space-2) 0 var(--space-1);
+  transition: transform var(--duration-fast) var(--ease-out-quint);
+}
+
+.vbdOption__arrow--open {
+  transform: rotate(90deg);
+}
+
+/* Clipped and on a layer of its own, as the original's accordion wraps what it opens: the text in
+   it, half a pixel in, is then drawn on the same pixels */
+.vbdOption__content {
+  padding-top: var(--space-2);
+  overflow: hidden;
+  transform: translate(0);
+}
+
+.vbdOption__panel {
   padding: var(--space-4);
   border-radius: var(--radius-lg);
   background: var(--color-surface-secondary);
 }
 
-.vbdOption__panel .atlFormRow {
+/* A switch stays at the top of a label of two lines, as the original's */
+.vbdOption__panel .vzeSwitch,
+.vbdConfig__editor .vzeSwitch {
+  align-items: flex-start;
+}
+
+.vbdOption__rule {
+  height: 1px;
   margin: 0;
+  border: 0;
+  background: var(--color-border-light);
 }
 
-.vbdTip {
-  display: inline-flex;
-  gap: var(--space-1);
-  align-items: center;
-}
-
-.vbdTip__mark {
-  display: inline-flex;
-  color: var(--color-text-secondary);
-}
-
-.vbdSegments {
-  width: 100%;
-}
-
-.vbdSegments .atlSegment {
-  flex: 1 1 0;
-}
-
-.vbdRange {
-  display: flex;
-  gap: var(--space-2);
-  align-items: center;
-}
-
-.vbdRange input[type="range"] {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.vbdRange input[type="number"] {
-  flex: none;
-  width: 64px;
+.vbdConfirm__text {
+  margin: 0;
+  font-size: var(--font-size-s);
+  line-height: 21px;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .vbdDropbox__draggable,
   .vbdDropbox__draggable--closing,
   .vbdDropbox__target,
-  .vbdPicture__hand {
+  .vbdEmpty__hand {
     animation: none;
   }
 

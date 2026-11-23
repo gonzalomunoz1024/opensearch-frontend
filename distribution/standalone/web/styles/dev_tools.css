@@ -1,67 +1,164 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
-/* Dev Tools: the console and the Grok debugger. */
+/*
+ * Dev Tools: the console and the Grok debugger, as OpenSearch Dashboards draws them with the
+ * Atlas theme. The console's editors are Ace with the theme's colours for it; the values below
+ * are those colours as the theme computes them, in light and in dark.
+ */
 
-.dvtPage {
+.dvtApp {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
   height: calc(100vh - var(--header-height));
-  padding: var(--space-2) var(--space-2) 0;
 }
 
-.dvtPage > .atlTabs {
-  flex: none;
+.dvtApp__panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
-.dvtTight {
-  gap: var(--space-2);
+/* The tabs of Dev Tools and of the console: pills, as the theme draws small tabs */
+.dvtTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
 }
 
-/* --- Console ------------------------------------------------------------------------------- */
+.dvtTab {
+  margin: 0;
+  padding: var(--space-1) 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 21px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color 150ms ease-out,
+    background-color 150ms ease-out;
+}
+
+.dvtTab:hover:not(.dvtTab--selected),
+.dvtTab:focus {
+  color: var(--color-text-primary);
+}
+
+.dvtTab:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
+}
+
+.dvtTab--selected {
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  cursor: default;
+}
+
+/* --- The console ---------------------------------------------------------------------------- */
 
 .dvtConsole {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
+  padding: var(--space-2);
 }
 
-.dvtMenu {
+.dvtNav {
   display: flex;
-  align-items: center;
   flex: none;
+}
+
+.dvtNav > .dvtTabs {
+  flex: 1 1 auto;
+}
+
+.dvtNav__status {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-2) var(--space-1);
+  border-bottom: 1px solid var(--color-border-light);
 }
 
-.dvtMenu__item {
-  padding: var(--space-1) var(--space-2);
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: none;
-  color: var(--color-text-secondary);
-  font: inherit;
-  cursor: pointer;
-}
-
-.dvtMenu__item:hover,
-.dvtMenu__item[aria-pressed='true'] {
+.dvtBadge {
+  display: inline-block;
+  max-width: 100%;
+  padding: 1px var(--space-2);
+  border: 1px solid transparent;
+  border-radius: 999px;
   background: var(--color-surface-secondary);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 18px;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.dvtBadge--hollow {
+  border-color: var(--color-border-light);
+  background: transparent;
   color: var(--color-text-primary);
 }
 
-.dvtMenu__item:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
+.dvtBadge--healthy {
+  background: var(--color-healthy-tint);
+  color: var(--color-healthy-text);
 }
 
-.dvtMenu__status {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: 22px;
+.dvtBadge--accent {
+  background: var(--color-accent-tint);
+  color: var(--color-accent);
+}
+
+.dvtBadge--warning {
+  background: var(--color-warning-tint);
+  color: var(--color-warning-text);
+}
+
+.dvtBadge--critical {
+  background: var(--color-critical-tint);
+  color: var(--color-critical-text);
+}
+
+/* The bar that runs while a request is out */
+.dvtProgress {
+  position: relative;
+  z-index: 2000;
+  height: 0;
+}
+
+.dvtProgress::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 2px;
+  overflow: hidden;
+  background: linear-gradient(to right, transparent 0, var(--color-accent) 30%, var(--color-accent) 60%, transparent 100%) no-repeat;
+  background-size: 40% 100%;
+  animation: dvtProgress 1s linear infinite;
+}
+
+@keyframes dvtProgress {
+  from {
+    background-position: -60% 0;
+  }
+
+  to {
+    background-position: 160% 0;
+  }
 }
 
 .dvtPanes {
@@ -72,184 +169,1029 @@
 
 .dvtPane {
   position: relative;
-  min-width: 0;
-  min-height: 0;
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 100px;
+  height: 100%;
 }
 
-.dvtEditor.atlCodeEditor {
-  border-radius: 0;
-  border-color: var(--color-border-light);
-}
-
-.dvtEditor.atlCodeEditor:focus-within,
-.dvtEditor.atlCodeEditor--readOnly:focus-visible {
-  box-shadow: none;
+.dvtPane > .dvtAce {
+  flex: 1 1 1px;
+  height: 100%;
 }
 
 .dvtResizer {
+  position: relative;
+  z-index: 1000;
   display: flex;
+  flex: 0 0 14px;
   align-items: center;
   justify-content: center;
-  flex: none;
   width: 14px;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
-  cursor: col-resize;
-  user-select: none;
-}
-
-.dvtResizer:hover {
-  background: var(--color-surface-secondary);
-}
-
-/* The buttons of the request the cursor is in, at the end of its first line */
-.dvtActions {
-  position: absolute;
-  right: var(--space-4);
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-
-.dvtActions button {
-  display: inline-flex;
-  padding: 2px;
+  margin: 0;
+  padding: 0;
   border: 0;
-  border-radius: var(--radius-xs);
-  background: none;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  user-select: none;
   cursor: pointer;
 }
 
-.dvtActions button:hover {
-  background: color-mix(in srgb, var(--color-text-primary) 10%, transparent);
+.dvtResizer:hover {
+  background: var(--dvt-resizer-hover);
+}
+
+.dvtResizer:focus,
+.dvtResizer--active {
+  outline: none;
+  background: var(--color-accent);
+  color: var(--color-surface);
+}
+
+.dvtResizer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  cursor: ew-resize;
+}
+
+/* The send button and the wrench over the first line of the request */
+.dvtActions {
+  position: absolute;
+  top: 0;
+  right: 16px;
+  z-index: 1000;
+  display: flex;
+  min-width: 40px;
+  line-height: 1;
 }
 
 .dvtActions__send {
+  display: inline-flex;
+  padding: 0 var(--space-1);
+  border: 0;
+  background: none;
   color: var(--color-healthy);
+  line-height: inherit;
+  cursor: pointer;
 }
 
 .dvtActions__more {
-  color: var(--color-accent);
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: none;
+  color: var(--color-accent-button-text);
+  line-height: inherit;
+  cursor: pointer;
 }
 
-.tokMethod {
-  color: var(--code-string);
+.dvtActions__more:hover,
+.dvtActions__more:focus-visible {
+  background: var(--color-accent-tint);
 }
 
-.tokUrl {
-  color: var(--code-number);
+.dvtActions .atlIcon {
+  width: 16px;
+  height: 16px;
 }
 
-/* --- History ------------------------------------------------------------------------------- */
+/* The flyouts of the console: small, under the header, with the original's spacing, over the
+   theme's scrim (a dimming, then a blur once the flyout is up). The mask stacks as the original's
+   (z-index 1000, after the page), so it covers the splitter and the request buttons too. */
+.dvtMask {
+  position: fixed;
+  inset: var(--header-height) 0 0;
+  z-index: 1000;
+}
 
+.dvtMask::before,
+.dvtMask::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.dvtMask::before {
+  background: var(--scrim);
+}
+
+.dvtMask::after {
+  backdrop-filter: blur(4px);
+  animation:
+    dvtScrimShow 0s linear var(--duration-fast) backwards,
+    dvtScrimBlur var(--duration-normal) var(--ease-out-quint) var(--duration-fast) backwards;
+}
+
+@keyframes dvtScrimShow {
+  from {
+    visibility: hidden;
+  }
+}
+
+@keyframes dvtScrimBlur {
+  from {
+    backdrop-filter: blur(0);
+  }
+}
+
+/* The flyout stacks with its mask and comes after it, as the original's does inside its mask: under
+   the mask it would be dimmed, blurred and closed by any click on it */
+.atlFlyout.dvtFlyout {
+  top: var(--header-height);
+  z-index: 1000;
+  width: min(384px, 100vw);
+}
+
+.dvtFlyout .atlFlyout__header {
+  padding: var(--space-6);
+}
+
+/* The cross sits in the corner, as the original's */
+.dvtFlyout .atlFlyout__header > .atlButton {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: 3;
+  width: var(--space-6);
+  height: var(--space-6);
+  border-radius: 50%;
+  background: var(--color-hover);
+}
+
+.dvtFlyout .atlFlyout__header > .atlButton .atlIcon {
+  width: 16px;
+  height: 16px;
+}
+
+.dvtFlyout .atlFlyout__body {
+  padding: var(--space-6);
+}
+
+.dvtFlyout .atlFlyout__footer {
+  padding: var(--space-4) var(--space-6);
+}
+
+.dvtText {
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+.dvtText h3 {
+  margin: 0 0 7px;
+  font-size: 17px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 22px;
+  letter-spacing: -0.022em;
+}
+
+.dvtText h4 {
+  margin: 0 0 7px;
+  font-size: 15px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+.dvtText p,
+.dvtText ul,
+.dvtText dl {
+  margin: 0 0 21px;
+}
+
+.dvtText ul {
+  padding: 0;
+  margin-left: 21px;
+  list-style: disc;
+}
+
+.dvtText dt {
+  font-weight: var(--font-weight-semibold);
+}
+
+.dvtText dd {
+  margin: 0 0 7px;
+}
+
+.dvtText > :last-child {
+  margin-bottom: 0;
+}
+
+.dvtExample.dvtAce {
+  display: block;
+  height: 128px;
+  margin: var(--space-4) 0;
+}
+
+.atlModal.dvtSettings {
+  min-width: 460px;
+}
+
+/* The history, above the editors */
 .dvtHistory {
-  display: flex;
-  flex-direction: column;
   flex: none;
-  gap: var(--space-2);
-  padding: var(--space-2);
+  margin-bottom: var(--space-2);
+  padding: 12px;
+  box-shadow: var(--dvt-history-shadow);
+}
+
+.dvtHistory h2 {
+  margin: 0 0 var(--space-2);
+  font-size: 17px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 22px;
+  letter-spacing: -0.022em;
 }
 
 .dvtHistory__body {
   display: flex;
-  gap: var(--space-3);
-  height: 240px;
+  height: 320px;
 }
 
 .dvtHistory__list {
-  flex: 0 0 50%;
-  min-width: 0;
+  flex: 0 0 49.5%;
   margin: 0;
   padding: 0;
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-sm);
+  overflow: auto;
   list-style: none;
-  overflow-y: auto;
 }
 
-.dvtHistory__list:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
+.dvtHistory__spacer {
+  flex: 0 0 1%;
+}
+
+.dvtHistory__viewer.dvtAce {
+  flex: 0 0 49.5%;
 }
 
 .dvtHistory__item {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-3);
-  border-bottom: 1px solid var(--color-border-light);
+  margin-bottom: -1px;
+  padding: 10px 15px;
+  border: 1px solid var(--dvt-list-border);
+  background: var(--dvt-list-background);
+  line-height: 21px;
   cursor: pointer;
 }
 
-.dvtHistory__item .atlIcon {
-  flex: none;
-  visibility: hidden;
-}
-
-.dvtHistory__item:hover,
 .dvtHistory__item--selected {
   background: var(--color-surface-secondary);
 }
 
-.dvtHistory__item--selected .atlIcon,
-.dvtHistory__item:hover .atlIcon {
-  visibility: visible;
-}
-
-.dvtHistory__viewer {
-  flex: 1 1 0;
-  min-width: 0;
+.dvtHistory__item .atlIcon {
+  flex: none;
+  color: var(--color-text-tertiary);
 }
 
 .dvtHistory__footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  margin-top: var(--space-2);
 }
 
-/* --- Help ---------------------------------------------------------------------------------- */
-
-.dvtKeys {
-  margin: 0;
+.dvtHistory__footer .atlRow {
+  gap: var(--space-4);
 }
 
-.dvtKeys > div {
-  padding: var(--space-2) 0;
-  border-bottom: 1px solid var(--color-border-light);
+/* "Clear": a button of text in the theme's red for text */
+.dvtHistory__clear.atlButton--empty:not(:disabled) {
+  color: var(--color-critical-button-text);
 }
 
-.dvtKeys dt {
-  font-weight: var(--font-weight-semibold, 600);
+.dvtHistory__clear.atlButton--empty:hover:not(:disabled) {
+  background: var(--color-critical-tint);
 }
 
-.dvtKeys dd {
-  margin: 0;
+/* The original's buttons with a fill are never narrower than this */
+.dvtWide.atlButton {
+  min-width: 112px;
+}
+
+.dvtTight {
+  gap: var(--space-2);
+}
+
+.dvtNone {
+  flex: none;
+}
+
+/* --- The editors: Ace with the console's colours ----------------------------------------------- */
+
+.dvtAce {
+  --dvtAce-bg: var(--color-surface-secondary);
+  --dvtAce-gutter-bg: var(--color-surface);
+  --dvtAce-edge: rgb(233, 233, 235);
+  --dvtAce-active: rgba(210, 210, 215, 0.7);
+  --dvtAce-selection: rgb(179, 215, 255);
+  --dvtAce-guide: rgb(134, 134, 139);
+  --dvtAce-margin: rgb(210, 210, 215);
+  --dvtAce-cursor: rgb(0, 0, 0);
+  --dvtAce-method: rgb(202, 12, 107);
+  --dvtAce-url: rgb(11, 115, 109);
+  --dvtAce-string: rgb(8, 120, 36);
+  --dvtAce-variable: rgb(3, 112, 152);
+  --dvtAce-constant: rgb(153, 0, 0);
+  --dvtAce-language: rgb(82, 86, 225);
+  --dvtAce-comment: rgb(65, 112, 90);
+  --dvtAce-operator: rgb(102, 102, 107);
+  --dvtAce-function: rgb(0, 0, 162);
+  --dvtAce-warning: rgb(255, 59, 48);
+  --dvtAce-thumb: rgba(110, 110, 115, 0.5);
+  --dvtAce-hint: rgba(255, 255, 255, 0.7);
+
+  position: relative;
+  overflow: hidden;
+  background: var(--dvtAce-bg);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-code);
+  line-height: normal;
+  text-align: left;
+}
+
+:root.themeDark .dvtAce {
+  --dvtAce-edge: rgb(56, 56, 58);
+  --dvtAce-active: rgba(56, 56, 58, 0.7);
+  --dvtAce-selection: rgb(23, 60, 98);
+  --dvtAce-guide: rgb(99, 99, 102);
+  --dvtAce-margin: rgb(56, 56, 58);
+  --dvtAce-cursor: rgb(255, 255, 255);
+  --dvtAce-method: rgb(237, 123, 179);
+  --dvtAce-url: rgb(36, 179, 169);
+  --dvtAce-string: rgb(77, 184, 103);
+  --dvtAce-variable: rgb(94, 171, 198);
+  --dvtAce-constant: rgb(212, 148, 148);
+  --dvtAce-language: rgb(150, 152, 249);
+  --dvtAce-comment: rgb(130, 172, 152);
+  --dvtAce-operator: rgb(162, 162, 167);
+  --dvtAce-function: rgb(159, 159, 220);
+  --dvtAce-warning: rgb(255, 69, 58);
+  --dvtAce-thumb: rgba(152, 152, 157, 0.5);
+  --dvtAce-hint: rgba(0, 0, 0, 0.7);
+}
+
+.dvtAce__probe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: inline-block;
+  overflow: hidden;
+  visibility: hidden;
+  white-space: pre;
+  pointer-events: none;
+}
+
+.dvtAce__scroller {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  background:
+    linear-gradient(
+      to right,
+      var(--dvtAce-edge) 0,
+      var(--dvtAce-edge) 1px,
+      var(--dvtAce-gutter-bg) 1px,
+      var(--dvtAce-gutter-bg) var(--dvtAce-gutter),
+      transparent var(--dvtAce-gutter)
+    ),
+    var(--dvtAce-bg);
+  scrollbar-width: thin;
+}
+
+.dvtAce__scroller::-webkit-scrollbar {
+  width: 16px;
+  height: 16px;
+}
+
+.dvtAce__scroller::-webkit-scrollbar-thumb {
+  border: 6px solid transparent;
+  background-color: var(--dvtAce-thumb);
+  background-clip: content-box;
+}
+
+.dvtAce__scroller::-webkit-scrollbar-track,
+.dvtAce__scroller::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.dvtAce__body {
+  position: relative;
+  display: inline-block;
+  min-width: 100%;
+  min-height: 100%;
+  vertical-align: top;
+  cursor: text;
+}
+
+.dvtAce--wrap .dvtAce__body {
+  display: block;
+}
+
+/* Only the rows in view are drawn, each at its place in the height of the whole text */
+.dvtAce__rows {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.dvtAce__row {
+  position: absolute;
+  right: 0;
+  left: 0;
+  display: flex;
+  min-height: var(--dvtAce-line);
+}
+
+.dvtAce__cell {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  flex: none;
+  box-sizing: border-box;
+  width: var(--dvtAce-gutter);
+  padding: 0 13px 0 19px;
+  border-left: 1px solid var(--dvtAce-edge);
+  background: var(--dvtAce-gutter-bg);
   color: var(--color-text-secondary);
+  line-height: var(--dvtAce-line);
+  text-align: right;
+  white-space: pre;
+  pointer-events: auto;
+  cursor: default;
+  user-select: none;
 }
 
-.dvtTips {
+.dvtAce__cell--active {
+  background: linear-gradient(var(--dvtAce-active), var(--dvtAce-active)), var(--dvtAce-gutter-bg);
+}
+
+.dvtAce__cell--error {
+  background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAABOFBMVEX/////////QRswFAb/Ui4wFAYwFAYwFAaWGAfDRymzOSH/PxswFAb/SiUwFAYwFAbUPRvjQiDllog5HhHdRybsTi3/Tyv9Tir+Syj/UC3////XurebMBIwFAb/RSHbPx/gUzfdwL3kzMivKBAwFAbbvbnhPx66NhowFAYwFAaZJg8wFAaxKBDZurf/RB6mMxb/SCMwFAYwFAbxQB3+RB4wFAb/Qhy4Oh+4QifbNRcwFAYwFAYwFAb/QRzdNhgwFAYwFAbav7v/Uy7oaE68MBK5LxLewr/r2NXewLswFAaxJw4wFAbkPRy2PyYwFAaxKhLm1tMwFAazPiQwFAaUGAb/QBrfOx3bvrv/VC/maE4wFAbRPBq6MRO8Qynew8Dp2tjfwb0wFAbx6eju5+by6uns4uH9/f36+vr/GkHjAAAAYnRSTlMAGt+64rnWu/bo8eAA4InH3+DwoN7j4eLi4xP99Nfg4+b+/u9B/eDs1MD1mO7+4PHg2MXa347g7vDizMLN4eG+Pv7i5evs/v79yu7S3/DV7/498Yv24eH+4ufQ3Ozu/v7+y13sRqwAAADLSURBVHjaZc/XDsFgGIBhtDrshlitmk2IrbHFqL2pvXf/+78DPokj7+Fz9qpU/9UXJIlhmPaTaQ6QPaz0mm+5gwkgovcV6GZzd5JtCQwgsxoHOvJO15kleRLAnMgHFIESUEPmawB9ngmelTtipwwfASilxOLyiV5UVUyVAfbG0cCPHig+GBkzAENHS0AstVF6bacZIOzgLmxsHbt2OecNgJC83JERmePUYq8ARGkJx6XtFsdddBQgZE2nPR6CICZhawjA4Fb/chv+399kfR+MMMDGOQAAAABJRU5ErkJggg==');
+  background-repeat: no-repeat;
+  background-position: 2px center;
+}
+
+.dvtAce__cell--active.dvtAce__cell--error {
+  background:
+    url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAABOFBMVEX/////////QRswFAb/Ui4wFAYwFAYwFAaWGAfDRymzOSH/PxswFAb/SiUwFAYwFAbUPRvjQiDllog5HhHdRybsTi3/Tyv9Tir+Syj/UC3////XurebMBIwFAb/RSHbPx/gUzfdwL3kzMivKBAwFAbbvbnhPx66NhowFAYwFAaZJg8wFAaxKBDZurf/RB6mMxb/SCMwFAYwFAbxQB3+RB4wFAb/Qhy4Oh+4QifbNRcwFAYwFAYwFAb/QRzdNhgwFAYwFAbav7v/Uy7oaE68MBK5LxLewr/r2NXewLswFAaxJw4wFAbkPRy2PyYwFAaxKhLm1tMwFAazPiQwFAaUGAb/QBrfOx3bvrv/VC/maE4wFAbRPBq6MRO8Qynew8Dp2tjfwb0wFAbx6eju5+by6uns4uH9/f36+vr/GkHjAAAAYnRSTlMAGt+64rnWu/bo8eAA4InH3+DwoN7j4eLi4xP99Nfg4+b+/u9B/eDs1MD1mO7+4PHg2MXa347g7vDizMLN4eG+Pv7i5evs/v79yu7S3/DV7/498Yv24eH+4ufQ3Ozu/v7+y13sRqwAAADLSURBVHjaZc/XDsFgGIBhtDrshlitmk2IrbHFqL2pvXf/+78DPokj7+Fz9qpU/9UXJIlhmPaTaQ6QPaz0mm+5gwkgovcV6GZzd5JtCQwgsxoHOvJO15kleRLAnMgHFIESUEPmawB9ngmelTtipwwfASilxOLyiV5UVUyVAfbG0cCPHig+GBkzAENHS0AstVF6bacZIOzgLmxsHbt2OecNgJC83JERmePUYq8ARGkJx6XtFsdddBQgZE2nPR6CICZhawjA4Fb/chv+399kfR+MMMDGOQAAAABJRU5ErkJggg==') no-repeat 2px center,
+    linear-gradient(var(--dvtAce-active), var(--dvtAce-active)),
+    var(--dvtAce-gutter-bg);
+}
+
+.dvtAce__fold {
+  display: inline-block;
+  box-sizing: border-box;
+  width: 11px;
+  height: var(--dvtAce-line);
+  margin: 0 -12px 0 1px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAANElEQVR42mWKsQ0AMAzC8ixLlrzQjzmBiEjp0A6WwBCSPgKAXoLkqSot7nN3yMwR7pZ32NzpKkVoDBUxKAAAAABJRU5ErkJggg==');
+  background-repeat: no-repeat;
+  background-position: center center;
+  vertical-align: top;
+  cursor: pointer;
+}
+
+.dvtAce__fold--closed {
+  background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAMAAAAGCAYAAAAG5SQMAAAAOUlEQVR42jXKwQkAMAgDwKwqKD4EwQ26sSOkVWjgIIHAzPiCgaqiqnJHZnKICBERHN194O5b9vbLuAVRL+l0YWnZAAAAAElFTkSuQmCCXA==');
+}
+
+.dvtAce__fold--invalid {
+  border-color: #de5555;
+  background-color: #ffb4b4;
+}
+
+.dvtAce__fold--end {
+  background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAANElEQVR42m3HwQkAMAhD0YzsRchFKI7sAikeWkrxwScEB0nh5e7KTPWimZki4tYfVbX+MNl4pyZXejUO1QAAAABJRU5ErkJggg==');
+}
+
+.dvtAce__fold:hover {
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  background-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 1px 1px rgba(255, 255, 255, 0.7);
+}
+
+.dvtAce__line {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 var(--space-1);
+  line-height: var(--dvtAce-line);
+  white-space: pre;
+}
+
+/* A row of the screen: a line, or one of the rows a long line wraps into */
+.dvtAce__screenRow {
+  height: var(--dvtAce-line);
+  white-space: pre;
+}
+
+/* A character two columns wide */
+.dvtAce__wide {
+  display: inline-block;
+  text-align: center;
+}
+
+/* The text a fold stands for, as Ace draws it */
+.dvtAce__foldText {
+  display: inline-block;
+  box-sizing: border-box;
+  height: 11px;
+  margin-top: -2px;
+  border: 1px solid black;
+  border-radius: 2px;
+  background-color: #6b72e6;
+  background-image:
+    url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABEAAAAJCAYAAADU6McMAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAJpJREFUeNpi/P//PwOlgAXGYGRklAVSokD8GmjwY1wasKljQpYACtpCFeADcHVQfQyMQAwzwAZI3wJKvCLkfKBaMSClBlR7BOQikCFGQEErIH0VqkabiGCAqwUadAzZJRxQr/0gwiXIal8zQQPnNVTgJ1TdawL0T5gBIP1MUJNhBv2HKoQHHjqNrA4WO4zY0glyNKLT2KIfIMAAQsdgGiXvgnYAAAAASUVORK5CYII='),
+    url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAA3CAYAAADNNiA5AAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAACJJREFUeNpi+P//fxgTAwPDBxDxD078RSX+YeEyDFMCIMAAI3INmXiwf2YAAAAASUVORK5CYII=');
+  background-repeat: no-repeat, repeat-x;
+  background-position:
+    center center,
+    top left;
+  color: transparent;
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+.dvtAce__foldText:hover {
+  background-image:
+    url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABEAAAAJCAYAAADU6McMAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAJpJREFUeNpi/P//PwOlgAXGYGRklAVSokD8GmjwY1wasKljQpYACtpCFeADcHVQfQyMQAwzwAZI3wJKvCLkfKBaMSClBlR7BOQikCFGQEErIH0VqkabiGCAqwUadAzZJRxQr/0gwiXIal8zQQPnNVTgJ1TdawL0T5gBIP1MUJNhBv2HKoQHHjqNrA4WO4zY0glyNKLT2KIfIMAAQsdgGiXvgnYAAAAASUVORK5CYII='),
+    url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAA3CAYAAADNNiA5AAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAACBJREFUeNpi+P//fz4TAwPDZxDxD5X4i5fLMEwJgAADAEPVDbjNw87ZAAAAAElFTkSuQmCC');
+}
+
+/* What is typed goes to a text area the size of a character, kept at the cursor as Ace keeps its own */
+.dvtAce__input {
+  position: absolute;
+  z-index: 0;
+  box-sizing: border-box;
   margin: 0;
-  padding-left: var(--space-5);
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: var(--dvtAce-line);
+  white-space: pre;
+  opacity: 0;
+  resize: none;
+  pointer-events: none;
 }
 
-/* --- Grok debugger ------------------------------------------------------------------------- */
+/* While a character is being composed, what is typed of it shows */
+.dvtAce__input--composing {
+  z-index: 7;
+  min-width: 2em;
+  background: var(--dvtAce-bg);
+  opacity: 1;
+}
+
+.dvtAce__markers {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: var(--dvtAce-gutter);
+  z-index: 0;
+  pointer-events: none;
+}
+
+.dvtAce__snippet,
+.dvtAce__activeLine {
+  position: absolute;
+  right: 0;
+  left: 0;
+}
+
+.dvtAce__snippet {
+  background: var(--dvtAce-edge);
+}
+
+.dvtAce__activeLine {
+  z-index: 2;
+  background: var(--dvtAce-active);
+}
+
+.dvtAce__selection {
+  position: absolute;
+  z-index: 5;
+  background: var(--dvtAce-selection);
+}
+
+.dvtAce__bracket {
+  position: absolute;
+  z-index: 6;
+  margin: -1px 0 0 -1px;
+  border: 1px solid var(--color-border-light);
+}
+
+/* The word selected wherever else it is, and what is searched for */
+.dvtAce__selectedWord {
+  position: absolute;
+  z-index: 4;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border-light);
+  border-radius: 3px;
+  background: var(--dvtAce-bg);
+}
+
+.dvtAce__cursor {
+  position: absolute;
+  z-index: 3;
+  box-sizing: border-box;
+  width: 2px;
+  margin-left: var(--dvtAce-gutter);
+  border-left: 2px solid var(--dvtAce-cursor);
+  opacity: 0.2;
+  pointer-events: none;
+}
+
+/* Insert pressed: what is typed takes the place of what is there */
+.dvtAce__cursor--overwrite {
+  border-bottom: 1px solid var(--dvtAce-cursor);
+  border-left-width: 0;
+}
+
+.dvtAce--focus .dvtAce__cursor {
+  opacity: 1;
+  animation: dvtBlink 1s step-end 1s infinite;
+}
+
+.dvtAce--focus.dvtAce--readOnly .dvtAce__cursor {
+  animation: none;
+}
+
+@keyframes dvtBlink {
+  0% {
+    opacity: 0;
+  }
+
+  60% {
+    opacity: 1;
+  }
+}
+
+/* Ace's search box, with its own colours in both themes */
+.dvtSearch {
+  position: absolute;
+  top: 0;
+  /* Over the request's buttons, which it covers in the original too */
+  z-index: 1001;
+  margin: 0;
+  padding: 4px 6px 0 4px;
+  overflow: hidden;
+  border: 1px solid #cbcbcb;
+  border-top: 0 none;
+  background-color: #ddd;
+  color: #666;
+  white-space: normal;
+}
+
+.dvtSearch--right {
+  right: 0;
+  border-right: 0 none;
+  border-radius: 0 0 0 5px;
+}
+
+.dvtSearch__form {
+  margin: 0 20px 4px 0;
+  overflow: hidden;
+  line-height: 1.9;
+}
+
+.dvtSearch__form--replace {
+  margin-right: 0;
+}
+
+.dvtSearch__form--nomatch {
+  outline: 1px solid red;
+}
+
+.dvtSearch__field {
+  box-sizing: border-box;
+  min-width: 17em;
+  margin: 0;
+  padding: 0 6px;
+  border: 1px solid #cbcbcb;
+  border-right: 0 none;
+  border-radius: 3px 0 0 3px;
+  outline: 0;
+  background-color: white;
+  color: black;
+  font-size: inherit;
+  line-height: inherit;
+  vertical-align: top;
+}
+
+.dvtSearch__button {
+  position: relative;
+  display: inline-block;
+  box-sizing: content-box;
+  margin: 0;
+  padding: 0 6px;
+  border: 1px solid #cbcbcb;
+  border-right: 0 none;
+  border-left: 1px solid #dcdcdc;
+  background: #fff;
+  color: #666;
+  line-height: inherit;
+  cursor: pointer;
+}
+
+.dvtSearch__button:last-child {
+  border-right: 1px solid #cbcbcb;
+  border-radius: 0 3px 3px 0;
+}
+
+.dvtSearch__button:hover {
+  background-color: #eef1f6;
+}
+
+.dvtSearch__button--prev,
+.dvtSearch__button--next {
+  padding: 0 0.7em;
+}
+
+.dvtSearch__button--prev::after,
+.dvtSearch__button--next::after {
+  display: inline-block;
+  width: 0.5em;
+  height: 0.5em;
+  border: solid 2px #888;
+  border-width: 2px 0 0 2px;
+  content: '';
+  transform: rotate(-45deg);
+}
+
+.dvtSearch__button--next::after {
+  border-width: 0 2px 2px 0;
+}
+
+.dvtSearch__close {
+  position: absolute;
+  top: 9px;
+  right: 7px;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 0 none;
+  border-radius: 50%;
+  background: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAA4AAAAcCAYAAABRVo5BAAAAZ0lEQVR42u2SUQrAMAhDvazn8OjZBilCkYVVxiis8H4CT0VrAJb4WHT3C5xU2a2IQZXJjiQIRMdkEoJ5Q2yMqpfDIo+XY4k6h+YXOyKqTIj5REaxloNAd0xiKmAtsTHqW8sR2W5f7gCu5nWFUpVjZwAAAABJRU5ErkJggg==') no-repeat 50% 0;
+  color: #656565;
+  font: 16px/16px Arial;
+  cursor: pointer;
+}
+
+.dvtSearch__close:hover {
+  background-color: #656565;
+  background-position: 50% 100%;
+  color: white;
+}
+
+.dvtSearch__option {
+  box-sizing: border-box;
+  margin-left: 2px;
+  padding: 1px;
+  overflow: hidden;
+  border: 1px solid rgba(100, 100, 100, 0.23);
+  color: black;
+  opacity: 0.7;
+  cursor: pointer;
+  user-select: none;
+}
+
+.dvtSearch__option:hover {
+  background-color: #eee;
+  opacity: 1;
+}
+
+.dvtSearch__option:active {
+  background-color: #ddd;
+}
+
+.dvtSearch__option--checked {
+  border-color: #39f;
+  opacity: 1;
+}
+
+.dvtSearch__options {
+  clear: both;
+  margin-bottom: 3px;
+  text-align: right;
+  user-select: none;
+}
+
+.dvtSearch__counter {
+  float: left;
+  padding: 0 8px;
+  font-family: arial, sans-serif;
+}
+
+/* Ace's keyboard mode: shown only when it has the focus */
+.dvtAce__hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--dvtAce-hint);
+  font-family: var(--font-family);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+  text-align: center;
+  opacity: 0;
+}
+
+.dvtAce__hint:focus {
+  z-index: 1000;
+  border: 2px solid var(--color-accent);
+  outline: none;
+  opacity: 1;
+}
+
+.dvtAce__hintText p {
+  margin: 0;
+}
+
+/* The tokens of the console's modes, by the parts of their kind */
+.dvtTok-indent-guide {
+  background: linear-gradient(to left, var(--dvtAce-guide) 0%, var(--dvtAce-guide) 1px, transparent 1px, transparent 100%);
+}
+
+.dvtTok-method {
+  color: var(--dvtAce-method);
+}
+
+.dvtTok-url,
+.dvtTok-start_triple_quote,
+.dvtTok-end_triple_quote {
+  color: var(--dvtAce-url);
+}
+
+.dvtTok-string,
+.dvtTok-multi_string {
+  color: var(--dvtAce-string);
+}
+
+.dvtTok-multi_string {
+  font-style: italic;
+}
+
+.dvtTok-variable,
+.dvtTok-keyword,
+.dvtTok-storage,
+.dvtTok-constant.dvtTok-numeric {
+  color: var(--dvtAce-variable);
+}
+
+.dvtTok-constant {
+  color: var(--dvtAce-constant);
+}
+
+.dvtTok-constant.dvtTok-numeric {
+  color: var(--dvtAce-variable);
+}
+
+.dvtTok-constant.dvtTok-language {
+  color: var(--dvtAce-language);
+}
+
+.dvtTok-comment {
+  color: var(--dvtAce-comment);
+}
+
+.dvtTok-keyword.dvtTok-operator {
+  color: var(--dvtAce-operator);
+}
+
+.dvtTok-entity.dvtTok-name.dvtTok-function {
+  color: var(--dvtAce-function);
+}
+
+.dvtTok-warning {
+  color: var(--dvtAce-warning);
+}
+
+.dvtTok-invalid {
+  background-color: rgba(255, 0, 0, 0.1);
+  color: red;
+}
+
+/* Ace's list of what could be typed next */
+.dvtSuggest {
+  position: fixed;
+  z-index: 200000;
+  box-sizing: content-box;
+  width: 278px;
+  overflow: auto;
+  border: 1px solid lightgray;
+  background: var(--color-surface-secondary);
+  box-shadow: 2px 3px 5px rgba(0, 0, 0, 0.2);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-code);
+  scrollbar-width: thin;
+}
+
+.dvtSuggest__row {
+  position: relative;
+  padding: 0 var(--space-1);
+  overflow: hidden;
+  white-space: pre;
+  cursor: default;
+}
+
+.dvtSuggest__row:hover:not(.dvtSuggest__row--active) {
+  margin-top: -1px;
+  border: 1px solid rgb(171, 191, 254);
+  border-width: 1px 0;
+  background: rgba(233, 233, 253, 0.4);
+}
+
+.dvtSuggest__row--active {
+  background: rgba(210, 210, 215, 0.7);
+}
+
+:root.themeDark .dvtSuggest__row--active {
+  background: rgba(56, 56, 58, 0.7);
+}
+
+.dvtSuggest__match {
+  color: var(--dvtAce-url);
+  text-shadow: 0 0 0.01em;
+}
+
+.dvtSuggest__meta {
+  position: absolute;
+  right: 4px;
+  color: var(--dvtAce-variable);
+}
+
+.dvtSuggest,
+.dvtApp {
+  --dvt-resizer-hover: rgb(204, 228, 255);
+  --dvt-history-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --dvt-list-border: rgb(211, 218, 230);
+  --dvt-list-background: var(--color-surface);
+  --dvtAce-url: rgb(11, 115, 109);
+  --dvtAce-variable: rgb(3, 112, 152);
+}
+
+:root.themeDark .dvtSuggest,
+:root.themeDark .dvtApp {
+  --dvt-resizer-hover: rgb(21, 70, 121);
+  --dvt-history-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --dvt-list-border: rgb(52, 55, 65);
+  --dvt-list-background: rgb(29, 30, 36);
+  --dvtAce-url: rgb(36, 179, 169);
+  --dvtAce-variable: rgb(94, 171, 198);
+}
+
+/* --- The Grok debugger ------------------------------------------------------------------------ */
+
+.dvtGrokPage {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--space-4);
+  overflow: auto;
+  background: var(--color-surface);
+}
 
 .dvtGrok {
   display: flex;
+  flex: 1 1 auto;
   align-items: flex-start;
   gap: var(--space-6);
+  box-sizing: border-box;
   padding: var(--space-6);
-  overflow: auto;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.dvtGrok__form {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .dvtGrok__form {
   display: flex;
   flex-direction: column;
-  flex: 1 1 0;
   gap: var(--space-4);
-  min-width: 0;
+}
+
+/* The original's text areas sit on the line of text, two pixels over what follows them */
+.dvtGrok__form .atlFormRow > textarea {
+  margin-bottom: 2px;
 }
 
 .dvtGrok__docs {
@@ -257,17 +1199,74 @@
   justify-content: flex-end;
 }
 
-.dvtGrok__advanced {
-  padding: var(--space-2) var(--space-3);
+.dvtGrok__docs .atlButton {
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 1px solid transparent;
+  font-size: var(--font-size-s);
+  text-decoration: none;
+}
+
+.dvtGrok__docs .atlIcon {
+  width: 16px;
+  height: 16px;
+}
+
+.dvtGrok__form .atlButton {
+  border: 1px solid transparent;
+  font-size: var(--font-size-s);
+}
+
+.dvtGrok__form .atlButton--primary:disabled {
+  border-color: var(--color-border);
+}
+
+.dvtGrok__advanced,
+.dvtGrok__result {
   border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.dvtGrok__advanced {
+  overflow: hidden;
+}
+
+.dvtGrok__toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  margin: 0;
+  padding: var(--space-2) 12px;
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-s);
+  line-height: 21px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dvtGrok__toggle:hover span {
+  text-decoration: underline;
+}
+
+.dvtGrok__toggle .atlIcon {
+  width: 16px;
+  height: 16px;
+}
+
+.dvtGrok__advancedBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
 }
 
 .dvtGrok__result {
-  flex: 1 1 0;
-  min-width: 0;
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
@@ -275,30 +1274,366 @@
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  padding: var(--space-3) var(--space-4);
+  padding: 12px var(--space-4);
   background: var(--color-surface-secondary);
+}
+
+.dvtGrok__resultHead h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
 }
 
 .dvtGrok__resultBody {
   padding: var(--space-4);
+  font-size: var(--font-size-s);
+  line-height: 21px;
 }
 
+.dvtGrok__resultBody p {
+  margin: 0;
+}
+
+.dvtGrok__placeholder {
+  color: var(--color-text-secondary);
+}
+
+/* The theme's colours for text of success and of danger */
 .dvtGrok__matched {
-  color: var(--color-healthy-text);
+  color: #2b8342;
+  font-size: var(--font-size-s);
+  line-height: 21px;
 }
 
 .dvtGrok__failed {
-  color: var(--color-critical-text);
+  color: #d5352d;
+  font-size: var(--font-size-s);
+  line-height: 21px;
 }
 
-@media (max-width: 760px) {
-  .dvtGrok {
-    flex-direction: column;
-  }
+:root.themeDark .dvtGrok__matched {
+  color: var(--color-healthy);
+}
 
-  .dvtGrok__form,
-  .dvtGrok__result {
-    flex: none;
-    width: 100%;
-  }
+:root.themeDark .dvtGrok__failed {
+  color: var(--color-critical);
+}
+
+/* The theme's small text: a line's height between its paragraphs */
+.dvtGrok__failed p + p {
+  margin-top: 21px;
+}
+
+.dvtGrok__table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.dvtGrok__table th {
+  height: 38.5px;
+  padding: 0 var(--space-3);
+  background: var(--color-surface-secondary);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 20px;
+  text-align: left;
+}
+
+.dvtGrok__table td {
+  height: 42px;
+  padding: 0 var(--space-3);
+  border-top: 1px solid var(--color-border-light);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+  overflow-wrap: anywhere;
+}
+
+/* --- Round two: the parts the measures of the original asked for -------------------------------- */
+
+/* The theme's buttons: a border that shows no colour, links in the colour of links */
+.dvtApp .atlButton,
+.dvtFlyout .atlButton,
+.dvtSettings .atlButton {
+  border: 1px solid transparent;
+}
+
+/* A filled one stays brighter while it has the focus, however it got it, as the original's */
+.dvtApp .atlButton--primary:not(:disabled):hover,
+.dvtApp .atlButton--primary:not(:disabled):focus,
+.dvtFlyout .atlButton--primary:not(:disabled):hover,
+.dvtFlyout .atlButton--primary:not(:disabled):focus,
+.dvtSettings .atlButton--primary:not(:disabled):hover,
+.dvtSettings .atlButton--primary:not(:disabled):focus {
+  background: var(--color-accent);
+  filter: brightness(1.1);
+}
+
+.dvtApp .atlButton--empty:not(.dvtHistory__clear):not(:disabled),
+.dvtFlyout .atlButton--empty:not(:disabled),
+.dvtSettings .atlButton--empty:not(:disabled) {
+  color: var(--color-accent-button-text);
+}
+
+.dvtFlyout .atlFlyout__header > .atlButton {
+  border: 0;
+  background: color-mix(in srgb, var(--color-text-secondary) 10%, transparent);
+}
+
+:root.themeDark .dvtFlyout .atlFlyout__header > .atlButton {
+  background: color-mix(in srgb, var(--color-text-secondary) 15%, transparent);
+}
+
+/* The text of the flyouts: a heading after anything has room above it */
+.dvtText * + h3,
+.dvtText * + h4 {
+  margin-top: 28px;
+}
+
+.dvtText .dvtText__flush {
+  margin-bottom: 0;
+}
+
+.dvtText dd {
+  margin: 0;
+}
+
+.dvtText dd + dt {
+  margin-top: 14px;
+}
+
+.dvtSpacer {
+  height: var(--space-6);
+}
+
+/* The menu of a request: rows of 37 pixels, 8 pixels under the wrench */
+.atlPopover.dvtMenu {
+  min-width: 0;
+  margin: var(--space-1) 0 0 -14px;
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+}
+
+.dvtMenu__item {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: var(--space-2) 12px;
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-s);
+  line-height: 21px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.dvtMenu__item:hover,
+.dvtMenu__item:focus {
+  outline: none;
+  background: var(--color-surface-secondary);
+}
+
+:root.themeDark .dvtMenu__item:hover,
+:root.themeDark .dvtMenu__item:focus {
+  background: var(--color-surface-tertiary);
+}
+
+.dvtMenu__item:disabled {
+  background: none;
+  color: var(--color-text-tertiary);
+  cursor: not-allowed;
+}
+
+/* A status that succeeded, in the theme's colour for text of success */
+.dvtBadge--healthy {
+  color: #2b8342;
+}
+
+:root.themeDark .dvtBadge--healthy {
+  color: var(--color-healthy);
+}
+
+.dvtHistory__item:first-child {
+  border-radius: 4px 4px 0 0;
+}
+
+.dvtHistory__item:last-child {
+  border-radius: 0 0 4px 4px;
+}
+
+.dvtHistory__item:only-child {
+  border-radius: 4px;
+}
+
+/* The settings: as wide as the original's, its switches the small ones */
+.atlModal.dvtSettings {
+  width: 460px;
+  min-width: 0;
+  max-width: calc(100vw - 32px);
+}
+
+.dvtSettings .atlFormRow__help {
+  max-width: 400px;
+  color: var(--color-text-tertiary);
+  line-height: 18px;
+}
+
+.dvtSettings .atlSwitch__track {
+  width: 28px;
+  height: 16px;
+  border-radius: 8px;
+}
+
+.dvtSettings .atlSwitch__track::after {
+  width: 12px;
+  height: 12px;
+}
+
+.dvtSettings .atlSwitch__track[aria-checked="true"] {
+  background: var(--color-accent);
+}
+
+.dvtSettings .atlSwitch__track[aria-checked="true"]::after {
+  transform: translateX(12px);
+}
+
+/* The Grok debugger's text areas: twelve pixels inside, lines of 21 */
+.dvtGrok textarea.atlField {
+  padding: 11px;
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+.dvtGrok__side {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* The rows of the settings as the original spaces them: 16 pixels apart, under a title of the
+   theme's medium size, as the original's console gives it */
+.dvtSettings .atlModal__header h2 {
+  font-size: var(--font-size-xl);
+  line-height: 28px;
+  letter-spacing: -0.021em;
+}
+
+.dvtSettings .atlModal__body > .atlStack {
+  gap: var(--space-4);
+}
+
+.dvtSettings .atlSwitch {
+  line-height: 16px;
+}
+
+.dvtSettings .dvtChecks {
+  gap: 0;
+}
+
+.dvtSettings .dvtChecks .atlCheckbox {
+  display: flex;
+  align-items: center;
+  min-height: 24px;
+}
+
+/* The file picker of the Import flyout: a zone a file is dropped on, as the original's */
+.dvtFilePicker {
+  position: relative;
+  height: 104px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  box-shadow: inset 0 0 0 1px var(--color-border-light);
+  color: var(--color-text-primary);
+}
+
+.dvtFilePicker:focus-within {
+  box-shadow:
+    inset 0 0 0 1px var(--color-accent),
+    0 0 0 2px var(--color-focus-ring);
+}
+
+.dvtFilePicker__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.dvtFilePicker__prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 0 var(--space-6);
+  pointer-events: none;
+  text-align: center;
+}
+
+.dvtFilePicker__prompt > .atlIcon {
+  width: 24px;
+  height: 24px;
+  margin-bottom: var(--space-4);
+}
+
+.dvtFilePicker__text {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: var(--font-size-s);
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dvtFilePicker__text strong {
+  font-weight: var(--font-weight-semibold);
+}
+
+.dvtFilePicker__remove {
+  position: relative;
+  z-index: 1;
+  height: 24px;
+  padding: 0 var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--color-accent);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+  font-weight: var(--font-weight-medium);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.dvtFilePicker__remove:hover {
+  text-decoration: underline;
+}
+
+/* The Import flyout's choice of merging or overwriting: a title of 15 px, each choice a line of 24 px */
+.dvtImportOptions {
+  margin-top: var(--space-1);
+}
+
+.dvtImportOptions__title {
+  display: block;
+  margin-bottom: var(--space-2);
+  font-size: var(--font-size-m);
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.dvtImportOptions .atlRadio {
+  height: 24px;
+  line-height: 24px;
+}
+
+/* The kit's group spaces its choices itself: the original's follow each other */
+.dvtImportOptions .atlRadio + .atlRadio {
+  margin-top: calc(-1 * var(--space-2));
 }

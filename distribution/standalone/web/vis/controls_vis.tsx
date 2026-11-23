@@ -7,6 +7,7 @@
  * and the filters it makes, are in controls.ts.
  */
 
+import '../styles/input_controls.css';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button, cx } from '../components/basic';
 import { ComboBox } from '../components/combo_box';
@@ -15,7 +16,7 @@ import { Tooltip } from '../components/overlay';
 import { resolveTimeRange } from '../lib/dates';
 import { fieldFormatter } from '../lib/field_formats';
 import { timeRangeFilter } from '../lib/query';
-import type { Filter, IndexPattern } from '../lib/types';
+import type { Field, Filter, IndexPattern } from '../lib/types';
 import type { Vis } from '../lib/vis';
 import { services } from '../services';
 import { errorMessage } from '../services/http';
@@ -26,6 +27,7 @@ import {
   NOT_INITIALIZED,
   PARTIAL_RESULTS,
   ancestorsOf,
+  asksAsTyped,
   ceilWithPrecision,
   controlLabel,
   controlSearchBody,
@@ -76,7 +78,12 @@ const isAbort = (failure: unknown) => (failure as Error | undefined)?.name === '
 interface Ancestor {
   control: ControlParam;
   value: ControlValue;
+  /** Its field as its own index pattern has it */
+  field?: Field;
 }
+
+const fieldNamed = (indexPattern: IndexPattern | undefined, name: string | undefined) =>
+  name ? indexPattern?.fields.find((candidate) => candidate.name === name) : undefined;
 
 async function fetchList(
   control: ControlParam,
@@ -92,7 +99,7 @@ async function fetchList(
   }
   const field = indexPattern.fields.find((candidate) => candidate.name === control.fieldName);
   const ancestorFilters = ancestors
-    .map((ancestor) => filterOf(ancestor.control, ancestor.value))
+    .map((ancestor) => filterOf(ancestor.control, ancestor.value, ancestor.field))
     .filter((filter): filter is Filter => filter !== undefined);
   const body = controlSearchBody(indexPattern, termsAggs(control, field, query), ancestorFilters, timeClause, {
     timeout: `${AUTOCOMPLETE_TIMEOUT_MS}ms`,
@@ -209,8 +216,8 @@ function ListControl({
 }) {
   const id = useId();
   const [loading, setLoading] = useState(false);
-  const dynamic = Boolean(control.options?.dynamicOptions);
   const indexPattern = state?.indexPattern;
+  const dynamic = asksAsTyped(control, fieldNamed(indexPattern, control.fieldName));
   const format = useMemo(
     () => (indexPattern && control.fieldName ? fieldFormatter(indexPattern, control.fieldName, services.formatSettings()) : undefined),
     [indexPattern, control.fieldName]
@@ -404,6 +411,7 @@ function DualRange({
                 type="button"
                 className="visControls__tick"
                 style={{ left: `calc((100% - 16px) * ${trackShare(tick, min, max)} + 8px)` }}
+                title={String(tick)}
                 value={tick}
                 tabIndex={-1}
                 disabled={off}
@@ -517,8 +525,16 @@ export function ControlsVis({
       const timeClause =
         useTime && indexPattern ? timeRangeFilter(indexPattern, resolveTimeRange(time, { weekStart: services.weekStart() })) : undefined;
       if (control.type === 'range') return fetchRange(control, indexPattern, timeClause, signal);
-      const ancestors = (ancestry.get(control.id) ?? []).map((ancestor) => ({ control: ancestor, value: values[ancestor.id] }));
-      if (ancestors.length > 0) asked.current.set(control.id, JSON.stringify(ancestors.map((ancestor) => ancestor.value ?? null)));
+      const parents = ancestry.get(control.id) ?? [];
+      if (parents.length > 0) asked.current.set(control.id, JSON.stringify(parents.map((ancestor) => values[ancestor.id] ?? null)));
+      // Each parent filters on its field as its own index pattern has it
+      const ancestors = await Promise.all(
+        parents.map(async (ancestor) => ({
+          control: ancestor,
+          value: values[ancestor.id],
+          field: fieldNamed(await indexPatternOf(ancestor.indexPattern ?? ''), ancestor.fieldName),
+        }))
+      );
       return fetchList(control, indexPattern, ancestors, query, timeClause, signal);
     },
     [ancestry, indexPatternOf, useTime]
@@ -583,7 +599,11 @@ export function ControlsVis({
   const pinned = params.pinFilters ?? services.uiSettings.get('filters:pinnedByDefault', false);
 
   const submit = (values: ControlValues) => {
-    onFiltersChange?.(submitFilters(controls, values, input.filters, Boolean(pinned)));
+    onFiltersChange?.(
+      submitFilters(controls, values, input.filters, Boolean(pinned), (control) =>
+        fieldNamed(states[control.id]?.indexPattern, control.fieldName)
+      )
+    );
   };
   const stage = (id: string, value: ControlValue) => {
     const next = { ...latest.current.staged, [id]: value };

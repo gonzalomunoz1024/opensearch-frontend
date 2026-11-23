@@ -1,0 +1,592 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/*
+ * The list a kind of saved object opens with, as the original's table list view draws it in the
+ * theme: a panel with a heading, a 40px search box, a table with a quiet header and hairlines
+ * between its rows, and the pages under it.
+ */
+
+.shlListing {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: var(--space-4);
+  background: var(--color-surface);
+}
+
+.shlListing--l {
+  padding: var(--space-6);
+}
+
+.shlListing__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.shlListing__content {
+  width: 100%;
+  padding: var(--space-6);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+  font-size: var(--font-size-s);
+}
+
+/* The panel of a page with nothing to list is as wide as what it says, in the middle */
+.shlListing__content--empty {
+  width: auto;
+  max-width: 100%;
+  align-self: center;
+}
+
+.shlListing__top {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.shlListing__title {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xxl);
+  font-weight: var(--font-weight-semibold);
+  line-height: 34px;
+  letter-spacing: -0.022em;
+}
+
+.shlListing__callout {
+  margin-bottom: var(--space-4);
+}
+
+.shlListing__callout p {
+  margin: 0;
+}
+
+.shlListing__tools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.shlListing__delete.atlButton {
+  flex: none;
+}
+
+.shlListing__search {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+  height: 40px;
+  padding: 0 var(--space-3) 0 40px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  box-shadow: inset 0 0 0 1px var(--color-border-light);
+  color: var(--color-text-primary);
+}
+
+.shlListing__search > .atlIcon {
+  position: absolute;
+  left: var(--space-3);
+}
+
+.shlListing__search:focus-within {
+  box-shadow:
+    inset 0 0 0 1px var(--color-accent),
+    0 0 0 2px var(--color-focus-ring);
+}
+
+.shlListing__search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  outline: none;
+  appearance: none;
+}
+
+.shlListing__search input::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.shlListing__search input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+/* The original's clear button: a small round mark at the end of the field */
+.shlListing__clear {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: var(--space-2);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-text-tertiary);
+  color: var(--color-surface);
+  cursor: pointer;
+}
+
+.shlListing__clear .atlIcon {
+  width: 10px;
+  height: 10px;
+  stroke-width: 2.5;
+}
+
+.shlListing__tableWrap {
+  position: relative;
+}
+
+/* Read aloud and not seen, yet a pixel high above the rows, as the original's */
+.shlListing__caption {
+  position: relative;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+/* Figures of one width, as the original's tables set them (its hyphens are wider so) */
+.shlListing__table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  font-feature-settings: "calt", "kern", "liga", "tnum";
+  font-kerning: normal;
+  line-height: 21px;
+}
+
+.shlListing__table th {
+  padding: 0;
+  background: var(--color-surface-secondary);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 18px;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.shlListing__table td {
+  padding: 0;
+  border-top: 1px solid var(--color-border-light);
+  vertical-align: middle;
+}
+
+.shlListing__checkCell {
+  width: 32px;
+}
+
+/* The original's theme takes the line under a row's cells away, but not under the one with the
+   tick: it shows under the last row only, and is half a pixel of the table's height */
+.shlListing__table td.shlListing__checkCell {
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.shlListing__actionsCell {
+  width: 100px;
+}
+
+.shlListing__cell {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 10px var(--space-3);
+  overflow: hidden;
+}
+
+/* A title the original draws as a button: a block with the browser's own line height, so its
+   lines stand closer together than a link's where it takes two */
+.shlListing__buttonTitle {
+  display: block;
+  line-height: normal;
+  text-align: left;
+}
+
+.shlListing__cell--right {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.shlListing__cell--center {
+  justify-content: center;
+  text-align: center;
+}
+
+.shlListing__text {
+  min-width: 0;
+  overflow-wrap: break-word;
+  text-overflow: ellipsis;
+}
+
+.shlListing__table th .shlListing__text {
+  overflow: hidden;
+}
+
+.shlListing__sort {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.shlListing__sort:hover,
+.shlListing__sort:focus-visible {
+  color: var(--color-text-primary);
+}
+
+.shlListing__sortIcon {
+  margin-left: var(--space-1);
+  color: var(--color-accent);
+}
+
+.shlListing__row:hover {
+  background: var(--color-surface-secondary);
+}
+
+.shlListing__row--selected,
+.shlListing__row--selected:hover {
+  background: color-mix(in srgb, var(--color-accent) var(--tint-opacity), var(--color-surface));
+}
+
+/* A search on its way: a line runs over the rows, as in the original */
+.shlListing__tableWrap--loading tbody::before {
+  position: absolute;
+  height: 2px;
+  background: var(--color-accent);
+  content: "";
+  animation: shlListingLoading 1000ms linear infinite;
+}
+
+@keyframes shlListingLoading {
+  from {
+    left: 0;
+    width: 0;
+  }
+
+  20% {
+    left: 0;
+    width: 40%;
+  }
+
+  80% {
+    left: 60%;
+    width: 40%;
+  }
+
+  to {
+    left: 100%;
+    width: 0;
+  }
+}
+
+/* What only a narrow screen shows: the head over the cards, and each cell's small header */
+.shlListing__mobileHead,
+.shlListing__mobileHeader {
+  display: none;
+}
+
+/*
+ * On a narrow screen, as the original's table: its header gives way to a head with the box that
+ * ticks every row and a menu that sorts them, and each row is a card whose cells wrap, half its
+ * width or more each, each under the name of its column; the tick and the pencil stand in its
+ * corners. The page's heading and its create button stack, as wide as the panel.
+ */
+@media (max-width: 767px) {
+  /* The original's items stacked: 16 px under one and 12 over the next */
+  .shlListing__top {
+    flex-direction: column;
+    align-items: stretch;
+    gap: calc(var(--space-4) + var(--space-3));
+    margin-bottom: var(--space-5);
+  }
+
+  .shlListing__tools {
+    margin-bottom: var(--space-8);
+  }
+
+  .shlListing__mobileHead {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: var(--space-2) 0;
+  }
+
+  /* As the original's tick box with a label: the box 3 px down the label's line, the words 24 px
+     in, which is what lines them up with the menu's word */
+  .shlListing__selectAll {
+    position: relative;
+    display: inline-block;
+    padding-left: var(--space-6);
+    line-height: 24px;
+    cursor: pointer;
+  }
+
+  .shlListing__selectAll .shlListing__tick {
+    position: absolute;
+    top: 3px;
+    left: 0;
+  }
+
+  /* The menu's button stands 1.2 px lower than the tick box's line, where the original's lining
+     up of the two by their baselines puts it (which makes the head 41.2 px high) */
+  .shlListing__sorting {
+    padding-top: 1.2px;
+  }
+
+  /* The original's empty button flush with the panel's edge: no room at its sides */
+  .shlListing__sorting .atlButton {
+    padding: 0;
+  }
+
+  /* Its height takes in the last card's margin, as the original's table does */
+  .shlListing__table {
+    display: flow-root;
+  }
+
+  .shlListing__table tbody {
+    display: block;
+  }
+
+  .shlListing__table thead {
+    display: none;
+  }
+
+  .shlListing__table .shlListing__row {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    margin-bottom: var(--space-2);
+    padding: var(--space-2) var(--space-2) var(--space-2) 36px;
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-card);
+  }
+
+  .shlListing__table .shlListing__row--actions {
+    padding-right: 40px;
+  }
+
+  .shlListing__table .shlListing__row > td {
+    display: block;
+    min-width: 50%;
+    border: 0;
+  }
+
+  .shlListing__table .shlListing__row > .shlListing__checkCell {
+    position: absolute;
+    top: var(--space-2);
+    left: var(--space-1);
+    width: 32px;
+    min-width: 0;
+  }
+
+  .shlListing__table .shlListing__row > .shlListing__actionsCell {
+    position: absolute;
+    top: var(--space-4);
+    right: var(--space-2);
+    width: 24px;
+    min-width: 0;
+  }
+
+  .shlListing__actionsCell .shlListing__cell {
+    flex-direction: column;
+    padding: 0;
+  }
+
+  .shlListing__actionsCell .shlListing__hoverItem {
+    margin-bottom: var(--space-2);
+  }
+
+  /* The name of a cell's column: the original's smallest size (11 px) at seven eighths */
+  .shlListing__mobileHeader {
+    display: block;
+    min-height: 24px;
+    margin-bottom: calc(-1 * var(--space-2));
+    padding: var(--space-2) var(--space-2) 0;
+    overflow: hidden;
+    color: var(--color-text-secondary);
+    font-size: calc(var(--font-size-chart) * 0.875);
+    line-height: 1.5;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* The original's check box: a square of the theme, the accent once ticked */
+.shlListing__tick {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.shlListing__tick input {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.shlListing__square {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  background: var(--color-surface);
+  color: var(--color-on-accent);
+}
+
+.shlListing__square .atlIcon {
+  width: 12px;
+  height: 12px;
+  stroke-width: 2;
+}
+
+.shlListing__tick--on .shlListing__square {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+}
+
+.shlListing__tick--some .shlListing__square {
+  border-color: var(--color-accent);
+}
+
+.shlListing__tick--some .shlListing__square::after {
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+  background: var(--color-accent);
+  content: "";
+}
+
+.shlListing__tick input:disabled {
+  cursor: not-allowed;
+}
+
+.shlListing__tick input:disabled + .shlListing__square {
+  border-color: var(--color-border-light);
+  background: var(--color-border-light);
+}
+
+.shlListing__tick input:focus-visible + .shlListing__square {
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
+}
+
+/* The pencil of a row is quieter until the row is under the pointer, on a wide screen */
+@media (min-width: 992px) {
+  .shlListing__hoverItem {
+    opacity: 0.7;
+    filter: grayscale(100%);
+    transition:
+      opacity var(--duration-normal) var(--ease-out-quint),
+      filter var(--duration-normal) var(--ease-out-quint);
+  }
+
+  .shlListing__row:hover .shlListing__hoverItem,
+  .shlListing__hoverItem:focus-within {
+    opacity: 1;
+    filter: none;
+  }
+}
+
+/* The pencil sits on a line of text, as the original's icon in its popover's anchor */
+.shlListing__pencil {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  line-height: inherit;
+  cursor: pointer;
+}
+
+.shlListing__pencil .atlIcon {
+  vertical-align: middle;
+}
+
+/* What a page with nothing to list says, as the original's empty prompt */
+.shlListing__empty {
+  max-width: 504px;
+  margin: 0 auto;
+  padding: var(--space-6);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+  text-align: center;
+}
+
+.shlListing__emptyIcon.atlIcon {
+  display: block;
+  margin: 0 auto;
+  width: 40px;
+  height: 40px;
+  color: var(--color-text-tertiary);
+  stroke-width: 1;
+}
+
+.shlListing__emptyTitle {
+  margin: var(--space-4) 0 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xxl);
+  font-weight: var(--font-weight-semibold);
+  line-height: 34px;
+  letter-spacing: -0.022em;
+}
+
+.shlListing__emptyBody {
+  margin-top: var(--space-4);
+}
+
+.shlListing__emptyBody p {
+  margin: 0;
+}
+
+.shlListing__emptyBody p + p {
+  margin-top: 21px;
+}
+
+.shlListing__emptyActions {
+  margin-top: var(--space-6);
+}
+
+.shlListing__emptyLink {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent);
+  font: inherit;
+  cursor: pointer;
+}

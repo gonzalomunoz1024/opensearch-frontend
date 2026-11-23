@@ -5,15 +5,16 @@
  * filters or the visualization itself change, and hands the answer to the drawing of its kind.
  */
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ChartMessage, LegendToggle } from '../charts/core';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ChartMessage } from '../charts/core';
 import { ErrorBoundary } from '../components/basic';
-import type { Table } from '../lib/aggs';
+import type { AggContext, Table } from '../lib/aggs';
 import type { TimeRange } from '../lib/dates';
 import type { Filter } from '../lib/types';
 import { visType, type UiState, type Vis } from '../lib/vis';
 import type { RequestRecord } from '../services/search';
 import { errorMessage } from '../services/http';
+import { useFilterChoice } from './apply_filters';
 import { ControlsVis } from './controls_vis';
 import { GaugeVis } from './gauge_vis';
 import { HeatmapVis } from './heatmap_vis';
@@ -25,7 +26,7 @@ import { fetchVisData, type VisData, type VisInput } from './request';
 import { TableVis } from './table_vis';
 import { TagCloudVis } from './tag_cloud_vis';
 import { TileMapVis } from './tile_map/tile_map_vis';
-import { splitTables, visFailure, type VisFailure, type VisRenderProps } from './types';
+import { splitDrawing, splitParts, splitTables, visFailure, type VisFailure, type VisRenderProps } from './types';
 import type { TsvbData, TsvbTableData } from './tsvb/data';
 import { TimelineVis } from './timeline/timeline_vis';
 import { TsvbVis } from './tsvb/vis';
@@ -39,6 +40,8 @@ import '../styles/vis.css';
 export interface VisInspectData {
   requests: RequestRecord[];
   table?: Table;
+  /** What the table's columns were asked with, which Inspect's cell filters are made from */
+  context?: AggContext;
   vega?: VegaDebugValues;
   tsvb?: TsvbData | TsvbTableData;
 }
@@ -82,15 +85,15 @@ const DRAWN: Record<string, (props: VisRenderProps) => ReactNode> = {
   tile_map: (props) => <TileMapVis {...props} />,
 };
 
-// The kinds whose legend can be opened and closed from the corner of the chart
-const LEGEND_KINDS = new Set(['area', 'line', 'histogram', 'horizontal_bar', 'pie', 'heatmap']);
-
 /** Whether this product draws a kind of visualization */
 export const canDraw = (type: string) =>
   type in DRAWN || type === 'markdown' || type === 'input_control_vis' || type === 'metrics' || type === 'vega' || type === 'timelion';
 
 /** Whether a kind of visualization takes colours from the page's memory, and so a turn */
 export const takesTurn = (type: string) => type in DRAWN;
+
+// The maps filter as they always have; the other drawings' clicks go as the original's value click
+const MAPS = new Set(['region_map', 'tile_map']);
 
 function AggVisualization({ vis: saved, input, tick, uiState, onUiState, onFilter, onTimeChange, onData, turn, onError }: VisualizationProps) {
   // Params a drawing sets on an aggregation (a map's bounds and precision), until the aggregations change
@@ -106,6 +109,7 @@ function AggVisualization({ vis: saved, input, tick, uiState, onUiState, onFilte
   const [data, setData] = useState<VisData>();
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(true);
+  const choice = useFilterChoice({ onFilter, onTimeChange, indexPattern: data?.indexPattern });
   const report = useRef(onData);
   report.current = onData;
   const reportError = useRef(onError);
@@ -123,7 +127,7 @@ function AggVisualization({ vis: saved, input, tick, uiState, onUiState, onFilte
         setError(undefined);
         setLoading(false);
         reportError.current?.(undefined);
-        report.current?.({ requests: answer.requests, table: answer.table });
+        report.current?.({ requests: answer.requests, table: answer.table, context: answer.context });
       })
       .catch((failure) => {
         if ((failure as Error).name === 'AbortError') return;
@@ -137,6 +141,16 @@ function AggVisualization({ vis: saved, input, tick, uiState, onUiState, onFilte
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, tick]);
 
+  // Rows or columns, as the original reads them from the visualization's params: columns unless
+  // it says rows, which its editor says once a chart is split
+  const asRows = Boolean(vis.params.row);
+  // A split its drawing lays out itself, the same while the data is
+  const splitBy = splitDrawing(vis.type);
+  const splits = useMemo(() => {
+    const parts = data && splitBy === 'frame' ? splitParts(data.table) : undefined;
+    return parts?.length ? { rows: asRows, parts } : undefined;
+  }, [data, splitBy, asRows]);
+
   const draw = DRAWN[vis.type];
   let body: ReactNode;
   if (error) {
@@ -149,35 +163,32 @@ function AggVisualization({ vis: saved, input, tick, uiState, onUiState, onFilte
   } else if (!data) {
     body = null;
   } else {
-    const parts = vis.type === 'table' || vis.type in DRAWN ? splitTables(data.table) : [{ table: data.table }];
-    const split = vis.aggs.find((agg) => agg.schema === 'split' && agg.enabled !== false);
-    const asRows = split?.params?.row !== false;
-    const props = { vis, uiState: uiState ?? vis.uiState, onUiState, onFilter, onTimeChange, onAggParams };
-    body =
-      parts.length === 1 && parts[0].label === undefined ? (
-        draw({ ...props, data })
-      ) : parts.length === 0 ? (
-        <ChartMessage>No results found</ChartMessage>
-      ) : (
-        <div className={`visSplit ${asRows ? 'visSplit--rows' : 'visSplit--columns'}`}>
-          {parts.map((part) => (
-            <div key={part.label} className="visSplit__part">
-              <div className="visSplit__title">{part.label}</div>
-              <div className="visSplit__body">{draw({ ...props, data: { ...data, table: part.table } })}</div>
-            </div>
-          ))}
-        </div>
-      );
+    // A data table is handed the whole of a split: it draws a table of each bucket itself
+    const parts = splitBy === 'whole' ? [{ table: data.table }] : splitTables(data.table);
+    const clicks = onFilter && !MAPS.has(vis.type) ? choice.apply : onFilter;
+    const props = { vis, uiState: uiState ?? vis.uiState, onUiState, onFilter: clicks, onTimeChange, onAggParams };
+    body = splits ? (
+      draw({ ...props, data, splits })
+    ) : parts.length === 1 && parts[0].label === undefined ? (
+      draw({ ...props, data })
+    ) : parts.length === 0 ? (
+      <ChartMessage>No results found</ChartMessage>
+    ) : (
+      <div className={`visSplit ${asRows ? 'visSplit--rows' : 'visSplit--columns'}`}>
+        {parts.map((part) => (
+          <div key={part.label} className="visSplit__part">
+            <div className="visSplit__title">{part.label}</div>
+            <div className="visSplit__body">{draw({ ...props, data: { ...data, table: part.table }, split: part.split })}</div>
+          </div>
+        ))}
+      </div>
+    );
   }
-  const state = uiState ?? vis.uiState;
-  const legendOpen = state.vis?.legendOpen !== false;
   return (
     <>
       {loading && <div className="atlProgress visRoot__progress" />}
       {body}
-      {data && !error && onUiState && LEGEND_KINDS.has(vis.type) && vis.params.addLegend !== false && (
-        <LegendToggle open={legendOpen} onToggle={() => onUiState({ ...state, vis: { ...state.vis, legendOpen: !legendOpen } })} />
-      )}
+      {choice.dialog}
     </>
   );
 }
@@ -198,6 +209,7 @@ export function Visualization(props: VisualizationProps) {
         onUiState={props.onUiState}
         onTimeChange={props.onTimeChange}
         onData={props.onData}
+        onError={props.onError}
       />
     );
   } else if (vis.type === 'vega') {

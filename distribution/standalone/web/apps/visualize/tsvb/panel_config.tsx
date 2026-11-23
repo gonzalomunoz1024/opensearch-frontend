@@ -96,7 +96,7 @@ function TimeseriesPanel(props: PanelProps) {
         <Spacer />
         <OptionsPanel title="Style">
           <Spacer size="m" />
-          <Row center>
+          <Row center wrap responsive={false}>
             <Item>
               <Field label="Axis min">
                 <TextInput type="number" value={model.axis_min} onChange={(text) => onChange({ axis_min: text })} label="Axis min" />
@@ -119,7 +119,7 @@ function TimeseriesPanel(props: PanelProps) {
             </Item>
           </Row>
           <Rule />
-          <Row center>
+          <Row center wrap responsive={false}>
             <Item grow={false}>
               <Label>Background color:</Label>
             </Item>
@@ -136,7 +136,7 @@ function TimeseriesPanel(props: PanelProps) {
               <Label>Legend position</Label>
             </Item>
             <Item>
-              <Combo options={LEGEND_POSITIONS} value={model.legend_position} clearable={false} onChange={(value) => onChange({ legend_position: value })} />
+              <Combo options={LEGEND_POSITIONS} value={model.legend_position} clearable={false} narrow onChange={(value) => onChange({ legend_position: value })} />
             </Item>
             <Item grow={false}>
               <Label>Display grid</Label>
@@ -148,7 +148,7 @@ function TimeseriesPanel(props: PanelProps) {
               <Label>Tooltip</Label>
             </Item>
             <Item>
-              <Combo options={TOOLTIP_MODES} value={model.tooltip_mode} clearable={false} onChange={(value) => onChange({ tooltip_mode: value })} />
+              <Combo options={TOOLTIP_MODES} value={model.tooltip_mode} clearable={false} narrow onChange={(value) => onChange({ tooltip_mode: value })} />
             </Item>
           </Row>
         </OptionsPanel>
@@ -212,7 +212,7 @@ function TopNPanel(props: PanelProps) {
         <Spacer />
         <OptionsPanel title="Style">
           <Spacer size="m" />
-          <Row center>
+          <Row center wrap responsive={false}>
             <Item grow={false}>
               <Label>Background color:</Label>
             </Item>
@@ -254,7 +254,7 @@ function GaugePanel(props: PanelProps) {
         <Spacer />
         <OptionsPanel title="Style">
           <Spacer size="m" />
-          <Row>
+          <Row wrap responsive={false}>
             <Item>
               <Field label="Gauge max (empty for auto)">
                 <TextInput type="number" value={model.gauge_max} onChange={(text) => onChange({ gauge_max: text })} label="Gauge max (empty for auto)" />
@@ -277,7 +277,7 @@ function GaugePanel(props: PanelProps) {
             </Item>
           </Row>
           <Rule />
-          <Row center>
+          <Row center wrap responsive={false}>
             <Item grow={false}>
               <Label>Background color:</Label>
             </Item>
@@ -333,7 +333,7 @@ function MarkdownPanel(props: PanelProps) {
         <Spacer />
         <OptionsPanel title="Style">
           <Spacer size="m" />
-          <Row center>
+          <Row center wrap responsive={false}>
             <Item grow={false}>
               <Label>Background color:</Label>
             </Item>
@@ -360,6 +360,7 @@ function MarkdownPanel(props: PanelProps) {
                 options={ALIGNMENTS}
                 value={model.markdown_vertical_align}
                 clearable={false}
+                narrow
                 onChange={(value) => onChange({ markdown_vertical_align: value })}
               />
             </Item>
@@ -403,7 +404,7 @@ function TablePanel(props: PanelProps) {
           <section className="tvbOptions">
             <p className="tvbText">For the table visualization you need to define a field to group by using a terms aggregation.</p>
             <Spacer size="m" />
-            <Row>
+            <Row wrap responsive={false}>
               <Item testId="groupByField">
                 <Field label="Group by field">
                   <FieldSelect fields={fields} indexPattern={str(props.model, 'index_pattern')} value={props.model.pivot_id} onChange={changePivot} />

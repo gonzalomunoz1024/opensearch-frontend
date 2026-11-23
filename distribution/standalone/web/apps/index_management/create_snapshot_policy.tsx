@@ -5,20 +5,13 @@
  * they go, when, how long they are kept, whom it tells, and the switches of a snapshot.
  */
 
-import { useEffect, useRef, useState } from 'react';
-import { Accordion, Button, IconButton, Panel } from '../../components/basic';
-import {
-  Checkbox,
-  NumberField,
-  RadioGroup,
-  Select,
-  TextArea,
-  TextField,
-} from '../../components/form';
+import { Fragment, useEffect, useRef, useState } from 'react';
+import { Accordion, Button, IconButton } from '../../components/basic';
+import { Checkbox, NumberField, Select, TextArea, TextField } from '../../components/form';
+import { Icon } from '../../components/icon';
 import { useLocation } from '../../router';
 import { useBreadcrumbs } from '../../shell/state';
-import { ExternalLink, PageTitle, go, ism, toasts } from './common';
-import { FormPanel } from './job_parts';
+import { ExternalLink, go, ism, toasts } from './common';
 import type { Channel } from './notification_config';
 import { CRUMBS, ROUTES } from './routes';
 import {
@@ -42,8 +35,11 @@ import {
   CronSchedule,
   Field,
   IndicesRepositoryInput,
+  PolicyPanel,
   REPOSITORY_REQUIRED,
+  RadioStack,
   SNAPSHOT_DOCS,
+  Spacer,
   useRepositories,
   useSourceOptions,
 } from './snapshot_parts';
@@ -126,6 +122,8 @@ export function CreateSnapshotPolicy({ isEdit }: { isEdit: boolean }) {
 
   useEffect(() => {
     here.current = true;
+    // The channels are asked for with the policy, as the plugin asks for them when it opens
+    void loadChannels();
     const open = async () => {
       if (isEdit) {
         if (!id) {
@@ -148,10 +146,8 @@ export function CreateSnapshotPolicy({ isEdit }: { isEdit: boolean }) {
               : `Could not load the policy: ${answer.ok ? 'Policy was empty' : answer.error}`
           );
           go(ROUTES.SNAPSHOT_POLICIES);
-          return;
         }
       }
-      await loadChannels();
     };
     void open();
     return () => {
@@ -201,13 +197,15 @@ export function CreateSnapshotPolicy({ isEdit }: { isEdit: boolean }) {
 
   const condition = policy.deletion?.condition;
   return (
-    <div className="ismPage ismPage--form ismSnapshotPolicy">
-      <PageTitle title={isEdit ? 'Edit policy' : 'Create policy'}>
+    <div className="ismSnapshotPolicyPage ismSnapshotPolicyPage--form ismSnapshotPolicy">
+      <h1 className="atlTitleL">{isEdit ? 'Edit' : 'Create'} policy</h1>
+      <p className="ismSnapshotPolicyPage__subtitle">
         Snapshot policies allow you to define an automated snapshot schedule and retention period.{' '}
         <ExternalLink href={SNAPSHOT_DOCS} />
-      </PageTitle>
+      </p>
+      <Spacer />
 
-      <FormPanel title="Policy settings">
+      <PolicyPanel title="Policy settings">
         <div className="ismSnapshotForm">
           <Field title="Policy name" error={errors.name}>
             <TextField
@@ -222,6 +220,7 @@ export function CreateSnapshotPolicy({ isEdit }: { isEdit: boolean }) {
               compact
             />
           </Field>
+          <Spacer />
           <Field title="Description" optional>
             <TextArea
               value={policy.description ?? ''}
@@ -232,9 +231,10 @@ export function CreateSnapshotPolicy({ isEdit }: { isEdit: boolean }) {
             />
           </Field>
         </div>
-      </FormPanel>
+      </PolicyPanel>
+      <Spacer />
 
-      <FormPanel title="Source and destination">
+      <PolicyPanel title="Source and destination">
         <div className="ismSnapshotForm">
           <IndicesRepositoryInput
             options={source.options}
@@ -255,9 +255,10 @@ export function CreateSnapshotPolicy({ isEdit }: { isEdit: boolean }) {
             onRepositoryCreated={reload}
           />
         </div>
-      </FormPanel>
+      </PolicyPanel>
+      <Spacer />
 
-      <FormPanel title="Snapshot schedule">
+      <PolicyPanel title="Snapshot schedule">
         <div className="ismSnapshotForm">
           <CronSchedule
             title="Snapshot frequency"
@@ -281,17 +282,19 @@ export function CreateSnapshotPolicy({ isEdit }: { isEdit: boolean }) {
             disabled={form.deletionOnly}
           />
         </div>
-      </FormPanel>
+      </PolicyPanel>
+      <Spacer />
 
-      <FormPanel title="Retention period">
+      <PolicyPanel title="Retention period">
         <div className="ismSnapshotForm">
-          <RadioGroup
+          <RadioStack
             options={RETENTION_OPTIONS}
             value={form.retention ? 'retention_enabled' : 'retention_disabled'}
             onChange={(chosen) => change({ retention: chosen === 'retention_enabled' })}
           />
           {form.retention && (
             <>
+              <Spacer size="m" />
               <Field title="Maximum age of snapshots retained">
                 <div className="ismSnapshotPolicy__age">
                   <NumberField
@@ -312,9 +315,12 @@ export function CreateSnapshotPolicy({ isEdit }: { isEdit: boolean }) {
                   />
                 </div>
               </Field>
-              <Accordion title="Additional settings" initiallyOpen={false}>
-                <div className="ismSnapshotForm ismSnapshotPolicy__more">
+              <Spacer size="m" />
+              <div className="ismSnapshotForm__accordion">
+                <Accordion title="Additional settings" initiallyOpen={false}>
+                  <Spacer size="m" />
                   <p className="ismSnapshotPolicy__text">Number of snapshots retained</p>
+                  <Spacer size="s" />
                   <div className="ismSnapshotPolicy__counts">
                     <Field title="Minimum" error={errors.minCount}>
                       <NumberField
@@ -348,18 +354,21 @@ export function CreateSnapshotPolicy({ isEdit }: { isEdit: boolean }) {
                       />
                     </Field>
                   </div>
-                  <div>
-                    <p className="ismSnapshotPolicy__text">Deletion frequency</p>
-                    <p className="ismLabeled__help">
+                  <Spacer size="m" />
+                  <p className="ismSnapshotPolicy__text">Deletion frequency</p>
+                  <div className="ismSnapshotPolicy__noteLine">
+                    <span className="ismSnapshotPolicy__note">
                       Configure when to check retention conditions and delete snapshots.
-                    </p>
+                    </span>
                   </div>
+                  <Spacer size="s" />
                   <Checkbox
                     checked={!form.deletionSchedule}
                     onChange={(same) => change({ deletionSchedule: !same })}
                     label="Same as snapshot frequency"
                     testId="delete_schedule_checkbox"
                   />
+                  <Spacer size="s" />
                   {form.deletionSchedule && (
                     <CronSchedule
                       title="Deletion frequency"
@@ -371,96 +380,104 @@ export function CreateSnapshotPolicy({ isEdit }: { isEdit: boolean }) {
                       }
                     />
                   )}
-                </div>
-              </Accordion>
+                </Accordion>
+              </div>
             </>
           )}
         </div>
-      </FormPanel>
+      </PolicyPanel>
+      <Spacer />
 
-      <FormPanel title="Notifications">
+      <PolicyPanel title="Notifications">
         <div className="ismSnapshotForm">
-          <h3>Notify on snapshot activities</h3>
+          <h3 className="atlTitleS">Notify on snapshot activities</h3>
+          <Spacer size="s" />
           <div className="ismTicks">
-            {NOTIFY_TICKS.map((tick) => (
-              <Checkbox
-                key={tick.id}
-                checked={isOn(policy, tick.path)}
-                onChange={(on) => set(tick.path, on)}
-                label={tick.label}
-                testId={tick.id}
-              />
+            {NOTIFY_TICKS.map((tick, at) => (
+              <Fragment key={tick.id}>
+                {at > 0 && <Spacer size="s" />}
+                <Checkbox
+                  checked={isOn(policy, tick.path)}
+                  onChange={(on) => set(tick.path, on)}
+                  label={tick.label}
+                  testId={tick.id}
+                />
+              </Fragment>
             ))}
           </div>
           {notifies(policy) && (
-            <Field title="Select notification channels">
-              <div className="ismSnapshotPolicy__channels">
-                <Select
-                  id="channel-id"
-                  value={policy.notification?.channel?.id ?? ''}
-                  onChange={(channelId) => set('notification.channel.id', channelId)}
-                  options={channels.map((channel) => ({
-                    value: channel.config_id,
-                    label: channel.name,
-                  }))}
-                  placeholder=""
-                  compact
-                  aria-label="Select notification channels"
-                  testId="create-policy-notification-channel-id"
-                />
-                <IconButton
-                  icon="refresh"
-                  label="Refresh"
-                  variant="default"
-                  size="s"
-                  disabled={loadingChannels}
-                  onClick={() => void loadChannels()}
-                  testId="channel-notification-refresh"
-                />
-                <Button
-                  size="s"
-                  icon="external"
-                  iconSide="right"
-                  onClick={() => window.open('/app/notifications-dashboards#/channels')}
-                >
-                  Manage channels
-                </Button>
-              </div>
-            </Field>
+            <>
+              <Spacer size="s" />
+              <Field title="Select notification channels">
+                <div className="ismSnapshotPolicy__channels">
+                  <Select
+                    id="channel-id"
+                    value={policy.notification?.channel?.id ?? ''}
+                    onChange={(channelId) => set('notification.channel.id', channelId)}
+                    options={channels.map((channel) => ({
+                      value: channel.config_id,
+                      label: channel.name,
+                    }))}
+                    placeholder=""
+                    compact
+                    aria-label="Select notification channels"
+                    testId="create-policy-notification-channel-id"
+                  />
+                  <Button
+                    icon="refresh"
+                    aria-label="Refresh"
+                    disabled={loadingChannels}
+                    onClick={() => void loadChannels()}
+                    testId="channel-notification-refresh"
+                  />
+                  {/* A link, as the plugin's, that opens the channels in a new tab */}
+                  <a
+                    className="atlButton"
+                    href="notifications-dashboards#/channels"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Manage channels
+                    <Icon name="external" />
+                  </a>
+                </div>
+              </Field>
+            </>
           )}
         </div>
-      </FormPanel>
+      </PolicyPanel>
+      <Spacer />
 
-      <Panel>
+      <section className="ismPolicyPanel">
         <div className="ismSnapshotPolicy__fold">
           <IconButton
             icon={advancedOpen ? 'chevronDown' : 'chevronRight'}
             label="drop down icon"
-            size="s"
             onClick={() => setAdvancedOpen(!advancedOpen)}
           />
-          <h2 className="ismPanel__heading">
+          <h2 className="atlTitleS">
             Advanced settings <i>– optional</i>
           </h2>
         </div>
         {advancedOpen && (
-          <>
-            <hr className="ismRule" />
+          <div className="ismSnapshotForm">
+            <hr className="ismPolicyPanel__rule" />
             <AdvancedSnapshotSettings
               includeGlobalState={isOn(policy, 'snapshot_config.include_global_state')}
               ignoreUnavailable={isOn(policy, 'snapshot_config.ignore_unavailable')}
               partial={isOn(policy, 'snapshot_config.partial')}
               onChange={(name, value) => set(`snapshot_config.${name}`, value)}
             />
-          </>
+          </div>
         )}
-      </Panel>
+      </section>
+      <Spacer />
 
-      <div className="ismButtons">
-        <Button variant="empty" size="s" onClick={() => go(ROUTES.SNAPSHOT_POLICIES)}>
+      <div className="ismSnapshotPolicyPage__footer">
+        <Button variant="empty" onClick={() => go(ROUTES.SNAPSHOT_POLICIES)}>
           Cancel
         </Button>
-        <Button variant="primary" size="s" loading={busy} onClick={() => void submit()}>
+        <Button variant="primary" loading={busy} onClick={() => void submit()}>
           {isEdit ? 'Update' : 'Create'}
         </Button>
       </div>

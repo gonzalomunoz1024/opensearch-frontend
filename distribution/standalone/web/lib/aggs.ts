@@ -10,6 +10,7 @@
 
 import {
   UNIT_MS,
+  addUnits,
   formatDate,
   parseDateMath,
   parseInterval,
@@ -17,6 +18,7 @@ import {
   scaledDateFormat,
   type AbsoluteRange,
   type Interval,
+  type TimeUnit,
 } from './dates';
 import {
   DEFAULT_FORMAT_SETTINGS,
@@ -24,7 +26,17 @@ import {
   formatSpecOf,
   type FormatSettings,
 } from './field_formats';
-import { buildQuery, existsFilter, phraseFilter, rangeFilter, customFilter } from './query';
+import {
+  buildQuery,
+  cidrRange,
+  customFilter,
+  existsFilter,
+  phraseFilter,
+  phrasesFilter,
+  rangeFilter,
+  type FilterField,
+  type RangeParams,
+} from './query';
 import type { Field, FieldFormatSpec, Filter, IndexPattern, Query } from './types';
 
 type Dsl = Record<string, unknown>;
@@ -50,6 +62,8 @@ export interface AggContext {
   /** The smallest and largest value of a field, for a number histogram with an automatic interval */
   fieldBounds?: Record<string, { min: number; max: number }>;
   queryConfig?: Parameters<typeof buildQuery>[3];
+  /** Every aggregation of the chart: a pipeline on another metric is labelled after it */
+  aggs?: AggConfig[];
 }
 
 export const METRIC_TYPES = [
@@ -84,6 +98,7 @@ export const BUCKET_TYPES = [
   'filters',
   'significant_terms',
   'geohash_grid',
+  'geotile_grid',
 ] as const;
 
 const SIBLING_PIPELINES = new Set(['avg_bucket', 'sum_bucket', 'min_bucket', 'max_bucket']);
@@ -121,6 +136,7 @@ export const AGG_TITLES: Record<string, string> = {
   filters: 'Filters',
   significant_terms: 'Significant Terms',
   geohash_grid: 'Geohash',
+  geotile_grid: 'Geotile',
 };
 
 const param = <T>(agg: AggConfig, name: string, fallback: T): T => {
@@ -142,11 +158,7 @@ const fieldOf = (agg: AggConfig, context: AggContext): Field | undefined => {
 /** How an aggregation names a field in a request: by name, or by its script */
 function fieldClause(agg: AggConfig, context: AggContext): Dsl {
   const field = fieldOf(agg, context);
-  if (field?.scripted && field.script) {
-    // Without the type the values of a script come back as text, and sort as text
-    const valueType = field.type === 'number' ? 'float' : field.type === 'date' ? 'date' : field.type === 'boolean' ? 'boolean' : undefined;
-    return { script: { source: field.script, lang: field.lang ?? 'painless' }, ...(valueType ? { value_type: valueType } : {}) };
-  }
+  if (field?.scripted && field.script) return { script: { source: field.script, lang: field.lang ?? 'painless' } };
   return { field: fieldNameOf(agg) };
 }
 
@@ -173,24 +185,174 @@ const INTERVAL_NAMES: Record<string, string> = {
   y: 'year',
 };
 
-/** The interval of a date histogram: the one it asks for, or one that suits the time range */
-export function dateInterval(agg: AggConfig, context: AggContext): Interval & { scaled: boolean } {
+/** The interval a date histogram is asked for, as it is saved: "auto" when it says nothing */
+function requestedInterval(agg: AggConfig): string {
   let requested = param<string>(agg, 'interval', 'auto');
   if (requested === 'custom') requested = param<string>(agg, 'customInterval', 'auto');
-  if (INTERVAL_NAMES[requested]) requested = `1${requested}`;
+  return requested;
+}
+
+/**
+ * The interval of a date histogram: the one it asks for, or one that suits the time range. One
+ * that is asked for and not widened is said to OpenSearch (`asked`) and described the way the
+ * original normalizes it: 24h is a day, 1.5d is 36 hours, 2y is 730 days.
+ */
+export function dateInterval(agg: AggConfig, context: AggContext): Interval & { scaled: boolean; asked?: string } {
+  let requested = requestedInterval(agg);
+  // As the original reads it: "0d" and "1 d" are a day
+  const written = requested === 'auto' ? undefined : normalizedInterval(requested);
+  if (written) requested = `${Number.parseFloat(requested) || 1}${/(ms|[smhdwMy])$/.exec(requested.trim())?.[1] ?? ''}`;
   const range = context.timeRange;
-  const duration = range ? range.to.getTime() - range.from.getTime() : 0;
+  // As the original's TimeBuckets, whose setBounds sorts the two ends: a range typed the other way
+  // round is as long, and not a length below nothing that made buckets of a millisecond
+  const duration = range ? Math.abs(range.to.getTime() - range.from.getTime()) : 0;
   if ((requested === 'auto' || !parseInterval(requested)) && !range) {
     return { ...parseInterval('1d')!, scaled: false };
   }
-  return resolveInterval(requested, duration, {
+  const resolved = resolveInterval(requested, duration, {
     targetBuckets: context.barTarget ?? 50,
     maxBuckets: context.maxBars ?? 100,
   });
+  if (written && parseInterval(requested) && !resolved.scaled) return { ...resolved, description: written.description, asked: written.expression };
+  // An interval the time range chose, auto or widened, is a length of time, which the original
+  // writes (convertDurationToNormalizedOpenSearchInterval) in the largest of weeks, days, hours,
+  // minutes and seconds it is a whole number of: its month is "30d" and its year "365d", fixed
+  const unit = (['w', 'd', 'h', 'm', 's'] as const).find((name) => resolved.ms % UNIT_MS[name] === 0 && resolved.ms >= UNIT_MS[name]);
+  const length = unit ? parseInterval(`${resolved.ms / UNIT_MS[unit]}${unit}`) : parseInterval(`${resolved.ms}ms`);
+  return length ? { ...length, scaled: resolved.scaled } : resolved;
 }
 
-function dateIntervalClause(interval: Interval): Dsl {
-  const match = /^(\d+(?:\.\d+)?)(ms|[smhdwMy])$/.exec(interval.expression);
+const INTERVAL_UNITS = ['ms', 's', 'm', 'h', 'd', 'w', 'M', 'y'] as const;
+type IntervalUnit = (typeof INTERVAL_UNITS)[number];
+
+/**
+ * An interval someone wrote as the original reads and normalizes it (parseInterval, then
+ * convertDurationToNormalizedOpenSearchInterval): a duration as moment keeps one, in months, days
+ * and milliseconds, said in the largest unit it is a whole number of, years and months only when
+ * it is one of them. Nothing when it is not an interval.
+ */
+export function normalizedInterval(text: string): { expression: string; description: string; value: number; unit: IntervalUnit } | undefined {
+  const match = /^([0-9.]*)\s*(ms|s|m|h|d|w|M|y)$/.exec(String(text).trim());
+  if (!match) return undefined;
+  const amount = Number.parseFloat(match[1]) || 1;
+  const unit = match[2] as IntervalUnit;
+  // As moment's duration: years and months are months, weeks and days are days, the rest milliseconds
+  const months = unit === 'y' ? amount * 12 : unit === 'M' ? amount : 0;
+  const days = unit === 'w' ? amount * 7 : unit === 'd' ? amount : 0;
+  const ms = unit === 'h' ? amount * 3600000 : unit === 'm' ? amount * 60000 : unit === 's' ? amount * 1000 : unit === 'ms' ? amount : 0;
+  const wholeDays = days + Math.round((months * 146097) / 4800);
+  const as = (to: IntervalUnit): number => {
+    switch (to) {
+      case 'y':
+        return (months + ((days + ms / 864e5) * 4800) / 146097) / 12;
+      case 'M':
+        return months + ((days + ms / 864e5) * 4800) / 146097;
+      case 'w':
+        return wholeDays / 7 + ms / 6048e5;
+      case 'd':
+        return wholeDays + ms / 864e5;
+      case 'h':
+        return wholeDays * 24 + ms / 36e5;
+      case 'm':
+        return wholeDays * 1440 + ms / 6e4;
+      case 's':
+        return wholeDays * 86400 + ms / 1000;
+      default:
+        return Math.floor(wholeDays * 864e5) + ms;
+    }
+  };
+  const said = (value: number, to: IntervalUnit) => ({
+    expression: `${value}${to}`,
+    description: value === 1 ? INTERVAL_NAMES[to] : `${value} ${INTERVAL_NAMES[to]}s`,
+    value,
+    unit: to,
+  });
+  for (const to of [...INTERVAL_UNITS].reverse()) {
+    const value = as(to);
+    if (value < 1 || Math.floor(value) !== value) continue;
+    if ((to === 'y' || to === 'M') && value !== 1) continue;
+    return said(value, to);
+  }
+  return said(as('ms'), 'ms');
+}
+
+/**
+ * Why the original refuses to ask for a date histogram, in its words: an interval that is not one,
+ * or one that comes to several weeks, which OpenSearch counts one at a time only
+ */
+export function dateIntervalProblem(agg: AggConfig, context: AggContext): string | undefined {
+  const requested = requestedInterval(agg);
+  if (requested === 'auto') return undefined;
+  if (!normalizedInterval(requested)) return `"${requested}" is not a valid interval.`;
+  // Whatever it comes to, written or widened: OpenSearch counts weeks, months and years one at a time
+  const interval = dateInterval(agg, context);
+  const asked = interval.asked ?? interval.expression;
+  const match = /^(\d+)(w|M|y)$/.exec(asked);
+  return match && match[1] !== '1' ? `Invalid calendar interval: ${asked}, value must be 1` : undefined;
+}
+
+const FIELD_REQUIRED = new Set([
+  'avg',
+  'sum',
+  'min',
+  'max',
+  'median',
+  'std_dev',
+  'cardinality',
+  'percentiles',
+  'percentile_ranks',
+  'top_hits',
+  'date_histogram',
+  'histogram',
+  'range',
+  'date_range',
+  'ip_range',
+  'terms',
+  'significant_terms',
+  'geohash_grid',
+  'geotile_grid',
+]);
+
+/**
+ * Why the original does not send the request of a chart's aggregations, in the words of the error
+ * it shows instead: an aggregation without its field, a date histogram whose interval it refuses,
+ * in the aggregations and in those inside them. Nothing when it sends it.
+ */
+export function requestProblem(aggs: AggConfig[], context: AggContext): string | undefined {
+  const inner = (value: unknown): AggConfig[] => (value !== null && typeof value === 'object' && typeof (value as AggConfig).type === 'string' ? [value as AggConfig] : []);
+  const problemOf = (agg: AggConfig): string | undefined => {
+    if (!agg.type) return undefined;
+    if (FIELD_REQUIRED.has(agg.type) && !fieldNameOf(agg)) return '"field" is a required parameter';
+    if (agg.type === 'date_histogram') {
+      const problem = dateIntervalProblem(agg, context);
+      if (problem) return problem;
+    }
+    const nested: AggConfig[] = [];
+    if (agg.type === 'terms') nested.push(...inner(agg.params?.orderAgg));
+    if (SIBLING_PIPELINES.has(agg.type)) {
+      // A bucket whose type `visualize:disableBucketAgg` took away: the original fails on it as it
+      // writes the request (`this.type.hasNoDsl` of an aggregation without a type), in these words
+      const bucket = agg.params?.customBucket as AggConfig | undefined;
+      if (agg.params?.customMetric && bucket && typeof bucket === 'object' && !bucket.type) return "Cannot read properties of undefined (reading 'hasNoDsl')";
+      nested.push(...inner(agg.params?.customBucket), ...inner(agg.params?.customMetric));
+    }
+    if (PARENT_PIPELINES.has(agg.type) && param<string>(agg, 'metricAgg', 'custom') === 'custom') nested.push(...inner(agg.params?.customMetric));
+    for (const child of nested) {
+      const problem = problemOf(child);
+      if (problem) return problem;
+    }
+    return undefined;
+  };
+  const active = enabled(aggs);
+  for (const agg of [...active.filter(isBucketAgg), ...active.filter(isMetricAgg)]) {
+    const problem = problemOf(agg);
+    if (problem) return problem;
+  }
+  return undefined;
+}
+
+function dateIntervalClause(interval: Interval & { asked?: string }): Dsl {
+  const match = /^(\d+(?:\.\d+)?)(ms|[smhdwMy])$/.exec(interval.asked ?? interval.expression);
   const amount = match ? Number(match[1]) : 1;
   const unit = match ? match[2] : 'd';
   if (amount === 1 && unit !== 'ms' && unit !== 's') return { calendar_interval: `1${unit}` };
@@ -201,39 +363,102 @@ function dateIntervalClause(interval: Interval): Dsl {
   return { fixed_interval: `${amount}${unit}` };
 }
 
-/** The step of a number histogram: the one it asks for, or one that gives a readable number of bars */
+/**
+ * The step of a number histogram, as the original's calculateHistogramInterval: an interval asked
+ * that would give more bars than histogram:maxBars is widened to the next multiple of its power of
+ * ten; auto gives a power of ten, or two or five times one, for about that many bars (or the user's
+ * Max bars when fewer), and 1 for an integer field that spans less.
+ */
 export function numberInterval(agg: AggConfig, context: AggContext): number {
   const requested = agg.params?.interval;
-  const asked = typeof requested === 'number' ? requested : Number(requested);
+  const asked = typeof requested === 'number' ? requested : Number.parseFloat(String(requested));
+  // An interval that is not a number is taken as auto (the original asks for none, which fails)
+  const auto = requested === undefined || requested === 'auto' || Number.isNaN(asked);
   const bounds = context.fieldBounds?.[fieldNameOf(agg) ?? ''];
   const maxBars = context.maxBars ?? 100;
-  if (Number.isFinite(asked) && asked > 0) {
-    // An interval that would give too many bars is widened, as OpenSearch Dashboards does
-    if (bounds && (bounds.max - bounds.min) / asked > maxBars) {
-      return roundInterval((bounds.max - bounds.min) / maxBars);
+  let interval = auto ? 0 : asked;
+  const diff = bounds ? bounds.max - bounds.min : 0;
+  if (diff) {
+    if (auto) {
+      const bars = Math.min(maxBars, Number(agg.params?.maxBars) || maxBars);
+      const esTypes = fieldOf(agg, context)?.esTypes ?? [];
+      interval = autoNumberInterval(diff, bars, esTypes);
+    } else if (diff / interval > maxBars) {
+      const least = diff / maxBars;
+      const magnitude = Math.pow(10, Math.floor(Math.log10(least)));
+      interval = magnitude;
+      while (interval < least) interval += magnitude;
     }
-    return asked;
   }
-  if (!bounds || bounds.max <= bounds.min) return 1;
-  return roundInterval((bounds.max - bounds.min) / Math.min(maxBars, context.barTarget ?? 50));
+  const base = Number(agg.params?.intervalBase);
+  if (base) {
+    if (interval < base) interval = base;
+    else if (interval % base !== 0) interval = Math.round(interval / base) * base;
+  }
+  return interval || 1;
 }
 
-function roundInterval(raw: number): number {
-  const magnitude = 10 ** Math.floor(Math.log10(raw));
-  const fraction = raw / magnitude;
-  const nice = fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10;
-  return nice * magnitude;
+function autoNumberInterval(diff: number, maxBars: number, esTypes: string[]): number {
+  const integers = ['integer', 'long', 'short', 'byte'];
+  if (diff < maxBars && esTypes.every((type) => integers.includes(type))) return 1;
+  const lowerPower = Math.pow(10, Math.floor(Math.log10(diff / maxBars)));
+  const buckets = diff / lowerPower;
+  if (buckets <= maxBars) return lowerPower;
+  if (buckets / 2 <= maxBars) return lowerPower * 2;
+  if (buckets / 5 <= maxBars) return lowerPower * 5;
+  return lowerPower * 10;
 }
 
-/** Whether an aggregation needs the smallest and largest value of its field before it can be asked */
-export const needsFieldBounds = (agg: AggConfig) =>
-  agg.type === 'histogram' && (agg.params?.interval === 'auto' || agg.params?.interval === undefined);
+/** Whether an aggregation needs the smallest and largest value of its field before it can be asked:
+ * as the original, every number histogram, for an interval asked may need widening */
+export const needsFieldBounds = (agg: AggConfig) => agg.type === 'histogram';
 
 // --- Labels ---------------------------------------------------------------------------------------
 
+/** The label of an aggregation: a label of someone's own, or the one its type makes */
 export function aggLabel(agg: AggConfig, context: AggContext): string {
   const custom = agg.params?.customLabel;
   if (typeof custom === 'string' && custom !== '') return custom;
+  if (!agg.type) return '';
+  return aggTypeLabel(agg, context);
+}
+
+const startCase = (text: string) => text.replace(/(^|\s)(\S)/g, (_match, space: string, letter: string) => `${space}${letter.toUpperCase()}`);
+
+/**
+ * The label of a pipeline, as the original's `makeNestedLabel`: after the metric inside it, a
+ * pipeline of a pipeline numbered ("2. derivative of Count"), or after the metric it is on.
+ */
+function nestedLabel(agg: AggConfig, label: string, context: AggContext): string {
+  const upper = startCase(label);
+  const metric = agg.params?.customMetric as AggConfig | undefined;
+  if (metric && typeof metric === 'object') {
+    let text = aggLabel(metric, context);
+    if (text.includes(`${upper} of `)) text = `2. ${label} of ${text.substring(`${upper} of `.length)}`;
+    else if (text.includes(`${label} of `)) text = `${Number.parseInt(text.substring(0, 1), 10) + 1}${text.substring(1)}`;
+    else text = `${upper} of ${text}`;
+    return text;
+  }
+  const target = agg.params?.metricAgg;
+  // Without the chart's aggregations the metric is not known: it is labelled as a count was
+  if (!context.aggs) return `${upper} of Count`;
+  const other = context.aggs.find((candidate) => candidate.id === target);
+  return other ? `${upper} of ${aggLabel(other, context)}` : '';
+}
+
+const PIPELINE_WORDS: Record<string, string> = {
+  avg_bucket: 'overall average',
+  sum_bucket: 'overall sum',
+  min_bucket: 'overall min',
+  max_bucket: 'overall max',
+  derivative: 'derivative',
+  cumulative_sum: 'cumulative sum',
+  moving_avg: 'moving avg',
+  serial_diff: 'serial diff',
+};
+
+/** The label an aggregation's type makes for it, whatever label someone gave it: the type's `makeLabel` */
+export function aggTypeLabel(agg: AggConfig, context: AggContext): string {
   const field = fieldNameOf(agg) ?? '';
   switch (agg.type) {
     case 'count':
@@ -257,31 +482,19 @@ export function aggLabel(agg: AggConfig, context: AggContext): string {
     case 'percentile_ranks':
       return `Percentile ranks of ${field}`;
     case 'top_hits': {
-      const size = param<number>(agg, 'size', 1);
+      const size = agg.params?.size ?? 1;
       const last = param<string>(agg, 'sortOrder', 'desc') === 'desc';
-      return `${last ? 'Last' : 'First'}${size > 1 ? ` ${size}` : ''} ${field}`;
+      return `${last ? 'Last' : 'First'}${size !== 1 ? ` ${String(size)}` : ''} ${field}`;
     }
     case 'avg_bucket':
     case 'sum_bucket':
     case 'min_bucket':
-    case 'max_bucket': {
-      const word = { avg_bucket: 'Average', sum_bucket: 'Sum', min_bucket: 'Min', max_bucket: 'Max' }[agg.type];
-      const metric = agg.params?.customMetric as AggConfig | undefined;
-      return `Overall ${word} of ${metric ? aggLabel(metric, context) : 'Count'}`;
-    }
+    case 'max_bucket':
     case 'derivative':
     case 'cumulative_sum':
     case 'moving_avg':
-    case 'serial_diff': {
-      const word = {
-        derivative: 'Derivative',
-        cumulative_sum: 'Cumulative Sum',
-        moving_avg: 'Moving Avg',
-        serial_diff: 'Serial Diff',
-      }[agg.type];
-      const metric = agg.params?.customMetric as AggConfig | undefined;
-      return `${word} of ${metric ? aggLabel(metric, context) : 'Count'}`;
-    }
+    case 'serial_diff':
+      return nestedLabel(agg, PIPELINE_WORDS[agg.type], context);
     case 'date_histogram': {
       const interval = dateInterval(agg, context);
       return `${field} per ${interval.description}`;
@@ -299,12 +512,16 @@ export function aggLabel(agg: AggConfig, context: AggContext): string {
       return `${field}: ${order}`;
     }
     case 'significant_terms':
-      return `Top ${param<number>(agg, 'size', 10)} unusual terms in ${field}`;
+      // As the original: a size left empty leaves a gap in the label
+      return `Top ${String(agg.params?.size ?? '')} unusual terms in ${field}`;
     case 'filters':
       return 'filters';
     case 'geohash_grid':
       // makeLabel of the geohash_grid
       return 'Geohash';
+    case 'geotile_grid':
+      // It has no makeLabel of its own: the original then says the type's name
+      return 'geotile_grid';
     default:
       return field || agg.type;
   }
@@ -329,30 +546,17 @@ function metricDsl(agg: AggConfig, context: AggContext, all: AggConfig[]): Dsl {
       return { [agg.id]: { percentiles: { ...field, percents: [50] } } };
     case 'std_dev':
       return { [agg.id]: { extended_stats: field } };
+    // As the original, percentiles come back as a list of keys and values
     case 'percentiles':
       return {
         [agg.id]: {
-          percentiles: { ...field, percents: param(agg, 'percents', [1, 5, 25, 50, 75, 95, 99]) },
+          percentiles: { ...field, percents: param(agg, 'percents', [1, 5, 25, 50, 75, 95, 99]), keyed: false },
         },
       };
     case 'percentile_ranks':
-      return { [agg.id]: { percentile_ranks: { ...field, values: param(agg, 'values', [0]) } } };
-    case 'top_hits': {
-      const sortField = param<string | { name: string }>(agg, 'sortField', '');
-      const sortName = typeof sortField === 'string' ? sortField : sortField.name;
-      return {
-        [agg.id]: {
-          top_hits: {
-            size: param(agg, 'size', 1),
-            _source: fieldNameOf(agg),
-            docvalue_fields: fieldNameOf(agg) ? [{ field: fieldNameOf(agg) }] : undefined,
-            sort: sortName
-              ? [{ [sortName]: { order: param(agg, 'sortOrder', 'desc'), unmapped_type: 'boolean' } }]
-              : undefined,
-          },
-        },
-      };
-    }
+      return { [agg.id]: { percentile_ranks: { ...field, values: param(agg, 'values', [0]), keyed: false } } };
+    case 'top_hits':
+      return { [agg.id]: { top_hits: topHitsClause(agg, context) } };
     default:
       break;
   }
@@ -362,11 +566,15 @@ function metricDsl(agg: AggConfig, context: AggContext, all: AggConfig[]): Dsl {
     if (!bucket) return {};
     const bucketId = `${agg.id}-bucket`;
     const metricId = `${agg.id}-metric`;
-    const inner = metric && metric.type !== 'count' ? metricDsl({ ...metric, id: metricId }, context, all) : {};
+    const inner = metric && metric.type !== 'count' ? metricWithJson({ ...metric, id: metricId }, context, all) : {};
+    const clause = withJson(bucket, bucketClause({ ...bucket, id: bucketId }, context));
+    // Its terms in the order asked for, as the original writes the bucket like any other
+    const under: Dsl = { ...inner };
+    if (bucket.type === 'terms') orderTerms({ ...bucket, id: bucketId }, clause.terms as Dsl, under, context, all);
     return {
       [bucketId]: {
-        ...bucketClause({ ...bucket, id: bucketId }, context),
-        ...(Object.keys(inner).length ? { aggs: inner } : {}),
+        ...clause,
+        ...(Object.keys(under).length ? { aggs: under } : {}),
       },
       [agg.id]: {
         [agg.type]: {
@@ -384,7 +592,7 @@ function metricDsl(agg: AggConfig, context: AggContext, all: AggConfig[]): Dsl {
       if (!metric || metric.type === 'count') path = '_count';
       else {
         path = `${agg.id}-metric`;
-        Object.assign(out, metricDsl({ ...metric, id: path }, context, all));
+        Object.assign(out, metricWithJson({ ...metric, id: path }, context, all));
       }
     } else {
       const other = all.find((candidate) => candidate.id === target);
@@ -404,6 +612,33 @@ function metricDsl(agg: AggConfig, context: AggContext, all: AggConfig[]): Dsl {
     return out;
   }
   return {};
+}
+
+/**
+ * A top hit as the original writes one: the field from the document's source and, when it is
+ * read from doc values, from there too (a date as `date_time`), or the field's script; then the
+ * size and the sort.
+ */
+function topHitsClause(agg: AggConfig, context: AggContext): Dsl {
+  const out: Dsl = {};
+  const name = fieldNameOf(agg);
+  const field = fieldOf(agg, context);
+  if (field?.scripted && field.script) {
+    out.script_fields = { [field.name]: { script: { source: field.script, lang: field.lang } } };
+  } else if (name) {
+    if (field?.readFromDocValues) out.docvalue_fields = [{ field: name, ...(field.type === 'date' ? { format: 'date_time' } : {}) }];
+    out._source = name === '_source' ? true : name;
+  }
+  const size = agg.params?.size;
+  if (size) out.size = size;
+  const sortField = agg.params?.sortField as string | { name?: string } | undefined;
+  const sortName = typeof sortField === 'string' ? sortField : sortField?.name;
+  const order = param<string>(agg, 'sortOrder', 'desc');
+  const sort = sortName ? context.indexPattern?.fields.find((candidate) => candidate.name === sortName) : undefined;
+  if (sort?.scripted && sort.script) {
+    out.sort = [{ _script: { script: { source: sort.script, lang: sort.lang }, type: sort.type, order } }];
+  } else if (sortName) out.sort = [{ [sortName]: { order } }];
+  return out;
 }
 
 function queryOf(input: Query | undefined, context: AggContext): Dsl {
@@ -430,17 +665,13 @@ function bucketClause(agg: AggConfig, context: AggContext): Dsl {
         ...field,
         ...dateIntervalClause(interval),
         time_zone: context.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
-        min_doc_count: Number.isFinite(minimum) ? minimum : 1,
       };
+      // As the original, a least count of 0 (under a parent pipeline) is not asked: OpenSearch's own
+      // is 0; bounds are asked only when they are set
+      if (minimum !== 0) clause.min_doc_count = Number.isFinite(minimum) ? minimum : 1;
       const min = boundOf(bounds?.min);
       const max = boundOf(bounds?.max);
       if (min !== undefined || max !== undefined) clause.extended_bounds = { min, max };
-      else if (clause.min_doc_count === 0 && context.timeRange) {
-        clause.extended_bounds = {
-          min: context.timeRange.from.getTime(),
-          max: context.timeRange.to.getTime(),
-        };
-      }
       return { date_histogram: clause };
     }
     case 'histogram': {
@@ -459,15 +690,8 @@ function bucketClause(agg: AggConfig, context: AggContext): Dsl {
       return { histogram: clause };
     }
     case 'range':
-      return {
-        range: {
-          ...field,
-          ranges: param<Array<{ from?: number; to?: number }>>(agg, 'ranges', [
-            { from: 0, to: 1000 },
-            { from: 1000, to: 2000 },
-          ]).map((range) => ({ from: numberOf(range.from), to: numberOf(range.to) })),
-        },
-      };
+      // As the original, the buckets come back keyed by their ranges
+      return { range: { ...field, ranges: numberRangesOf(agg), keyed: true } };
     case 'date_range':
       return {
         date_range: {
@@ -478,40 +702,30 @@ function bucketClause(agg: AggConfig, context: AggContext): Dsl {
           time_zone: context.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
         },
       };
-    case 'ip_range': {
-      const kind = param<string>(agg, 'ipRangeType', 'fromTo');
-      const ranges = (agg.params?.ranges ?? {}) as {
-        fromTo?: Array<{ from?: string; to?: string }>;
-        mask?: Array<{ mask: string }>;
-      };
-      return {
-        ip_range: {
-          ...field,
-          ranges:
-            kind === 'mask'
-              ? (ranges.mask ?? [{ mask: '0.0.0.0/1' }, { mask: '128.0.0.0/2' }])
-              : (ranges.fromTo ?? [
-                  { from: '0.0.0.0', to: '127.255.255.255' },
-                  { from: '128.0.0.0', to: '191.255.255.255' },
-                ]),
-        },
-      };
-    }
+    case 'ip_range':
+      return { ip_range: { ...field, ranges: ipRangesOf(agg) } };
     case 'terms': {
       const clause: Dsl = {
         ...field,
         size: param(agg, 'size', 5),
         order: { _count: param(agg, 'order', 'desc') },
       };
-      if (agg.params?.missingBucket) clause.missing = MISSING_KEY;
-      const include = agg.params?.include;
-      const exclude = agg.params?.exclude;
-      if (typeof include === 'string' && include !== '') clause.include = include;
-      if (typeof exclude === 'string' && exclude !== '') clause.exclude = exclude;
+      // Terms only, as the original's: without its type a script's values come back as text, and
+      // a filter made from one would not match
+      const scripted = fieldOf(agg, context);
+      if (field.script && scripted) clause.value_type = scripted.type === 'number' ? 'float' : scripted.type;
+      // Missing values are a bucket of a text field only, as the original's switch and its request
+      if (agg.params?.missingBucket && scripted?.type === 'string') clause.missing = MISSING_KEY;
+      includeExclude(agg, context, clause);
       return { terms: clause };
     }
-    case 'significant_terms':
-      return { significant_terms: { ...field, size: param(agg, 'size', 10) } };
+    case 'significant_terms': {
+      // An empty size is not asked: OpenSearch's own applies
+      const size = agg.params?.size;
+      const clause: Dsl = { ...field, ...(size ? { size } : {}) };
+      includeExclude(agg, context, clause);
+      return { significant_terms: clause };
+    }
     case 'filters': {
       const filters: Record<string, Dsl> = {};
       for (const filter of param<Array<{ input?: Query; label?: string }>>(agg, 'filters', [])) {
@@ -524,12 +738,36 @@ function bucketClause(agg: AggConfig, context: AggContext): Dsl {
       return {
         geohash_grid: { ...field, precision: Math.min(12, Math.max(1, param(agg, 'precision', 2))) },
       };
+    case 'geotile_grid': {
+      // As the original's default writer: a precision of 0, its default, is not asked
+      const precision = agg.params?.precision;
+      return { geotile_grid: { ...field, ...(precision ? { precision } : {}) } };
+    }
     default:
       return { [agg.type]: field };
   }
 }
 
 export const MISSING_KEY = '__missing__';
+
+/**
+ * The values a terms or significant terms aggregation keeps or leaves out, as the original's
+ * `migrateIncludeExcludeFormat` writes them: the numbers of a list on a number field, a pattern on
+ * a text field (or the pattern of an older saved object), and nothing on any other field
+ */
+function includeExclude(agg: AggConfig, context: AggContext, clause: Dsl): void {
+  const type = fieldOf(agg, context)?.type;
+  for (const name of ['exclude', 'include']) {
+    const value = agg.params?.[name];
+    if (Array.isArray(value) && value.length > 0 && type === 'number') {
+      const numbers = value.filter((item): item is number => Number.isFinite(item));
+      if (numbers.length) clause[name] = numbers;
+    } else if (value !== null && typeof value === 'object') {
+      const pattern = (value as { pattern?: unknown }).pattern;
+      if (pattern !== undefined) clause[name] = pattern;
+    } else if (value && type === 'string') clause[name] = value;
+  }
+}
 
 /** A clause with what someone wrote under "JSON input" merged into it */
 function withJson(agg: AggConfig, clause: Dsl): Dsl {
@@ -544,7 +782,61 @@ function withJson(agg: AggConfig, clause: Dsl): Dsl {
   if (extra === null || typeof extra !== 'object' || Array.isArray(extra)) return clause;
   const [type] = Object.keys(clause);
   if (!type || clause[type] === null || typeof clause[type] !== 'object') return clause;
-  return { ...clause, [type]: { ...(clause[type] as Dsl), ...(extra as Dsl) } };
+  return { ...clause, [type]: combine(clause[type], extra) as Dsl };
+}
+
+/**
+ * Two values merged as the original's `filteredCombine` merges the JSON input into a clause: an
+ * object key by key and a list item by item, all the way down; a null takes a key away
+ */
+function combine(written: unknown, typed: unknown): unknown {
+  const plain = (value: unknown): value is Dsl => value !== null && typeof value === 'object' && !Array.isArray(value);
+  if (plain(written) && plain(typed)) {
+    const out: Dsl = {};
+    for (const key of new Set([...Object.keys(written), ...Object.keys(typed)])) {
+      const value = combine(written[key], typed[key]);
+      if (value !== undefined) out[key] = value;
+    }
+    return out;
+  }
+  if (Array.isArray(written) && Array.isArray(typed)) {
+    return Array.from({ length: Math.max(written.length, typed.length) }, (_, index) => combine(written[index], typed[index]));
+  }
+  if (typed === null) return undefined;
+  return typed !== undefined ? typed : written;
+}
+
+/**
+ * A metric's clauses with its JSON input merged into its own, as the original writes each
+ * aggregation it asks for: one that orders terms, or one inside a pipeline, too
+ */
+function metricWithJson(agg: AggConfig, context: AggContext, all: AggConfig[]): Dsl {
+  const own = metricDsl(agg, context, all);
+  if (own[agg.id]) own[agg.id] = withJson(agg, own[agg.id] as Dsl);
+  return own;
+}
+
+/** The ranges of a range aggregation, as they are asked */
+function numberRangesOf(agg: AggConfig): Array<{ from?: number; to?: number }> {
+  return param<Array<{ from?: number; to?: number }>>(agg, 'ranges', [
+    { from: 0, to: 1000 },
+    { from: 1000, to: 2000 },
+  ]).map((range) => ({ from: numberOf(range.from), to: numberOf(range.to) }));
+}
+
+/** The ranges of an IP range aggregation, as they are asked: from and to, or masks */
+function ipRangesOf(agg: AggConfig): Array<{ from?: string; to?: string; mask?: string }> {
+  const ranges = (agg.params?.ranges ?? {}) as {
+    fromTo?: Array<{ from?: string; to?: string }>;
+    mask?: Array<{ mask: string }>;
+  };
+  if (param<string>(agg, 'ipRangeType', 'fromTo') === 'mask') return ranges.mask ?? [{ mask: '0.0.0.0/1' }, { mask: '128.0.0.0/2' }];
+  return (
+    ranges.fromTo ?? [
+      { from: '0.0.0.0', to: '127.255.255.255' },
+      { from: '128.0.0.0', to: '191.255.255.255' },
+    ]
+  );
 }
 
 function numberOf(value: unknown): number | undefined {
@@ -560,7 +852,8 @@ function boundOf(value: unknown): number | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date.getTime();
 }
 
-const enabled = (aggs: AggConfig[]) => aggs.filter((agg) => agg.enabled !== false);
+// As the original's request, an aggregation without a type is left out, as one turned off
+const enabled = (aggs: AggConfig[]) => aggs.filter((agg) => agg.enabled !== false && Boolean(agg.type));
 
 export interface BuildOptions {
   /** Ask for the metrics at every bucket level, not at the deepest only: a table that shows them all */
@@ -578,15 +871,16 @@ export function buildAggsDsl(aggs: AggConfig[], context: AggContext, options: Bu
     for (const metric of metrics) {
       // A derivative has nothing to derive from outside a histogram
       if (PARENT_PIPELINES.has(metric.type) && !insideHistogram) continue;
-      const own = metricDsl(metric, context, metrics);
-      if (own[metric.id]) own[metric.id] = withJson(metric, own[metric.id] as Dsl);
-      Object.assign(out, own);
+      Object.assign(out, metricWithJson(metric, context, metrics));
     }
     return out;
   };
+  // As the original, the centroid a grid asks for is one more metric: under the last bucket only
+  const centroids: Dsl = {};
+  for (const grid of buckets.filter(asksCentroid)) centroids[geoCentroidId(aggs)] = { geo_centroid: { field: fieldNameOf(grid) } };
 
   const nest = (level: number, insideHistogram: boolean): Dsl => {
-    if (level === buckets.length) return metricsDsl(insideHistogram);
+    if (level === buckets.length) return { ...metricsDsl(insideHistogram), ...centroids };
     const agg = buckets[level];
     const isHistogram = agg.type === 'date_histogram' || agg.type === 'histogram';
     const deeper = nest(level + 1, isHistogram);
@@ -594,29 +888,7 @@ export function buildAggsDsl(aggs: AggConfig[], context: AggContext, options: Bu
     if (options.metricsAtAllLevels && level < buckets.length - 1) Object.assign(own, metricsDsl(isHistogram));
     const clause = withJson(agg, bucketClause(agg, context));
 
-    if (agg.type === 'terms') {
-      const terms = clause.terms as Dsl;
-      const direction = param<string>(agg, 'order', 'desc');
-      const orderBy = param<string>(agg, 'orderBy', '_count');
-      if (orderBy === '_key' || orderBy === '_term') terms.order = { _key: direction };
-      else if (orderBy === 'custom') {
-        const orderAgg = agg.params?.orderAgg as AggConfig | undefined;
-        if (orderAgg && orderAgg.type !== 'count') {
-          const id = orderAgg.id ?? `${agg.id}-orderAgg`;
-          Object.assign(own, metricDsl({ ...orderAgg, id }, context, metrics));
-          terms.order = { [orderPath(orderAgg, id)]: direction };
-        }
-      } else {
-        const metric = metrics.find((candidate) => candidate.id === orderBy);
-        if (metric && metric.type !== 'count' && !SIBLING_PIPELINES.has(metric.type) && !PARENT_PIPELINES.has(metric.type)) {
-          Object.assign(own, metricDsl(metric, context, metrics));
-          terms.order = { [orderPath(metric, metric.id)]: direction };
-        }
-      }
-    }
-    if (agg.type === 'geohash_grid' && agg.params?.useGeocentroid !== false) {
-      own[geoCentroidId(aggs)] = { geo_centroid: { field: fieldNameOf(agg) } };
-    }
+    if (agg.type === 'terms') orderTerms(agg, clause.terms as Dsl, own, context, metrics);
     const dsl = { [agg.id]: { ...clause, ...(Object.keys(own).length ? { aggs: own } : {}) } };
     return agg.type === 'geohash_grid' ? withGeoCollar(agg, dsl) : dsl;
   };
@@ -624,7 +896,10 @@ export function buildAggsDsl(aggs: AggConfig[], context: AggContext, options: Bu
   return nest(0, false);
 }
 
-/** The id the original gives the geo_centroid it asks for beside a geohash_grid: the next free one */
+/** Whether a geohash_grid or a geotile_grid asks for the centroid of each of its buckets */
+const asksCentroid = (agg: AggConfig) => (agg.type === 'geohash_grid' || agg.type === 'geotile_grid') && agg.params?.useGeocentroid !== false;
+
+/** The id the original gives the geo_centroid it asks for beside a geohash_grid or geotile_grid: the next free one */
 export const geoCentroidId = (aggs: AggConfig[]) => String(aggs.reduce((max, agg) => Math.max(max, Number(agg.id) || 0), 0) + 1);
 
 /** What a geohash_grid that is filtered by the collar asks before the map's size is known */
@@ -636,6 +911,69 @@ function withGeoCollar(agg: AggConfig, dsl: Dsl): Dsl {
   if (agg.params?.isFilteredByCollar === false || !field) return dsl;
   const box = (agg.params?.boundingBox as Dsl | null | undefined) || DEFAULT_GEO_BOUNDING_BOX;
   return { filter_agg: { filter: { geo_bounding_box: { ignore_unmapped: true, [field]: box } }, aggs: dsl } };
+}
+
+/**
+ * The order of a terms aggregation's buckets, as the original's orderAgg writes it: by key, by a
+ * custom metric or by a metric of the chart, the metric then asked for under the terms (`own`).
+ * The bucket of a sibling pipeline is ordered the same way.
+ */
+function orderTerms(agg: AggConfig, terms: Dsl, own: Dsl, context: AggContext, metrics: AggConfig[]): void {
+  const direction = param<string>(agg, 'order', 'desc');
+  const orderBy = param<string>(agg, 'orderBy', '_count');
+  // As the original's `params.orderAgg || the metric named`: a custom metric the aggregation carries
+  // orders it whatever "Order by" says, under the id the original gives it
+  const orderAgg = agg.params?.orderAgg as AggConfig | null | undefined;
+  if (orderAgg && typeof orderAgg === 'object' && orderAgg.type) {
+    if (orderAgg.type === 'count') {
+      terms.order = { _count: direction };
+      return;
+    }
+    const id = `${agg.id}-orderAgg`;
+    Object.assign(own, metricWithJson({ ...orderAgg, id }, context, metrics));
+    terms.order = { [orderPath(orderAgg, id)]: direction };
+    return;
+  }
+  if (orderBy === '_key' || orderBy === '_term') terms.order = { _key: direction };
+  else if (orderBy !== 'custom') {
+    const metric = metrics.find((candidate) => candidate.id === orderBy);
+    if (metric && metric.type !== 'count' && !SIBLING_PIPELINES.has(metric.type) && !PARENT_PIPELINES.has(metric.type)) {
+      Object.assign(own, metricWithJson(metric, context, metrics));
+      terms.order = { [orderPath(metric, metric.id)]: direction };
+      return;
+    }
+    // One value of a metric with several: a percentile rank, or the percentile a saved object names
+    for (const candidate of metrics) {
+      const key = valueKeysOf(candidate).find((value) => responseAggId(candidate.id, value) === orderBy);
+      if (key === undefined) continue;
+      Object.assign(own, metricWithJson(candidate, context, metrics));
+      // The original writes the id as it is; OpenSearch reads a value with a point in it between brackets only
+      terms.order = { [String(key).includes('.') ? `${candidate.id}[${key}]` : orderBy]: direction };
+      return;
+    }
+  }
+}
+
+/** The values a percentiles or percentile ranks aggregation answers with */
+const valueKeysOf = (agg: AggConfig): number[] =>
+  agg.type === 'percentiles' ? param<number[]>(agg, 'percents', [1, 5, 25, 50, 75, 95, 99]) : agg.type === 'percentile_ranks' ? param<number[]>(agg, 'values', [0]) : [];
+
+/** The id the original gives one value of a metric with several: `2.5000`, or `2['1.5']` when the value has a point */
+export function responseAggId(parentId: string, key: string | number): string {
+  const subId = String(key);
+  return subId.includes('.') ? `${parentId}['${subId.replace(/'/g, "\\'")}']` : `${parentId}.${subId}`;
+}
+
+/**
+ * The values a metric answers with, as the original's response aggregations: what "Order by" and
+ * a parent pipeline's "Metric" list, each with its id and its label
+ */
+export function responseAggs(agg: AggConfig, context: AggContext): Array<{ id: string; label: string; agg: AggConfig }> {
+  return metricColumns(agg, context, '').map((column) => ({
+    id: column.valueKey !== undefined && agg.type !== 'std_dev' ? responseAggId(agg.id, column.valueKey) : column.id,
+    label: column.name,
+    agg,
+  }));
 }
 
 function orderPath(metric: AggConfig, id: string): string {
@@ -721,7 +1059,7 @@ function metricColumns(agg: AggConfig, context: AggContext, prefix: string): Tab
       return param<number[]>(agg, 'values', [0]).map((value) => ({
         ...base,
         id: `${prefix}${agg.id}.${value}`,
-        name: `Percentile rank ${value} of "${custom ? label : field}"`,
+        name: `Percentile rank ${formatterFor(agg, context)(value)} of "${custom ? label : field}"`,
         format: (ratio: unknown) =>
           ratio === null || ratio === undefined ? '-' : formatterFor(agg, context, 'percent')(Number(ratio) / 100),
         valueKey: String(value),
@@ -748,10 +1086,12 @@ function metricColumns(agg: AggConfig, context: AggContext, prefix: string): Tab
   }
 }
 
-function findKeyed(values: Record<string, unknown> | undefined, wanted: string): unknown {
+/** A value of percentiles by its percent: from a list of keys and values, or from an object */
+function findKeyed(values: Record<string, unknown> | Array<{ key?: unknown; value?: unknown }> | undefined, wanted: string): unknown {
   if (!values) return undefined;
-  if (wanted in values) return values[wanted];
   const target = Number(wanted);
+  if (Array.isArray(values)) return values.find((item) => Number(item.key) === target)?.value;
+  if (wanted in values) return values[wanted];
   for (const [key, value] of Object.entries(values)) {
     if (Number(key) === target) return value;
   }
@@ -768,7 +1108,7 @@ function metricValue(column: TableColumn, bucket: Bucket): unknown {
       return findKeyed(data?.values as Record<string, unknown> | undefined, '50') ?? null;
     case 'percentiles':
     case 'percentile_ranks':
-      return findKeyed(data?.values as Record<string, unknown> | undefined, column.valueKey ?? '') ?? null;
+      return findKeyed(data?.values as Parameters<typeof findKeyed>[0], column.valueKey ?? '') ?? null;
     case 'std_dev': {
       const bounds = data?.std_deviation_bounds as { lower?: number; upper?: number } | undefined;
       return (column.valueKey === 'lower' ? bounds?.lower : bounds?.upper) ?? null;
@@ -807,12 +1147,6 @@ function metricValue(column: TableColumn, bucket: Bucket): unknown {
   }
 }
 
-const rangeText = (key: RangeKey, format: (value: unknown) => string) => {
-  if (key.gte === undefined || key.gte === null) return key.lt === undefined || key.lt === null ? 'All' : `< ${format(key.lt)}`;
-  if (key.lt === undefined || key.lt === null) return `≥ ${format(key.gte)}`;
-  return `${format(key.gte)} to ${format(key.lt)}`;
-};
-
 function bucketColumn(agg: AggConfig, context: AggContext, id: string): TableColumn {
   const settings = context.formatSettings ?? DEFAULT_FORMAT_SETTINGS;
   const base: TableColumn = {
@@ -828,7 +1162,7 @@ function bucketColumn(agg: AggConfig, context: AggContext, id: string): TableCol
   switch (agg.type) {
     case 'date_histogram': {
       const interval = dateInterval(agg, context);
-      const pattern = scaledDateFormat(interval.ms);
+      const pattern = scaledDateFormat(interval.ms, settings.scaledDateRules, settings.dateFormat);
       return {
         ...base,
         interval: interval.ms,
@@ -840,21 +1174,35 @@ function bucketColumn(agg: AggConfig, context: AggContext, id: string): TableCol
     case 'histogram':
       return { ...base, interval: numberInterval(agg, context), format: fieldFormat };
     case 'range':
-      return { ...base, format: (value) => rangeText((value ?? {}) as RangeKey, fieldFormat) };
-    case 'date_range':
-      return {
-        ...base,
-        format: (value) =>
-          rangeText((value ?? {}) as RangeKey, (end) =>
-            formatDate(new Date(end as number), settings.dateFormat, settings.timeZone)
-          ),
-      };
-    case 'ip_range':
+      // As the original's range format: an open end is an infinity, written by the field's format
       return {
         ...base,
         format: (value) => {
           const key = (value ?? {}) as RangeKey;
-          return key.label ?? rangeText(key, String);
+          return `≥ ${fieldFormat(key.gte ?? -Infinity)} and < ${fieldFormat(key.lt ?? Infinity)}`;
+        },
+      };
+    case 'date_range':
+      // As the original's convertDateRangeToString
+      return {
+        ...base,
+        format: (value) => {
+          const key = (value ?? {}) as RangeKey;
+          const date = (end: unknown) =>
+            end === undefined || end === null ? '-' : formatDate(new Date(end as number), settings.dateFormat, settings.timeZone);
+          if (!key.gte) return `Before ${date(key.lt)}`;
+          if (!key.lt) return `After ${date(key.gte)}`;
+          return `${date(key.gte)} to ${date(key.lt)}`;
+        },
+      };
+    case 'ip_range':
+      // As the original's convertIPRangeToString: a mask as it is, a range from one address to another
+      return {
+        ...base,
+        format: (value) => {
+          const key = (value ?? {}) as RangeKey;
+          if (param<string>(agg, 'ipRangeType', 'fromTo') === 'mask') return key.label ?? '';
+          return `${key.gte ? String(key.gte) : '-Infinity'} to ${key.lt ? String(key.lt) : 'Infinity'}`;
         },
       };
     case 'terms':
@@ -881,13 +1229,36 @@ function bucketColumn(agg: AggConfig, context: AggContext, id: string): TableCol
 
 export const OTHER_KEY = '__other__';
 
+/** A bucket of a range answers the range asked when both its ends are the range's */
+const sameEnds = (bucket: Bucket | undefined, range: { from?: unknown; to?: unknown }) => bucket?.from === range.from && bucket?.to === range.to;
+
 function bucketsOf(agg: AggConfig, data: unknown): Array<{ key: unknown; bucket: Bucket }> {
   const raw = (data as { buckets?: unknown } | undefined)?.buckets;
   if (!raw) return [];
+  // As the original's table, the buckets of ranges, IP ranges and filters come in the order they are
+  // asked in (OpenSearch sorts them); one the answer does not hold is left out
   if (!Array.isArray(raw)) {
-    return Object.entries(raw as Record<string, Bucket>).map(([key, bucket]) => ({ key, bucket }));
+    const keyed = raw as Record<string, Bucket>;
+    if (agg.type === 'range') {
+      return numberRangesOf(agg).flatMap((range) => {
+        const name = Object.keys(keyed).find((key) => sameEnds(keyed[key], range));
+        if (name === undefined) return [];
+        const bucket = keyed[name];
+        return [{ key: { gte: bucket.from as number | undefined, lt: bucket.to as number | undefined, label: name }, bucket }];
+      });
+    }
+    const filters = agg.type === 'filters' ? param<Array<{ input?: Query; label?: string }>>(agg, 'filters', []) : [];
+    if (filters.length) return filters.map(filterLabel).flatMap((key) => (key in keyed ? [{ key, bucket: keyed[key] }] : []));
+    return Object.entries(keyed).map(([key, bucket]) => ({ key, bucket }));
   }
-  return (raw as Bucket[]).map((bucket) => {
+  let list = raw as Bucket[];
+  if (agg.type === 'ip_range') {
+    list = ipRangesOf(agg).flatMap((range) => {
+      const found = range.mask !== undefined ? list.find((bucket) => bucket.key === range.mask) : list.find((bucket) => sameEnds(bucket, range));
+      return found ? [found] : [];
+    });
+  }
+  return list.map((bucket) => {
     switch (agg.type) {
       case 'range':
       case 'date_range':
@@ -918,6 +1289,7 @@ export function tabify(
   context: AggContext,
   options: TabifyOptions = {}
 ): Table {
+  context = context.aggs ? context : { ...context, aggs };
   const active = enabled(aggs);
   const metrics = active.filter(isMetricAgg);
   const buckets = active.filter(isBucketAgg);
@@ -937,9 +1309,10 @@ export function tabify(
         index += made.length;
         return made;
       });
-      if (agg.type === 'geohash_grid' && agg.params?.useGeocentroid !== false) {
-        const centroid: AggConfig = { id: geoCentroidId(aggs), type: 'geo_centroid', schema: 'geo_centroid', params: { field: fieldNameOf(agg) } };
-        own.push({ id: `col-${index}-${centroid.id}`, name: 'Geo Centroid', kind: 'metric', agg: centroid, schema: 'geo_centroid', fieldName: fieldNameOf(agg), format: (value) => JSON.stringify(value) });
+      // The centroid of a grid is read as the metric it is asked as: after the others, wherever they are
+      for (const grid of buckets.filter(asksCentroid)) {
+        const centroid: AggConfig = { id: geoCentroidId(aggs), type: 'geo_centroid', schema: 'geo_centroid', params: { field: fieldNameOf(grid) } };
+        own.push({ id: `col-${index}-${centroid.id}`, name: 'Geo Centroid', kind: 'metric', agg: centroid, schema: 'geo_centroid', fieldName: fieldNameOf(grid), format: (value) => JSON.stringify(value) });
         index += 1;
       }
       metricsByLevel[level] = own;
@@ -987,12 +1360,52 @@ export function tabify(
   return { columns, rows };
 }
 
-/** The filter that narrows a search to one bucket: what clicking a bar or a slice adds */
-export function bucketFilter(column: TableColumn, key: unknown, context: AggContext): Filter | undefined {
+/**
+ * The field of the index pattern a column's aggregation is on, as a filter on it needs it: a
+ * scripted field is asked by its script, a boolean one takes 1 and 0 as true and false. A field
+ * the index pattern does not list is asked by its name.
+ */
+export function filterFieldOf(column: TableColumn, context: AggContext): FilterField | undefined {
+  const name = column.fieldName;
+  if (!name) return undefined;
+  return context.indexPattern?.fields.find((field) => field.name === name) ?? { name };
+}
+
+/** Where a bucket was clicked: the table of its chart and the row of the mark, slice or cell */
+export interface BucketCell {
+  table: Table;
+  row: TableRow;
+}
+
+const sameKey = (a: unknown, b: unknown) =>
+  a === b || (typeof a === 'object' && a !== null && typeof b === 'object' && b !== null && JSON.stringify(a) === JSON.stringify(b));
+
+/**
+ * The terms beside the "Other" bucket of a column, as the original's getOtherBucketFilterTerms
+ * finds them for a click: the column's values in the rows that agree with the clicked one on every
+ * column before it, once each, the other and the missing buckets left out.
+ */
+export function otherBucketTerms(column: TableColumn, { table, row }: BucketCell): unknown[] {
+  const before = table.columns.slice(0, Math.max(table.columns.indexOf(column), 0));
+  const rows = table.rows.filter((candidate) => before.every((other) => sameKey(candidate[other.id], row[other.id])));
+  const terms = rows.map((candidate) => candidate[column.id]).filter((term) => term !== OTHER_KEY && term !== MISSING_KEY);
+  return [...new Set(terms)];
+}
+
+/**
+ * The filter that narrows a search to one bucket: what clicking a bar or a slice adds, as the
+ * original's createFilter of each aggregation (buckets/create_filter). A range's filter says what
+ * its bucket is called, "≥ 0 and < 1,000", an open end being infinite; a histogram's, its key as
+ * the field writes it. The "Other" bucket of a terms aggregation takes the documents in none of
+ * the terms beside it where it was clicked (`cell`): no filter without the cell. The original also
+ * adds an exists filter when those terms hold the missing bucket, which a click leaves out of them.
+ */
+export function bucketFilter(column: TableColumn, key: unknown, context: AggContext, cell?: BucketCell): Filter | undefined {
   const { agg } = column;
   const indexId = context.indexPattern?.id;
-  const name = column.fieldName;
-  const field = name ? { name } : undefined;
+  const field = filterFieldOf(column, context);
+  // The field's format: it writes the names above
+  const format = formatterFor(agg, context);
   switch (agg.type) {
     case 'terms':
     case 'significant_terms':
@@ -1002,40 +1415,57 @@ export function bucketFilter(column: TableColumn, key: unknown, context: AggCont
         filter.meta.negate = true;
         return filter;
       }
-      if (key === OTHER_KEY) return undefined;
+      if (key === OTHER_KEY) {
+        if (!cell || agg.type !== 'terms' || !agg.params?.otherBucket) return undefined;
+        const filter = phrasesFilter(field, otherBucketTerms(column, cell), indexId);
+        filter.meta.negate = true;
+        return filter;
+      }
       return phraseFilter(field, key, indexId);
-    case 'date_histogram':
+    case 'date_histogram': {
       if (!field || typeof key !== 'number') return undefined;
+      // The bucket ends an interval on, days and longer counted by the calendar, as moment adds them
+      const step = /^(\d+(?:\.\d+)?)(ms|[smhdwMy])$/.exec(dateInterval(agg, context).expression);
+      const end = step ? addUnits(new Date(key), Number(step[1]), step[2] as TimeUnit).getTime() : key + (column.interval ?? UNIT_MS.d);
       return rangeFilter(
         field,
         {
           gte: new Date(key).toISOString(),
-          lt: new Date(key + (column.interval ?? UNIT_MS.d)).toISOString(),
+          lt: new Date(end).toISOString(),
           format: 'strict_date_optional_time',
         },
         indexId
       );
+    }
     case 'histogram':
       if (!field || typeof key !== 'number') return undefined;
-      return rangeFilter(field, { gte: key, lt: key + (column.interval ?? 1) }, indexId);
-    case 'range':
+      return rangeFilter(field, { gte: key, lt: key + (column.interval ?? 1) }, indexId, format(key));
+    case 'range': {
+      if (!field) return undefined;
+      const range = key as RangeKey;
+      // An end the range leaves open is infinite, as the original's RangeKey has it
+      const gte = range.gte ?? -Infinity;
+      const lt = range.lt ?? Infinity;
+      return rangeFilter(field, { gte, lt }, indexId, `≥ ${format(gte)} and < ${format(lt)}`);
+    }
     case 'ip_range': {
       if (!field) return undefined;
       const range = key as RangeKey;
-      return rangeFilter(field, { gte: range.gte, lt: range.lt }, indexId);
+      // A mask is all its addresses, the last one included; the ends of a range as they are
+      if (param<string>(agg, 'ipRangeType', 'fromTo') === 'mask') {
+        const mask = cidrRange(String(range.label ?? ''));
+        return mask ? rangeFilter(field, { gte: mask.from, lte: mask.to }, indexId) : undefined;
+      }
+      return rangeFilter(field, { gte: range.gte || -Infinity, lte: range.lt || Infinity }, indexId);
     }
     case 'date_range': {
       if (!field) return undefined;
       const range = key as RangeKey;
-      return rangeFilter(
-        field,
-        {
-          gte: range.gte === undefined ? undefined : new Date(range.gte).toISOString(),
-          lt: range.lt === undefined ? undefined : new Date(range.lt).toISOString(),
-          format: 'strict_date_optional_time',
-        },
-        indexId
-      );
+      const params: RangeParams = {};
+      if (range.gte) params.gte = new Date(range.gte).toISOString();
+      if (range.lt) params.lt = new Date(range.lt).toISOString();
+      if (range.gte && range.lt) params.format = 'strict_date_optional_time';
+      return rangeFilter(field, params, indexId);
     }
     case 'filters': {
       const query = column.filterQueries?.[String(key)];
@@ -1049,28 +1479,55 @@ export function bucketFilter(column: TableColumn, key: unknown, context: AggCont
   }
 }
 
+/**
+ * The filter a brushed stretch of a histogram's axis adds, as the original's range selection
+ * (createFiltersFromRangeSelectAction): from its start to its end, as dates when the field is
+ * one; nothing when the stretch has no width.
+ */
+export function brushFilter(column: TableColumn, from: number, to: number, context: AggContext): Filter | undefined {
+  const field = filterFieldOf(column, context);
+  if (!field || from === to) return undefined;
+  const isDate = field.type ? field.type === 'date' : Boolean(column.isDate);
+  const range: RangeParams = isDate
+    ? { gte: new Date(from).toISOString(), lt: new Date(to).toISOString(), format: 'strict_date_optional_time' }
+    : { gte: from, lt: to };
+  return rangeFilter(field, range, context.indexPattern?.id);
+}
+
 // --- The bucket of everything else ----------------------------------------------------------------
 
 const OTHER_AGG = 'other-filter';
 
+/** What the bucket of everything else that a request put in an answer stands for, for the requests of the buckets under it */
+const otherBucketFilters = new WeakMap<object, Filter[]>();
+
+const groupsOthers = (agg: AggConfig) => agg.type === 'terms' && Boolean(agg.params?.otherBucket);
+
+/** The terms aggregations with "Group other values in separate bucket", in the order their rest is asked */
+export const otherBucketAggs = (aggs: AggConfig[]) => enabled(aggs).filter(isBucketAgg).filter(groupsOthers);
+
 /**
  * What a terms aggregation with "Group other values in separate bucket" still has to ask once
  * its answer is in: per list of terms, the documents that are in none of them, with the same
- * aggregations under them. `apply` puts the answer in the first answer as one more bucket.
+ * aggregations under them. `apply` puts the answer in the first answer as one more bucket. Each
+ * such aggregation asks in turn, the first one unless `aggId` says which, and one under another
+ * asks under its rest too, as the original's postFlightRequest of each.
  */
 export function planOtherBucket(
   aggs: AggConfig[],
   dsl: Dsl,
   response: { aggregations?: Record<string, unknown> },
-  context: AggContext
+  context: AggContext,
+  aggId?: string
 ): { aggs: Dsl; apply: (answer: Record<string, unknown> | undefined) => void } | undefined {
   const buckets = enabled(aggs).filter(isBucketAgg);
-  const level = buckets.findIndex((agg) => agg.type === 'terms' && Boolean(agg.params?.otherBucket));
+  const level = buckets.findIndex((agg) => groupsOthers(agg) && (aggId === undefined || agg.id === aggId));
   if (level === -1) return undefined;
   const other = buckets[level];
-  const field = fieldOf(other, context);
   const fieldName = fieldNameOf(other);
-  if (!fieldName || field?.scripted) return undefined;
+  if (!fieldName) return undefined;
+  // The field of the index pattern: a scripted one is asked by its script, as in the original
+  const field: FilterField = fieldOf(other, context) ?? { name: fieldName };
 
   // What is asked under each term is asked under the rest too
   let node: Dsl | undefined = dsl;
@@ -1079,7 +1536,7 @@ export function planOtherBucket(
   const columns = buckets.map((agg, at) => bucketColumn(agg, context, `other-${at}`));
   const indexId = context.indexPattern?.id;
   const filters: Record<string, Dsl> = {};
-  const targets: Record<string, { buckets?: unknown }> = {};
+  const targets: Record<string, { list: { buckets?: unknown }; shown: Filter[]; missing: boolean }> = {};
   let empty = false;
   const visit = (container: Bucket, at: number, above: Filter[], name: string) => {
     const agg = buckets[at];
@@ -1090,23 +1547,29 @@ export function planOtherBucket(
     }
     if (at < level) {
       for (const { key, bucket } of list) {
-        const filter = bucketFilter(columns[at], key, context);
+        // The rest of a bucket above stands for what its own request said
+        const own = otherBucketFilters.get(bucket);
+        const filter = own ? undefined : bucketFilter(columns[at], key, context);
         const part = key !== null && typeof key === 'object' ? String((key as { label?: string }).label ?? '') : String(key);
-        visit(bucket, at + 1, filter ? [...above, filter] : above, `${name}-${part}`);
+        visit(bucket, at + 1, own ? [...above, ...own] : filter ? [...above, filter] : above, `${name}-${part}`);
       }
       return;
     }
     const all = [...above];
-    // Documents without the field are the "missing" bucket's, when it is shown, and not the rest's
-    if (!other.params?.missingBucket || list.some(({ key }) => key === MISSING_KEY)) all.push(existsFilter({ name: fieldName }, indexId));
+    const missing = list.some(({ key }) => key === MISSING_KEY);
+    // Documents without the field are the "missing" bucket's, when it is shown, and not the rest's;
+    // a scripted field is not asked whether it exists, as in the original
+    if (!field.scripted && (!other.params?.missingBucket || missing)) all.push(existsFilter(field, indexId));
+    const shown: Filter[] = [];
     for (const { key } of list) {
       if (key === MISSING_KEY) continue;
-      const shown = phraseFilter({ name: fieldName }, key, indexId);
-      shown.meta.negate = true;
-      all.push(shown);
+      const filter = phraseFilter(field, key, indexId);
+      filter.meta.negate = true;
+      shown.push(filter);
     }
+    all.push(...shown);
     filters[name] = buildQuery(context.indexPattern, [], all) as unknown as Dsl;
-    targets[name] = container[agg.id] as { buckets?: unknown };
+    targets[name] = { list: container[agg.id] as { buckets?: unknown }, shown, missing };
   };
   visit((response.aggregations ?? {}) as Bucket, 0, [], '');
   // As in OpenSearch Dashboards, one list without terms and nothing is asked
@@ -1118,8 +1581,18 @@ export function planOtherBucket(
       const found = (answer?.[OTHER_AGG] as { buckets?: Record<string, Bucket> } | undefined)?.buckets ?? {};
       for (const [name, bucket] of Object.entries(found)) {
         const target = targets[name];
-        if (!target || !Array.isArray(target.buckets) || !bucket.doc_count) continue;
-        target.buckets.push({ ...bucket, key: OTHER_KEY });
+        if (!target || !Array.isArray(target.list.buckets) || !bucket.doc_count) continue;
+        const rest: Bucket = { ...bucket, key: OTHER_KEY };
+        // As the original's mergeOtherBucketAggResponse: none of the terms its request named as
+        // phrases (a scripted field's, none), and the field, when the missing bucket is shown
+        const terms = target.shown.flatMap((filter) => {
+          const phrase = (filter.query as { match_phrase?: Record<string, unknown> } | undefined)?.match_phrase;
+          return phrase && field.name in phrase ? [phrase[field.name]] : [];
+        });
+        const none = phrasesFilter(field, terms, indexId);
+        none.meta.negate = true;
+        otherBucketFilters.set(rest, target.missing ? [none, existsFilter(field, indexId)] : [none]);
+        target.list.buckets.push(rest);
       }
     },
   };

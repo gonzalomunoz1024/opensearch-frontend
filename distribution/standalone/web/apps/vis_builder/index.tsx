@@ -9,33 +9,47 @@
  */
 
 import '../../styles/vis_builder.css';
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
-import { Spinner } from '../../components/basic';
-import { SearchField } from '../../components/form';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type PointerEvent,
+  type ReactNode,
+} from 'react';
+import { Spinner, cx } from '../../components/basic';
+import { SearchField, Switch } from '../../components/form';
 import { Icon } from '../../components/icon';
-import { Popover } from '../../components/overlay';
+import { Popover, Tooltip } from '../../components/overlay';
 import { resolveTimeRange, type TimeRange } from '../../lib/dates';
 import type { RawHit } from '../../lib/docs';
 import { buildQuery, mergeFilters, sameFilter, timeRangeFilter } from '../../lib/query';
 import type { Filter, IndexPattern, Query } from '../../lib/types';
 import { appUrl, buildHash, encodeState } from '../../lib/url';
-import { getLocation, navigate, setHashParams, useLocation, useUrlState } from '../../router';
+import { getLocation, lastAddressOf, navigate, setHashParams, useLocation, useUrlState } from '../../router';
 import { services } from '../../services';
 import { HttpFetchError, errorMessage } from '../../services/http';
-import { patternName, type IndexPatternSummary } from '../../services/index_patterns';
-import { TopNav } from '../../shell/chrome';
+import { patternName } from '../../services/index_patterns';
+import { TopNav, type TopNavItem } from '../../shell/chrome';
 import { splitFilters } from '../../shell/filter_bar';
 import { defaultQueryLanguage } from '../../shell/query_bar';
+import { pageFiltersOf, savedQueryGlobalParam, type SavedQueryChange } from '../../shell/saved_query';
 import { SaveModal, type SaveResult } from '../../shell/saved_objects_ui';
 import { SearchBar } from '../../shell/search_bar';
 import { addRecentlyAccessed, currentGlobalParam, useAutoRefresh, useBreadcrumbs, useGlobalState } from '../../shell/state';
 import { visContext, type VisInput } from '../../vis/request';
 import { documentFields, sortClause } from '../discover/search';
+import { incomingEditorState } from '../visualize/state_transfer';
+import { returnSwitch } from '../visualize/top_nav';
 import { DataTab } from './data_tab';
 import {
   afterChange,
   newAppState,
   openedState,
+  originatingAppOf,
   readAppState,
   saveDisabledReason,
   urlAppState,
@@ -94,6 +108,8 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
   const [opened, setOpened] = useState<string | null | undefined>(null);
   const [saving, setSaving] = useState(false);
   const [tick, setTick] = useState(0);
+  // Whether the save dialog goes back to the application that opened the page
+  const [returnToOrigin, setReturnToOrigin] = useState(false);
 
   const app = useMemo(() => readAppState(location.hashParams._a), [location.hashParams._a]);
 
@@ -110,7 +126,9 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
       // The query and the filters are in the address from the start
       if (getLocation().hashParams._q === undefined) setQueryState({}, { replace: true });
       if (!savedId) {
-        const state = readApp() ?? newAppState(await services.indexPatterns.defaultId().catch(() => undefined));
+        // A page just arrived at keeps the application it was sent from, as there; a state in the
+        // address says so itself
+        const state = readApp() ?? newAppState(await services.indexPatterns.defaultId().catch(() => undefined), incomingEditorState()?.originatingApp);
         if (!live) return;
         setSaved(undefined);
         writeApp(withStatus(state, 'clean'));
@@ -121,7 +139,7 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
         const loaded = visBuilderFromSavedObject(await services.savedObjects.get<VisBuilderAttributes>(VIS_BUILDER_TYPE, savedId));
         if (!live) return;
         setSaved(loaded);
-        writeApp(openedState(readApp(), loaded));
+        writeApp(openedState(readApp(), loaded, incomingEditorState()?.originatingApp));
         // What it was saved with becomes the page's query and filters, but for those pinned already
         const pinned = pinnedFilters.current;
         setQueryState(
@@ -174,7 +192,7 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
           // An index pattern that is gone is replaced by the first there is, as there
         }
       }
-      const first = (await services.indexPatterns.list().catch(() => []))[0];
+      const first = (await findIndexPatterns().catch(() => []))[0];
       if (live && first && first.id !== indexId) update((current) => withIndexPattern(current, first.id));
     };
     void load();
@@ -222,6 +240,22 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
     },
     [query, setQueryState, markDirty]
   );
+  // A saved query loaded, saved or cleared: its query and filters become the page's, and the page
+  // keeps its id with the visualization, as there (the id is not saved with the object)
+  const onSavedQueryChange = useCallback((change: SavedQueryChange) => {
+    const current = readApp();
+    if (!current) return;
+    const { savedQuery: _previous, ...visualization } = current.visualization;
+    const next = withStatus({ ...current, visualization: change.id ? { ...visualization, savedQuery: change.id } : visualization }, 'dirty');
+    setHashParams(
+      {
+        _g: savedQueryGlobalParam(change),
+        _q: encodeState({ filters: pageFiltersOf(change), query: change.query }),
+        _a: encodeState(urlAppState(next)),
+      },
+      { replace: change.replace ?? true }
+    );
+  }, []);
   const setTime = useCallback((time: TimeRange) => setGlobal({ time }), [setGlobal]);
   const refresh = useCallback(() => setTick((count) => count + 1), []);
   useAutoRefresh(global.refreshInterval, refresh);
@@ -239,8 +273,10 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
   }, [savedId, title]);
 
   const reason = app ? saveDisabledReason(app) : 'The canvas is empty. Add some aggregations before saving.';
+  // The application a panel was sent from: a dashboard, to go back to once it is saved
+  const originatingApp = app ? originatingAppOf(app) : undefined;
 
-  const save = async ({ title: newTitle, description, asNew }: SaveResult) => {
+  const save = async ({ title: newTitle, description, asNew, returnToOrigin: returning }: SaveResult & { returnToOrigin?: boolean }) => {
     const current = readApp();
     if (!current) return;
     const { attributes, references } = visBuilderToSavedObject(
@@ -254,6 +290,15 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
         references,
       });
       services.toasts.success(`Saved '${newTitle}'`);
+      if (originatingApp && returning) {
+        // Back where it came from, as the original's `navigateToApp(originatingApp)`: where the
+        // dashboards were last, with the time range of now. What is new, or a copy, is handed over
+        // to become a panel there; what was saved over itself is drawn again by the panel it has.
+        const back = lastAddressOf(originatingApp);
+        const newlyCreated = !savedId || asNew;
+        navigate(back, { force: true, state: newlyCreated ? { type: VIS_BUILDER_TYPE, input: { savedObjectId: stored.id } } : undefined });
+        return;
+      }
       setSaving(false);
       setSaved(visBuilderFromSavedObject(stored));
       writeApp({ ...current, metadata: { editor: { state: 'clean' }, isMigrated: false } });
@@ -271,7 +316,7 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
   const area = useRef<HTMLDivElement>(null);
   const [rightShare, setRightShare] = useState(RIGHT_SHARE);
   const clampShare = (right: number, width: number) => (Math.min(Math.max(right, RIGHT_MIN), Math.max(RIGHT_MIN, width - WORKSPACE_MIN)) / width) * 100;
-  const startResize = (event: PointerEvent<HTMLDivElement>) => {
+  const startResize = (event: PointerEvent<HTMLButtonElement>) => {
     const box = area.current?.getBoundingClientRect();
     if (!box) return;
     event.preventDefault();
@@ -283,7 +328,7 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', stop);
   };
-  const resizeByKey = (event: KeyboardEvent<HTMLDivElement>) => {
+  const resizeByKey = (event: KeyboardEvent<HTMLButtonElement>) => {
     const width = area.current?.getBoundingClientRect().width;
     if (!width || (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight')) return;
     event.preventDefault();
@@ -299,22 +344,43 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
     );
   }
 
+  // As the original's: once saved and opened from another application, saving is "Save as" and
+  // beside it "Save and return" saves over it and goes back; both say why they cannot be pressed
+  const fromOrigin = Boolean(savedId && originatingApp);
+  const returns = Boolean(originatingApp) && returnToOrigin;
+  const withReason = (button: ReactNode) => (reason ? <Tooltip content={reason} position="bottom">{button}</Tooltip> : button);
+  const navItems: TopNavItem[] = [
+    {
+      id: 'save',
+      label: fromOrigin ? 'Save as' : 'Save',
+      icon: fromOrigin ? undefined : 'save',
+      emphasize: !savedId,
+      disabled: Boolean(reason),
+      onClick: () => {
+        // Going back is what the dialog offers first, as the original's
+        setReturnToOrigin(Boolean(originatingApp));
+        setSaving(true);
+      },
+      testId: 'visBuilderSaveButton',
+      wrap: withReason,
+    },
+  ];
+  if (fromOrigin) {
+    navItems.push({
+      id: 'saveAndReturn',
+      label: 'Save and return',
+      icon: 'checkInCircleFilled',
+      emphasize: true,
+      disabled: Boolean(reason),
+      onClick: () => void save({ title, description: saved?.description ?? '', asNew: false, returnToOrigin: true }),
+      testId: 'visBuilderSaveAndReturnButton',
+      wrap: withReason,
+    });
+  }
+
   return (
     <div className="vbdPage" data-test-subj="visBuilderPage">
-      <TopNav
-        items={[
-          {
-            id: 'save',
-            label: 'Save',
-            icon: 'save',
-            emphasize: !savedId,
-            disabled: Boolean(reason),
-            title: reason,
-            onClick: () => setSaving(true),
-            testId: 'visBuilderSaveButton',
-          },
-        ]}
-      />
+      <TopNav items={navItems} />
       <div className="vbdTop">
         <SearchBar
           indexPatterns={indexPattern ? [indexPattern] : []}
@@ -328,6 +394,8 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
           onRefreshChange={(refreshInterval) => setGlobal({ refreshInterval })}
           onRefresh={refresh}
           showTime={Boolean(indexPattern?.timeFieldName)}
+          savedQueryId={app.visualization.savedQuery}
+          onSavedQueryChange={onSavedQueryChange}
         />
       </div>
       <div className="vbdLayout">
@@ -352,14 +420,13 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
               onTimeChange={setTime}
             />
           </div>
-          <div
+          <button
+            type="button"
             className="vbdArea__resize"
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize the settings"
-            tabIndex={0}
+            aria-label="Press left or right to adjust panels size"
             onPointerDown={startResize}
             onKeyDown={resizeByKey}
+            data-test-subj="euiResizableButton"
           />
           <div className="vbdArea__right" style={{ width: `${rightShare}%` }}>
             <StylePanel state={app} update={update} />
@@ -374,7 +441,17 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
           description={saved?.description}
           showDescription
           existing={Boolean(savedId)}
-          onSave={save}
+          id={savedId}
+          // Opened from a dashboard, a saved visualization is saved as a new one unless told otherwise
+          initialAsNew={Boolean(savedId) && Boolean(originatingApp)}
+          confirmLabel={returns ? 'Save and return' : undefined}
+          options={({ asNew }) => {
+            const offer = returnSwitch(originatingApp, savedId, asNew);
+            return offer.shown ? (
+              <Switch compressed checked={returnToOrigin} onChange={setReturnToOrigin} label={offer.label} testId="returnToOriginModeSwitch" />
+            ) : null;
+          }}
+          onSave={(result) => save({ ...result, returnToOrigin: returns && returnSwitch(originatingApp, savedId, Boolean(savedId) && result.asNew).shown })}
           onClose={() => setSaving(false)}
         />
       )}
@@ -390,7 +467,14 @@ function useSampleHits(indexPattern: IndexPattern | undefined, query: Query, fil
     if (!indexPattern) return undefined;
     const controller = new AbortController();
     const { version: _version, ...fields } = documentFields(indexPattern);
-    const bool = buildQuery(indexPattern, query, filters, services.queryConfig());
+    // A query that cannot be read finds nothing to count: the chart says what is wrong with it
+    let bool: ReturnType<typeof buildQuery>;
+    try {
+      bool = buildQuery(indexPattern, query, filters, services.queryConfig());
+    } catch {
+      setHits([]);
+      return undefined;
+    }
     const range = indexPattern.timeFieldName ? resolveTimeRange(time, { weekStart: services.weekStart() }) : undefined;
     const timeFilter = timeRangeFilter(indexPattern, range);
     if (timeFilter) bool.bool.filter.push(timeFilter);
@@ -410,16 +494,49 @@ function useSampleHits(indexPattern: IndexPattern | undefined, query: Query, fil
   return hits;
 }
 
-/** The index pattern the fields are those of: a list to search, as there */
+interface PatternOption {
+  id: string;
+  title: string;
+  displayName?: string;
+}
+
+/** The index patterns in the order the saved objects come, as the original lists them */
+async function findIndexPatterns(): Promise<PatternOption[]> {
+  const found = await services.savedObjects.find<{ title: string; displayName?: string }>({
+    type: 'index-pattern',
+    fields: ['title', 'displayName'],
+    perPage: 10000,
+  });
+  return found.saved_objects.map((object) => ({
+    id: object.id,
+    title: object.attributes.title,
+    displayName: object.attributes.displayName || undefined,
+  }));
+}
+
+/**
+ * The index pattern the fields are those of, as the original's "searchable dropdown": a field with
+ * "Data Source" in front that opens a list to search. In the list, as in the component library's,
+ * one option is active at a time, the chosen one when the search is focused; the arrows move it,
+ * Enter takes it, and it carries the badge of the Return key.
+ */
+/** Under the middle of the control, 8 px below, on a whole pixel as the original puts its panel */
+const UNDER_SOURCE = (anchor: DOMRect, panel: { width: number }) => ({
+  top: anchor.bottom + 8,
+  left: Math.round(anchor.left + (anchor.width - panel.width) / 2),
+  side: 'bottom' as const,
+});
+
 function DataSourceSelect({ selectedId, onChange }: { selectedId?: string; onChange: (id: string) => void }) {
   const [open, setOpen] = useState(false);
-  const [patterns, setPatterns] = useState<IndexPatternSummary[]>();
+  const [patterns, setPatterns] = useState<PatternOption[]>();
   const [error, setError] = useState<string>();
   const [search, setSearch] = useState('');
+  const [active, setActive] = useState<number>();
+  const listId = useId();
   useEffect(() => {
     let live = true;
-    services.indexPatterns
-      .list()
+    findIndexPatterns()
       .then((list) => live && setPatterns(list))
       .catch((failure) => live && setError(errorMessage(failure)));
     return () => {
@@ -427,21 +544,43 @@ function DataSourceSelect({ selectedId, onChange }: { selectedId?: string; onCha
     };
   }, []);
   const loading = patterns === undefined && error === undefined;
+  // As the original's, which shows what went wrong in place of the list
+  const shownError = error !== undefined ? `Error: ${error}` : patterns?.length === 0 ? 'Error: No index patterns available' : undefined;
   const current = patterns?.find((pattern) => pattern.id === selectedId);
   const wanted = search.trim().toLowerCase();
-  const shown = (patterns ?? []).filter(
-    (pattern) => !wanted || patternName(pattern).toLowerCase().includes(wanted) || pattern.title.toLowerCase().includes(wanted)
-  );
+  const shown = (patterns ?? []).filter((pattern) => !wanted || pattern.title.toLowerCase().includes(wanted));
+  // What is active once the search has the focus: the chosen one when it is shown, else the first
+  const firstActive = (list: PatternOption[]) => {
+    const chosen = list.findIndex((pattern) => pattern.id === selectedId);
+    return chosen > -1 ? chosen : list.length ? 0 : undefined;
+  };
   const close = useCallback(() => {
     setOpen(false);
     setSearch('');
+    setActive(undefined);
   }, []);
+  const choose = (pattern: PatternOption | undefined) => {
+    close();
+    if (pattern && pattern.id !== selectedId) onChange(pattern.id);
+  };
+  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (!shown.length) return;
+      const step = event.key === 'ArrowDown' ? 1 : -1;
+      setActive((index) => (index === undefined ? (step > 0 ? 0 : shown.length - 1) : (index + step + shown.length) % shown.length));
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      if (active !== undefined) choose(shown[active]);
+    }
+  };
+  const optionId = (index: number) => `${listId}_option-${index}`;
 
   return (
     <Popover
       open={open}
       onClose={close}
-      matchWidth
+      placeAt={UNDER_SOURCE}
       anchorStyle={{ display: 'flex', width: '100%' }}
       className="vbdSourceList"
       button={
@@ -450,56 +589,114 @@ function DataSourceSelect({ selectedId, onChange }: { selectedId?: string; onCha
           <button
             type="button"
             className="vbdSource__button"
-            aria-haspopup="listbox"
-            aria-expanded={open}
             onClick={() => (open ? close() : setOpen(true))}
             data-test-subj="searchableDropdownValue"
           >
-            {current ? (
-              <>
-                <Icon name="index" className="vbdSource__icon" />
-                <span className="atlTruncate">{patternName(current)}</span>
-              </>
-            ) : (
-              <span className="atlSubdued">{loading ? 'Loading' : 'Select an option'}</span>
-            )}
-            {loading ? <Spinner /> : <Icon name="chevronDown" className="vbdSource__caret" />}
+            <span className="vbdSource__value">
+              <span className="vbdSource__text">
+                {current ? (
+                  <>
+                    <Icon name="indexPatternApp" app /> {patternName(current)}
+                  </>
+                ) : (
+                  <span className="atlSubdued">{loading ? 'Loading' : 'Select an option'}</span>
+                )}
+              </span>
+            </span>
           </button>
+          <span className="vbdSource__icons">
+            {loading && <Spinner />}
+            <Icon name="chevronDown" />
+          </span>
         </div>
       }
     >
-      {error !== undefined ? (
-        <p className="vbdSourceList__message">{error}</p>
-      ) : loading ? (
-        <div className="vbdSourceList__message">
+      {loading ? (
+        <div className="vbdSourceList__loading">
           <Spinner />
         </div>
+      ) : shownError !== undefined ? (
+        <p className="vbdSourceList__error">{shownError}</p>
       ) : (
         <>
           <div className="vbdSourceList__search">
-            <SearchField compact value={search} onChange={setSearch} placeholder="Filter options" aria-label="Filter options" autoFocus />
+            <SearchField
+              value={search}
+              onChange={(next) => {
+                setSearch(next);
+                const nextWanted = next.trim().toLowerCase();
+                setActive(firstActive((patterns ?? []).filter((pattern) => !nextWanted || pattern.title.toLowerCase().includes(nextWanted))));
+              }}
+              placeholder="Filter options"
+              aria-label="Selectable options"
+              role="combobox"
+              aria-haspopup="listbox"
+              aria-controls={`${listId}_listbox`}
+              aria-activedescendant={active === undefined ? undefined : optionId(active)}
+              autoComplete="off"
+              autoFocus
+              onFocus={() => setActive((index) => index ?? firstActive(shown))}
+              onBlur={(event) => {
+                if (!event.currentTarget.closest('.vbdSourceList')?.contains(event.relatedTarget as Node | null)) setActive(undefined);
+              }}
+              onKeyDown={onKeyDown}
+              append={
+                // The original's button that clears the search, which gives the focus back to it
+                search ? (
+                  <button
+                    type="button"
+                    className="vbdSourceList__clear"
+                    aria-label="Clear input"
+                    onClick={(event) => {
+                      setSearch('');
+                      setActive(firstActive(patterns ?? []));
+                      event.currentTarget.parentElement?.querySelector('input')?.focus();
+                    }}
+                  >
+                    <Icon name="cross" />
+                  </button>
+                ) : undefined
+              }
+            />
           </div>
-          <ul className="vbdSourceList__options" role="listbox" aria-label="Selectable options" data-test-subj="searchableDropdownList">
-            {shown.map((pattern) => (
-              <li key={pattern.id}>
-                <button
-                  type="button"
+          {shown.length ? (
+            <ul
+              className={cx('vbdSourceList__options', shown.length > 7 && 'vbdSourceList__options--more')}
+              id={`${listId}_listbox`}
+              role="listbox"
+              aria-label="Selectable options"
+              data-test-subj="searchableDropdownList"
+            >
+              {shown.map((pattern, index) => (
+                <li
+                  key={pattern.id}
+                  id={optionId(index)}
                   role="option"
                   aria-selected={pattern.id === selectedId}
-                  className="vbdSourceList__option"
+                  aria-posinset={index + 1}
+                  aria-setsize={shown.length}
+                  className={cx('vbdSourceList__option', active === index && 'vbdSourceList__option--active')}
                   title={patternName(pattern)}
-                  onClick={() => {
-                    close();
-                    if (pattern.id !== selectedId) onChange(pattern.id);
-                  }}
+                  onMouseDown={() => setActive(index)}
+                  onClick={() => choose(pattern)}
                 >
-                  <Icon name="index" className="vbdSource__icon" />
-                  <span className="atlTruncate">{patternName(pattern)}</span>
-                </button>
-              </li>
-            ))}
-            {shown.length === 0 && <li className="vbdSourceList__message">No options match the search</li>}
-          </ul>
+                  <Icon name="indexPatternApp" app className="vbdSourceList__icon" />
+                  <span className="vbdSourceList__text">{patternName(pattern)}</span>
+                  {active === index && (
+                    <span className="vbdSourceList__badge" aria-hidden="true">
+                      <Icon name="returnKey" />
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="vbdSourceList__message">
+              <p>
+                <strong>{search}</strong> doesn&apos;t match any options
+              </p>
+            </div>
+          )}
         </>
       )}
     </Popover>

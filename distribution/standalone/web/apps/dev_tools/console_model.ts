@@ -5,17 +5,14 @@
  * cURL or read from cURL, how it is coloured, and what could be typed next.
  */
 
-import type { CodeToken } from '../../components/code_editor';
 import {
   collapseLiteralStrings,
   expandLiteralStrings,
   reindentJson,
-  tokenizeJsonLine,
-  type JsonState,
 } from '../../lib/json_text';
+import { highlight, rehighlight, type Highlighted } from './console_highlight';
 
 export const METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'HEAD', 'PATCH', 'OPTIONS'];
-const REQUEST_LINE = /^\s*(GET|POST|PUT|DELETE|HEAD|PATCH|OPTIONS)\s+(\S.*?)\s*$/i;
 const isComment = (line: string) => /^\s*(#|\/\/)/.test(line);
 
 export const DEFAULT_TEXT = `GET _search
@@ -37,47 +34,221 @@ export interface ConsoleRequest {
   endLine: number;
 }
 
-/** The line a JSON document that starts on `from` closes on: the last line when it never does */
-function documentEnd(lines: string[], from: number): number {
-  const state: JsonState = { depth: 0, triple: false };
-  for (let row = from; row < lines.length; row += 1) {
-    tokenizeJsonLine(lines[row], state);
-    if (state.depth === 0 && !state.triple) return row;
-  }
-  return lines.length - 1;
+/** The text of the console with the state each of its lines ends in, which says where requests are */
+export interface ConsoleText {
+  lines: string[];
+  highlighted: Highlighted;
 }
 
 /**
- * The requests of a text. A request is a line with a method and a path; its body starts on the
- * very next line with a brace, and a further document starts on the line after one closes.
+ * The text of the console read. With the reading of the text before it, only the lines that
+ * changed are read again, and those after them as far as their state changed: what is typed
+ * into a long text costs what a few lines cost.
  */
-export function parseRequests(text: string): ConsoleRequest[] {
+export function readConsole(text: string, previous?: ConsoleText): ConsoleText {
   const lines = text.split('\n');
-  const requests: ConsoleRequest[] = [];
-  let row = 0;
-  while (row < lines.length) {
-    const match = isComment(lines[row]) ? null : REQUEST_LINE.exec(lines[row]);
-    if (!match) {
-      row += 1;
-      continue;
-    }
-    const request: ConsoleRequest = { method: match[1].toUpperCase(), url: match[2], data: [], startLine: row, endLine: row };
-    let next = row + 1;
-    while (next < lines.length && lines[next].trim().startsWith('{')) {
-      const end = documentEnd(lines, next);
-      request.data.push(lines.slice(next, end + 1).join('\n').trim());
-      request.endLine = end;
-      next = end + 1;
-    }
-    requests.push(request);
-    row = next;
-  }
-  return requests;
+  return { lines, highlighted: previous ? rehighlight(previous.lines, previous.highlighted, lines, 'input') : highlight(text, 'input') };
 }
 
-/** The requests a selection touches; a cursor between two requests is on none */
+/** What a line is to the request parser of OpenSearch Dashboards (its RowParser) */
+export const ROW = { REQUEST_START: 2, IN_REQUEST: 4, MULTI_DOC_CUR_DOC_END: 8, REQUEST_END: 16, BETWEEN_REQUESTS: 32 };
+
+export function rowMode(doc: ConsoleText, row: number): number {
+  const { lines } = doc;
+  if (row < 0 || row >= lines.length) return ROW.BETWEEN_REQUESTS;
+  const state = doc.highlighted.states[row];
+  // Within a body: the line ends inside braces, a string or a script
+  if (state !== 'start' && state !== 'start-sql') return ROW.IN_REQUEST;
+  const line = lines[row].trim();
+  if (!line || line[0] === '#') return ROW.BETWEEN_REQUESTS;
+  const next = row + 1 < lines.length ? lines[row + 1].trim() : undefined;
+  if (line.endsWith('}')) {
+    // Another document of a bulk body starts right after this one
+    if (next !== undefined && next.startsWith('{')) return ROW.MULTI_DOC_CUR_DOC_END | ROW.IN_REQUEST;
+    return ROW.REQUEST_END | ROW.MULTI_DOC_CUR_DOC_END;
+  }
+  if (next === undefined || !next.startsWith('{')) return ROW.REQUEST_START | ROW.REQUEST_END;
+  return ROW.REQUEST_START;
+}
+
+const is = (doc: ConsoleText, row: number, mode: number) => (rowMode(doc, row) & mode) > 0;
+
+/** The line a request that starts on `start` ends on; one past the text when it never ends */
+function requestEnd(doc: ConsoleText, start: number): number {
+  let row = start;
+  for (; row < doc.lines.length; row += 1) {
+    if (is(doc, row, ROW.REQUEST_END)) break;
+    if (row !== start && is(doc, row, ROW.REQUEST_START)) break;
+  }
+  return row;
+}
+
+function documentEnd(doc: ConsoleText, start: number): number {
+  let row = start;
+  for (; row < doc.lines.length - 1; row += 1) {
+    if (is(doc, row, ROW.REQUEST_END) || is(doc, row, ROW.MULTI_DOC_CUR_DOC_END)) break;
+    if (row !== start && is(doc, row, ROW.REQUEST_START)) break;
+  }
+  return row;
+}
+
+interface PlacedToken {
+  type: string;
+  value: string;
+  row: number;
+}
+
+function* tokensFrom(doc: ConsoleText, row: number): Generator<PlacedToken> {
+  for (let at = row; at < doc.lines.length; at += 1) {
+    for (const token of doc.highlighted.lines[at]) yield { ...token, row: at };
+  }
+}
+
+const isEmptyToken = (token: PlacedToken | undefined) => !token || token.type === 'whitespace';
+
+function nextNonEmpty(tokens: Generator<PlacedToken>): PlacedToken | undefined {
+  let token = tokens.next().value as PlacedToken | undefined;
+  while (token && isEmptyToken(token)) token = tokens.next().value as PlacedToken | undefined;
+  return token;
+}
+
+/** The request whose first line is at or above `row`, as the console reads it from the tokens */
+export function requestAt(doc: ConsoleText, row: number): (ConsoleRequest & { end: number }) | undefined {
+  if (is(doc, row, ROW.BETWEEN_REQUESTS)) return undefined;
+  let start = row;
+  while (start > 0 && !is(doc, start, ROW.REQUEST_START)) start -= 1;
+  const end = requestEnd(doc, start);
+  const tokens = tokensFrom(doc, start);
+  let token = tokens.next().value as PlacedToken | undefined;
+  if (isEmptyToken(token)) token = nextNonEmpty(tokens);
+  if (!token) return undefined;
+  const method = token.value;
+  token = nextNonEmpty(tokens);
+  if (!token || token.type === 'method') return undefined;
+  let url = '';
+  while (token && token.type.indexOf('url') === 0) {
+    url += token.value;
+    token = tokens.next().value as PlacedToken | undefined;
+  }
+  if (isEmptyToken(token)) token = nextNonEmpty(tokens);
+  const data: string[] = [];
+  let bodyStart = token ? token.row : doc.lines.length;
+  const endsWithText = end < doc.lines.length && doc.lines[end].trimEnd().length > 0;
+  while (bodyStart < end || (bodyStart === end && endsWithText)) {
+    const last = documentEnd(doc, bodyStart);
+    data.push(doc.lines.slice(bodyStart, last + 1).join('\n').trim());
+    bodyStart = last + 1;
+  }
+  return { method, url, data, startLine: start, endLine: Math.min(end, doc.lines.length - 1), end };
+}
+
+/** The lines from the first request a range touches to the end of the last one, if it touches any */
+export function expandToRequests(doc: ConsoleText, fromRow: number, toRow = fromRow): [number, number] | undefined {
+  let start = fromRow;
+  let end = toRow;
+  if (!is(doc, start, ROW.BETWEEN_REQUESTS)) {
+    for (; start >= 0; start -= 1) if (is(doc, start, ROW.REQUEST_START)) break;
+  }
+  if (start < 0 || start > end) return undefined;
+  if (is(doc, end, ROW.BETWEEN_REQUESTS)) {
+    for (; end >= start; end -= 1) if (is(doc, end, ROW.REQUEST_END)) break;
+  } else {
+    for (; end < doc.lines.length; end += 1) if (is(doc, end, ROW.REQUEST_END)) break;
+  }
+  if (end < start || end > doc.lines.length - 1) return undefined;
+  return [start, end];
+}
+
+/** The requests a range of lines touches, with the text between them when it is asked for */
+export function blocksBetween(doc: ConsoleText, fromRow: number, toRow = fromRow, withText = false): Array<ConsoleRequest | string> {
+  const range = expandToRequests(doc, fromRow, toRow);
+  if (!range) return [];
+  const out: Array<ConsoleRequest | string> = [];
+  let blockStart = range[0];
+  let row = range[0];
+  const flush = () => {
+    const block = doc.lines.slice(blockStart, row).join('\n').replace(/\s+$/, '');
+    if (withText && block) out.push(block);
+  };
+  while (row <= range[1]) {
+    if (is(doc, row, ROW.REQUEST_START)) {
+      flush();
+      const request = requestAt(doc, row);
+      if (!request) return out;
+      const { end, ...rest } = request;
+      out.push(rest);
+      blockStart = row = end + 1;
+    } else {
+      row += 1;
+    }
+  }
+  flush();
+  return out;
+}
+
+export const requestsBetween = (doc: ConsoleText, fromRow: number, toRow = fromRow): ConsoleRequest[] =>
+  blocksBetween(doc, fromRow, toRow).filter((block): block is ConsoleRequest => typeof block !== 'string');
+
+/** Every request of a text */
+export function parseRequests(text: string): ConsoleRequest[] {
+  const doc = readConsole(text);
+  return requestsBetween(doc, 0, Math.max(0, doc.lines.length - 1));
+}
+
 export function requestsInRange(requests: ConsoleRequest[], fromLine: number, toLine = fromLine): ConsoleRequest[] {
   return requests.filter((request) => request.endLine >= fromLine && request.startLine <= toLine);
+}
+
+/** The line Ctrl/Cmd + Up or Down goes to: the previous or next line a request starts or ends on */
+export function requestEdge(doc: ConsoleText, row: number, direction: -1 | 1): number {
+  const edge = ROW.REQUEST_START | ROW.REQUEST_END;
+  let at = row + direction;
+  if (direction < 0) {
+    for (; at > 0 && !is(doc, at, edge); at -= 1);
+    return Math.max(0, at);
+  }
+  for (; at < doc.lines.length - 1 && !is(doc, at, edge); at += 1);
+  return Math.min(at, Math.max(0, doc.lines.length - 1));
+}
+
+/** Where the request's buttons are: so far from the top of the editor, or on its bottom edge */
+export type ActionsPlace = { top: number } | { bottom: number };
+
+/** The editor as it is laid out, from the top of its frame with the scrolling taken off */
+export interface ActionsLayout {
+  lineTop: (line: number) => number | undefined;
+  lineBottom: (line: number) => number | undefined;
+  /** The top of the row the end of a line is on */
+  endTop: (line: number) => number | undefined;
+  height: number;
+  /** Ace's wrap limit: the characters a row holds */
+  wrapLimit: number;
+}
+
+/**
+ * Where the buttons of the request on the lines `first` to `last` go, as the original places
+ * them (Ace's legacyUpdateUI): on the request's first line; on the bottom edge while that line is
+ * below the editor; when it has more characters than five short of the wrap limit, on the line
+ * before it, or for the first line on the line after it (Ace's place past the last line being
+ * the end of the last); on the top edge while only the end of the request is in sight. Nothing
+ * while the request is out of sight above: the buttons stay where they were.
+ */
+export function placeActions(lines: string[], [first, last]: [number, number], layout: ActionsLayout): ActionsPlace | undefined {
+  const top = layout.lineTop(first);
+  if (top === undefined) return undefined;
+  if (top >= 0) {
+    if (top > layout.height) return { bottom: 0 };
+    if (lines[first].length > layout.wrapLimit - 5) {
+      let other: number | undefined;
+      if (first > 0) other = layout.lineTop(first - 1);
+      else if (first + 1 < lines.length) other = layout.lineTop(first + 1);
+      else other = layout.endTop(first);
+      return { top: other ?? top };
+    }
+    return { top };
+  }
+  const bottom = layout.lineBottom(last);
+  return bottom !== undefined && bottom >= 0 ? { top: 0 } : undefined;
 }
 
 /** The offsets of the first character of a request and of the end of its last line */
@@ -131,57 +302,67 @@ export function autoIndent(request: ConsoleRequest): string {
   return [`${request.method} ${request.url}`, ...formatted.data].join('\n');
 }
 
-/** The text with one request replaced, and where the request now ends */
+/** The text with one request replaced */
 export function replaceRequest(text: string, request: ConsoleRequest, replacement: string): string {
   const [start, end] = requestOffsets(text, request);
   return `${text.slice(0, start)}${replacement}${text.slice(end)}`;
 }
 
-/** The text with a request from the history put where the cursor is, and the place of its first line */
+/**
+ * The text with a request from the history put by the cursor, as the original does: before a
+ * request whose first line the cursor is on, after one it is in, at the cursor between requests.
+ * The offset is the start of the line the request now starts on, where the cursor goes.
+ */
 export function insertRequest(
   text: string,
   cursorLine: number,
   past: { method: string; endpoint: string; data?: string }
-): { text: string; offset: number } {
-  const lines = text.split('\n');
-  const requests = parseRequests(text);
-  const here = requestsInRange(requests, cursorLine)[0];
-  let line = cursorLine;
-  let atEnd = false;
+): { text: string; offset: number; from: number; inserted: string } {
+  const doc = readConsole(text);
+  const lines = doc.lines;
+  let row = cursorLine;
+  let column = 0;
   let prefix = '';
   let suffix = '\n';
-  if (here && here.startLine === cursorLine) {
-    // On the first line of a request: the new one goes before it
+  if (is(doc, row, ROW.REQUEST_START)) {
     suffix += '\n';
-  } else if (here) {
-    // In a request, or on its last line: the new one goes after it
-    line = here.endLine;
-    atEnd = true;
+  } else if (is(doc, row, ROW.REQUEST_END)) {
+    column = lines[row].length;
+    prefix = '\n\n';
+  } else if (is(doc, row, ROW.BETWEEN_REQUESTS)) {
+    // at the start of the line, as it is
+  } else {
+    row = Math.min(requestEnd(doc, row), lines.length - 1);
+    column = lines[row].replace(/\s+$/, '').length;
     prefix = '\n\n';
   }
-  let offset = 0;
-  for (let row = 0; row < line; row += 1) offset += lines[row].length + 1;
-  if (atEnd) offset += lines[line].length;
+  let offset = column;
+  for (let at = 0; at < row; at += 1) offset += lines[at].length + 1;
   let inserted = `${prefix}${past.method} ${past.endpoint}`;
   if (past.data) inserted += `\n${past.data}`;
   inserted += suffix;
-  return { text: `${text.slice(0, offset)}${inserted}${text.slice(offset)}`, offset: offset + prefix.length };
+  return { text: `${text.slice(0, offset)}${inserted}${text.slice(offset)}`, offset: offset + prefix.length, from: offset, inserted };
 }
 
 // --- cURL --------------------------------------------------------------------------------------
 
-/** A request as a cURL command against the OpenSearch the product talks to */
-export function toCurl(request: ConsoleRequest, host: string): string {
-  const url = `${host.replace(/\/+$/, '')}/${request.url.replace(/^\/+/, '')}`;
-  let command = `curl -X${request.method} "${url}"`;
-  if (request.data.length) {
-    command += " -H 'Content-Type: application/json' -d'\n";
-    // Console has no single-quoted strings, so a single quote is inside a string
-    command += collapseLiteralStrings(request.data.join('\n')).replace(/'/g, '\\"');
-    if (request.data.length > 1) command += '\n';
-    command += "'";
-  }
-  return command;
+/** The requests as cURL commands against the OpenSearch the product talks to, the text between them kept */
+export function toCurl(blocks: Array<ConsoleRequest | string>, host: string): string {
+  return blocks
+    .map((block) => {
+      if (typeof block === 'string') return block;
+      const url = `${host.replace(/\/+$/, '')}/${block.url.replace(/^\/+/, '')}`;
+      let command = `curl -X${block.method} "${url}"`;
+      if (block.data.length) {
+        command += " -H 'Content-Type: application/json' -d'\n";
+        // A single quote ends the shell's string: it is closed, escaped and opened again
+        command += collapseLiteralStrings(block.data.join('\n')).replace(/'/g, "'\\''");
+        if (block.data.length > 1) command += '\n';
+        command += "'";
+      }
+      return command;
+    })
+    .join('\n');
 }
 
 export const looksLikeCurl = (text: string) => /^\s*curl\s+/.test(text);
@@ -210,6 +391,10 @@ function shellWords(command: string): string[] {
         at = end + 1;
       } else if (command[at] === '\\' && command[at + 1] === '\n') {
         at += 2;
+      } else if (command[at] === '\\' && /['"\\]/.test(command[at + 1] ?? '')) {
+        // A quote or a backslash written between quoted parts: '\'' is a quote inside a body
+        word += command[at + 1];
+        at += 2;
       } else {
         word += command[at];
         at += 1;
@@ -237,7 +422,7 @@ export function parseCurl(text: string): string {
           method = word.slice(2);
         } else if (/^(-d|--data|--data-raw|--data-binary|--data-ascii)$/.test(word)) {
           bodies.push(words[(index += 1)] ?? '');
-        } else if (/^-d./.test(word)) {
+        } else if (/^-d[\s\S]/.test(word)) {
           bodies.push(word.slice(2));
         } else if (/^(-H|--header|-u|--user|-o|--output|--cacert|--cert|--key|-A|--user-agent)$/.test(word)) {
           index += 1;
@@ -245,15 +430,15 @@ export function parseCurl(text: string): string {
           url = word;
         }
       }
-      // The address without its scheme and host, which the console does not write
-      const path =
-        url
-          .replace(/^[a-z]+:\/\/[^/]*\/?/i, '')
-          .replace(/^(?:localhost|[\w-]+(?:\.[\w-]+)+|[\w.-]+:\d+)(?::\d+)?(?:\/|$)/i, '')
-          .replace(/^\/+/, '') || '/';
+      // The address without its scheme and host, after a slash, as the original writes it
+      const path = url
+        .replace(/^[a-z]+:\/\/[^/]*\/?/i, '')
+        .replace(/^(?:localhost|[\w-]+(?:\.[\w-]+)+|[\w.-]+:\d+)(?::\d+)?(?:\/|$)/i, '')
+        .replace(/^\/+/, '');
       const body = bodies.join('\n').trim();
-      const verb = (method ?? (body ? 'POST' : 'GET')).toUpperCase();
-      return body ? `${verb} ${path}\n${body}` : `${verb} ${path}`;
+      // GET unless the command names a method, with a body too: the original reads only -X
+      const verb = (method ?? 'GET').toUpperCase();
+      return body ? `${verb} /${path}\n${body}` : `${verb} /${path}`;
     })
     .join('\n\n');
 }
@@ -318,36 +503,36 @@ export function formatAnswer(
   return value;
 }
 
-// --- Colours -----------------------------------------------------------------------------------
-
-/** The text of the editor as lines of coloured runs */
-export function tokenizeConsole(text: string): CodeToken[][] {
-  const state: JsonState = { depth: 0, triple: false };
-  return text.split('\n').map((line) => {
-    if (state.depth > 0 || state.triple) return tokenizeJsonLine(line, state);
-    if (isComment(line)) return [{ text: line, kind: 'Comment' }];
-    const match = /^(\s*)(GET|POST|PUT|DELETE|HEAD|PATCH|OPTIONS)(\s+)(.*)$/i.exec(line);
-    if (match) {
-      const tokens: CodeToken[] = [];
-      if (match[1]) tokens.push({ text: match[1] });
-      tokens.push({ text: match[2], kind: 'Method' }, { text: match[3] });
-      if (match[4]) tokens.push({ text: match[4], kind: 'Url' });
-      return tokens;
-    }
-    if (line.trim().startsWith('{')) return tokenizeJsonLine(line, state);
-    return [{ text: line }];
-  });
+/**
+ * What a request that failed shows: its answer, JSON spread over lines as the original's, or that
+ * none came
+ */
+export function failedAnswer(text: string, contentType: string, status: number): string {
+  return text ? formatAnswer(text, contentType) : `Request failed to get to the server (status code: ${status})`;
 }
 
-/** An answer as lines of coloured runs: comment lines, then JSON or plain text */
-export function tokenizeAnswer(text: string): CodeToken[][] {
-  const state: JsonState = { depth: 0, triple: false };
-  const lines = text.split('\n');
-  const json = lines.some((line) => /^\s*[{[]/.test(line));
-  return lines.map((line) => {
-    if (state.depth === 0 && !state.triple && line.startsWith('#')) return [{ text: line, kind: 'Comment' }];
-    return json ? tokenizeJsonLine(line, state) : [{ text: line }];
-  });
+/** An answer of OpenSearch to one request, as the console keeps it */
+export interface Answer {
+  ok: boolean;
+  method: string;
+  path: string;
+  data: string;
+  statusCode?: number;
+  statusText?: string;
+  contentType: string;
+  timeMs: number;
+  value: string;
+}
+
+/**
+ * What the output pane shows: the answers one under the other, strings with escapes in triple
+ * quotes when the setting asks for them (only for answers that succeeded, as the original). Any
+ * text is read with the output's colours, JSON or not, as the original's editor does.
+ */
+export function outputOf(answers: Answer[], tripleQuotes: boolean): { value: string; mode: 'output' | 'text' } {
+  const expand = tripleQuotes && answers[0]?.ok === true;
+  const value = answers.map((answer) => (expand ? expandLiteralStrings(answer.value) : answer.value)).join('\n');
+  return { value, mode: value ? 'output' : 'text' };
 }
 
 // --- History -----------------------------------------------------------------------------------
@@ -357,6 +542,25 @@ export interface PastRequest {
   endpoint: string;
   method: string;
   data?: string;
+}
+
+/**
+ * A key pressed in the history's list: the arrows choose a request, Enter applies the chosen one.
+ * The keys are the list's alone: applying gives the focus to the editor, where an Enter left to
+ * the browser would break a line as well.
+ */
+export function historyKey(
+  event: { key: string; preventDefault(): void },
+  selected: number,
+  actions: { choose(index: number): void; apply(): void }
+): void {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    actions.apply();
+  } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+    event.preventDefault();
+    actions.choose(selected + (event.key === 'ArrowUp' ? -1 : 1));
+  }
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -714,15 +918,25 @@ function bodyKeys(path: string[], url: string, names: ClusterNames): string[] {
 }
 
 /**
- * What could be typed at a place of the editor: a method at the start of a line, a path after
- * it, and in the body of a search the names OpenSearch knows there.
+ * Whether something is typed before the cursor on its line. A line just begun, or its indentation,
+ * opens no list of suggestions by itself, as in the original: the next Enter would accept a
+ * suggestion nobody asked for. Ctrl+Space opens the list there.
  */
-export function suggest(text: string, offset: number, names: ClusterNames): Suggestions | undefined {
+export function typedOnLine(text: string, offset: number): boolean {
+  return /\S/.test(text.slice(text.lastIndexOf('\n', offset - 1) + 1, offset));
+}
+
+/**
+ * What could be typed at a place of the editor: a method at the start of a line, a path after
+ * it, and in the body of a search the names OpenSearch knows there. The text as already read is
+ * given by a caller that has it, which spares reading a long text again at every key.
+ */
+export function suggest(text: string, offset: number, names: ClusterNames, doc: ConsoleText = readConsole(text)): Suggestions | undefined {
   const lineStart = text.lastIndexOf('\n', offset - 1) + 1;
   const before = text.slice(lineStart, offset);
   const row = lineOf(text, offset);
-  const requests = parseRequests(text);
-  const request = requestsInRange(requests, row)[0];
+  // The request the cursor is in, its body closed or not yet
+  const request = requestAt(doc, row);
 
   if (!request || request.startLine === row) {
     if (isComment(before)) return undefined;
@@ -760,9 +974,9 @@ export function suggest(text: string, offset: number, names: ClusterNames): Sugg
     to: offset + after,
     items: keys.map((label) => {
       if (FIELD_QUERIES.has(last) && path.length > 1) return { label, insert: `"${label}": `, meta: 'field' };
-      if (ARRAYS.has(label)) return { label, insert: `"${label}": []`, back: 1 };
-      if (SCALARS.has(label)) return { label, insert: `"${label}": ` };
-      return { label, insert: `"${label}": {}`, back: 1 };
+      if (ARRAYS.has(label)) return { label, insert: `"${label}": []`, back: 1, meta: 'API' };
+      if (SCALARS.has(label)) return { label, insert: `"${label}": `, meta: 'API' };
+      return { label, insert: `"${label}": {}`, back: 1, meta: 'API' };
     }),
   };
 }

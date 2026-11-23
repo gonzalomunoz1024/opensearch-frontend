@@ -42,112 +42,172 @@ export function encode(value: RisonValue): string {
   return `(${pairs.join(',')})`;
 }
 
+// What starts a name, and what a name is made of: the first run of such characters from a place on
+const NEXT_ID = /[^-0123456789 '!:(),*@$][^ '!:(),*@$]*/g;
+
+/*
+ * The reader of rison-node 1.0.2, which OpenSearch Dashboards reads an address with, step for
+ * step, so that the same text is read into the same value or refused. What that makes of awkward
+ * text is kept: a number is as many digits, one `-`, a `.` and an `e` as follow (`1.` is 1,
+ * `1-1` is not a number but is read), `1e+5` is refused, a key can be any value (`(!t:a)` has the
+ * key "true"), and a name cannot start with `-` or a digit.
+ */
 class Parser {
-  private at = 0;
+  private index = 0;
+  private message: string | undefined;
+
   constructor(private readonly text: string) {}
 
   parse(): RisonValue {
-    const value = this.value();
-    if (this.at < this.text.length) this.fail(`unexpected "${this.text[this.at]}"`);
+    let value = this.readValue();
+    if (this.message === undefined && this.next() !== undefined) {
+      value = this.error(`unable to parse string as rison: '${encode(this.text)}'`);
+    }
+    if (this.message !== undefined) throw new Error(`rison decoder error: ${this.message}`);
     return value;
   }
 
-  private fail(message: string): never {
-    throw new Error(`rison: ${message} at position ${this.at}`);
+  /** Notes what is wrong and goes on, as the original: the last thing noted is what is told */
+  private error(message: string): undefined {
+    this.message = message;
+    return undefined;
   }
 
-  private value(): RisonValue {
-    const char = this.text[this.at];
-    if (char === undefined) this.fail('unexpected end');
-    if (char === '!') {
-      this.at += 1;
-      const next = this.text[this.at];
-      this.at += 1;
-      if (next === 't') return true;
-      if (next === 'f') return false;
-      if (next === 'n') return null;
-      if (next === '(') return this.array();
-      this.fail(`unknown literal "!${next ?? ''}"`);
-    }
-    if (char === '(') {
-      this.at += 1;
-      return this.object();
-    }
-    if (char === "'") {
-      this.at += 1;
-      return this.quoted();
-    }
-    if (char === '-' || (char >= '0' && char <= '9')) return this.number();
-    return this.id();
+  private next(): string | undefined {
+    if (this.index === this.text.length) return undefined;
+    const char = this.text.charAt(this.index);
+    this.index += 1;
+    return char;
   }
 
-  private array(): RisonValue[] {
+  private readValue(): RisonValue {
+    const char = this.next();
+    if (char === '!') return this.bang();
+    if (char === '(') return this.object();
+    if (char === "'") return this.quoted();
+    if (char === '-' || (char !== undefined && char >= '0' && char <= '9')) return this.number();
+    // A name: looked for from the character just read (at the end of the text, from the one
+    // before) onwards, and taken as long as it is from there
+    const from = this.index - 1;
+    NEXT_ID.lastIndex = from;
+    const match = NEXT_ID.exec(this.text);
+    // The original fails here in the same words
+    if (match === null) throw new TypeError("Cannot read properties of null (reading 'length')");
+    this.index = from + match[0].length;
+    return match[0];
+  }
+
+  private bang(): RisonValue {
+    const char = this.text.charAt(this.index);
+    this.index += 1;
+    if (!char) return this.error('"!" at end of input');
+    if (char === 't') return true;
+    if (char === 'f') return false;
+    if (char === 'n') return null;
+    if (char === '(') return this.array();
+    return this.error(`unknown literal: "!${char}"`);
+  }
+
+  private array(): RisonValue {
     const items: RisonValue[] = [];
-    if (this.text[this.at] === ')') {
-      this.at += 1;
-      return items;
-    }
     for (;;) {
-      items.push(this.value());
-      const char = this.text[this.at];
-      this.at += 1;
+      const char = this.next();
       if (char === ')') return items;
-      if (char !== ',') this.fail('a list needs "," or ")"');
-    }
-  }
-
-  private object(): { [key: string]: RisonValue } {
-    const result: { [key: string]: RisonValue } = {};
-    if (this.text[this.at] === ')') {
-      this.at += 1;
-      return result;
-    }
-    for (;;) {
-      const key = this.text[this.at] === "'" ? (this.at += 1, this.quoted()) : this.id();
-      if (this.text[this.at] !== ':') this.fail('a key needs ":"');
-      this.at += 1;
-      result[key] = this.value();
-      const char = this.text[this.at];
-      this.at += 1;
-      if (char === ')') return result;
-      if (char !== ',') this.fail('an object needs "," or ")"');
-    }
-  }
-
-  private quoted(): string {
-    let result = '';
-    for (;;) {
-      const char = this.text[this.at];
-      if (char === undefined) this.fail('a quote is not closed');
-      this.at += 1;
-      if (char === "'") return result;
-      if (char === '!') {
-        const escaped = this.text[this.at];
-        if (escaped !== '!' && escaped !== "'") this.fail('"!" must be followed by "!" or a quote');
-        result += escaped;
-        this.at += 1;
+      if (!char) return this.error("unmatched '!('");
+      if (items.length) {
+        if (char !== ',') this.error("missing ','");
+      } else if (char === ',') {
+        return this.error("extra ','");
       } else {
-        result += char;
+        this.index -= 1;
+      }
+      const item = this.readValue();
+      if (item === undefined) return undefined;
+      items.push(item);
+    }
+  }
+
+  private object(): RisonValue {
+    const result: { [key: string]: RisonValue } = {};
+    let count = 0;
+    for (;;) {
+      const char = this.next();
+      if (char === ')') return result;
+      // At the end of the text the original steps back onto the bracket that opened the object
+      // and reads it again, without end
+      if (char === undefined && count === 0) throw new RangeError('Maximum call stack size exceeded');
+      if (count) {
+        if (char !== ',') this.error("missing ','");
+      } else if (char === ',') {
+        return this.error("extra ','");
+      } else {
+        this.index -= 1;
+      }
+      const key = this.readValue();
+      if (key === undefined) return undefined;
+      if (this.next() !== ':') return this.error("missing ':'");
+      const value = this.readValue();
+      if (value === undefined) return undefined;
+      // Whatever the key is, it is a key as text
+      result[String(key)] = value;
+      count += 1;
+    }
+  }
+
+  private quoted(): RisonValue {
+    const text = this.text;
+    let at = this.index;
+    let start = at;
+    const segments: string[] = [];
+    for (;;) {
+      let char = text.charAt(at);
+      at += 1;
+      if (char === "'") break;
+      if (!char) return this.error('unmatched "\'"');
+      if (char === '!') {
+        if (start < at - 1) segments.push(text.slice(start, at - 1));
+        char = text.charAt(at);
+        at += 1;
+        if ("!'".indexOf(char) >= 0) segments.push(char);
+        else return this.error(`invalid string escape: "!${char}"`);
+        start = at;
       }
     }
+    if (start < at - 1) segments.push(text.slice(start, at - 1));
+    this.index = at;
+    return segments.join('');
   }
 
-  private number(): number {
-    const match = /^-?\d+(\.\d+)?([eE][-+]?\d+)?/.exec(this.text.slice(this.at));
-    if (!match) this.fail('not a number');
-    this.at += match[0].length;
-    return Number(match[0]);
-  }
-
-  private id(): string {
-    const start = this.at;
-    while (this.at < this.text.length && !NOT_ID_CHAR.includes(this.text[this.at])) this.at += 1;
-    if (this.at === start) this.fail(`unexpected "${this.text[this.at]}"`);
-    return this.text.slice(start, this.at);
+  private number(): RisonValue {
+    const text = this.text;
+    let at = this.index;
+    const start = at - 1;
+    let state: string | undefined = 'int';
+    let permittedSigns = '-';
+    const transitions: Record<string, string | undefined> = { 'int+.': 'frac', 'int+e': 'exp', 'frac+e': 'exp' };
+    do {
+      const char = text.charAt(at);
+      at += 1;
+      if (!char) break;
+      if (char >= '0' && char <= '9') continue;
+      if (permittedSigns.indexOf(char) >= 0) {
+        permittedSigns = '';
+        continue;
+      }
+      state = transitions[`${state}+${char.toLowerCase()}`];
+      if (state === 'exp') permittedSigns = '-';
+    } while (state);
+    at -= 1;
+    this.index = at;
+    const digits = text.slice(start, at);
+    if (digits === '-') return this.error('invalid number');
+    return Number(digits);
   }
 }
 
+/** The value a text stands for; an error (not always a rison one) when the original refuses it */
 export function decode(text: string): RisonValue {
+  if (typeof text !== 'string') throw new Error('rison decoder error: decode input must be a string');
   return new Parser(text).parse();
 }
 

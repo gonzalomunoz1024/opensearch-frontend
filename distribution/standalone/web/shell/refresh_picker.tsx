@@ -1,18 +1,12 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
-/*
- * How often a page refreshes, for a page whose range of dates means nothing: the date picker of
- * the original in its "auto refresh only" mode. Its button opens only "Refresh every", and beside
- * it the interval is written out ("Off", "10 seconds").
- */
+/* How often a page refreshes: the "Refresh every" of the date picker's quick menu, as the original's. */
 
-import { useCallback, useState } from 'react';
+import { useId, useState } from 'react';
 import { Button } from '../components/basic';
 import { NumberField, Select } from '../components/form';
-import { Icon } from '../components/icon';
-import { Popover } from '../components/overlay';
 import type { RefreshInterval } from '../lib/types';
-import { REFRESH_UNITS, prettyInterval, refreshIntervalMs, refreshIntervalParts, type RefreshUnit } from './refresh_interval';
+import { REFRESH_UNITS, refreshIntervalMs, refreshIntervalParts, type RefreshUnit } from './refresh_interval';
 
 /**
  * "Refresh every": a change to the number or the unit applies at once and keeps the refresh
@@ -27,6 +21,9 @@ export function RefreshEvery({
 }) {
   const [value, setValue] = useState<number | ''>(() => refreshIntervalParts(refreshInterval.value).value);
   const [units, setUnits] = useState<RefreshUnit>(() => refreshIntervalParts(refreshInterval.value).units);
+  const legend = useId();
+  const description = useId();
+  const described = `${description} ${legend}`;
 
   const apply = (nextValue: number | '', nextUnits: RefreshUnit) => {
     setValue(nextValue);
@@ -44,78 +41,50 @@ export function RefreshEvery({
   const unitLabel = REFRESH_UNITS.find((unit) => unit.value === units)?.label ?? '';
 
   return (
-    <fieldset className="shlRefreshEvery">
-      <legend className="atlTitleXxs">Refresh every</legend>
-      <div className="shlRefreshEvery__row">
-        <NumberField
-          value={value}
-          onChange={(next) => apply(next ?? '', units)}
-          onKeyDown={onKeyDown}
-          aria-label="Refresh interval value"
-          testId="superDatePickerRefreshIntervalInput"
-        />
-        <Select
-          value={units}
-          onChange={(next) => apply(value, next as RefreshUnit)}
-          onKeyDown={onKeyDown}
-          options={REFRESH_UNITS.map((unit) => ({ value: unit.value, label: unit.label }))}
-          aria-label="Refresh interval units"
-          testId="superDatePickerRefreshIntervalUnitsSelect"
-        />
+    <fieldset className="shlQuickMenu__fieldset">
+      <legend id={legend} className="shlQuickMenu__title">
+        Refresh every
+      </legend>
+      <div className="shlRefreshEvery">
+        <div className="shlRefreshEvery__field">
+          <NumberField
+            compact
+            value={value}
+            onChange={(next) => apply(next ?? '', units)}
+            onKeyDown={onKeyDown}
+            aria-label="Refresh interval value"
+            aria-describedby={described}
+            testId="superDatePickerRefreshIntervalInput"
+          />
+        </div>
+        <div className="shlRefreshEvery__field">
+          <Select
+            compact
+            value={units}
+            onChange={(next) => apply(value, next as RefreshUnit)}
+            onKeyDown={onKeyDown}
+            options={REFRESH_UNITS.map((unit) => ({ value: unit.value, label: unit.label }))}
+            aria-label="Refresh interval units"
+            aria-describedby={described}
+            testId="superDatePickerRefreshIntervalUnitsSelect"
+          />
+        </div>
         <Button
+          className="shlRefreshEvery__toggle"
           icon={refreshInterval.pause ? 'play' : 'stop'}
           disabled={value === '' || value <= 0}
           onClick={() => {
             if (value !== '') onRefreshChange({ value: refreshIntervalMs(units, value), pause: !refreshInterval.pause });
           }}
+          aria-describedby={description}
           testId="superDatePickerToggleRefreshButton"
         >
           {refreshInterval.pause ? 'Start' : 'Stop'}
         </Button>
       </div>
-      <p className="atlScreenReaderOnly">
+      <p id={description} className="atlScreenReaderOnly">
         Currently set to {value} {unitLabel}.
       </p>
     </fieldset>
-  );
-}
-
-/** The date picker with no dates: how often the page refreshes, and the menu that sets it */
-export function RefreshPicker({
-  refreshInterval,
-  onRefreshChange,
-}: {
-  refreshInterval: RefreshInterval;
-  onRefreshChange: (interval: RefreshInterval) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const close = useCallback(() => setOpen(false), []);
-  return (
-    <div className="atlField shlTime">
-      <Popover
-        open={open}
-        onClose={close}
-        padded
-        anchorStyle={{ height: '100%' }}
-        button={
-          <button
-            type="button"
-            className="shlTime__quick"
-            aria-label="Date quick select"
-            aria-expanded={open}
-            onClick={() => setOpen(!open)}
-            data-test-subj="superDatePickerToggleQuickMenuButton"
-          >
-            <Icon name="clock" />
-            <Icon name="chevronDown" />
-          </button>
-        }
-      >
-        <div className="shlTimeMenu" data-test-subj="superDatePickerQuickMenu">
-          <RefreshEvery refreshInterval={refreshInterval} onRefreshChange={onRefreshChange} />
-        </div>
-      </Popover>
-      <span className="shlTime__interval">{prettyInterval(refreshInterval.pause, refreshInterval.value)}</span>
-    </div>
   );
 }

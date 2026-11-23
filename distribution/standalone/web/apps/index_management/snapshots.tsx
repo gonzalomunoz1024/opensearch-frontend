@@ -5,21 +5,17 @@
  * restore one, and the tab that tells how far a restore has come.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Accordion, Button, CallOut, CodeBlock, Health, Tabs } from '../../components/basic';
 import { ComboBox } from '../../components/combo_box';
-import { Checkbox, RadioGroup, TextArea, TextField } from '../../components/form';
+import { Checkbox, FormRow, RadioGroup, TextArea, TextField } from '../../components/form';
 import { Icon } from '../../components/icon';
 import { Flyout, Modal } from '../../components/overlay';
 import { searchItems } from '../../lib/search_syntax';
+import { services } from '../../services';
 import { useBreadcrumbs } from '../../shell/state';
 import {
-  ConfirmationModal,
-  ContentPanel,
-  Detail,
-  Details,
   ExternalLink,
-  FilterButton,
   LocalTable,
   SearchRow,
   go,
@@ -70,12 +66,18 @@ import {
 } from './snapshot_model';
 import {
   AdvancedSnapshotSettings,
+  DeleteDialog,
+  Facts,
   Field,
+  FilterGroup,
   FlyoutFooter,
+  GroupFilter,
   INDEX_SETTINGS_DOCS,
   IndicesRepositoryInput,
+  ListPanel,
   REPOSITORY_REQUIRED,
   RESTORE_DOCS,
+  Spacer,
   TickLabel,
   useRepositories,
   useSourceOptions,
@@ -97,6 +99,22 @@ interface SnapshotDetail {
 const snapshotPath = (id: string) => `_snapshots/${encodeURIComponent(id)}`;
 
 const MORE = 'Open browser console & click below for details.';
+
+/**
+ * A request OpenSearch refused, as the plugin's addError: the first sentence of the reason and
+ * where to look, kept as long as errors are, with the whole answer behind "See the full error".
+ * The plugin's button throws, as it is given the answer's text and not an error.
+ */
+export function toastFailure(
+  title: string,
+  error: string | undefined,
+  sentence = failureSentence(error)
+) {
+  return services.toasts.addError(new Error(error ?? ''), {
+    title,
+    toastMessage: `${sentence} ${MORE}`,
+  });
+}
 
 // --- One snapshot ----------------------------------------------------------------------------------------
 
@@ -130,45 +148,56 @@ function SnapshotFlyout({
       hideClose
       className="ismSnapshotFlyout"
       footer={
-        <Button variant="empty" size="s" onClick={onClose}>
+        <Button variant="empty" onClick={onClose}>
           Close
         </Button>
       }
     >
-      <div className="ismSnapshotDetails">
-        <Details columns={2}>
-          <Detail name="Snapshot name">{snapshot?.snapshot}</Detail>
-          <Detail name="Status">{snapshot?.state}</Detail>
-        </Details>
-        {snapshot?.failures !== undefined && snapshot.failures !== null && (
-          <Details columns={1}>
-            <Detail name="Error details">
+      <Facts
+        columns={2}
+        items={[
+          ['Snapshot name', snapshot?.snapshot],
+          ['Status', snapshot?.state],
+        ]}
+      />
+      <Spacer size="m" />
+      {snapshot?.failures !== undefined && snapshot.failures !== null && (
+        <Facts
+          columns={1}
+          items={[
+            [
+              'Error details',
               <button
+                key="failures"
                 type="button"
                 className="atlLinkButton"
                 onClick={() => setFailuresShown(true)}
               >
                 failures
-              </button>
-            </Detail>
-          </Details>
-        )}
-        <Details columns={2}>
-          <Detail name="Start time">{snapshot?.start_time}</Detail>
-          <Detail name="End time">{snapshot?.end_time}</Detail>
-          <Detail name="Repository">{repository}</Detail>
-          <Detail name="Policy">
-            {policy && (
+              </button>,
+            ],
+          ]}
+        />
+      )}
+      <Spacer size="m" />
+      <Facts
+        columns={2}
+        items={[
+          ['Start time', snapshot?.start_time],
+          ['End time', snapshot?.end_time],
+          ['Repository', repository],
+          [
+            'Policy',
+            policy && (
               <a href={to(ROUTES.SNAPSHOT_POLICY_DETAILS, { id: policy }).replace(/^[^#]*/, '')}>
                 {policy}
               </a>
-            )}
-          </Detail>
-        </Details>
-        <Details columns={1}>
-          <Detail name="Indices">{snapshot?.indices?.join(', ')}</Detail>
-        </Details>
-      </div>
+            ),
+          ],
+        ]}
+      />
+      <Spacer />
+      <Facts columns={1} items={[['Indices', snapshot?.indices?.join(', ')]]} />
       {failuresShown && (
         <InfoModal title=" " onClose={() => setFailuresShown(false)}>
           <CodeBlock>{JSON.stringify(snapshot?.failures, null, 4)}</CodeBlock>
@@ -196,7 +225,7 @@ function CreateSnapshotFlyout({
   const [busy, setBusy] = useState(false);
   const source = useSourceOptions();
   // The first repository is the one a snapshot goes to until another is chosen
-  const { repositories, reload } = useRepositories((found) =>
+  const { repositories } = useRepositories((found) =>
     setRepository(found.length > 0 ? found[0].id : '')
   );
   const here = useRef(true);
@@ -242,7 +271,8 @@ function CreateSnapshotFlyout({
             testId="snapshotNameInput"
           />
         </Field>
-        <p className="ismSnapshotForm__note">{SNAPSHOT_NAME_HELP}</p>
+        <p className="ismSnapshotForm__help">{SNAPSHOT_NAME_HELP}</p>
+        <Spacer size="m" />
         <IndicesRepositoryInput
           options={source.options}
           loading={source.loading}
@@ -256,10 +286,11 @@ function CreateSnapshotFlyout({
             setRepositoryError(value ? '' : REPOSITORY_REQUIRED);
           }}
           repositoryError={repositoryError}
-          onRepositoryCreated={reload}
         />
+        <Spacer />
         <div className="ismSnapshotForm__accordion">
-          <Accordion title={<h3>Advanced options</h3>} initiallyOpen={false}>
+          <Accordion title={<h3 className="atlTitleS">Advanced options</h3>} initiallyOpen={false}>
+            <Spacer size="m" />
             <AdvancedSnapshotSettings
               includeGlobalState={body.include_global_state}
               ignoreUnavailable={body.ignore_unavailable}
@@ -312,12 +343,12 @@ function IndexList({
   return (
     <Flyout
       title={
-        <span className="ismIndexList__title">
+        <>
           <button type="button" className="ismIndexList__back" aria-label="Back" onClick={onBack}>
-            <Icon name="chevronLeft" />
+            <Icon name="chevronLeft" size="xl" />
           </button>{' '}
           {title} {snapshot} ({rows.length})
-        </span>
+        </>
       }
       onClose={onBack}
       hideClose
@@ -327,7 +358,6 @@ function IndexList({
         columns={columns}
         rows={rows}
         rowId={(row) => row.index}
-        sortField="index"
         pageSizes={SMALL_PAGE_SIZES}
         empty="No items found"
       />
@@ -380,10 +410,7 @@ function RestoreSnapshotFlyout({
         setSnapshot(answer.response);
         setForm(newRestoreForm(answer.response));
       } else {
-        toasts.danger(
-          'There was a problem getting the snapshot',
-          `${failureSentence(answer.error)} ${MORE}`
-        );
+        toastFailure('There was a problem getting the snapshot', answer.error);
       }
     });
     return () => {
@@ -437,22 +464,24 @@ function RestoreSnapshotFlyout({
       <div className="ismSnapshotForm">
         <div className="ismRestoreSummary">
           <Field title="Snapshot name">
+            <Spacer size="xs" />
             <p>{snapshot?.snapshot}</p>
           </Field>
           <Field title="Status">
             {status && (
-              <span title={`${status} indicator icon`}>
+              <span className="ismRestoreSummary__status" title={`${status} indicator icon`}>
                 <Health tone={status === 'Success' ? 'healthy' : undefined}>{status}</Health>
               </span>
             )}
           </Field>
           <Field title="Indices">
+            <Spacer size="xs" />
             <button type="button" className="atlLinkButton" onClick={() => setListed(true)}>
               {snapshot?.indices?.length}
             </button>
           </Field>
         </div>
-
+        <Spacer size="xxl" />
         <Field title="Specify restore option">
           <RadioGroup
             options={[
@@ -467,28 +496,30 @@ function RestoreSnapshotFlyout({
             }}
           />
         </Field>
+        <Spacer />
         {form.restoreSpecific && (
-          <div className="ismSnapshotForm__small">
-            <label className="ismSnapshotForm__label">
-              Select indices or input index patterns you want to restore
-            </label>
-            <ComboBox
-              options={form.all.map((index) => ({ value: index, label: index }))}
-              selected={form.selected}
-              onChange={(selected) => change({ selected })}
-              allowCustom
-              compact
-              invalid={errors.noIndicesSelected}
-              placeholder="Select indices or input index patterns."
-            />
-            {errors.noIndicesSelected && (
-              <div className="ismLabeled__error">
-                You must select at least one index to restore.
-              </div>
-            )}
-          </div>
+          <>
+            <FormRow
+              label="Select indices or input index patterns you want to restore"
+              error={
+                errors.noIndicesSelected
+                  ? 'You must select at least one index to restore.'
+                  : undefined
+              }
+            >
+              <ComboBox
+                options={form.all.map((index) => ({ value: index, label: index }))}
+                selected={form.selected}
+                onChange={(selected) => change({ selected })}
+                allowCustom
+                invalid={errors.noIndicesSelected}
+                placeholder="Select indices or input index patterns."
+              />
+            </FormRow>
+            <Spacer size="m" />
+          </>
         )}
-
+        <Spacer />
         <Field title="Rename restored indices">
           <RadioGroup
             options={RENAME_OPTIONS}
@@ -505,26 +536,37 @@ function RestoreSnapshotFlyout({
           />
         </Field>
         {form.rename === 'add_prefix' && (
-          <Field
-            title="Specify prefix for restored index names"
-            help="A prefix will be added to any restored index names."
-          >
-            <TextField
-              value={form.prefix}
-              onChange={(prefix) => change({ prefix })}
-              compact
-              testId="prefixInput"
-            />
-          </Field>
+          <>
+            <Spacer />
+            <Field
+              title="Specify prefix for restored index names"
+              help="A prefix will be added to any restored index names."
+            >
+              <TextField
+                value={form.prefix}
+                onChange={(prefix) => change({ prefix })}
+                compact
+                testId="prefixInput"
+              />
+            </Field>
+            <Spacer size="m" />
+          </>
         )}
         {form.rename === 'rename_indices' && (
-          <div className="ismSnapshotForm__minor">
-            <Field
-              title="Rename Pattern"
-              help={
-                <>
-                  {PATTERN_HELP} <ExternalLink href={RESTORE_DOCS} />
-                </>
+          <>
+            <Spacer />
+            <FormRow
+              label={
+                <SmallLabel
+                  title="Rename Pattern"
+                  help={
+                    <>
+                      {/* The plugin's text has a brace too many after it */}
+                      {`${PATTERN_HELP}} `}
+                      <ExternalLink href={RESTORE_DOCS} />
+                    </>
+                  }
+                />
               }
               error={errors.badPattern ? 'Please enter a valid Rename pattern.' : undefined}
             >
@@ -535,13 +577,19 @@ function RestoreSnapshotFlyout({
                 compact
                 testId="renamePatternInput"
               />
-            </Field>
-            <Field
-              title="Rename Replacement"
-              help={
-                <>
-                  {PATTERN_HELP} <ExternalLink href={RESTORE_DOCS} />
-                </>
+            </FormRow>
+            <Spacer size="m" />
+            <FormRow
+              label={
+                <SmallLabel
+                  title="Rename Replacement"
+                  help={
+                    <>
+                      {`${PATTERN_HELP} `}
+                      <ExternalLink href={RESTORE_DOCS} />
+                    </>
+                  }
+                />
               }
               error={errors.badRename ? 'Please enter a valid Rename replacement.' : undefined}
             >
@@ -552,12 +600,13 @@ function RestoreSnapshotFlyout({
                 compact
                 testId="renameReplacementInput"
               />
-            </Field>
-          </div>
+            </FormRow>
+          </>
         )}
-
+        <Spacer size="xxl" />
         <div className="ismSnapshotForm__accordion">
-          <Accordion title={<h3>Advanced options</h3>} initiallyOpen={false}>
+          <Accordion title={<h3 className="atlTitleS">Advanced options</h3>} initiallyOpen={false}>
+            <Spacer size="m" />
             <div className="ismTicks ismTicks--inset">
               <Checkbox
                 checked={form.restoreAliases}
@@ -570,12 +619,14 @@ function RestoreSnapshotFlyout({
                 }
                 testId="restore_aliases"
               />
+              <Spacer size="s" />
               <Checkbox
                 checked={form.includeGlobalState}
                 onChange={(includeGlobalState) => change({ includeGlobalState })}
                 label={<TickLabel title="Restore cluster state from snapshots" />}
                 testId="include_global_state"
               />
+              <Spacer size="m" />
               <Checkbox
                 checked={form.ignoreUnavailable}
                 onChange={(ignoreUnavailable) => change({ ignoreUnavailable })}
@@ -587,15 +638,14 @@ function RestoreSnapshotFlyout({
                 }
                 testId="ignore_unavailable"
               />
-              <div>
-                <h5 className="ismTicks__heading">Custom index settings</h5>
-                <p className="ismLabeled__help">
-                  By default, index settings are restored from indices in snapshots. You can choose
-                  to
-                  <br />
-                  customize index settings on restore.
-                </p>
-              </div>
+              <Spacer />
+              <h5 className="atlTitleXxs">Custom index settings</h5>
+              <p className="ismTicks__text">
+                By default, index settings are restored from indices in snapshots. You can choose to
+                <br />
+                customize index settings on restore.
+              </p>
+              <Spacer size="m" />
               <Checkbox
                 checked={customize}
                 onChange={(value) => {
@@ -627,6 +677,7 @@ function RestoreSnapshotFlyout({
                   }
                 />
               )}
+              <Spacer size="s" />
               <Checkbox
                 checked={ignore}
                 onChange={(value) => {
@@ -661,7 +712,7 @@ function RestoreSnapshotFlyout({
             </div>
           </Accordion>
         </div>
-
+        <Spacer />
         {partial && (
           <CallOut tone="warning" title="Restoring a partial snapshot">
             <p>
@@ -669,10 +720,11 @@ function RestoreSnapshotFlyout({
               <br />
               snapshot. Do you want to continue?
             </p>
+            <Spacer size="s" />
             <Checkbox
               checked={form.partial}
               onChange={(value) => change({ partial: value })}
-              label="Allow restore partial snapshots"
+              label={<TickLabel title="Allow restore partial snapshots" />}
               testId="partial"
             />
           </CallOut>
@@ -682,6 +734,17 @@ function RestoreSnapshotFlyout({
   );
 }
 
+/** The label of a field set in a form row, as the plugin's: a small heading over what it means */
+function SmallLabel({ title, help }: { title: string; help: ReactNode }) {
+  return (
+    <>
+      <h4 className="atlTitleXs ismSmallLabel__title">{title}</h4>
+      <span className="ismSmallLabel__help">{help}</span>
+    </>
+  );
+}
+
+/** Index settings to set or to leave out, under their tick, as the plugin asks for them */
 function IndexSettingsInput({
   title,
   help,
@@ -698,62 +761,95 @@ function IndexSettingsInput({
   error?: string;
 }) {
   return (
-    <div className="ismSnapshotForm__small">
-      <label className="ismSnapshotForm__label">{title}</label>
-      <p className="ismLabeled__help">
-        {help} <ExternalLink href={INDEX_SETTINGS_DOCS} />
-      </p>
-      <TextArea
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        invalid={Boolean(error)}
-        rows={6}
-      />
-      {error && <div className="ismLabeled__error">{error}</div>}
-    </div>
+    <>
+      <Spacer size="m" />
+      <FormRow
+        label={
+          <SmallLabel
+            title={title}
+            help={
+              <>
+                {`${help} `}
+                <ExternalLink href={INDEX_SETTINGS_DOCS} />
+              </>
+            }
+          />
+        }
+        error={error}
+      >
+        <TextArea
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+          invalid={Boolean(error)}
+          rows={3}
+        />
+      </FormRow>
+      <Spacer size="m" />
+    </>
   );
 }
 
 // --- How far a restore has come ---------------------------------------------------------------------------
 
-/** A restore that was asked for on this page */
-interface Restore {
+/**
+ * A restore that OpenSearch took on this page, and what was last read of it. The page keeps it, so
+ * that the tab shows it again at once when it is opened again.
+ */
+export interface Restore {
   snapshotId: string;
   startedAt: number;
   indices: string[];
+  progress?: RestoreProgress;
+  /** The stage it was at when its recoveries could not be read, "Failed (50%)" */
+  failed?: string;
 }
 
-function RestoreActivities({
+/**
+ * Asks OpenSearch to restore a snapshot: the restore to follow when it is taken, or why it was
+ * not. Only the recoveries that begin after the request count. The plugin follows a restore that
+ * was refused too, a row of 1970 at "Copying (0%)" among the activities.
+ */
+export async function askRestore(
+  row: { id: string; repository: string },
+  body: Record<string, unknown>,
+  indices: string[]
+): Promise<{ restore: Restore } | { error: string }> {
+  const startedAt = Date.now();
+  const answer = await ism.post(snapshotPath(row.id), body, { repository: row.repository });
+  return answer.ok
+    ? { restore: { snapshotId: row.id, startedAt, indices } }
+    : { error: answer.error ?? '' };
+}
+
+export function RestoreActivities({
   restore,
+  onSeen,
   onFailure,
 }: {
   restore: Restore | undefined;
+  /** What was read of the restore that began at `startedAt` */
+  onSeen: (startedAt: number, seen: Pick<Restore, 'progress' | 'failed'>) => void;
   /** Called when the recoveries cannot be read, with why */
   onFailure: (error: string) => void;
 }) {
-  const [progress, setProgress] = useState<RestoreProgress>();
-  const [failed, setFailed] = useState<string>();
+  const progress = restore?.progress;
+  const failed = restore?.failed;
   const [listed, setListed] = useState(false);
   const here = useRef(true);
   const stage = failed ?? progress?.stage ?? '';
 
   const check = async () => {
     if (!restore) return;
+    const { snapshotId, startedAt, indices } = restore;
     const answer = await ism.get<Recovery>('_recovery');
     if (!here.current) return;
     if (answer.ok) {
-      setProgress(
-        restoreProgress(
-          answer.response ?? {},
-          restore.snapshotId,
-          restore.startedAt,
-          restore.indices,
-          Date.now()
-        )
-      );
+      onSeen(startedAt, {
+        progress: restoreProgress(answer.response ?? {}, snapshotId, startedAt, indices, Date.now()),
+      });
     } else {
-      setFailed(failedStage(stage));
+      onSeen(startedAt, { failed: failedStage(stage) });
       onFailure(`${answer.error ?? ''}, please check your connection`);
     }
   };
@@ -769,7 +865,7 @@ function RestoreActivities({
     const timer = window.setInterval(() => void check(), 2000);
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [restore, stage, failed]);
+  }, [restore?.startedAt, stage, failed]);
 
   interface Row {
     start_time: string;
@@ -819,11 +915,10 @@ function RestoreActivities({
 
   return (
     <>
-      <ContentPanel
+      <ListPanel
         title="Restore activities in progress"
         actions={
           <Button
-            size="s"
             icon="refresh"
             disabled={!restore}
             onClick={() => void check()}
@@ -840,7 +935,7 @@ function RestoreActivities({
           paged={false}
           empty="There are no restore activities."
         />
-      </ContentPanel>
+      </ListPanel>
       {listed && restore && (
         <IndexList
           title="Indices being restored"
@@ -897,10 +992,7 @@ export function Snapshots() {
         found.filter((row) => before.some((item) => snapshotRowId(item) === snapshotRowId(row)))
       );
     } else {
-      toasts.danger(
-        'There was a problem getting the snapshots.',
-        `${failureSentence(answer.error)} ${MORE}`
-      );
+      toastFailure('There was a problem getting the snapshots.', answer.error);
     }
     setLoading(false);
   };
@@ -918,11 +1010,7 @@ export function Snapshots() {
       const answer = await ism.delete(snapshotPath(row.id), { repository: row.repository });
       if (answer.ok)
         toasts.success(`Deleted snapshot ${row.id} from repository ${row.repository}.`);
-      else
-        toasts.danger(
-          'There was a problem deleting the snapshot.',
-          `${failureSentence(answer.error)} ${MORE}`
-        );
+      else toastFailure('There was a problem deleting the snapshot.', answer.error);
     }
     if (here.current) await load();
   };
@@ -935,7 +1023,7 @@ export function Snapshots() {
       toasts.success(`Created snapshot ${snapshotId} in repository ${repository}.`);
       await load();
     } else {
-      toasts.danger('There was a problem creating the snapshot.', `${answer.error ?? ''} ${MORE}`);
+      toastFailure('There was a problem creating the snapshot.', answer.error, answer.error ?? '');
     }
   };
 
@@ -958,10 +1046,10 @@ export function Snapshots() {
     body: Record<string, unknown>,
     indices: string[]
   ) => {
-    setRestore({ snapshotId: row.id, startedAt: Date.now(), indices });
-    const answer = await ism.post(snapshotPath(row.id), body, { repository: row.repository });
+    const asked = await askRestore(row, body, indices);
     if (!here.current) return;
-    if (answer.ok) {
+    if ('restore' in asked) {
+      setRestore(asked.restore);
       toasts.success(
         `Restore from snapshot "${row.id}" is in progress.`,
         <span className="ismToastAction">
@@ -972,7 +1060,7 @@ export function Snapshots() {
         6000
       );
     } else {
-      showFailure(row.id, answer.error ?? '', restoreFailureText(answer.error));
+      showFailure(row.id, asked.error, restoreFailureText(asked.error));
     }
   };
 
@@ -984,8 +1072,7 @@ export function Snapshots() {
 
   const filter = (field: string) => (values: string[]) =>
     setSearch(withFieldValues(search, field, values));
-  const filterOptions = (values: Array<string | undefined>) =>
-    distinct(values).map((value) => ({ value }));
+  const filterOptions = (values: Array<string | undefined>) => distinct(values);
 
   const columns: Array<TableColumn<SnapshotRow>> = [
     {
@@ -1058,21 +1145,25 @@ export function Snapshots() {
       {tab === 'restore' ? (
         <RestoreActivities
           restore={restore}
+          onSeen={(startedAt, seen) =>
+            setRestore((before) =>
+              before?.startedAt === startedAt ? { ...before, ...seen } : before
+            )
+          }
           onFailure={(error) => {
             if (restore) showFailure(restore.snapshotId, error, '');
           }}
         />
       ) : (
-        <ContentPanel
+        <ListPanel
           title="Snapshots"
           description={DESCRIPTION}
           actions={
             <>
-              <Button size="s" icon="refresh" onClick={() => void load()} testId="refreshButton">
+              <Button icon="refresh" onClick={() => void load()} testId="refreshButton">
                 Refresh
               </Button>
               <Button
-                size="s"
                 variant="danger"
                 disabled={selected.length === 0}
                 onClick={() => setDialog('delete')}
@@ -1080,16 +1171,10 @@ export function Snapshots() {
               >
                 Delete
               </Button>
-              <Button
-                size="s"
-                disabled={selected.length !== 1}
-                onClick={clickRestore}
-                testId="restoreButton"
-              >
+              <Button disabled={selected.length !== 1} onClick={clickRestore} testId="restoreButton">
                 Restore
               </Button>
               <Button
-                size="s"
                 variant="primary"
                 icon="plus"
                 onClick={() => setDialog('create')}
@@ -1101,26 +1186,26 @@ export function Snapshots() {
           }
         >
           <SearchRow search={search} onSearch={setSearch} placeholder="Search snapshot">
-            <div className="ismFilterGroup">
-              <FilterButton
+            <FilterGroup>
+              <GroupFilter
                 name="Repository"
                 options={filterOptions(snapshots.map((row) => row.repository))}
                 selected={fieldValues(search, 'repository')}
                 onChange={filter('repository')}
               />
-              <FilterButton
+              <GroupFilter
                 name="Status"
                 options={filterOptions(snapshots.map((row) => row.status))}
                 selected={fieldValues(search, 'status')}
                 onChange={filter('status')}
               />
-              <FilterButton
+              <GroupFilter
                 name="Policy"
                 options={filterOptions(snapshots.map((row) => row.policy))}
                 selected={fieldValues(search, 'policy')}
                 onChange={filter('policy')}
               />
-            </div>
+            </FilterGroup>
           </SearchRow>
           <LocalTable
             columns={columns}
@@ -1133,7 +1218,7 @@ export function Snapshots() {
             onSelect={setSelected}
             empty={loading ? 'Loading snapshots...' : 'No items found'}
           />
-        </ContentPanel>
+        </ListPanel>
       )}
 
       {shown && (
@@ -1155,17 +1240,11 @@ export function Snapshots() {
         />
       )}
       {dialog === 'delete' && (
-        <ConfirmationModal
-          title="Delete snapshot"
-          bodyMessage={
-            <>
-              Delete "<strong>{selected.map((row) => row.id).join(', ')}</strong>" permanently?
-            </>
-          }
-          actionMessage="Delete snapshot"
-          danger
-          onClose={() => setDialog(undefined)}
-          onAction={remove}
+        <DeleteDialog
+          type="snapshot"
+          ids={selected.map((row) => row.id).join(', ')}
+          onCancel={() => setDialog(undefined)}
+          onDelete={() => void remove()}
         />
       )}
       {failureShown && failure && (

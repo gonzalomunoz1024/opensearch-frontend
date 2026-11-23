@@ -7,7 +7,7 @@ import { Markdown } from '../../web/lib/markdown';
 import { evaluateMath } from '../../web/lib/math_expression';
 import { renderTemplate } from '../../web/lib/template';
 import { buildHash, parseHash, parseQuery } from '../../web/lib/url';
-import { metricLabel, ruleFor, seriesFormatter, splitColors, type ColorRule } from '../../web/vis/tsvb/data';
+import { metricLabel, ruleFor, seriesFormatter, splitColors, type ColorRule, type TsvbMetric } from '../../web/vis/tsvb/data';
 
 const html = (text: string, openLinksInNewTab = false) =>
   renderToStaticMarkup(<Markdown text={text} openLinksInNewTab={openLinksInNewTab} />);
@@ -19,14 +19,15 @@ describe('Markdown', () => {
     assert.match(out, /<em>slanted<\/em>/);
     assert.match(out, /<strong>strong<\/strong>/);
     assert.match(out, /<code>code<\/code>/);
-    assert.match(out, /<ul[^>]*><li[^>]*>one<\/li><li[^>]*>two<\/li><\/ul>/);
+    // markdown-it's HTML, a line after each block, as the original sets it
+    assert.match(out, /<ul>\n<li>one<\/li>\n<li>two<\/li>\n<\/ul>/);
   });
 
   it('keeps a list tight when a list of the other kind follows it after a blank line', () => {
     const out = html('- one\n- two\n\n1. first\n2. second');
-    assert.match(out, /<ul><li>one<\/li><li>two<\/li><\/ul><ol><li>first<\/li><li>second<\/li><\/ol>/);
+    assert.match(out, /<ul>\n<li>one<\/li>\n<li>two<\/li>\n<\/ul>\n<ol>\n<li>first<\/li>\n<li>second<\/li>\n<\/ol>/);
     // A blank line between two items of one list still makes it loose
-    assert.match(html('- one\n\n- two'), /<ul><li><p>one<\/p><\/li><li><p>two<\/p><\/li><\/ul>/);
+    assert.match(html('- one\n\n- two'), /<ul>\n<li>\n<p>one<\/p>\n<\/li>\n<li>\n<p>two<\/p>\n<\/li>\n<\/ul>/);
   });
 
   it('shows HTML as the text it is', () => {
@@ -69,7 +70,7 @@ describe('the text of a TSVB Markdown panel', () => {
 
   it('says what is wrong with a text it cannot use', () => {
     assert.throws(() => renderTemplate('{{#each hosts}}x', scope), /never closed/);
-    assert.throws(() => renderTemplate('{{#lookup hosts}}x{{/lookup}}', scope), /not something/);
+    assert.throws(() => renderTemplate('{{#lookup hosts}}x{{/lookup}}', scope), /lookup needs/);
   });
 });
 
@@ -113,10 +114,21 @@ describe('TSVB series', () => {
     assert.equal(metricLabel({ id: 's', metrics: [] }), 'Unknown');
   });
 
-  it('colour the terms they are split by from their own colour, darkening', () => {
+  it('are named as the product names a positive rate and a metric worked out from a percentile', () => {
+    assert.equal(metricLabel({ id: 's', metrics: [{ id: '1', type: 'positive_rate', field: 'bytes', unit: '' }] }), 'Positive Rate of bytes');
+    const percentile: TsvbMetric = { id: '1', type: 'percentile', field: 'bytes', percentiles: [{ id: 'a', value: 50, mode: 'line' }] };
+    assert.equal(metricLabel({ id: 's', metrics: [percentile, { id: '2', type: 'derivative', field: '1[50.0]' }] }), 'Derivative of Percentile of bytes (50.0)');
+    // A metric that names none of the series' metrics is worked out from an unknown one
+    assert.equal(metricLabel({ id: 's', metrics: [{ id: '2', type: 'cumulative_sum', field: '9' }] }), 'Cumulative Sum of Unknown');
+  });
+
+  it('colour the terms they are split by from their own colour, darkening, or leave it to the chart', () => {
     assert.deepEqual(splitColors('#ff0000', 3, 'gradient'), ['#ff0000', '#c90000', '#930000']);
-    assert.deepEqual(splitColors('rgba(255,0,0,1)', 1, undefined), ['#ff0000']);
+    assert.deepEqual(splitColors('rgba(255,0,0,1)', 1, 'gradient'), ['#ff0000']);
     assert.equal(splitColors('#ff0000', 3, 'rainbow')[0], '#68BC00');
+    // The default colours the terms by their names, in the chart
+    assert.deepEqual(splitColors('#ff0000', 3, 'opensearchDashboards'), []);
+    assert.deepEqual(splitColors('#ff0000', 3, undefined), []);
   });
 
   it('write their values in their format, inside their template', () => {

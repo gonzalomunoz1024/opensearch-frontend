@@ -13,6 +13,7 @@ import { aggLabel, type AggConfig } from '../../lib/aggs';
 import { parseSearchSource, serializeSearchSource, type SearchSource } from '../../lib/search_source';
 import type { Filter, Query } from '../../lib/types';
 import type { UiState, Vis } from '../../lib/vis';
+import { paramNames } from '../visualize/agg_params';
 import { defaultParams } from '../visualize/defaults';
 
 export const VIS_BUILDER_TYPE = 'visualization-visbuilder';
@@ -44,6 +45,11 @@ export interface VisualizationState {
   activeVisualization?: ActiveVisualization;
   /** Kept as the object's reference when saved, not in `visualizationState` */
   indexPattern?: string;
+  /**
+   * The saved query the page has loaded, kept in the address only. The original also writes it
+   * into `visualizationState`, which its own check of a saved object then refuses to open.
+   */
+  savedQuery?: string;
 }
 
 export type StyleState = Record<string, unknown>;
@@ -86,7 +92,7 @@ export interface VisBuilderType {
   name: string;
   title: string;
   /** The icon of the kind in the picker */
-  icon: 'visualize' | 'line' | 'area' | 'number' | 'table';
+  icon: 'visBarVertical' | 'visLine' | 'visArea' | 'visMetric' | 'visTable';
   description: string;
   schemas: VisBuilderSchema[];
   style: () => StyleState;
@@ -127,13 +133,13 @@ const xyStyle = (type: string) => () => ({ addTooltip: true, addLegend: true, le
 
 /** The kinds VisBuilder offers, in the order it registers them: the first is a new one's */
 export const VIS_BUILDER_TYPES: VisBuilderType[] = [
-  { name: 'histogram', title: 'Bar', icon: 'visualize', description: 'Display histogram visualizations', schemas: xySchemas(false), style: xyStyle('histogram') },
-  { name: 'line', title: 'Line', icon: 'line', description: 'Display line chart', schemas: xySchemas(true), style: xyStyle('line') },
-  { name: 'area', title: 'Area', icon: 'area', description: 'Display area chart', schemas: xySchemas(false), style: xyStyle('area') },
+  { name: 'histogram', title: 'Bar', icon: 'visBarVertical', description: 'Display histogram visualizations', schemas: xySchemas(false), style: xyStyle('histogram') },
+  { name: 'line', title: 'Line', icon: 'visLine', description: 'Display line chart', schemas: xySchemas(true), style: xyStyle('line') },
+  { name: 'area', title: 'Area', icon: 'visArea', description: 'Display area chart', schemas: xySchemas(false), style: xyStyle('area') },
   {
     name: 'metric',
     title: 'Metric',
-    icon: 'number',
+    icon: 'visMetric',
     description: 'Display metric visualizations',
     schemas: [
       {
@@ -166,7 +172,7 @@ export const VIS_BUILDER_TYPES: VisBuilderType[] = [
   {
     name: 'table',
     title: 'Table',
-    icon: 'table',
+    icon: 'visTable',
     description: 'Display table visualizations',
     schemas: [
       { group: 'metrics', name: 'metric', title: 'Metric', min: 1, aggFilter: ['!geo_centroid', '!geo_bounds'], defaults: ['avg', 'cardinality'], allowStrings: true },
@@ -266,17 +272,12 @@ export function visBuilderToSavedObject(
   attributes: VisBuilderAttributes;
   references: SavedObjectReference[];
 } {
-  const { indexPattern, searchField, activeVisualization: active, ...rest } = saved.state.visualization;
+  const { indexPattern, searchField, activeVisualization: active, savedQuery: _savedQuery, ...rest } = saved.state.visualization;
   // Written with the keys in the order the original writes them, though the address sorts them
   const stored: VisualizationState = {
     searchField,
     ...rest,
-    activeVisualization: active
-      ? {
-          name: active.name,
-          aggConfigParams: active.aggConfigParams.map(({ id, enabled, type, params, schema, ...others }) => ({ id, enabled, type, params, schema, ...others })),
-        }
-      : undefined,
+    activeVisualization: active ? { name: active.name, aggConfigParams: active.aggConfigParams.map(orderedAgg) } : undefined,
   };
   const query = search.query && { query: search.query.query, language: search.query.language };
   const { searchSourceJSON, references } = serializeSearchSource({
@@ -298,6 +299,43 @@ export function visBuilderToSavedObject(
     },
     references: [...references.filter(isIndex), ...references.filter((reference) => !isIndex(reference))],
   };
+}
+
+const isAgg = (value: unknown): value is AggConfig => isPlainObject(value) && typeof value.id === 'string' && typeof value.type === 'string';
+
+// Keys the original writes before another that the alphabet puts first: the ends of the bounds of
+// a histogram, the query of a filter
+const WRITTEN_FIRST: Record<string, string> = { max: 'min', language: 'query' };
+
+/** A part of a parameter with its keys in the order the original writes them */
+function orderedPart(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(orderedPart);
+  if (isAgg(value)) return orderedAgg(value);
+  if (!isPlainObject(value)) return value;
+  const out: Plain = {};
+  for (const key of Object.keys(value)) {
+    const first = WRITTEN_FIRST[key];
+    if (first !== undefined && first in value && !(first in out)) out[first] = orderedPart(value[first]);
+    if (!(key in out)) out[key] = orderedPart(value[key]);
+  }
+  return out;
+}
+
+/**
+ * An aggregation with its keys in the order the original writes them, which serializes each one
+ * from its type: `id, enabled, type, params, schema`, the parameters in the order the type has
+ * them, and an aggregation inside a parameter the same way. The address, which the page keeps its
+ * state in, sorts them all.
+ */
+export function orderedAgg(agg: AggConfig): AggConfig {
+  const { id, enabled, type, params, schema, ...others } = agg;
+  let ordered = params;
+  if (params) {
+    ordered = {};
+    for (const name of paramNames(type)) if (name in params) ordered[name] = orderedPart(params[name]);
+    for (const [name, value] of Object.entries(params)) if (!(name in ordered)) ordered[name] = orderedPart(value);
+  }
+  return { id, enabled, type, params: ordered, schema, ...others };
 }
 
 /** Why a state cannot be drawn: a part it needs and lacks, as OpenSearch Dashboards says it */

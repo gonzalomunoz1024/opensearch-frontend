@@ -1,0 +1,1601 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/*
+ * Index patterns: the list, the page of one, the wizard that makes one and the editor of a field,
+ * drawn as OpenSearch Dashboards draws them with the Atlas theme (packages/osd-atlas-theme): the
+ * pieces of EUI those pages use, at the sizes the theme gives them. Class prefix: inp.
+ */
+
+/*
+ * The colours EUI derives for text and icons in a state colour, shaded towards the text until
+ * they read on the surface or on the soft fill of their call-out. Mixed with the primary text,
+ * they lighten in the dark as they darken in the light.
+ */
+.inpPage,
+.inpFlyout,
+.inpConfirm {
+  --inp-primary-text: color-mix(in srgb, var(--color-accent) 90%, var(--color-text-primary));
+  --inp-danger-text: color-mix(in srgb, var(--color-critical) 81%, var(--color-text-primary));
+  --inp-success-icon: color-mix(in srgb, var(--color-healthy) 81%, var(--color-text-primary));
+  --inp-warning-icon: color-mix(in srgb, var(--color-warning) 81%, var(--color-text-primary));
+  --inp-warning-badge: color-mix(in srgb, var(--color-warning) 60%, var(--color-text-primary));
+  --inp-callout-primary: color-mix(in srgb, var(--color-accent) 82%, var(--color-text-primary));
+  --inp-callout-success: color-mix(in srgb, var(--color-healthy) 57%, var(--color-text-primary));
+  --inp-callout-warning: color-mix(in srgb, var(--color-warning) 57%, var(--color-text-primary));
+  --inp-callout-danger: color-mix(in srgb, var(--color-critical) 73%, var(--color-text-primary));
+  --inp-disabled-fill: color-mix(in srgb, var(--color-text-tertiary) 88%, var(--color-border));
+}
+
+.inpPage {
+  padding: var(--space-4);
+  color: var(--color-text-primary);
+}
+
+.inpPanel {
+  padding: var(--space-6);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.inpStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.inpScreenReader {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.inpSpacer--xs {
+  height: var(--space-1);
+}
+
+.inpSpacer--s {
+  height: var(--space-2);
+}
+
+.inpSpacer--m {
+  height: var(--space-4);
+}
+
+.inpSpacer--l,
+.inpSpacer--step {
+  height: var(--space-6);
+}
+
+.inpRule {
+  height: 1px;
+  margin: var(--space-6) 0;
+  border: 0;
+  background: var(--color-border-light);
+}
+
+/* --- Type ----------------------------------------------------------------------------------- */
+
+.inpTitle {
+  margin: 0;
+  font-size: var(--font-size-xxl);
+  font-weight: var(--font-weight-semibold);
+  line-height: 34px;
+  letter-spacing: -0.022em;
+  overflow-wrap: anywhere;
+}
+
+.inpTitle--s {
+  font-size: var(--font-size-l);
+  line-height: 22px;
+}
+
+.inpTitle--xs {
+  font-size: var(--font-size-m);
+  line-height: 20px;
+  letter-spacing: normal;
+}
+
+.inpText {
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+.inpText p,
+.inpText ul {
+  margin: 0 0 21px;
+}
+
+.inpText ul {
+  margin-left: 21px;
+  padding: 0;
+  list-style: disc;
+}
+
+.inpText h3 {
+  margin: 0 0 7px;
+  font-size: var(--font-size-l);
+  font-weight: var(--font-weight-semibold);
+  line-height: 22px;
+  letter-spacing: -0.022em;
+}
+
+.inpText h4 {
+  margin: 7px 0;
+  font-size: var(--font-size-m);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+.inpText > :last-child {
+  margin-bottom: 0;
+}
+
+/* EUI's bold is its semibold */
+.inpPage strong,
+.inpFlyout strong,
+.inpConfirm strong {
+  font-weight: var(--font-weight-semibold);
+}
+
+/* A word of code in running text, as EuiText sets a <code> */
+.inpText code {
+  font-size: 0.9em;
+}
+
+/*
+ * EuiCode: a word of code in a capsule of the secondary surface. EUI sets the code in Source Code
+ * Pro inside a capsule in the type of the sentence; with the monospace this product has, one
+ * element in the line height of the sentence is what gives the capsule EUI's height. As EUI's,
+ * it hides what overflows, so that it stands on the line of the sentence by its foot.
+ */
+.inpCode {
+  display: inline-block;
+  overflow: hidden;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-code);
+  font-size: 0.9em;
+  font-weight: var(--font-weight-regular);
+  line-height: inherit;
+  white-space: pre;
+}
+
+.inpLink {
+  color: var(--color-accent);
+  font-weight: inherit;
+  text-decoration: none;
+}
+
+.inpLink:hover {
+  text-decoration: underline;
+}
+
+.inpLink--button {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  line-height: normal;
+  text-align: left;
+  cursor: pointer;
+}
+
+.inpLink--xs {
+  font-size: var(--font-size-xs);
+}
+
+.inpLink__external {
+  width: 12px;
+  height: 12px;
+  margin-left: var(--space-1);
+  vertical-align: middle;
+}
+
+.inpLink__icon {
+  vertical-align: middle;
+}
+
+/* --- Buttons --------------------------------------------------------------------------------- */
+
+/* EuiSmallButton: filled in the accent, or on the secondary surface */
+.inpButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-width: 112px;
+  max-width: 100%;
+  height: var(--control-height);
+  padding: 0 var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 30px;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) ease-out,
+    color var(--duration-fast) ease-out,
+    filter var(--duration-fast) ease-out,
+    transform var(--duration-fast) ease-out;
+}
+
+.inpButton:hover,
+.inpButton:focus-visible {
+  background: var(--color-border-light);
+  text-decoration: none;
+}
+
+.inpButton:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.inpButton--fill {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  box-shadow: var(--shadow-sm);
+}
+
+.inpButton--fill:hover,
+.inpButton--fill:focus-visible {
+  background: var(--color-accent);
+  filter: brightness(1.1);
+}
+
+.inpButton:disabled {
+  background: var(--color-surface-secondary);
+  color: var(--color-text-tertiary);
+  box-shadow: none;
+  filter: none;
+  cursor: not-allowed;
+}
+
+.inpButton--danger {
+  background: var(--color-critical);
+  color: var(--color-on-accent);
+  box-shadow: var(--shadow-sm);
+}
+
+.inpButton--danger:hover,
+.inpButton--danger:focus-visible {
+  background: var(--color-critical);
+  filter: brightness(1.1);
+}
+
+.inpButton--fill:disabled,
+.inpButton--danger:disabled {
+  background: var(--color-border);
+  color: var(--inp-disabled-fill);
+}
+
+/* EUI's default size, which the buttons of its dialogs keep */
+.inpButton--m {
+  height: 40px;
+}
+
+.inpButton__content {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.inpButton__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* EuiButtonEmpty: no surface until the pointer is on it */
+.inpButtonEmpty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  flex: none;
+  max-width: 100%;
+  height: var(--control-height);
+  padding: 0 var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 21px;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) ease-out,
+    transform var(--duration-fast) ease-out;
+}
+
+.inpButtonEmpty--xs {
+  height: 24px;
+}
+
+.inpButtonEmpty--m {
+  height: 40px;
+}
+
+.inpButtonEmpty--xs .atlIcon {
+  width: 12px;
+  height: 12px;
+}
+
+.inpButtonEmpty--primary {
+  color: var(--inp-primary-text);
+}
+
+.inpButtonEmpty--danger {
+  color: var(--inp-danger-text);
+}
+
+.inpButtonEmpty:hover,
+.inpButtonEmpty:focus-visible {
+  background: color-mix(in srgb, var(--color-text-secondary) var(--tint-opacity), transparent);
+  text-decoration: none;
+}
+
+.inpButtonEmpty--primary:hover,
+.inpButtonEmpty--primary:focus-visible {
+  background: var(--color-accent-tint);
+}
+
+.inpButtonEmpty--danger:hover,
+.inpButtonEmpty--danger:focus-visible {
+  background: var(--color-critical-tint);
+}
+
+.inpButtonEmpty:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.inpButtonEmpty:disabled {
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: not-allowed;
+}
+
+.inpButtonEmpty__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* EuiButtonIcon: a round button of an icon */
+.inpButtonIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--inp-primary-text);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) ease-out,
+    transform var(--duration-fast) ease-out;
+}
+
+.inpButtonIcon--xs {
+  width: 24px;
+  height: 24px;
+}
+
+.inpButtonIcon--s {
+  width: var(--control-height);
+  height: var(--control-height);
+}
+
+.inpButtonIcon--text {
+  color: var(--color-text-primary);
+}
+
+.inpButtonIcon--danger {
+  color: var(--inp-danger-text);
+}
+
+.inpButtonIcon:hover:not(:disabled),
+.inpButtonIcon:focus-visible {
+  background: var(--color-accent-tint);
+}
+
+.inpButtonIcon--text:hover:not(:disabled),
+.inpButtonIcon--text:focus-visible {
+  background: color-mix(in srgb, var(--color-text-secondary) var(--tint-opacity), transparent);
+}
+
+.inpButtonIcon--danger:hover:not(:disabled),
+.inpButtonIcon--danger:focus-visible {
+  background: var(--color-critical-tint);
+}
+
+.inpButtonIcon:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.inpButtonIcon:disabled {
+  cursor: not-allowed;
+}
+
+/* The star that makes a pattern the default, and the tick that saves a source filter */
+.inpButtonIcon--filledStar .atlIcon {
+  fill: currentcolor;
+}
+
+.inpButtonIcon--filledCheck .atlIcon {
+  fill: color-mix(in srgb, currentcolor 15%, transparent);
+}
+
+.inpSpinner {
+  display: inline-block;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--color-border-light);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: atlSpin 0.8s linear infinite;
+}
+
+.inpSpinner--s {
+  width: 12px;
+  height: 12px;
+  border-width: 1.5px;
+}
+
+.inpSpinner--l {
+  width: 24px;
+  height: 24px;
+}
+
+/* --- Badges, icons and call-outs ------------------------------------------------------------- */
+
+.inpBadge {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 1px var(--space-2);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--color-surface-secondary);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 18px;
+  white-space: nowrap;
+  vertical-align: middle;
+  cursor: default;
+}
+
+.inpBadge__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inpBadge--hollow {
+  border-color: var(--color-border-light);
+  background: transparent;
+}
+
+.inpBadge--warning {
+  background: var(--color-warning-tint);
+  color: var(--inp-warning-badge);
+}
+
+.inpBadge--primary {
+  background: var(--color-accent-tint);
+  color: var(--color-accent);
+}
+
+.inpBadge--danger {
+  background: var(--color-critical-tint);
+  color: var(--inp-danger-text);
+}
+
+/*
+ * The badges of a pattern in the list, after the em space the original writes: EuiBadgeGroup,
+ * each badge in the middle of a line of text, in a block of its own
+ */
+.inpBadgeGroup {
+  display: block;
+  margin: calc(var(--space-1) * -1);
+}
+
+.inpBadgeGroup__item {
+  display: inline-block;
+  max-width: 100%;
+  margin: var(--space-1);
+}
+
+.inpBadgeGroup__item > .inpBadge {
+  vertical-align: middle;
+}
+
+.inpBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+}
+
+.inpIconTip {
+  display: inline-flex;
+  vertical-align: middle;
+  color: var(--color-accent);
+}
+
+.inpIconTip--warning {
+  color: var(--inp-warning-icon);
+}
+
+.inpWarningIcon {
+  width: 12px;
+  height: 12px;
+  color: var(--inp-warning-icon);
+  vertical-align: middle;
+}
+
+/* EuiIcon type="dot": what is true in a column of the fields */
+.inpDot {
+  display: block;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  fill: var(--inp-success-icon);
+}
+
+/* EuiCallOut: a rounded block in the soft fill of its colour, its title in a deeper shade */
+.inpCallOut {
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+}
+
+.inpCallOut--small {
+  padding: var(--space-2);
+}
+
+.inpCallOut__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--font-size-m);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+/* The icon makes the line of the title a pixel higher in EUI */
+.inpCallOut__title:has(> .inpCallOut__icon) {
+  min-height: 21px;
+}
+
+.inpCallOut--small .inpCallOut__title {
+  font-size: var(--font-size-s);
+}
+
+.inpCallOut__icon {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
+.inpCallOut__body {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+.inpCallOut--small .inpCallOut__body {
+  margin-top: var(--space-1);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+.inpCallOut__body p {
+  margin: 0 0 21px;
+}
+
+.inpCallOut__body > :last-child {
+  margin-bottom: 0;
+}
+
+.inpCallOut--primary {
+  background: color-mix(in srgb, var(--color-accent) var(--tint-opacity), var(--color-surface));
+}
+
+.inpCallOut--primary .inpCallOut__title {
+  color: var(--inp-callout-primary);
+}
+
+.inpCallOut--success {
+  background: color-mix(in srgb, var(--color-healthy) var(--tint-opacity), var(--color-surface));
+}
+
+.inpCallOut--success .inpCallOut__title {
+  color: var(--inp-callout-success);
+}
+
+.inpCallOut--warning {
+  background: color-mix(in srgb, var(--color-warning) var(--tint-opacity), var(--color-surface));
+}
+
+.inpCallOut--warning .inpCallOut__title {
+  color: var(--inp-callout-warning);
+}
+
+.inpCallOut--danger {
+  background: color-mix(in srgb, var(--color-critical) var(--tint-opacity), var(--color-surface));
+}
+
+.inpCallOut--danger .inpCallOut__title {
+  color: var(--inp-callout-danger);
+}
+
+/* --- Fields ---------------------------------------------------------------------------------- */
+
+/* EuiCompressedFormRow: 400 px, a label above, an error and help below */
+.inpFormRow {
+  display: flex;
+  flex-direction: column;
+  max-width: 400px;
+}
+
+.inpFormRow--wide {
+  max-width: none;
+}
+
+.inpFormRow + .inpFormRow {
+  margin-top: var(--space-4);
+}
+
+.inpFormRow__label {
+  align-self: flex-start;
+  margin-bottom: var(--space-1);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.5;
+}
+
+.inpFormRow__label--invalid {
+  color: var(--inp-danger-text);
+}
+
+/*
+ * A label holding a word of code is 24 px high in the original, whose capsule of code is a pixel
+ * taller there, set in Source Code Pro, than in the monospace this product falls back to.
+ */
+.inpFormRow__label:has(.inpCode) {
+  min-height: 24px;
+}
+
+.inpFormRow__labelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+}
+
+.inpFormRow__labelRow > .inpFormRow__label {
+  margin-bottom: 0;
+}
+
+.inpFormRow__field {
+  position: relative;
+  min-width: 0;
+}
+
+/* The line a <br> makes between two texts of a row is EUI's 14 px one */
+.inpFormRow__field:has(> br) {
+  line-height: 14px;
+}
+
+.inpFormRow__error,
+.inpFormRow__help {
+  padding-top: var(--space-1);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}
+
+.inpFormRow__error {
+  color: var(--color-critical);
+}
+
+.inpFormRow__help {
+  color: var(--color-text-tertiary);
+}
+
+.inpFormErrors {
+  margin-bottom: var(--space-4);
+}
+
+/* EuiFieldText and its kin: a hairline around the secondary surface */
+.inpInput {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: var(--control-height);
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  box-shadow: inset 0 0 0 1px var(--color-border-light);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  line-height: normal;
+  transition:
+    box-shadow var(--duration-fast) ease-in,
+    background-color var(--duration-fast) ease-in;
+}
+
+.inpInput--large {
+  height: 40px;
+  padding: var(--space-3);
+}
+
+.inpInput::placeholder {
+  color: var(--color-text-tertiary);
+  opacity: 1;
+}
+
+.inpInput--invalid {
+  box-shadow: inset 0 0 0 1px var(--color-critical);
+}
+
+.inpInput:focus {
+  outline: none;
+  box-shadow:
+    inset 0 0 0 1px var(--color-accent),
+    0 0 0 2px var(--color-focus-ring);
+}
+
+.inpInput:disabled {
+  color: var(--color-text-tertiary);
+  cursor: not-allowed;
+}
+
+.inpInput[type="search"] {
+  appearance: none;
+}
+
+.inpSearch {
+  position: relative;
+}
+
+/*
+ * EUI's magnifier fills its 12 px (16 px when large) box with a fine line; ours is drawn inside a
+ * margin of its box, so it is drawn larger and finer to cover the same place.
+ */
+.inpSearch__icon {
+  position: absolute;
+  top: 50%;
+  left: 6px;
+  width: 16px;
+  height: 16px;
+  margin-top: -8px;
+  color: var(--color-text-primary);
+  stroke-width: 0.9;
+  pointer-events: none;
+}
+
+.inpInput--search {
+  padding-left: var(--space-8);
+}
+
+.inpSearch--large .inpSearch__icon {
+  left: 9.33px;
+  width: 21.33px;
+  height: 21.33px;
+  margin-top: -10.67px;
+  stroke-width: 0.8;
+}
+
+.inpSearch--large .inpInput--search {
+  padding-left: 40px;
+}
+
+/* EuiCompressedSelect: the native list, with EUI's arrow */
+.inpSelectWrap {
+  position: relative;
+  min-width: 0;
+}
+
+.inpSelect {
+  display: block;
+  width: 100%;
+  height: var(--control-height);
+  padding: 0 var(--space-8) 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  box-shadow: inset 0 0 0 1px var(--color-border-light);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  line-height: var(--control-height);
+  appearance: none;
+  cursor: pointer;
+  transition: box-shadow var(--duration-fast) ease-in;
+}
+
+.inpSelect--invalid {
+  box-shadow: inset 0 0 0 1px var(--color-critical);
+}
+
+.inpSelect:focus {
+  outline: none;
+  box-shadow:
+    inset 0 0 0 1px var(--color-accent),
+    0 0 0 2px var(--color-focus-ring);
+}
+
+.inpSelect:disabled {
+  color: var(--color-text-tertiary);
+  cursor: not-allowed;
+}
+
+.inpSelectWrap__arrow {
+  position: absolute;
+  top: 50%;
+  right: var(--space-2);
+  width: 12px;
+  height: 12px;
+  margin-top: -6px;
+  color: var(--color-text-primary);
+  pointer-events: none;
+}
+
+.inpSelect:disabled + .inpSelectWrap__arrow {
+  color: var(--color-text-tertiary);
+}
+
+/* EuiCompressedSwitch: a capsule with a white thumb, in the accent when on */
+.inpSwitch {
+  display: flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 16px;
+}
+
+.inpSwitch__button {
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  line-height: 0;
+  cursor: pointer;
+}
+
+.inpSwitch__body {
+  position: relative;
+  display: block;
+  width: 28px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--color-border);
+  transition: background-color var(--duration-normal) var(--ease-out-quint);
+}
+
+.inpSwitch__button--on .inpSwitch__body {
+  background: var(--color-accent);
+}
+
+.inpSwitch__thumb {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-on-accent);
+  box-shadow: var(--shadow-sm);
+  transition: left var(--duration-normal) var(--ease-out-quint);
+}
+
+.inpSwitch__button--on .inpSwitch__thumb {
+  left: 13px;
+}
+
+.inpSwitch__label {
+  padding-left: var(--space-2);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  line-height: 16px;
+  cursor: pointer;
+}
+
+/* EuiColorPicker: its swatch inside the field at the left, an arrow at the right */
+.inpColorField {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.inpColorField__swatch {
+  position: absolute;
+  top: 50%;
+  left: var(--space-3);
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-top: -8px;
+}
+
+.inpColorField__swatch .atlColorSwatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+}
+
+.inpColorField__input.inpInput {
+  padding-right: 40px;
+  padding-left: 40px;
+}
+
+.inpColorField__arrow {
+  position: absolute;
+  top: 50%;
+  right: var(--space-3);
+  margin-top: -8px;
+  color: var(--color-text-primary);
+  pointer-events: none;
+}
+
+/* --- Tables ---------------------------------------------------------------------------------- */
+
+/* EuiBasicTable: a quiet header on the secondary surface, hairlines between rows */
+.inpTableWrap {
+  position: relative;
+}
+
+.inpTable {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+  /* EUI sets the numbers of a table in columns */
+  font-feature-settings: "calt", "kern", "liga", "tnum";
+}
+
+/* EUI's caption stays in the flow, a pixel high above the header, moved out of sight */
+.inpTable > caption.inpScreenReader {
+  position: relative;
+  left: -10000px;
+}
+
+.inpTable--auto {
+  table-layout: auto;
+}
+
+.inpTable__th,
+.inpTable__td {
+  padding: 0;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.inpTable__th {
+  background: var(--color-surface-secondary);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 20px;
+}
+
+.inpTable__td {
+  border-top: 1px solid var(--color-border-light);
+}
+
+.inpTable__row:hover {
+  background: var(--color-surface-secondary);
+}
+
+.inpTable__sortButton {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.inpTable__sortButton:hover,
+.inpTable__sortButton:focus-visible {
+  color: var(--color-text-primary);
+}
+
+.inpTable__headerStatic {
+  display: block;
+}
+
+.inpTable__headerContent {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: 10px var(--space-3);
+  overflow: hidden;
+  line-height: 18px;
+}
+
+.inpTable__th--right .inpTable__headerContent {
+  justify-content: flex-end;
+}
+
+.inpTable__headerText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inpTable__sortIcon {
+  color: var(--color-accent);
+}
+
+.inpTable__content {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 10px var(--space-3);
+  overflow: hidden;
+}
+
+.inpTable__content--overflow {
+  overflow: visible;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.inpTable__content--right,
+.inpTable__content--actions {
+  justify-content: flex-end;
+}
+
+.inpTable__content--center {
+  justify-content: center;
+}
+
+.inpTable__content--actions {
+  gap: var(--space-2);
+  overflow: visible;
+}
+
+/* The buttons keep their size in a column narrower than they are, and stand out to the left */
+.inpTable__content--actions > * {
+  flex: none;
+}
+
+.inpTable__text {
+  min-width: 0;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.inpTable__content > .inpInput {
+  flex: 1 1 auto;
+}
+
+/*
+ * The actions of a row are grey until the pointer is on the row. Each sits on a line of text, in
+ * its middle, as in EUI's tooltip anchor, whose line makes the row a little taller than the button.
+ */
+.inpTable__action {
+  display: block;
+  flex: none;
+  opacity: 0.7;
+  filter: grayscale(100%);
+  transition:
+    opacity var(--duration-normal) var(--ease-out-quint),
+    filter var(--duration-normal) var(--ease-out-quint);
+}
+
+.inpTable__action > .inpButtonIcon {
+  vertical-align: middle;
+}
+
+.inpTable__row:hover .inpTable__action,
+.inpTable__action:focus-within {
+  opacity: 1;
+  filter: none;
+}
+
+.inpTable--compressed .inpTable__headerContent,
+.inpTable--compressed .inpTable__content {
+  padding: 6px var(--space-2);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+.inpTable__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+  margin-top: var(--space-4);
+}
+
+/* A table that is saving: a line runs along its top */
+.inpTableWrap__progress {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 2;
+  height: 2px;
+  overflow: hidden;
+}
+
+.inpTableWrap__progress::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: var(--color-accent);
+  animation: atlProgress 1.2s var(--ease-out-quint) infinite;
+}
+
+.inpTableWrap--loading tbody {
+  opacity: 0.6;
+}
+
+/* EuiPagination: the current page on the secondary surface */
+.inpPagination {
+  display: flex;
+  align-items: center;
+}
+
+.inpPagination__list {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inpPagination__item {
+  display: flex;
+}
+
+.inpPagination__page {
+  height: var(--control-height);
+  padding: 0 var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 21px;
+  cursor: pointer;
+}
+
+.inpPagination__page:hover,
+.inpPagination__page:focus-visible {
+  color: var(--color-text-primary);
+}
+
+.inpPagination__page--active,
+.inpPagination__page--active:disabled {
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  cursor: default;
+}
+
+.inpPagination__ellipsis {
+  align-items: center;
+  height: var(--control-height);
+  padding: 0 var(--space-2);
+  color: var(--color-text-secondary);
+}
+
+.inpPagination__compressed {
+  padding: 0 var(--space-2);
+  color: var(--color-text-secondary);
+}
+
+/* The menu of the rows a page shows: a frosted panel under (or over) its button */
+.inpDropdown {
+  position: relative;
+  display: inline-flex;
+}
+
+.inpDropdown__panel {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  left: 50%;
+  z-index: 1000;
+  min-width: 120px;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  transform: translateX(-50%);
+}
+
+.inpDropdown--up .inpDropdown__panel {
+  top: auto;
+  bottom: calc(100% + var(--space-2));
+  left: 0;
+  transform: none;
+}
+
+.inpMenu {
+  display: flex;
+  flex-direction: column;
+}
+
+.inpMenu__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.inpMenu__item:hover,
+.inpMenu__item:focus-visible {
+  background: var(--color-surface-secondary);
+}
+
+.inpMenu__check {
+  display: inline-flex;
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+/* --- Tabs ------------------------------------------------------------------------------------ */
+
+.inpTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.inpTab {
+  padding: var(--space-1) 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 21px;
+  cursor: pointer;
+  transition:
+    color var(--duration-fast) ease-out,
+    background-color var(--duration-fast) ease-out;
+}
+
+.inpTab:hover,
+.inpTab:focus-visible {
+  color: var(--color-text-primary);
+}
+
+.inpTab--selected {
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  cursor: default;
+}
+
+.inpTab__content {
+  display: block;
+  white-space: nowrap;
+}
+
+/* --- The list -------------------------------------------------------------------------------- */
+
+.inpListHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-6);
+}
+
+.inpListHeader__lead {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+.inpListSearch {
+  margin: var(--space-6) 0;
+}
+
+/* --- The page of a pattern ------------------------------------------------------------------- */
+
+.inpIndexHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.inpIndexHeader__name {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.inpIndexHeader__subtext {
+  margin-top: 7px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.inpIndexHeader__buttons {
+  display: flex;
+  flex: none;
+  gap: var(--space-6);
+}
+
+.inpDisplayName {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
+/* The field keeps its 400 px; the button sits at the end of the row, as in the original */
+.inpDisplayName > .inpFormRow {
+  flex: 1 1 400px;
+  margin-right: auto;
+}
+
+.inpFilterBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.inpFilterBar__search {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.inpFilterBar > .inpSelectWrap {
+  flex: none;
+}
+
+.inpFilterBar .inpSelect {
+  width: auto;
+}
+
+.inpTabHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.inpTabHeader__text {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.inpAddFilter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+/* Ten parts to the field, one to the button, which keeps at least its own width */
+.inpAddFilter__input {
+  flex: 10 1 0;
+  min-width: 0;
+}
+
+.inpAddFilter__button {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+}
+
+/* --- The wizard ------------------------------------------------------------------------------ */
+
+.inpLoadingState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  text-align: center;
+}
+
+.inpStepRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-6);
+}
+
+.inpStepRow__form {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* The button stands level with the first field, under the space of a label */
+.inpStepRow__next {
+  flex: none;
+  padding-top: 22px;
+}
+
+.inpIndicesFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+}
+
+.inpActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-6);
+}
+
+/* --- The editor of a field ------------------------------------------------------------------- */
+
+.inpForm > .inpButton {
+  display: flex;
+  width: fit-content;
+}
+
+.inpFieldActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.inpFieldActions__end {
+  display: flex;
+  margin-left: auto;
+}
+
+.inpSamples audio,
+.inpSamples img {
+  max-width: 100%;
+}
+
+.inpRulesTable--narrow {
+  max-width: 400px;
+}
+
+.inpScriptEditor {
+  min-width: 0;
+}
+
+/* EuiConfirmModal: as wide as its words, at least 400 px; nothing between title and buttons when it says nothing */
+.atlModal.inpConfirm {
+  width: auto;
+  min-width: min(400px, 100%);
+  max-width: 768px;
+}
+
+.inpConfirm .atlModal__body:empty {
+  display: none;
+}
+
+/* The buttons right below the title come closer to it, as EUI's footer after a header does */
+.inpConfirm .atlModal__body:empty ~ .atlModal__footer {
+  padding-top: 8px;
+}
+
+/* The help on scripts and on templates: a panel at the right, below the header */
+.inpFlyoutMask {
+  top: var(--header-height);
+}
+
+.inpFlyout {
+  position: fixed;
+  top: var(--header-height);
+  right: 0;
+  bottom: 0;
+  z-index: 3500;
+  display: flex;
+  flex-direction: column;
+  width: 50vw;
+  min-width: min(424px, 100vw);
+  border-left: 1px solid var(--color-border-light);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+  color: var(--color-text-primary);
+  outline: none;
+  animation: atlSlide var(--duration-normal) var(--ease-out-quint);
+}
+
+.inpFlyout__close {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: 1;
+}
+
+.inpFlyout__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--space-6);
+  overflow-y: auto;
+}
+
+.inpTestScript__searchBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-top: var(--space-4);
+}
+
+/* EuiCodeBlock: the results of a preview */
+.inpCodeBlock {
+  overflow: hidden;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+}
+
+.inpCodeBlock__pre {
+  margin: 0;
+  padding: var(--space-6);
+  overflow: auto;
+  font-family: var(--font-family-code);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* The original colours the values of the JSON, not its keys, and greys its brackets and commas */
+.inpCodeBlock .tokKey {
+  color: inherit;
+}
+
+.inpCodeBlock__punctuation {
+  opacity: 0.7;
+}
+
+@media (max-width: 700px) {
+  .inpListHeader,
+  .inpIndexHeader,
+  .inpFilterBar,
+  .inpTabHeader,
+  .inpAddFilter,
+  .inpStepRow,
+  .inpDisplayName {
+    flex-wrap: wrap;
+  }
+
+  .inpFlyout {
+    width: 100vw;
+    min-width: 0;
+  }
+}

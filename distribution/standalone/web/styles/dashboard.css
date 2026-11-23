@@ -20,9 +20,42 @@
   margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) 0;
 }
 
+/* The menu in the page of one embedded in another, which has no header: the header's links at
+   the top left, as the original draws them there */
+.dshTopNav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: calc(-1 * var(--space-2)) 0 0 calc(-1 * var(--space-1));
+}
+
+.dshTopNav .atlButton--empty {
+  height: var(--space-6);
+  padding: 0 9px;
+}
+
+.dshTopNav > .atlButton:not(.atlButton--empty) {
+  gap: var(--space-2);
+  min-width: 112px;
+  border: 1px solid transparent;
+}
+
+/* ...and the bar under it follows at once */
+.dshTopNav + .shlSearchBar {
+  padding-top: 0;
+}
+
 .dshGrid {
   position: relative;
   width: 100%;
+}
+
+/* The grid of panels spans the page, as the original's: the margin around its panels is its own
+   (none when margins are off), in place of the page's */
+.dshGrid--placed {
+  width: auto;
+  margin: calc(-1 * var(--space-2));
 }
 
 .dshGrid__item {
@@ -33,14 +66,33 @@
 
 .dshGrid__item--settling {
   transition:
-    transform var(--duration-fast) var(--ease-out-quint),
+    left var(--duration-fast) var(--ease-out-quint),
+    top var(--duration-fast) var(--ease-out-quint),
     width var(--duration-fast) var(--ease-out-quint),
     height var(--duration-fast) var(--ease-out-quint);
 }
 
+/* The panel in hand, as the original's grid lifts it */
 .dshGrid__item--active {
+  z-index: 3;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  transition: box-shadow var(--duration-fast) var(--ease-out-quint);
+}
+
+/* Where the panel in hand will land: the theme's warning colour, as the original draws it */
+.dshGrid__placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
   z-index: 2;
-  transition: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-warning);
+  transition:
+    left 100ms ease,
+    top 100ms ease,
+    width 100ms ease,
+    height 100ms ease;
 }
 
 .dshGrid--stacked {
@@ -55,6 +107,94 @@
 
 .dshGrid--flush .dshPanel {
   border-radius: 0;
+}
+
+/* A panel far from the window, not drawn yet: the original's loading chart (its mono, large one)
+   in the middle of its place, with nothing around it */
+.dshWaiting {
+  position: relative;
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 26px;
+}
+
+.dshWaiting__chart {
+  display: inline-block;
+  height: var(--space-6);
+  overflow: hidden;
+}
+
+.dshWaiting__bar {
+  display: inline-block;
+  width: var(--space-1);
+  height: 100%;
+  margin-bottom: var(--space-3);
+  margin-left: 2px;
+  background-color: var(--color-border);
+}
+
+/* Each bar a little nearer the text's colour, as the component library's shadeOrTint makes them:
+   4, 8 and 12 hundredths of it */
+.dshWaiting__bar:nth-child(2) {
+  background-color: color-mix(in srgb, var(--color-text-primary) 4%, var(--color-border));
+}
+
+.dshWaiting__bar:nth-child(3) {
+  background-color: color-mix(in srgb, var(--color-text-primary) 8%, var(--color-border));
+}
+
+.dshWaiting__bar:nth-child(4) {
+  background-color: color-mix(in srgb, var(--color-text-primary) 12%, var(--color-border));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .dshWaiting__bar {
+    animation: dshWaiting 1s ease infinite;
+  }
+
+  .dshWaiting__bar:nth-child(2) {
+    animation-delay: 0.1s;
+  }
+
+  .dshWaiting__bar:nth-child(3) {
+    animation-delay: 0.2s;
+  }
+
+  .dshWaiting__bar:nth-child(4) {
+    animation-delay: 0.3s;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dshWaiting__bar:nth-child(1) {
+    transform: translateY(66%);
+  }
+
+  .dshWaiting__bar:nth-child(2) {
+    transform: translateY(44%);
+  }
+
+  .dshWaiting__bar:nth-child(3) {
+    transform: translateY(22%);
+  }
+}
+
+@keyframes dshWaiting {
+  0% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(66%);
+  }
+
+  100% {
+    transform: translateY(0);
+  }
 }
 
 body.dshDragging {
@@ -73,10 +213,13 @@ body.dshDragging {
   overflow: hidden;
 }
 
-.dshPanel--dragging {
-  box-shadow: var(--shadow-lg);
-  outline: 2px solid var(--color-accent);
-  outline-offset: -2px;
+/* While editing, a panel pointed at stands out a little, and its title bar is what moves it */
+.dshPanel--editing {
+  transition: box-shadow var(--duration-fast) var(--ease-out-quint);
+}
+
+.dshPanel--editing:hover {
+  box-shadow: var(--shadow-md);
 }
 
 /* The original's header: a line 24 pixels high, the title in it and the options button at its end */
@@ -96,27 +239,55 @@ body.dshDragging {
   min-height: 0;
 }
 
-.dshPanel--editing .dshPanel__header {
-  cursor: grab;
+.dshPanel--editing .dshPanel__title {
+  align-self: stretch;
+  cursor: move;
+  transition: background-color var(--duration-fast) var(--ease-out-quint);
 }
 
+.dshPanel--editing .dshPanel__title:hover {
+  background-color: var(--color-warning-tint);
+}
+
+/* An untitled panel says so while the dashboard is edited */
+.dshPanel__noTitle {
+  overflow: hidden;
+  color: var(--color-text-tertiary);
+  font-weight: var(--font-weight-regular);
+  text-overflow: ellipsis;
+}
+
+/* The space after the title is its spans', as in the original: a long one ends where it does */
 .dshPanel__title {
   flex: 1 1 auto;
   min-width: 0;
-  padding: 0 var(--space-2);
+  padding: 0 0 0 var(--space-2);
   /* the original's panel titles are 13 pixels, between the theme's two small sizes */
   font-size: 13px;
   font-weight: var(--font-weight-semibold);
   line-height: 24px;
 }
 
+/* A long title is cut short before the options button, which keeps its size */
+.dshPanel__menuAnchor {
+  flex: none;
+}
+
+/* The original's options button: a tab in the panel's corner, tinted with the text's colour */
 .dshPanel__menu.atlButton {
   flex: none;
   width: 24px;
   min-width: 24px;
   height: 24px;
   padding: 0;
+  border-radius: 0 50%;
+  background-color: color-mix(in srgb, var(--color-text-primary) 10%, transparent);
   opacity: 0;
+}
+
+.dshPanel__menu.atlButton:focus-visible {
+  background-color: var(--color-accent-tint);
+  opacity: 1;
 }
 
 .dshPanel:hover .dshPanel__menu,
@@ -154,46 +325,236 @@ body.dshDragging {
   padding: var(--space-2);
 }
 
+/* A saved search's table spans the panel from side to side, as the original's, and so does the
+   prompt in place of an experimental visualization */
+.dshPanel__body--flush {
+  padding: 0;
+}
+
+/* A description beside the title: the original's icon, its tooltip telling it; a long title is
+   cut short before the icon */
+.dshPanel__title > .atlTooltipAnchor {
+  max-width: 100%;
+}
+
+.dshPanel__titleInner {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  overflow: hidden;
+  padding-right: var(--space-2);
+  vertical-align: top;
+}
+
+.dshPanel__titleText {
+  overflow: hidden;
+  padding-right: var(--space-2);
+  text-overflow: ellipsis;
+}
+
+.dshPanel__info {
+  color: var(--color-text-tertiary);
+}
+
+/* A visualization of a kind still being tried out, while those are turned off: the original's
+   prompt in its place, its title left as plain text as the original leaves it */
+.dshLabDisabled {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  text-align: center;
+}
+
+.dshLabDisabled__prompt {
+  max-width: 36em;
+  margin: auto;
+  padding: var(--space-6);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  line-height: 1;
+}
+
+.dshLabDisabled__icon.atlIcon {
+  display: block;
+  width: 40px;
+  height: 40px;
+  margin: 0 auto var(--space-4);
+  color: var(--color-text-tertiary);
+}
+
+.dshLabDisabled__body {
+  margin: var(--space-4) 0 0;
+  color: var(--color-text-secondary);
+  line-height: 21px;
+}
+
+/* The original's handle: 24 pixels in the corner, its mark 8 pixels in from the edges */
 .dshPanel__resize {
   position: absolute;
   right: 0;
   bottom: 0;
   z-index: 2;
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
   cursor: se-resize;
+  transition: background-color var(--duration-fast) var(--ease-out-quint);
+}
+
+.dshPanel__resize:hover {
+  background-color: var(--color-warning-tint);
 }
 
 .dshPanel__resize::after {
   content: "";
   position: absolute;
-  right: 4px;
-  bottom: 4px;
-  width: 7px;
-  height: 7px;
-  border-right: 2px solid var(--color-text-tertiary);
-  border-bottom: 2px solid var(--color-text-tertiary);
+  right: 8px;
+  bottom: 8px;
+  box-sizing: border-box;
+  width: 6px;
+  height: 6px;
+  border-right: 1.8px solid var(--color-text-secondary);
+  border-bottom: 1.8px solid var(--color-text-secondary);
 }
 
+/*
+ * A saved search's table scrolls in its own area, as the original's, so its header stays at the
+ * top of the panel and a new search starts again at the top. The original's flex group gives it
+ * 2px on every side and takes 2px back at the top and the sides, which leaves 4px under it. Its
+ * scroll area reaches the 12px under the last pager, and both the group and the area fade 7.5px
+ * at their left and right edges (the group's edges are 2px outside the area's).
+ */
 .dshSearch {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: auto;
-}
-
-.dshEmpty {
   display: flex;
   flex: 1 1 auto;
-  align-items: center;
-  justify-content: center;
-  min-height: 320px;
+  flex-direction: column;
+  min-height: 0;
+  margin-bottom: 4px;
+  overflow: hidden;
+  mask-image: linear-gradient(to right, rgb(0 0 0 / 34%), #000 5.5px, #000 calc(100% - 5.5px), rgb(0 0 0 / 34%));
 }
 
+.dshSearch > .dscTable {
+  flex: 1 1 0;
+  min-height: 0;
+  padding-bottom: 12px;
+  overflow: auto;
+  mask-image: linear-gradient(to right, rgb(0 0 0 / 10%), #000 7.5px, #000 calc(100% - 7.5px), rgb(0 0 0 / 10%));
+}
+
+/* The options of the top menu, in a popover under their button */
+.dshOptionsPopover.atlPopover {
+  padding: var(--space-4);
+}
+
+.dshOptions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.dshLinkButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.dshLinkButton:hover {
+  text-decoration: underline;
+}
+
+/* An empty dashboard being edited: the original's dashed box, top left */
+.dshEmptyWidget {
+  max-width: 400px;
+  padding: 80px;
+  border: 1px dashed var(--color-border-light);
+  border-radius: var(--radius-sm);
+  text-align: center;
+}
+
+.dshEmptyWidget__text {
+  margin: 0 0 var(--space-6);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.dshEmptyWidget p:last-child {
+  margin: 0;
+}
+
+/* An empty dashboard looked at: its prompt in the middle of the page */
+.dshStartScreen {
+  max-width: 500px;
+  margin: 0 auto;
+  padding: 40px;
+  text-align: center;
+}
+
+.dshStartScreen__title {
+  margin: 0;
+  font-weight: var(--font-weight-semibold);
+}
+
+.dshStartScreen__text {
+  max-width: 260px;
+  margin: var(--space-4) auto 0;
+  color: var(--color-text-secondary);
+}
+
+/* The way out of full screen: the original's dark button in the corner, with the product's mark */
 .dshExitFullScreen {
   position: fixed;
-  bottom: var(--space-3);
-  left: var(--space-3);
-  z-index: 50;
+  bottom: var(--space-2);
+  left: var(--space-2);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  /* the theme's darkest shade */
+  background: #000000;
+  box-shadow: var(--shadow-lg);
+  cursor: pointer;
+}
+
+.dshExitFullScreen__text {
+  color: var(--color-text-tertiary);
+  line-height: 1.2;
+}
+
+.dshExitFullScreen__icon {
+  color: var(--color-text-tertiary);
+}
+
+.dshExitFullScreen:hover .dshExitFullScreen__icon {
+  color: var(--color-on-accent);
+}
+
+.dshCloneModal__warning {
+  margin-top: var(--space-4);
+}
+
+.dshCustomize__reset {
+  flex: none;
+  padding: 0 var(--space-2);
+  border: 0;
+  background: none;
+  color: var(--color-accent);
+  font: inherit;
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+.dshCustomize__reset:disabled {
+  color: var(--color-text-tertiary);
+  cursor: not-allowed;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -212,4 +573,162 @@ body.dshDragging {
 .dshPanel .chtLegendToggle:focus-visible,
 .dshPanel .chtLegendToggle--open {
   opacity: 1;
+}
+
+/* The "Add panels" and "Replace panel" flyouts: the original's medium flyout, under the header */
+.dshPanelFlyout.atlFlyout {
+  top: var(--header-height);
+  width: 50vw;
+  min-width: min(424px, 100vw);
+}
+
+/* Its mask leaves the header clear and blurs the page, as the theme's */
+.atlFlyoutMask:has(+ .dshPanelFlyout) {
+  top: var(--header-height);
+  backdrop-filter: blur(4px);
+}
+
+.dshPanelFlyout .atlFlyout__header {
+  padding: var(--space-6);
+}
+
+.dshPanelFlyout .atlFlyout__header > .atlButton {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  width: var(--space-6);
+  height: var(--space-6);
+  border-radius: 50%;
+}
+
+.dshPanelFlyout .atlFlyout__header > .atlButton:hover,
+.dshPanelFlyout .atlFlyout__header > .atlButton:focus {
+  background: color-mix(in srgb, var(--color-text-secondary) 10%, transparent);
+}
+
+.dshPanelFlyout .atlFlyout__body {
+  padding: var(--space-6);
+}
+
+/* The finder of the "Add panels" and "Replace panel" flyouts, as the original's */
+.dshFinder {
+  display: flex;
+  flex-direction: column;
+}
+
+.dshFinder__bar {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+
+.dshFinder__bar > * {
+  flex: none;
+}
+
+.dshFinder__bar > .atlFieldGroup {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.dshFinder__filters {
+  display: inline-flex;
+  flex: none;
+  overflow: hidden;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+}
+
+.dshFinder__filters > span + span {
+  border-left: 1px solid var(--color-border-light);
+}
+
+.dshFinder__filter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 32px;
+  padding: 0 var(--space-2);
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-weight: var(--font-weight-medium);
+  line-height: 21px;
+  cursor: pointer;
+}
+
+/* Its name is at least 48px wide, as the original's, so that the buttons keep their width */
+.dshFinder__filter > span:first-child {
+  min-width: 48px;
+  text-align: left;
+}
+
+/* The original's "Create new": a filled button, its icon 8px from its text */
+.dshFinder__create.atlButton {
+  gap: var(--space-2);
+  border: 1px solid transparent;
+  box-shadow: var(--shadow-sm);
+}
+
+.dshFinder__count {
+  min-width: 24px;
+  height: 20px;
+  padding: 0 var(--space-1);
+  border-radius: 999px;
+  background: var(--color-surface-secondary);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+  text-align: center;
+}
+
+.dshFinder__count--active {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.dshFinder__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  padding: 0 var(--space-2);
+  list-style: none;
+}
+
+.dshFinder__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  height: 32px;
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-weight: var(--font-weight-medium);
+  line-height: 24px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dshFinder__item:hover,
+.dshFinder__item:focus-visible {
+  background: var(--color-surface-secondary);
+  text-decoration: underline;
+}
+
+.dshFinder__empty {
+  margin: var(--space-6) 0;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.dshFinder .shlListing__pagination {
+  margin-top: var(--space-2);
 }
