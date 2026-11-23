@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { Button, IconButton } from '../../web/components/basic';
+import { ComboBox } from '../../web/components/combo_box';
 import { Pagination, pageButtons } from '../../web/components/table';
 
 /**
@@ -100,5 +101,46 @@ describe('the pages of a table', () => {
     );
     assert.match(sized, /^<div class="atlPagination ownPager">/);
     assert.match(sized, /data-test-subj="tablePaginationPopoverButton">Rows per page: (<!-- -->)?20</);
+  });
+});
+
+describe('the combo box', () => {
+  const options = [
+    { value: 'a', label: 'Alpha' },
+    { value: 'b', label: 'Beta' },
+  ];
+  /** The classes of the field itself */
+  const classOf = (html: string): string => /<div class="(atlField atlCombo[^"]*)"/.exec(html)?.[1] ?? '';
+
+  it('keeps the room of the clear button whenever it can be cleared, and shows the button only with a choice', () => {
+    const none = markupOf(<ComboBox options={options} selected={[]} onChange={() => undefined} />);
+    assert.match(classOf(none), /\batlCombo--clearable\b/);
+    assert.ok(!none.includes('comboBoxClearButton'));
+    const chosen = markupOf(<ComboBox options={options} selected={['a']} onChange={() => undefined} />);
+    assert.match(classOf(chosen), /\batlCombo--clearable\b/);
+    assert.match(chosen, /class="atlCombo__clear" aria-label="Clear input" data-test-subj="comboBoxClearButton"/);
+    // Neither when it cannot be cleared, nor when it is disabled
+    for (const html of [
+      markupOf(<ComboBox options={options} selected={['a']} onChange={() => undefined} clearable={false} />),
+      markupOf(<ComboBox options={options} selected={['a']} onChange={() => undefined} disabled />),
+    ]) {
+      assert.notEqual(classOf(html), '');
+      assert.ok(!classOf(html).includes('atlCombo--clearable'));
+      assert.ok(!html.includes('comboBoxClearButton'));
+    }
+  });
+
+  it('draws the spinner of a list on its way before the clear button and the arrow, as the original', () => {
+    const html = markupOf(<ComboBox options={options} selected={['a']} onChange={() => undefined} loading />);
+    assert.match(classOf(html), /\batlCombo--clearable atlCombo--loading\b/);
+    const spinner = html.indexOf('<span class="atlSpinner"></span>');
+    const clear = html.indexOf('comboBoxClearButton');
+    const caret = html.indexOf('comboBoxToggleListButton');
+    assert.ok(spinner > -1 && spinner < clear && clear < caret);
+  });
+
+  it('keeps the class of a compact field for a page\'s rules, the field being the same', () => {
+    const html = markupOf(<ComboBox options={options} selected={[]} onChange={() => undefined} compact single />);
+    assert.equal(classOf(html), 'atlField atlCombo atlCombo--s atlCombo--single atlCombo--clearable');
   });
 });

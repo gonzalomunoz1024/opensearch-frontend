@@ -1888,8 +1888,15 @@ select.atlField {
   box-shadow: 0 0 0 2px var(--color-focus-ring);
 }
 
-.atlCombo--clearable {
-  padding-right: 55px;
+/* Room for the clear button, as the original keeps it whenever the field can be cleared, chosen
+   or not, and for the spinner of a list on its way; for both */
+.atlCombo--clearable,
+.atlCombo--loading {
+  padding-right: 53px;
+}
+
+.atlCombo--clearable.atlCombo--loading {
+  padding-right: 75px;
 }
 
 .atlCombo--single {
@@ -1897,10 +1904,11 @@ select.atlField {
   padding-left: 7px;
 }
 
+/* The text typed: 24 px high, as the original's, its line in the middle of the field */
 .atlCombo > input {
   flex: 1 1 24px;
   min-width: 24px;
-  height: 22px;
+  height: 24px;
   margin: 0 4px;
   padding: 0;
   border: 0;
@@ -1914,7 +1922,7 @@ select.atlField {
   min-width: 2px;
 }
 
-/* The one value chosen, written as plain text */
+/* The one value chosen, written as plain text on the line of the original's compressed pills */
 .atlCombo__plain {
   flex: 0 1 auto;
   min-width: 0;
@@ -2303,20 +2311,14 @@ mark,
   accent-color: var(--color-accent);
 }
 
-.atlCombo--s {
-  min-height: var(--control-height-s);
-  padding-top: 2px;
-  padding-bottom: 2px;
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-xs);
-}
-
 .atlCombo--disabled {
   color: var(--color-text-tertiary);
   cursor: not-allowed;
 }
 
-/* The buttons at the right of the field: the caret 8 px from its edge, what clears it before */
+/* The buttons at the right of the field, as the original's compressed combo box draws them: the
+   arrow, 12 px in a button of 16, 8 px from the edge; the spinner and the clear button before it,
+   6 px apart */
 .atlCombo__clear,
 .atlCombo__caret {
   position: absolute;
@@ -2335,21 +2337,35 @@ mark,
   cursor: pointer;
 }
 
+.atlCombo__caret .atlIcon {
+  width: 12px;
+  height: 12px;
+}
+
+/* The small clear button: a 12 px disc of the medium shade (the dark shade in the dark theme), its
+   cross 6 px wide in the colour of the page, drawn thicker as the theme draws it */
 .atlCombo__clear {
-  right: 31px;
+  right: 29px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background: var(--color-text-tertiary);
   color: var(--color-surface);
 }
 
-.atlCombo__clear .atlIcon {
-  width: 10px;
-  height: 10px;
-  stroke-width: 2;
+:root.themeDark .atlCombo__clear {
+  background: var(--color-text-secondary);
 }
 
-.atlCombo__clear:hover {
-  background: var(--color-text-secondary);
+.atlCombo__clear .atlIcon {
+  width: 6px;
+  height: 6px;
+  stroke: currentcolor;
+  stroke-width: 4px;
+}
+
+.atlCombo--loading > .atlCombo__clear {
+  right: 51px;
 }
 
 .atlCombo__caret:disabled,
@@ -2361,12 +2377,8 @@ mark,
 .atlCombo > .atlSpinner {
   position: absolute;
   top: 50%;
-  right: 31px;
+  right: 29px;
   margin-top: -8px;
-}
-
-.atlCombo--clearable > .atlSpinner {
-  right: 55px;
 }
 
 /* Text written in Markdown */
