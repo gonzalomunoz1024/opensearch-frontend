@@ -412,10 +412,14 @@ function metricDsl(agg: AggConfig, context: AggContext, all: AggConfig[]): Dsl {
     const bucketId = `${agg.id}-bucket`;
     const metricId = `${agg.id}-metric`;
     const inner = metric && metric.type !== 'count' ? metricDsl({ ...metric, id: metricId }, context, all) : {};
+    const clause = bucketClause({ ...bucket, id: bucketId }, context);
+    // Its terms in the order asked for, as the original writes the bucket like any other
+    const under: Dsl = { ...inner };
+    if (bucket.type === 'terms') orderTerms({ ...bucket, id: bucketId }, clause.terms as Dsl, under, context, all);
     return {
       [bucketId]: {
-        ...bucketClause({ ...bucket, id: bucketId }, context),
-        ...(Object.keys(inner).length ? { aggs: inner } : {}),
+        ...clause,
+        ...(Object.keys(under).length ? { aggs: under } : {}),
       },
       [agg.id]: {
         [agg.type]: {
@@ -673,26 +677,7 @@ export function buildAggsDsl(aggs: AggConfig[], context: AggContext, options: Bu
     if (options.metricsAtAllLevels && level < buckets.length - 1) Object.assign(own, metricsDsl(isHistogram));
     const clause = withJson(agg, bucketClause(agg, context));
 
-    if (agg.type === 'terms') {
-      const terms = clause.terms as Dsl;
-      const direction = param<string>(agg, 'order', 'desc');
-      const orderBy = param<string>(agg, 'orderBy', '_count');
-      if (orderBy === '_key' || orderBy === '_term') terms.order = { _key: direction };
-      else if (orderBy === 'custom') {
-        const orderAgg = agg.params?.orderAgg as AggConfig | undefined;
-        if (orderAgg && orderAgg.type !== 'count') {
-          const id = orderAgg.id ?? `${agg.id}-orderAgg`;
-          Object.assign(own, metricDsl({ ...orderAgg, id }, context, metrics));
-          terms.order = { [orderPath(orderAgg, id)]: direction };
-        }
-      } else {
-        const metric = metrics.find((candidate) => candidate.id === orderBy);
-        if (metric && metric.type !== 'count' && !SIBLING_PIPELINES.has(metric.type) && !PARENT_PIPELINES.has(metric.type)) {
-          Object.assign(own, metricDsl(metric, context, metrics));
-          terms.order = { [orderPath(metric, metric.id)]: direction };
-        }
-      }
-    }
+    if (agg.type === 'terms') orderTerms(agg, clause.terms as Dsl, own, context, metrics);
     if (agg.type === 'geohash_grid' && agg.params?.useGeocentroid !== false) {
       own[geoCentroidId(aggs)] = { geo_centroid: { field: fieldNameOf(agg) } };
     }
@@ -715,6 +700,31 @@ function withGeoCollar(agg: AggConfig, dsl: Dsl): Dsl {
   if (agg.params?.isFilteredByCollar === false || !field) return dsl;
   const box = (agg.params?.boundingBox as Dsl | null | undefined) || DEFAULT_GEO_BOUNDING_BOX;
   return { filter_agg: { filter: { geo_bounding_box: { ignore_unmapped: true, [field]: box } }, aggs: dsl } };
+}
+
+/**
+ * The order of a terms aggregation's buckets, as the original's orderAgg writes it: by key, by a
+ * custom metric or by a metric of the chart, the metric then asked for under the terms (`own`).
+ * The bucket of a sibling pipeline is ordered the same way.
+ */
+function orderTerms(agg: AggConfig, terms: Dsl, own: Dsl, context: AggContext, metrics: AggConfig[]): void {
+  const direction = param<string>(agg, 'order', 'desc');
+  const orderBy = param<string>(agg, 'orderBy', '_count');
+  if (orderBy === '_key' || orderBy === '_term') terms.order = { _key: direction };
+  else if (orderBy === 'custom') {
+    const orderAgg = agg.params?.orderAgg as AggConfig | undefined;
+    if (orderAgg && orderAgg.type !== 'count') {
+      const id = orderAgg.id ?? `${agg.id}-orderAgg`;
+      Object.assign(own, metricDsl({ ...orderAgg, id }, context, metrics));
+      terms.order = { [orderPath(orderAgg, id)]: direction };
+    }
+  } else {
+    const metric = metrics.find((candidate) => candidate.id === orderBy);
+    if (metric && metric.type !== 'count' && !SIBLING_PIPELINES.has(metric.type) && !PARENT_PIPELINES.has(metric.type)) {
+      Object.assign(own, metricDsl(metric, context, metrics));
+      terms.order = { [orderPath(metric, metric.id)]: direction };
+    }
+  }
 }
 
 function orderPath(metric: AggConfig, id: string): string {

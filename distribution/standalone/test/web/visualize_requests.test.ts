@@ -117,6 +117,35 @@ describe('the request, as the original writes it', () => {
     assert.deepEqual(date({ min_doc_count: 0 }), { field: 'timestamp', calendar_interval: '1h', time_zone: 'UTC' });
     assert.equal(date({}).min_doc_count, 1);
   });
+
+  it('orders the terms of a sibling pipeline\'s bucket as asked, as it orders the chart\'s own', () => {
+    // What the original sent for these, measured on the reference
+    const sibling = (id: string, type: string, terms: Record<string, unknown>, customMetric: AggConfig): AggConfig => ({
+      id,
+      enabled: true,
+      type,
+      schema: 'metric',
+      params: { customBucket: { id: `${id}-bucket`, enabled: true, type: 'terms', schema: 'bucketAgg', params: terms }, customMetric },
+    });
+    const max: AggConfig = { id: '2-metric', enabled: true, type: 'max', schema: 'metricAgg', params: { field: 'bytes' } };
+    const none: AggConfig = { id: '3-metric', enabled: true, type: 'count', schema: 'metricAgg', params: {} };
+    const sum: AggConfig = { id: '3-bucket-orderAgg', enabled: true, type: 'sum', schema: 'orderAgg', params: { field: 'bytes' } };
+    const request = buildAggsDsl(
+      [
+        count,
+        sibling('2', 'max_bucket', { field: 'extension', size: 2, order: 'asc', orderBy: '_key' }, max),
+        sibling('3', 'sum_bucket', { field: 'extension', size: 3, order: 'desc', orderBy: 'custom', orderAgg: sum }, none),
+        sibling('4', 'avg_bucket', { field: 'extension', size: 3, order: 'desc', orderBy: '1' }, { ...none, id: '4-metric' }),
+      ],
+      context
+    );
+    assert.deepEqual(request['2-bucket'], { terms: { field: 'extension', size: 2, order: { _key: 'asc' } }, aggs: { '2-metric': { max: { field: 'bytes' } } } });
+    assert.deepEqual(request['2'], { max_bucket: { buckets_path: '2-bucket>2-metric' } });
+    assert.deepEqual(request['3-bucket'], { terms: { field: 'extension', size: 3, order: { '3-bucket-orderAgg': 'desc' } }, aggs: { '3-bucket-orderAgg': { sum: { field: 'bytes' } } } });
+    // The metric that orders the bucket is not the one the pipeline reads
+    assert.deepEqual(request['3'], { sum_bucket: { buckets_path: '3-bucket>_count' } });
+    assert.deepEqual(request['4-bucket'], { terms: { field: 'extension', size: 3, order: { _count: 'desc' } } });
+  });
 });
 
 describe('the buckets of ranges, IP ranges and filters, in the order they are asked', () => {
