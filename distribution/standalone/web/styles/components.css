@@ -1649,7 +1649,8 @@ select.atlField {
 /* As the theme's tooltip: frosted, without the arrow */
 .atlTooltip {
   position: fixed;
-  z-index: 6000;
+  /* The original's layer for tooltips, over every other */
+  z-index: 9000;
   /* As wide as the original's tooltips (EuiToolTip's max-width), breaking a longer word */
   max-width: 256px;
   overflow-wrap: break-word;

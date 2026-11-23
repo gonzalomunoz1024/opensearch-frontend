@@ -7,6 +7,8 @@ import { describe, it } from 'node:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { Button, IconButton } from '../../web/components/basic';
 import { ComboBox } from '../../web/components/combo_box';
+import { Icon, iconDrawing } from '../../web/components/icon';
+import { describedBy, initialModalFocus, placeTooltip } from '../../web/components/overlay';
 import { Pagination, pageButtons } from '../../web/components/table';
 
 /**
@@ -142,5 +144,71 @@ describe('the combo box', () => {
   it('keeps the class of a compact field for a page\'s rules, the field being the same', () => {
     const html = markupOf(<ComboBox options={options} selected={[]} onChange={() => undefined} compact single />);
     assert.equal(classOf(html), 'atlField atlCombo atlCombo--s atlCombo--single atlCombo--clearable');
+  });
+});
+
+describe('the tooltip', () => {
+  const view = { width: 1400, height: 900 };
+  const at = (left: number, top: number, width = 24, height = 24) => ({ left, top, width, height, right: left + width, bottom: top + height });
+  const own = { width: 128, height: 26 };
+
+  it('stands 16 px over its anchor, centred, or under it when there is no room over it', () => {
+    // Discover's "Add field as column", where the original draws it
+    assert.deepEqual(placeTooltip(at(247.8, 259), own, view), { left: 195.8, top: 217 });
+    assert.deepEqual(placeTooltip(at(600, 20), own, view), { left: 548, top: 60 });
+    assert.deepEqual(placeTooltip(at(600, 400), own, view, 'bottom'), { left: 548, top: 440 });
+    // Under it only while there is room under it
+    assert.deepEqual(placeTooltip(at(600, 850), own, view, 'bottom'), { left: 548, top: 808 });
+  });
+
+  it('keeps 16 px from the edges of the window, as the original', () => {
+    assert.equal(placeTooltip(at(0, 400), own, view).left, 16);
+    assert.equal(placeTooltip(at(1390, 400, 10), own, view).left, 1400 - 128 - 16);
+    // There is no room over its anchor when it would come nearer than 16 px to the top
+    assert.equal(placeTooltip(at(600, 57), own, view).top, 97);
+    assert.equal(placeTooltip(at(600, 58), own, view).top, 16);
+    // On the right while it keeps 16 px from that edge, else over its anchor
+    assert.deepEqual(placeTooltip(at(100, 400), own, view, 'right'), { left: 140, top: 399 });
+    assert.equal(placeTooltip(at(1240, 400), own, view, 'right').top, 400 - 26 - 16);
+  });
+
+  it('describes what it is about while it shows, after its own description', () => {
+    assert.equal(describedBy(undefined, ':r1:', false), undefined);
+    assert.equal(describedBy('help', ':r1:', false), 'help');
+    assert.equal(describedBy(undefined, ':r1:', true), ':r1:');
+    assert.equal(describedBy('help', ':r1:', true), 'help :r1:');
+  });
+});
+
+describe('the focus of a dialog when it opens', () => {
+  const element = (inside: unknown[] = [], marked?: unknown) => {
+    const self = {
+      focus: () => undefined,
+      contains: (node: unknown) => node === self || inside.includes(node),
+      querySelector: (selector: string) => (selector === '[data-autofocus]' ? (marked ?? null) : null),
+    };
+    return self;
+  };
+
+  it('stays where a field of the dialog took it, else goes to what is marked, else to the dialog', () => {
+    const field = { name: 'title' } as unknown as Node;
+    const button = { focus: () => undefined };
+    const opener = { name: 'opener' } as unknown as Node;
+    assert.equal(initialModalFocus(element([field]), field), null);
+    assert.equal(initialModalFocus(element([button], button), opener), button);
+    const plain = element();
+    assert.equal(initialModalFocus(plain, opener), plain);
+    assert.equal(initialModalFocus(plain, null), plain);
+  });
+});
+
+describe('the icons the original names', () => {
+  it("draws the original's logoGithub on its 32 grid", () => {
+    const drawing = iconDrawing('logoGithub');
+    assert.equal(drawing?.viewBox, '0 0 32 32');
+    assert.equal(drawing?.drawn, 'logoGithub');
+    const html = renderToStaticMarkup(<Icon name="logoGithub" size="s" />);
+    assert.match(html, /viewBox="0 0 32 32"/);
+    assert.match(html, /d="M16 0C7\.164 0 0 7\.343 0 16\.4c0 7\.248/);
   });
 });

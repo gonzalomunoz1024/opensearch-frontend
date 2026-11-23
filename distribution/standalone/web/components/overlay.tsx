@@ -3,6 +3,8 @@
 /* What sits over the page: popovers and menus, dialogs, side panels and the messages in the corner. */
 
 import {
+  cloneElement,
+  isValidElement,
   useCallback,
   useEffect,
   useId,
@@ -576,6 +578,47 @@ export function ContextMenu({
   );
 }
 
+/**
+ * What had the focus when an overlay was first drawn, before anything in it could take it (a
+ * field's autoFocus), so that the focus goes back there when it closes
+ */
+function useOpener() {
+  const opener = useRef<Element | null | undefined>(undefined);
+  if (opener.current === undefined) opener.current = typeof document === 'undefined' ? null : document.activeElement;
+  return opener;
+}
+
+/** Gives the focus back to what opened an overlay, unless it went somewhere else meanwhile */
+function returnFocus(opener: Element | null | undefined, overlay: Element) {
+  if (!(opener instanceof HTMLElement) || opener === document.body || overlay.contains(opener)) return;
+  const now = document.activeElement;
+  if ((!now || now === document.body || overlay.contains(now)) && opener.isConnected) opener.focus({ preventScroll: true });
+}
+
+interface Focusable {
+  focus: (options?: FocusOptions) => void;
+}
+
+/** The part of an element `initialModalFocus` reads */
+interface FocusRoot extends Focusable {
+  contains: (node: Node | null) => boolean;
+  querySelector: (selector: string) => unknown;
+}
+
+const isFocusable = (value: unknown): value is Focusable =>
+  typeof value === 'object' && value !== null && typeof (value as Focusable).focus === 'function';
+
+/**
+ * What takes the focus when a dialog opens, as the original's focus trap gives it: nothing when
+ * something in the dialog has it already (a field's autoFocus), else what is marked
+ * `data-autofocus` (the button a confirmation focuses), else the dialog itself
+ */
+export function initialModalFocus(box: FocusRoot, active: Node | null): Focusable | null {
+  if (active !== null && box.contains(active)) return null;
+  const marked = box.querySelector('[data-autofocus]');
+  return isFocusable(marked) ? marked : box;
+}
+
 export function Modal({
   title,
   children,
@@ -598,26 +641,38 @@ export function Modal({
 }) {
   useLayer(true, onClose);
   const box = useRef<HTMLDivElement>(null);
+  const opener = useOpener();
+  // As the original's dialog, which holds the focus: when it opens, what in it has the focus already
+  // keeps it (a field's autoFocus), else what is marked for it, else the dialog itself; Tab goes
+  // round the dialog and what it holds; when it closes, the focus goes back to what had it before
   useEffect(() => {
-    const first = box.current?.querySelector<HTMLElement>(
-      'input:not([type=hidden]), textarea, select, [data-autofocus]'
-    );
-    (first ?? box.current)?.focus();
+    const element = box.current;
+    if (!element) return undefined;
+    initialModalFocus(element, document.activeElement)?.focus({ preventScroll: true });
+    return () => returnFocus(opener.current, element);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  const holdTab = (event: ReactKeyboardEvent<HTMLElement>) => {
+    const element = box.current;
+    if (event.key !== 'Tab' || event.defaultPrevented || !element) return;
+    // A popover opened from the dialog is drawn outside it and holds the focus itself
+    if (!element.contains(document.activeElement)) return;
+    const target = wrapTab([element, ...tabbablesIn(element)], document.activeElement as HTMLElement | null, event.shiftKey);
+    if (!target) return;
+    event.preventDefault();
+    target.focus();
+  };
   return (
     <Portal>
-      <div
-        className="atlScrim"
-        onMouseDown={(event) => {
-          if (event.target === event.currentTarget) onClose();
-        }}
-      >
+      {/* A press on the mask does not close it, as the original's */}
+      <div className="atlScrim">
         <div
           ref={box}
           className={cx('atlModal', wide && 'atlModal--wide', className)}
           role="dialog"
           aria-modal="true"
           tabIndex={-1}
+          onKeyDown={holdTab}
           data-test-subj={testId}
         >
           <div className="atlModal__header">
@@ -710,20 +765,17 @@ export function Flyout({
 }) {
   useLayer(true, onClose);
   const panel = useRef<HTMLElement>(null);
+  const opener = useOpener();
   // As the original's flyout, which holds the focus: the first thing in it that takes the focus
   // has it when it opens (its close button), unless something in it took it already (a field's
   // autoFocus); Tab goes round what it holds; and when it closes, the focus goes back to what had
-  // it before
+  // it before it opened
   useEffect(() => {
     const element = panel.current;
     if (!element) return undefined;
-    const active = document.activeElement;
-    const opener = active instanceof HTMLElement && active !== document.body && !element.contains(active) ? active : null;
-    if (!element.contains(active)) (tabbablesIn(element)[0] ?? element).focus({ preventScroll: true });
-    return () => {
-      const now = document.activeElement;
-      if ((!now || now === document.body) && opener?.isConnected) opener.focus({ preventScroll: true });
-    };
+    if (!element.contains(document.activeElement)) (tabbablesIn(element)[0] ?? element).focus({ preventScroll: true });
+    return () => returnFocus(opener.current, element);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const holdTab = (event: ReactKeyboardEvent<HTMLElement>) => {
     const element = panel.current;
@@ -783,7 +835,7 @@ export function ToastList() {
             {items.map((toast) => {
               const icon = TOAST_ICONS[toast.kind];
               return (
-                <div key={toast.id} className={`atlToast atlMaterial atlToast--${toast.kind}`}>
+                <div key={toast.id} className={`atlToast atlMaterial atlToast--${toast.kind}`} data-test-subj={toast.testId}>
                   {/* As the original's toast: what a screen reader says before it */}
                   <p className="atlScreenReaderOnly">A new notification appears</p>
                   <div className="atlToast__header" aria-label="Notification" data-test-subj="euiToastHeader">
@@ -871,6 +923,52 @@ export function CopyableCode({ children, size = 'm' }: { children: string; size?
 
 /** How long the original's tooltips wait before they show: a quarter second, or five times it */
 const TOOLTIP_DELAYS = { regular: 250, long: 1250 };
+/** The room the original's tooltip keeps from the window's edges, and from its anchor */
+const TOOLTIP_BUFFER = 16;
+const TOOLTIP_OFFSET = 16;
+
+interface Box {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Where a tooltip goes, as the original places it: 16 px from its anchor, on the side asked unless
+ * there is no room there, and never nearer than 16 px to an edge of the window
+ */
+export function placeTooltip(
+  target: Box,
+  own: { width: number; height: number },
+  viewport: { width: number; height: number },
+  position: 'top' | 'bottom' | 'right' = 'top'
+): { left: number; top: number } {
+  if (position === 'right' && target.right + TOOLTIP_OFFSET + own.width <= viewport.width - TOOLTIP_BUFFER) {
+    return {
+      left: target.right + TOOLTIP_OFFSET,
+      top: Math.max(TOOLTIP_BUFFER, target.top + target.height / 2 - own.height / 2),
+    };
+  }
+  const left = Math.max(
+    TOOLTIP_BUFFER,
+    Math.min(target.left + target.width / 2 - own.width / 2, viewport.width - own.width - TOOLTIP_BUFFER)
+  );
+  const above = target.top - own.height - TOOLTIP_OFFSET;
+  const below = target.bottom + TOOLTIP_OFFSET;
+  const fitsAbove = above >= TOOLTIP_BUFFER;
+  const fitsBelow = below + own.height <= viewport.height - TOOLTIP_BUFFER;
+  const top = position === 'bottom' ? (fitsBelow || !fitsAbove ? below : above) : fitsAbove ? above : below;
+  return { left, top };
+}
+
+/** What describes an element while its tooltip shows: its own description, then the tooltip */
+export function describedBy(own: string | undefined, tooltip: string, shown: boolean): string | undefined {
+  if (!shown) return own;
+  return own ? `${own} ${tooltip}` : tooltip;
+}
 
 /** A short text shown over what the pointer or the focus is on */
 export function Tooltip({
@@ -902,22 +1000,22 @@ export function Tooltip({
   const box = useRef<HTMLDivElement>(null);
   const [shown, setShown] = useState(false);
   const timer = useRef<number | undefined>(undefined);
+  const id = useId();
   useLayoutEffect(() => {
     if (!shown || !anchor.current || !box.current) return;
-    const target = anchor.current.getBoundingClientRect();
-    const own = box.current.getBoundingClientRect();
-    if (position === 'right' && target.right + 16 + own.width <= window.innerWidth - 8) {
-      setPlace({ left: target.right + 16, top: Math.max(8, target.top + target.height / 2 - own.height / 2) });
-      return;
-    }
-    const left = Math.max(8, Math.min(target.left + target.width / 2 - own.width / 2, window.innerWidth - own.width - 8));
-    // 16 px from its anchor, as the original's, on the side asked unless there is no room
-    const above = target.top - own.height - 16;
-    const below = target.bottom + 16;
-    const fitsBelow = below + own.height <= window.innerHeight - 8;
-    const top = position === 'bottom' ? (fitsBelow || above < 8 ? below : above) : above >= 8 ? above : below;
-    setPlace({ left, top });
+    setPlace(
+      placeTooltip(
+        anchor.current.getBoundingClientRect(),
+        box.current.getBoundingClientRect(),
+        { width: window.innerWidth, height: window.innerHeight },
+        position
+      )
+    );
   }, [shown, content, position]);
+  // As the original's, what the tooltip is about is described by it while it shows
+  const anchored = isValidElement<{ 'aria-describedby'?: string }>(children)
+    ? cloneElement(children, { 'aria-describedby': describedBy(children.props['aria-describedby'], id, shown) })
+    : children;
   useEffect(() => () => window.clearTimeout(timer.current), []);
   const show = () => {
     window.clearTimeout(timer.current);
@@ -938,11 +1036,12 @@ export function Tooltip({
       onFocus={show}
       onBlur={hide}
     >
-      {children}
+      {anchored}
       {shown && (
         <Portal>
           <div
             ref={box}
+            id={id}
             className={cx('atlTooltip', 'atlMaterial', className)}
             role="tooltip"
             data-test-subj={testId}
