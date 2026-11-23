@@ -173,7 +173,10 @@ export function GroupFilter({
           aria-expanded={open}
           onClick={toggle}
         >
-          <span className="ismFilterGroup__name">{name}</span>
+          {/* As the plugin's, wide enough for the name in bold, which it takes once a value is chosen */}
+          <span className="ismFilterGroup__name" data-text={name}>
+            {name}
+          </span>
           {selected.length > 0 && <span className="ismFilterCount">{selected.length}</span>}
           <Icon name="chevronDown" />
         </button>

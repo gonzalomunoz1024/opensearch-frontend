@@ -3041,6 +3041,17 @@
   gap: var(--space-6);
 }
 
+/* Its buttons, as the plugin's small buttons: at least 112 px wide, the icon 8 px from the words,
+   and a clear 1 px border round them (the danger button keeps its own) */
+.ismListPanel__actions .atlButton {
+  min-width: 112px;
+  gap: var(--space-2);
+}
+
+.ismListPanel__actions .atlButton:not(.atlButton--danger) {
+  border: 1px solid transparent;
+}
+
 .ismListPanel__rule {
   height: 1px;
   margin: var(--space-2) 0;
@@ -3074,8 +3085,9 @@
   text-align: left;
 }
 
+/* The pager, as the plugin's, 16 px under the table (the kit's margin) and no further in */
 .ismListPanel .ismTable .atlPagination {
-  padding: var(--space-4) 0 0;
+  padding: 0;
 }
 
 /* The filters as the plugin's group of them: one box, the buttons parted by thin lines */
@@ -3103,6 +3115,7 @@
   background: none;
   color: var(--color-text-primary);
   font-weight: var(--font-weight-medium);
+  line-height: 1.5;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -3117,9 +3130,19 @@
   font-weight: var(--font-weight-semibold);
 }
 
+/* A short name stands in the middle of the 48 px the plugin's filter button keeps for it */
 .ismFilterGroup__name {
   min-width: 48px;
-  text-align: left;
+  text-align: center;
+}
+
+.ismFilterGroup__name::after {
+  content: attr(data-text);
+  display: block;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: var(--font-weight-semibold);
 }
 
 .ismFilterGroup__button .ismFilterCount {
@@ -3146,6 +3169,7 @@
 .ismTabbed > .atlTabs > .atlTab[aria-selected="true"] {
   background: var(--color-surface-secondary);
   color: var(--color-text-primary);
+  cursor: default;
 }
 
 .ismTabbed > .atlTabs > .atlTab[aria-selected="true"]::after {
