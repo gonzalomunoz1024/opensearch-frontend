@@ -39,6 +39,7 @@ export const CORE_NAMESPACES: Record<string, 'legacy' | 'platform'> = {
   plugins: 'platform',
   i18n: 'platform',
   dynamic_config_service: 'platform',
+  csp: 'platform',
 };
 
 /** Sub-objects of `server` that the new platform checks, with its words */
