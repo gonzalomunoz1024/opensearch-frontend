@@ -127,26 +127,6 @@ function startOnClock(clock: Date, unit: TimeUnit, weekStart: number): void {
   }
 }
 
-// A date and a time that name no zone
-const CLOCK_READING = /^(\d{4}|[+-]\d{6})-\d{2}(-\d{2})?[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/;
-
-/**
- * The moment the clock of a named zone shows a date and time. A reading that clock shows twice is
- * its first pass, and one it skips is counted on from before the change, as the original reads them.
- */
-function readOnClock(text: string, timeZone: string): Date | undefined {
-  const reading = Date.parse(`${text}Z`);
-  // Not within two days of the first and the last date there are: the days before and after count
-  if (!(Math.abs(reading) < 8.64e15 - 2 * UNIT_MS.d)) return undefined;
-  const before = timeZoneOffset(reading - UNIT_MS.d, timeZone);
-  if (timeZoneOffset(reading - before * UNIT_MS.m, timeZone) === before) {
-    return new Date(reading - before * UNIT_MS.m);
-  }
-  const after = timeZoneOffset(reading + UNIT_MS.d, timeZone);
-  const fits = timeZoneOffset(reading - after * UNIT_MS.m, timeZone) === after;
-  return new Date(reading - (fits ? after : before) * UNIT_MS.m);
-}
-
 export function addUnits(date: Date, amount: number, unit: TimeUnit): Date {
   const result = new Date(date.getTime());
   // Nothing to add leaves the moment alone: setting the date it has would move a moment in the
@@ -235,54 +215,82 @@ export interface DateMathOptions {
   weekStart?: number;
 }
 
+const DATE_MATH_UNITS = ['y', 'M', 'w', 'd', 'h', 'm', 's', 'ms'];
+
+// What the original's scan of an amount takes for a digit: whatever is not "not a number" as a
+// number, which a space is too, and the end of the text
+const countsAsDigit = (char: string) => !Number.isNaN(Number(char));
+
 /**
  * The date of an expression: "now", "now-15m", "now-1d/d", or a date with the same arithmetic
  * after "||" ("2026-01-01||+1M/d"). `undefined` when it is not one.
+ *
+ * Read as the original's date math reads it (its `parse` and `parseDateMath`, on moment), step
+ * for step: the text is taken as it is, spaces included; what does not start with "now" is a
+ * date as moment reads one (an ISO 8601 form, on the clock of the settings' zone when it names
+ * no offset, or RFC 2822, or else what the browser's Date makes of it), so digits alone are a
+ * date only where they are an ISO form ("2026", "20261123"); an amount is scanned as there
+ * ("now/1d" rounds, "now- 1d" and "now-1 d" take a day off, "now-1d " is no expression).
  */
 export function parseDateMath(text: string, options: DateMathOptions = {}): Date | undefined {
-  if (typeof text !== 'string' || text.trim() === '') return undefined;
-  const input = text.trim();
+  if (typeof text !== 'string' || text === '') return undefined;
   let date: Date;
   let math: string;
-  if (input.startsWith('now')) {
+  if (text.substring(0, 3) === 'now') {
     date = new Date((options.now ?? new Date()).getTime());
-    math = input.slice(3);
+    math = text.substring(3);
   } else {
-    const split = input.indexOf('||');
-    const base = split === -1 ? input : input.slice(0, split);
-    math = split === -1 ? '' : input.slice(split + 2);
-    // A date without a time is the start of that day on the clock, as the original reads it;
-    // JavaScript alone reads it as midnight UTC
-    const dated = /^(\d{4}|[+-]\d{6})-\d{2}(-\d{2})?$/.test(base) ? `${base}T00:00` : base;
-    const parsed = /^\d+$/.test(base) ? new Date(Number(base)) : new Date(dated);
-    if (Number.isNaN(parsed.getTime())) return undefined;
-    // The clock is that of the zone the settings name, when they do and the text names none
-    const zoned = clockZone && CLOCK_READING.test(dated) ? readOnClock(dated, clockZone) : undefined;
-    date = zoned ?? parsed;
+    const split = text.indexOf('||');
+    const base = split === -1 ? text : text.substring(0, split);
+    math = split === -1 ? '' : text.substring(split + 2);
+    const read = readMoment(base, clockZone, (options.now ?? new Date()).getTime());
+    if (!read) return undefined;
+    date = read;
   }
 
-  let rest = math;
-  while (rest.length) {
-    const operation = /^([+-])(\d*)(ms|[smhdwMy])/.exec(rest);
-    if (operation) {
-      const amount = operation[2] === '' ? 1 : Number(operation[2]);
-      date = addUnits(date, operation[1] === '+' ? amount : -amount, operation[3] as TimeUnit);
-      rest = rest.slice(operation[0].length);
-      continue;
+  const length = math.length;
+  let at = 0;
+  while (at < length) {
+    const sign = math.charAt(at);
+    at += 1;
+    if (sign !== '/' && sign !== '+' && sign !== '-') return undefined;
+
+    let amount: number;
+    if (!countsAsDigit(math.charAt(at))) {
+      amount = 1;
+    } else if (length === 2) {
+      // One sign and one digit: the original takes the digit for the unit as well
+      return undefined;
+    } else {
+      const from = at;
+      while (countsAsDigit(math.charAt(at))) {
+        at += 1;
+        if (at >= length) return undefined;
+      }
+      amount = parseInt(math.substring(from, at), 10);
     }
-    const rounding = /^\/(ms|[smhdwMy])/.exec(rest);
-    if (rounding) {
-      const unit = rounding[1] as TimeUnit;
+    // Rounding is to one whole unit
+    if (sign === '/' && amount !== 1) return undefined;
+
+    let unit = math.charAt(at);
+    at += 1;
+    while (at < length && /[a-z]/i.test(math.charAt(at))) {
+      unit += math.charAt(at);
+      at += 1;
+    }
+    if (!DATE_MATH_UNITS.includes(unit)) return undefined;
+
+    if (sign === '/') {
       // (to the millisecond there is nothing to round)
       if (unit !== 'ms') {
         date = options.roundUp
-          ? endOf(date, unit, options.weekStart)
-          : startOf(date, unit, options.weekStart);
+          ? endOf(date, unit as TimeUnit, options.weekStart)
+          : startOf(date, unit as TimeUnit, options.weekStart);
       }
-      rest = rest.slice(rounding[0].length);
-      continue;
+    } else if (!Number.isNaN(amount)) {
+      // (an amount of spaces alone is no number, and moves nothing)
+      date = addUnits(date, sign === '+' ? amount : -amount, unit as TimeUnit);
     }
-    return undefined;
   }
   return date;
 }

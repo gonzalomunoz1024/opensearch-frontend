@@ -6,7 +6,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, CallOut, Panel } from '../../components/basic';
 import { ComboBox } from '../../components/combo_box';
 import { useBreadcrumbs } from '../../shell/state';
-import { Labeled, go, ism, to, toasts } from './common';
+import { go, ism, to, toasts } from './common';
+import { TitledPanel } from './content_panel';
+import { FormRow } from './form_row';
 import { IndexForm, type IndexFormHandle } from './index_pages';
 import { SYSTEM_ALIAS, matchesAny } from './model';
 import {
@@ -123,59 +125,52 @@ export function Rollover({ source: preset }: { source: string }) {
     }
   };
 
+  const withNewIndex = type === 'alias' && Boolean(writeIndex);
+
   return (
-    <div className="ismPage ismPage--form">
-      <div className="ismPageHeader ismPageHeader--center">
-        <div>
-          <h1 className="ismPageTitle">Roll over</h1>
-          <div className="ismLabeled__help">
-            Rollover creates a new writing index for a data stream or index alias.
-          </div>
-        </div>
-      </div>
-      <Panel>
-        <h2 className="ismPanel__heading">Configure source</h2>
-        <hr className="ismRule" />
-        <div className="ismForm ismForm--wideHelp">
-          {type === 'alias' && matchesAny(source || '', SYSTEM_ALIAS) && (
+    <div className="ismFormPage ismPage--form">
+      <h1 className="ismTextTitle">Roll over</h1>
+      <FormRow className="ismRollover__intro" help="Rollover creates a new writing index for a data stream or index alias." />
+      <TitledPanel title="Configure source" grouped>
+        {type === 'alias' && matchesAny(source || '', SYSTEM_ALIAS) && (
+          <>
             <CallOut tone="warning">
               This alias may contain critical system data. Rollovering system aliases may break OpenSearch.
             </CallOut>
-          )}
-          <Labeled
-            title="Select an alias or data stream"
-            help="Select an alias or data stream to roll over."
-            testId="form-name-source"
-            error={sourceError}
-          >
-            <div className="ismField">
-              <ComboBox
-                compact
-                single
-                placeholder="Select a alias or data stream."
-                invalid={Boolean(sourceError)}
-                options={[
-                  ...sources.alias.map((item) => ({ value: item.label, label: item.label, group: 'aliases' })),
-                  ...sources.dataStreams.map((item) => ({ value: item.label, label: item.label, group: 'data streams' })),
-                ]}
-                selected={source ? [source] : []}
-                onChange={(next) => {
-                  setSource(next[0]);
-                  setChosenWrite(undefined);
-                  setSourceError(next[0] ? undefined : SOURCE_REQUIRED);
-                }}
-              />
-            </div>
-          </Labeled>
-          {type === 'alias' && !writeIndex && (
+            <div className="ismSpacer ismSpacer--l" />
+          </>
+        )}
+        <FormRow
+          title="Select an alias or data stream"
+          help="Select an alias or data stream to roll over."
+          testId="form-name-source"
+          error={sourceError}
+        >
+          <ComboBox
+            compact
+            single
+            placeholder="Select a alias or data stream."
+            options={[
+              ...sources.alias.map((item) => ({ value: item.label, label: item.label, group: 'aliases' })),
+              ...sources.dataStreams.map((item) => ({ value: item.label, label: item.label, group: 'data streams' })),
+            ]}
+            selected={source ? [source] : []}
+            onChange={(next) => {
+              setSource(next[0]);
+              setChosenWrite(undefined);
+              setSourceError(next[0] ? undefined : SOURCE_REQUIRED);
+            }}
+          />
+        </FormRow>
+        {type === 'alias' && !writeIndex && (
+          <>
+            <div className="ismSpacer ismSpacer--l" />
             <CallOut tone="critical" title="This alias does not contain a write index.">
-              <div style={{ marginBottom: 'var(--space-2)' }}>
-                Select a write index from this alias before performing rollover.
-              </div>
-              <div className="atlRow" style={{ gap: 'var(--space-4)', alignItems: 'flex-end' }}>
-                <div>
-                  <div className="ismSmallLabel">Select an index from this alias</div>
-                  <div style={{ width: 400 }}>
+              <div className="ismRollover__assign">
+                <div className="ismRollover__choice">
+                  Select a write index from this alias before performing rollover.
+                  <div className="ismSpacer ismSpacer--s" />
+                  <FormRow label="Select an index from this alias">
                     <ComboBox
                       compact
                       single
@@ -184,40 +179,47 @@ export function Rollover({ source: preset }: { source: string }) {
                       selected={chosenWrite ? [chosenWrite] : []}
                       onChange={(next) => setChosenWrite(next[0])}
                     />
-                  </div>
+                  </FormRow>
                 </div>
-                <Button variant="primary" size="s" disabled={!chosenWrite} onClick={assign}>
+                <Button variant="primary" disabled={!chosenWrite} onClick={assign}>
                   Assign as write index
                 </Button>
               </div>
             </CallOut>
-          )}
-          {type === 'alias' && writeIndex && (
-            <Labeled title="Assigned write index">
-              <span>{writeIndex}</span>
-            </Labeled>
-          )}
-        </div>
-      </Panel>
-      {type === 'alias' && writeIndex && (
-        <Panel>
-          <div className="atlRow" style={{ alignItems: 'center', gap: 'var(--space-3)' }}>
-            <h2 className="ismPanel__heading ismPanel__heading--l atlGrow">Configure new rollover index</h2>
-            <Button size="s" onClick={() => form.current?.importSettings(writeIndex)}>
-              Import from old write index
-            </Button>
-          </div>
-          <hr className="ismRule" />
-          <IndexForm ref={form} withoutPanel />
-        </Panel>
+          </>
+        )}
+        {withNewIndex && (
+          <>
+            <div className="ismSpacer ismSpacer--l" />
+            <FormRow title="Assigned write index">
+              <div className="ismTextS">
+                <span>{writeIndex}</span>
+              </div>
+            </FormRow>
+          </>
+        )}
+      </TitledPanel>
+      <div className="ismSpacer ismSpacer--l" />
+      {withNewIndex && (
+        <>
+          <Panel>
+            <div className="ismTitleRow">
+              <h2 className="ismPanelTitle ismPanelTitle--l">Configure new rollover index</h2>
+              <Button onClick={() => form.current?.importSettings(writeIndex ?? '')}>Import from old write index</Button>
+            </div>
+            <hr className="ismRule" />
+            <IndexForm ref={form} withoutPanel />
+            <div className="ismSpacer ismSpacer--l" />
+          </Panel>
+          <div className="ismSpacer ismSpacer--l" />
+        </>
       )}
-      <div className="ismButtons">
-        <Button variant="empty" size="s" onClick={leave} testId="rolloverCancelButton">
+      <div className="ismEndButtons">
+        <Button variant="empty" onClick={leave} testId="rolloverCancelButton">
           Cancel
         </Button>
         <Button
           variant="primary"
-          size="s"
           loading={busy}
           disabled={busy || (type === 'alias' && !writeIndex)}
           onClick={submit}

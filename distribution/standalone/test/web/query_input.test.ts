@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   addToLog,
+  barSuggestions,
   fromUser,
   matchPairs,
   matchingSearches,
@@ -90,6 +91,17 @@ describe('the searches the query bar remembers', () => {
     const log = ['currency:EUR', '', 'customer_gender:FEMALE', { match_all: {} }];
     assert.deepEqual(matchingSearches(log, 'cu'), ['currency:EUR', 'customer_gender:FEMALE']);
     assert.deepEqual(matchingSearches(log, ''), ['currency:EUR', 'customer_gender:FEMALE', '{"match_all":{}}']);
+  });
+
+  it("offers nothing but the searches made before, each for the whole text, as the original's bar", () => {
+    const log = ['machine.os:"win 8"', 'bytes > 100'];
+    // A field's start, a field and its colon, a term and a space: no field, value or conjunction
+    assert.deepEqual(barSuggestions(log, 'mach'), [{ type: 'recentSearch', text: 'machine.os:"win 8"', start: 0, end: 4 }]);
+    assert.deepEqual(barSuggestions(log, 'machine.os:'), [
+      { type: 'recentSearch', text: 'machine.os:"win 8"', start: 0, end: 11 },
+    ]);
+    assert.deepEqual(barSuggestions(log, 'bytes > 1 '), []);
+    assert.deepEqual(barSuggestions([], ''), []);
   });
 
   it('moves through the list with the arrows, round from either end', () => {

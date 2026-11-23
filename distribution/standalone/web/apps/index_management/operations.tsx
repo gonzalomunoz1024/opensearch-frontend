@@ -8,7 +8,9 @@
 
 import { useEffect, useState } from 'react';
 import { CallOut } from '../../components/basic';
-import { ActionModal, Names, ism, toasts } from './common';
+import { services } from '../../services';
+import { ism, toasts } from './common';
+import { ModalButtons, ModalNames, PluginModal } from './plugin_modal';
 import {
   BLOCKS,
   SINGULAR,
@@ -128,42 +130,53 @@ export function ClearCacheModal(props: OperationProps) {
     if (result.ok) {
       onClose();
       toasts.success(clearCacheToast(target, unBlockedItems, items.length === 0));
-    } else if (result.error?.includes('cluster_block_exception')) {
-      toasts.danger('Clear cache failed.', 'One or more indexes are blocked.');
     } else {
-      toasts.danger('Clear cache failed.', result.error);
+      // As the plugin's: a message that offers the whole error
+      services.toasts.addError(new Error(result.error ?? ''), {
+        title: 'Clear cache failed.',
+        toastMessage: result.error?.includes('cluster_block_exception') ? 'One or more indexes are blocked.' : undefined,
+      });
     }
   };
 
   return (
-    <ActionModal
-      title={`Clear cache for ${target}`}
-      label="Clear cache"
+    <PluginModal
+      title={<>Clear cache for {target}</>}
       onClose={onClose}
-      onConfirm={confirm}
-      disabled={items.length > 0 && unBlockedItems.length === 0}
-      cancelTestId="ClearCacheCancelButton"
-      confirmTestId="ClearCacheConfirmButton"
+      footer={
+        <ModalButtons
+          label="Clear cache"
+          disabled={items.length > 0 && unBlockedItems.length === 0}
+          onCancel={onClose}
+          onConfirm={() => void confirm()}
+          cancelTestId="ClearCacheCancelButton"
+          confirmTestId="ClearCacheConfirmButton"
+        />
+      }
     >
       {items.length === 0 ? (
-        <p>Cache will be cleared for all open indexes.</p>
+        <>
+          <p>Cache will be cleared for all open indexes.</p>
+          <div className="ismSpacer ismSpacer--l" />
+        </>
       ) : (
         <>
           {unBlockedItems.length > 0 && (
             <>
               <p>{hint}</p>
-              <Names names={unBlockedItems} />
+              <ModalNames names={unBlockedItems} />
+              <div className="ismSpacer ismSpacer--l" />
             </>
           )}
           {blockedItems.length > 0 && (
             <CallOut tone="warning" size="s">
-              <p>{blockHint}</p>
-              <Names names={blockedItems} />
+              <p className="ismModal__small">{blockHint}</p>
+              <ModalNames names={blockedItems} within="callOutSmall" />
             </CallOut>
           )}
         </>
       )}
-    </ActionModal>
+    </PluginModal>
   );
 }
 
@@ -202,31 +215,39 @@ export function FlushModal(props: OperationProps) {
   };
 
   return (
-    <ActionModal
-      title={`Flush ${target}`}
+    <PluginModal
+      title={<>Flush {target}</>}
       titleTestId="flushModalTitle"
-      label="Flush"
       onClose={onClose}
-      onConfirm={confirm}
-      cancelTestId="flushCancelButton"
-      confirmTestId="flushConfirmButton"
+      footer={
+        <ModalButtons
+          label="Flush"
+          onCancel={onClose}
+          onConfirm={() => void confirm()}
+          cancelTestId="flushCancelButton"
+          confirmTestId="flushConfirmButton"
+        />
+      }
     >
       {flushAll && <p>All open indexes will be flushed.</p>}
       {unBlockedItems.length > 0 && (
         <>
           <p>{`The following ${target} will be flushed:`}</p>
-          <Names names={unBlockedItems} />
+          <ModalNames names={unBlockedItems} />
         </>
       )}
+      {/* The plugin's two spacers stand whether or not the warning between them shows */}
+      <div className="ismSpacer ismSpacer--l" />
       {blockedItems.length > 0 && (
         <div data-test-subj="flushBlockedCallout">
           <CallOut tone="warning" size="s">
-            <p>{flushBlockedMessage(target)}</p>
-            <Names names={blockedItems} />
+            <p className="ismModal__small">{flushBlockedMessage(target)}</p>
+            <ModalNames names={blockedItems} within="callOutSmall" />
           </CallOut>
         </div>
       )}
-    </ActionModal>
+      <div className="ismSpacer ismSpacer--l" />
+    </PluginModal>
   );
 }
 
@@ -269,30 +290,36 @@ export function RefreshModal(props: OperationProps) {
   };
 
   return (
-    <ActionModal
-      title={`Refresh ${target}`}
-      label="Refresh"
+    <PluginModal
+      title={<>Refresh {target}</>}
       onClose={onClose}
-      onConfirm={confirm}
-      confirmTestId="refreshConfirmButton"
+      footer={
+        <ModalButtons
+          label="Refresh"
+          onCancel={onClose}
+          onConfirm={() => void confirm()}
+          confirmTestId="refreshConfirmButton"
+        />
+      }
     >
       {items.length === 0 && blockedItems.length === 0 && <p>All open indexes will be refreshed.</p>}
       {unBlockedItems.length > 0 && (
         <>
-          <p>{`The following ${one(unBlockedItems.length)} will be refreshed.`}</p>
-          <Names names={unBlockedItems} testId={(name) => `UnblockedItem-${name}`} />
+          <p>{`The following ${one(unBlockedItems.length)}`} will be refreshed.</p>
+          <ModalNames names={unBlockedItems} testId={(name) => `UnblockedItem-${name}`} />
         </>
       )}
+      <div className="ismSpacer ismSpacer--l" />
       {blockedItems.length > 0 && (
         <CallOut
           tone="warning"
           size="s"
-          icon="warning"
+          icon="alert"
           title={`The following ${one(blockedItems.length)} cannot be refreshed because ${closedWording(target)} are either closed or in red status.`}
         >
-          <Names names={blockedItems} testId={(name) => `BlockedItem-${name}`} />
+          <ModalNames names={blockedItems} testId={(name) => `BlockedItem-${name}`} within="callOutTitled" />
         </CallOut>
       )}
-    </ActionModal>
+    </PluginModal>
   );
 }

@@ -33,7 +33,7 @@ import {
   type ClusterNames,
 } from '../../web/apps/dev_tools/console_model';
 import { highlight, indentGuides, tokenClasses, type AceToken } from '../../web/apps/dev_tools/console_highlight';
-import { askProxy } from '../../web/apps/dev_tools/console';
+import { askProxy, badgeTone, importedText, suggestedNames } from '../../web/apps/dev_tools/console';
 import { matchingBracket, selectionOf } from '../../web/apps/dev_tools/console_editor';
 import { MAX_HISTORY, autocompleteRequests, consoleStorage, type KeyValueStore } from '../../web/apps/dev_tools/console_storage';
 import { failureReason, grokSimulation, grokValue, readSimulation } from '../../web/apps/dev_tools/grok_request';
@@ -319,22 +319,26 @@ describe('cURL', () => {
   });
 
   it('is read as a request', () => {
-    assert.equal(parseCurl('curl -XGET "http://localhost:9200/_cat/indices?v"'), 'GET _cat/indices?v');
+    assert.equal(parseCurl('curl -XGET "http://localhost:9200/_cat/indices?v"'), 'GET /_cat/indices?v');
     assert.equal(
       parseCurl(`curl -X POST 'https://host:9200/logs/_search' -H 'Content-Type: application/json' -d '{"size": 1}'`),
-      'POST logs/_search\n{"size": 1}'
+      'POST /logs/_search\n{"size": 1}'
     );
-    assert.equal(parseCurl('curl localhost:9200/_cluster/health'), 'GET _cluster/health');
-    assert.equal(parseCurl('curl -XDELETE search.example/logs-1'), 'DELETE logs-1');
+    assert.equal(parseCurl('curl localhost:9200/_cluster/health'), 'GET /_cluster/health');
+    assert.equal(parseCurl('curl -XDELETE search.example/logs-1'), 'DELETE /logs-1');
+    // Without -X the request is a GET, with a body too, as the original reads only -X
+    assert.equal(parseCurl(`curl localhost:9200/logs/_search -d '{"size": 1}'`), 'GET /logs/_search\n{"size": 1}');
+    assert.equal(parseCurl('curl localhost:9200/logs/_bulk -d @file.json'), 'GET /logs/_bulk\n@file.json');
+    assert.equal(parseCurl('curl localhost:9200'), 'GET /');
   });
 
   it('is read back with the single quotes of its body', () => {
     // What "Copy as cURL" writes for a body with a quote in it, pasted again
     const text = 'POST x/_doc\n{"name": "it\'s", "path": "c:\\\\temp"}';
-    assert.equal(parseCurl(toCurl(blocksBetween(readConsole(text), 0), 'http://h')), text);
+    assert.equal(parseCurl(toCurl(blocksBetween(readConsole(text), 0), 'http://h')), text.replace('POST x', 'POST /x'));
     assert.equal(
       parseCurl(`curl -XPUT 'http://h:9200/a/_doc/1' -d '\n{"t":"it'\\''s"}\n'\ncurl -XDELETE http://h:9200/a`),
-      'PUT a/_doc/1\n{"t":"it\'s"}\n\nDELETE a'
+      'PUT /a/_doc/1\n{"t":"it\'s"}\n\nDELETE /a'
     );
   });
 });
@@ -725,5 +729,47 @@ describe("the console's requests", () => {
     } finally {
       globalThis.fetch = real;
     }
+  });
+});
+
+describe('the console, as the original in its smaller ways', () => {
+  it('suggests of the names loaded only the kinds the settings want, with no request of its own', () => {
+    const loaded = { indices: { logs: ['alias'] }, fields: { logs: ['a'] }, templates: ['t'] };
+    assert.deepEqual(suggestedNames(loaded, { fields: true, indices: true, templates: true }), loaded);
+    assert.deepEqual(suggestedNames(loaded, { fields: false, indices: true, templates: false }), { indices: { logs: ['alias'] }, fields: {}, templates: [] });
+  });
+
+  it('marks an answer without a status, as of a connection that failed, as one of an error', () => {
+    assert.equal(badgeTone(undefined), 'critical');
+    assert.equal(badgeTone(200), 'healthy');
+    assert.equal(badgeTone(404), 'warning');
+    assert.equal(badgeTone(503), 'critical');
+  });
+
+  it('imports any text of a file that is not empty, a number as its digits', () => {
+    assert.equal(importedText({ text: 'GET _search' }), 'GET _search');
+    assert.equal(importedText({ text: 5 }), '5');
+    assert.equal(importedText({ text: '' }), undefined);
+    assert.equal(importedText({ text: 0 }), undefined);
+    assert.equal(importedText({}), undefined);
+    assert.equal(importedText(null), undefined);
+  });
+});
+
+describe('what could be typed next in a long request', () => {
+  it('is found in the text as the page has already read it, without reading ten thousand lines again', () => {
+    const lines = ['POST _bulk'];
+    for (let index = 0; index < 5000; index += 1) lines.push(`{ "index": { "_id": "${index}" } }`, `{ "field": "value ${index}" }`);
+    const text = `${lines.join('\n')}\n\nGET _search\n{\n  "qu`;
+    const doc = readConsole(text);
+    const names: ClusterNames = { indices: [], aliases: [], templates: [], fields: () => [] };
+    const known = suggest(text, text.length, names, doc);
+    assert.deepEqual(known, suggest(text, text.length, names));
+    assert.ok(known?.items.some((item) => item.label === 'query'));
+    // What it reads is the reading it was given: one with no request at the cursor finds nothing there
+    assert.equal(suggest(text, text.length, names, readConsole(`${lines.join('\n')}\n\n\n\n\n`)), undefined);
+    const started = Date.now();
+    for (let times = 0; times < 20; times += 1) suggest(text, text.length, names, doc);
+    assert.ok(Date.now() - started < 400, `twenty in ${Date.now() - started} ms`);
   });
 });

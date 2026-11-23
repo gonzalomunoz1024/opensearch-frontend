@@ -108,6 +108,15 @@ export function shownFields(indexPattern: IndexPattern): Field[] {
   return indexPattern.fields.filter((field) => !filters.some((filter) => filter.test(field.name)));
 }
 
+/**
+ * A text of a CSV cell that a spreadsheet would run as a formula, made plain text. A number below
+ * zero and the "-" of a missing value start with a sign too, and stay the values they are
+ */
+export function formulaSafe(text: string): string {
+  const signedNumber = /^[-+]\p{Sc}?([\d.,\s]*\d[\d.,\s]*[%\p{L}\p{Sc}°]*)?$/u.test(text);
+  return /^[=+\-@\t\r]/.test(text) && !signedNumber ? `'${text}` : text;
+}
+
 /** A value as one cell of a CSV file */
 export function csvCell(value: unknown, separator: string, quote: boolean): string {
   let text: string;

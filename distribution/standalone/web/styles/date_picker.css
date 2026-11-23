@@ -1,0 +1,951 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/*
+ * The date picker of the search bar as the original's Atlas build draws its super date picker:
+ * the group (the quick menu's button, the range by its name or as its two ends), the quick menu,
+ * the popover of each end with its Absolute, Relative and Now tabs, and the calendar written after
+ * react-datepicker. Sizes and colours the theme writes literally are written so here; the ones it
+ * has no token for are named once, below, for each theme.
+ */
+
+.shlDatePicker,
+.shlQuickMenu__panel,
+.shlDatePopover {
+  /* An end of the range that cannot be applied */
+  --shl-dp-invalid-text: #c3332b;
+  --shl-dp-invalid-fill: #ffebea;
+  /* A link under the pointer or with the focus, and the fill of its focus */
+  --shl-dp-link-active: #0062cc;
+  --shl-dp-link-focus-fill: #e6f2ff;
+  /* The calendar's marked option or time, and its chosen day under the pointer */
+  --shl-dp-preselected: #cce4ff;
+  --shl-dp-selected-hover: #006ee6;
+  /* What the component library draws on its accent where it does not write white: the chosen
+     month or year, the check of a switch that is on */
+  --shl-dp-on-accent-ink: #ffffff;
+  line-height: 1;
+}
+
+:root.themeDark .shlDatePicker,
+:root.themeDark .shlQuickMenu__panel,
+:root.themeDark .shlDatePopover {
+  --shl-dp-invalid-text: #ff7d75;
+  --shl-dp-invalid-fill: #612927;
+  --shl-dp-link-active: #006bd6;
+  --shl-dp-link-focus-fill: #16416d;
+  --shl-dp-preselected: #01070e;
+  --shl-dp-selected-hover: #0077f0;
+  --shl-dp-on-accent-ink: #000000;
+}
+
+/*
+ * The original's ring of the focus: its base style draws it round what has the focus and no class
+ * of the component library (the calendar's parts), the library round a link and a switch. It
+ * closes in from six pixels to three in 0.4 s, on any focus, the pointer's too.
+ */
+@keyframes shlFocusRingIn {
+  from {
+    box-shadow: 0 0 0 6px transparent;
+  }
+
+  to {
+    box-shadow: 0 0 0 3px var(--color-focus-ring);
+  }
+}
+
+/* --- The group: the quick menu's button, then the range --------------------------------------- */
+
+.shlDatePicker {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  height: var(--control-height);
+  padding: 1px;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface-secondary);
+  box-shadow: inset 0 0 0 1px var(--color-border-light);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+}
+
+.shlDatePicker__quickAnchor {
+  flex: none;
+  height: 100%;
+}
+
+/* An empty button of the component library's: a calendar (a clock while the page refreshes itself)
+   and the small arrow, centred in the width of a whole icon, with a line on its right */
+.shlDatePicker__quick {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 100%;
+  padding: 0 var(--space-2);
+  border: 1px solid transparent;
+  border-right-color: var(--color-border-light);
+  border-radius: 0;
+  background-color: transparent;
+  color: var(--color-accent-button-text);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 21px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) ease-in;
+}
+
+.shlDatePicker__quick > .atlIcon--s {
+  width: 16px;
+}
+
+.shlDatePicker__quick:hover,
+.shlDatePicker__quick:focus {
+  background-color: var(--color-accent-tint);
+}
+
+.shlDatePicker__range {
+  display: flex;
+  flex: 1 1 100%;
+  align-items: center;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  background-color: var(--color-surface-secondary);
+}
+
+/* The range by its name, "Show dates" pushed to the end */
+.shlDatePicker__pretty {
+  display: flex;
+  flex-grow: 1;
+  justify-content: space-between;
+  width: 100%;
+  height: 30px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-regular);
+  line-height: 30px;
+  text-align: left;
+  word-break: break-all;
+  cursor: pointer;
+  transition: background var(--duration-fast) ease-in;
+}
+
+/* Without dates, the interval is written in the taller line the original gives it there */
+span.shlDatePicker__pretty {
+  height: 38px;
+  line-height: 38px;
+  cursor: auto;
+}
+
+.shlDatePicker__prettyLink {
+  flex-shrink: 0;
+  padding-left: var(--space-1);
+  color: var(--color-accent);
+}
+
+.shlDatePicker__pretty:hover .shlDatePicker__prettyLink,
+.shlDatePicker__pretty:focus .shlDatePicker__prettyLink {
+  text-decoration: underline;
+}
+
+/* Each end: the start's text to the right, the end's to the left, the two closer to the arrow */
+.shlDatePicker__end {
+  flex-grow: 1;
+}
+
+.shlDatePicker__end--start {
+  margin-right: calc(-1 * var(--space-2));
+}
+
+.shlDatePicker__end--end {
+  margin-left: calc(-1 * var(--space-2));
+}
+
+.shlDateButton {
+  display: block;
+  width: 100%;
+  height: 30px;
+  padding: 0 var(--space-2);
+  border: 0;
+  background-color: transparent;
+  background-size: 100%;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-regular);
+  line-height: 30px;
+  word-break: break-all;
+  cursor: pointer;
+  transition: background var(--duration-fast) ease-in;
+}
+
+.shlDateButton--start {
+  text-align: right;
+}
+
+.shlDateButton--end {
+  text-align: left;
+}
+
+/* Open or with the focus: a line of the accent along its foot */
+.shlDateButton:focus,
+.shlDateButton--selected {
+  background-image: linear-gradient(0deg, var(--color-accent), var(--color-accent) 2px, transparent 2px, transparent 100%);
+}
+
+.shlDateButton--invalid {
+  background-color: var(--shl-dp-invalid-fill);
+  color: var(--shl-dp-invalid-text);
+}
+
+.shlDateButton--invalid:focus,
+.shlDateButton--invalid.shlDateButton--selected {
+  background-image: linear-gradient(0deg, var(--color-critical), var(--color-critical) 2px, transparent 2px, transparent 100%);
+}
+
+.shlDatePicker__delimiter {
+  flex: none;
+  height: 100%;
+  padding: var(--space-2);
+  font-size: var(--font-size-s);
+  line-height: var(--font-size-s);
+  cursor: default;
+}
+
+.shlDatePicker__delimiter > span {
+  display: block;
+  color: var(--color-text-secondary);
+}
+
+/* --- The quick menu ------------------------------------------------------------------------- */
+
+.shlQuickMenu__panel {
+  padding: var(--space-2);
+}
+
+.shlQuickMenu {
+  width: 400px;
+  max-width: 100%;
+}
+
+.shlQuickMenu__fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.shlQuickMenu__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  height: 24px;
+}
+
+.shlQuickMenu__label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 18px;
+}
+
+.shlQuickMenu__steps {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* The component library's empty icon buttons, extra small and round */
+.shlQuickMenu__step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background-color: transparent;
+  color: var(--color-accent-button-text);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) ease-in;
+}
+
+.shlQuickMenu__step:hover,
+.shlQuickMenu__step:focus {
+  background-color: var(--color-accent-tint);
+}
+
+.shlQuickMenu__step:active {
+  transform: scale(0.97);
+}
+
+.shlQuickMenu__fields {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.shlQuickMenu__field,
+.shlRefreshEvery__field {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* The component library's small button: a hairline of no colour round it */
+.shlQuickMenu__apply,
+.shlRefreshEvery__toggle,
+.shlDatePopover__now .atlButton {
+  border: 1px solid transparent;
+}
+
+.shlQuickMenu__apply {
+  flex: none;
+  min-width: 0;
+}
+
+.shlQuickMenu__panel .atlButton:not(:disabled):hover,
+.shlQuickMenu__panel .atlButton:not(:disabled):focus,
+.shlDatePopover .atlButton:not(:disabled):hover,
+.shlDatePopover .atlButton:not(:disabled):focus {
+  background: var(--color-border-light);
+}
+
+.shlQuickMenu__rule {
+  height: 1px;
+  margin: var(--space-3) 0;
+  border: none;
+  background-color: var(--color-border-light);
+}
+
+.shlQuickMenu__title {
+  margin: 0;
+  padding: 0;
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 18px;
+}
+
+.shlQuickMenu__section {
+  max-height: 132px;
+  padding: var(--space-2) 0 var(--space-1);
+  overflow: hidden auto;
+}
+
+.shlQuickMenu__grid,
+.shlQuickMenu__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The commonly used ranges in two columns, filled one after the other */
+.shlQuickMenu__grid {
+  display: block;
+  column-count: 2;
+  column-gap: 0;
+  margin: calc(-1 * var(--space-1));
+}
+
+.shlQuickMenu__grid > .shlQuickMenu__item {
+  display: inline-block;
+  width: calc(100% - var(--space-2));
+  margin: var(--space-1);
+  font-size: var(--font-size-s);
+  line-height: normal;
+}
+
+.shlQuickMenu__list > .shlQuickMenu__item {
+  font-size: var(--font-size-s);
+  line-height: var(--font-size-s);
+}
+
+.shlQuickMenu__list > .shlQuickMenu__item:not(:last-of-type) {
+  margin-bottom: var(--space-2);
+}
+
+/* The component library's link */
+.shlQuickMenu__link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent);
+  font-size: var(--font-size-s);
+  font-weight: inherit;
+  line-height: normal;
+  text-align: left;
+  cursor: pointer;
+}
+
+.shlQuickMenu__link:hover,
+.shlQuickMenu__link:focus {
+  color: var(--shl-dp-link-active);
+  text-decoration: underline;
+}
+
+.shlQuickMenu__link:focus {
+  background-color: var(--shl-dp-link-focus-fill);
+  animation: 0.4s var(--ease-out-quint) forwards shlFocusRingIn;
+}
+
+/* "Refresh every": the number and the unit share what the button leaves */
+.shlRefreshEvery {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.shlRefreshEvery__toggle {
+  flex: none;
+  gap: var(--space-2);
+  min-width: 90px;
+}
+
+/* --- The popover of an end of the range ------------------------------------------------------ */
+
+.shlDatePopover__content {
+  width: 400px;
+  max-width: 100%;
+}
+
+/* The small tabs of the component library, as wide as the popover together */
+.shlDatePopover__tabs {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-1);
+  max-width: 100%;
+  overflow: auto hidden;
+}
+
+.shlDatePopover__tab {
+  flex-grow: 1;
+  flex-basis: 0%;
+  min-width: 0;
+  padding: var(--space-1) 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background-color: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 21px;
+  cursor: pointer;
+  transition:
+    color var(--duration-fast) ease-out,
+    background-color var(--duration-fast) ease-out;
+}
+
+.shlDatePopover__tab:hover,
+.shlDatePopover__tab:focus {
+  color: var(--color-text-primary);
+}
+
+.shlDatePopover__tab:focus-visible {
+  outline-offset: -3px;
+}
+
+.shlDatePopover__tab--selected {
+  background-color: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  cursor: default;
+}
+
+.shlDatePopover__tabText {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shlDatePopover__error {
+  padding-top: var(--space-1);
+  color: var(--color-critical);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}
+
+/* A field in a group: its label before it, on the separators' colour */
+.shlDateField {
+  display: flex;
+  align-items: stretch;
+  height: var(--control-height);
+  padding: 1px;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface-secondary);
+  box-shadow: inset 0 0 0 1px var(--color-border-light);
+}
+
+.shlDateField--readOnly {
+  background-color: color-mix(in srgb, var(--color-border) 5%, transparent);
+}
+
+.shlDateField__label {
+  flex-shrink: 0;
+  max-width: 50%;
+  padding: var(--space-2);
+  overflow: hidden;
+  background-color: var(--color-border-light);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--font-size-s);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.shlDateField__input {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  padding: var(--space-2);
+  border: 0;
+  border-radius: 0;
+  background-color: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  line-height: normal;
+  outline: none;
+}
+
+.shlDateField--readOnly .shlDateField__input {
+  background-color: transparent;
+  cursor: default;
+}
+
+/* Absolute: the calendar, and under it the date as typed */
+.shlDatePopover__absoluteRow {
+  padding: 0 var(--space-2) var(--space-2);
+}
+
+/* Relative: the number and its unit, the rounding, and the date they make */
+.shlDatePopover__relative {
+  padding: var(--space-2);
+}
+
+.shlDatePopover__relativeRow {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.shlDatePopover__relativeField {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* A row as tall as the switch, with no line around it */
+.shlDatePopover__switch {
+  display: flex;
+  margin: var(--space-4) 0;
+}
+
+/*
+ * The component library's switch, 44 by 20: grey with a cross while off, the accent with a check
+ * while on, its thumb a circle on the surface that grows a little under the pointer.
+ */
+.shlDatePopover__switch .atlSwitch {
+  align-items: flex-start;
+  gap: 0;
+}
+
+.shlDatePopover__switch .atlSwitch__track {
+  width: 44px;
+  height: 20px;
+  border-radius: 999px;
+  background-color: var(--color-border);
+  transition: background-color var(--duration-normal) cubic-bezier(0.34, 1.3, 0.64, 1);
+}
+
+.shlDatePopover__switch .atlSwitch__track[aria-checked="true"] {
+  background-color: var(--color-accent);
+}
+
+/* The check and the cross slide in and out with the thumb, as the original's icons do */
+.shlDatePopover__switch .atlSwitch__track::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-color: var(--color-text-primary);
+  mask-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M6.5 12a.502.502 0 0 1-.354-.146l-4-4a.502.502 0 0 1 .708-.708L6.5 10.793l6.646-6.647a.502.502 0 0 1 .708.708l-7 7A.502.502 0 0 1 6.5 12'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M7.293 8 3.146 3.854a.5.5 0 1 1 .708-.708L8 7.293l4.146-4.147a.5.5 0 0 1 .708.708L8.707 8l4.147 4.146a.5.5 0 0 1-.708.708L8 8.707l-4.146 4.147a.5.5 0 0 1-.708-.708L7.293 8Z'/%3E%3C/svg%3E");
+  mask-repeat: no-repeat;
+  mask-size: 16px 16px;
+  mask-position:
+    -21px 2px,
+    23px 2px;
+  transition: mask-position var(--duration-normal) cubic-bezier(0.34, 1.3, 0.64, 1);
+}
+
+.shlDatePopover__switch .atlSwitch__track[aria-checked="true"]::before {
+  background-color: var(--shl-dp-on-accent-ink);
+  mask-position:
+    5px 2px,
+    49px 2px;
+}
+
+.shlDatePopover__switch .atlSwitch__track::after {
+  z-index: 1;
+  top: 0;
+  left: 0;
+  width: 20px;
+  height: 20px;
+  border: 1px solid transparent;
+  border-radius: 18px;
+  background-color: #ffffff;
+  box-shadow: var(--shadow-sm);
+  transition:
+    transform var(--duration-normal) cubic-bezier(0.34, 1.3, 0.64, 1),
+    left var(--duration-normal) cubic-bezier(0.34, 1.3, 0.64, 1);
+}
+
+.shlDatePopover__switch .atlSwitch__track[aria-checked="true"]::after {
+  left: 24px;
+  transform: none;
+}
+
+.shlDatePopover__switch .atlSwitch:hover .atlSwitch__track:not(:disabled)::after {
+  transform: scale(1.05);
+}
+
+.shlDatePopover__switch .atlSwitch:hover .atlSwitch__track:not(:disabled):active::after {
+  transform: scale(0.95);
+}
+
+.shlDatePopover__switch .atlSwitch__track:focus {
+  animation: 0.4s var(--ease-out-quint) forwards shlFocusRingIn;
+}
+
+.shlDatePopover__switch .atlSwitch > span {
+  padding-left: var(--space-2);
+  font-size: var(--font-size-s);
+  line-height: 20px;
+  cursor: pointer;
+}
+
+/* Now: what it means, and the button that sets it */
+.shlDatePopover__now {
+  padding: var(--space-4);
+}
+
+.shlDatePopover__now > p {
+  margin-bottom: 21px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+/* --- The calendar --------------------------------------------------------------------------- */
+
+.shlCalendar {
+  position: relative;
+  display: flex;
+  border-radius: var(--radius-sm);
+  color: var(--color-full-shade);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-regular);
+}
+
+/* The arrows of the month: the component library's arrow, turned, larger under the pointer */
+.shlCalendar__nav {
+  position: absolute;
+  top: 18px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: none;
+  color: var(--color-full-shade);
+  cursor: pointer;
+  transition: transform 90ms ease-in-out;
+}
+
+.shlCalendar__nav--previous {
+  left: 20px;
+  transform: rotate(90deg);
+}
+
+.shlCalendar__nav--next {
+  left: 248px;
+  transform: rotate(-90deg);
+}
+
+.shlCalendar__nav:hover,
+.shlCalendar__nav:focus {
+  border-radius: var(--radius-sm);
+}
+
+.shlCalendar__nav--previous:hover,
+.shlCalendar__nav--previous:focus {
+  transform: scale(1.2) rotate(90deg);
+}
+
+.shlCalendar__nav--next:hover,
+.shlCalendar__nav--next:focus {
+  transform: scale(1.2) rotate(-90deg);
+}
+
+.shlCalendar__nav:hover {
+  background-color: var(--color-surface-secondary);
+  box-shadow: 0 0 0 2px var(--color-surface-secondary);
+}
+
+/* Its fill, and over the fill's edge the ring of the original's base style */
+.shlCalendar__nav:focus {
+  background-color: var(--color-accent-callout-fill);
+  box-shadow: 0 0 0 2px var(--color-accent-callout-fill);
+  animation: 0.4s var(--ease-out-quint) forwards shlFocusRingIn;
+}
+
+.shlCalendar__header {
+  border-top-left-radius: var(--radius-sm);
+  border-top-right-radius: var(--radius-sm);
+  text-align: center;
+}
+
+.shlCalendar__reads {
+  padding: var(--space-4) 0 var(--space-2);
+}
+
+.shlCalendar__readContainer {
+  display: inline-block;
+  margin: 0 var(--space-1);
+}
+
+.shlCalendar__read {
+  font-size: var(--font-size-l);
+}
+
+.shlCalendar__monthRead {
+  font-weight: var(--font-weight-medium);
+}
+
+.shlCalendar__yearRead {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-regular);
+}
+
+.shlCalendar__read:hover {
+  color: var(--color-accent);
+  cursor: pointer;
+}
+
+.shlCalendar__read:focus {
+  text-decoration: underline;
+}
+
+.shlCalendar__read:focus,
+.shlCalendar__month:focus,
+.shlCalendar__timeBox:focus,
+.shlCalendar__timeList:focus {
+  animation: 0.4s var(--ease-out-quint) forwards shlFocusRingIn;
+}
+
+.shlCalendar__dayNames,
+.shlCalendar__week {
+  white-space: nowrap;
+}
+
+.shlCalendar__dayName,
+.shlCalendar__day {
+  display: inline-block;
+  width: 32px;
+  margin: 0 2px;
+  color: var(--color-full-shade);
+  line-height: 28px;
+  text-align: center;
+}
+
+.shlCalendar__dayName {
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+}
+
+.shlCalendar__month {
+  margin: 0 var(--space-4) var(--space-4);
+  border-radius: var(--radius-sm);
+  text-align: center;
+}
+
+.shlCalendar__month:focus {
+  background: var(--color-accent-callout-fill);
+}
+
+.shlCalendar__day {
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 90ms ease-in-out;
+}
+
+.shlCalendar__day:hover {
+  font-weight: var(--font-weight-semibold);
+  text-decoration: underline;
+  transform: scale(1.2);
+}
+
+.shlCalendar__day--today {
+  color: var(--color-accent);
+  font-weight: 700;
+}
+
+.shlCalendar__day--outside {
+  color: var(--color-text-secondary);
+}
+
+.shlCalendar__day--selected {
+  height: 32px;
+  border: 2px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-accent);
+  color: var(--color-on-accent);
+  line-height: 28px;
+}
+
+.shlCalendar__day--selected:hover {
+  background-color: var(--shl-dp-selected-hover);
+}
+
+/* The month and year lists, over the whole calendar */
+.shlCalendar__dropdown {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: space-around;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface);
+  text-align: center;
+  cursor: pointer;
+  animation: shlFadeIn var(--duration-fast) ease-in;
+}
+
+/* Focused as it opens, it has the ring in place of its fade, as the original's */
+.shlCalendar__dropdown:focus {
+  animation: 0.4s var(--ease-out-quint) forwards shlFocusRingIn;
+}
+
+.shlCalendar__dropdown--year {
+  flex-flow: row-reverse wrap-reverse;
+  justify-content: flex-end;
+}
+
+@keyframes shlFadeIn {
+  from {
+    opacity: 0;
+  }
+}
+
+.shlCalendar__option {
+  flex-basis: 33.3%;
+  padding: var(--space-2);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xs);
+}
+
+.shlCalendar__option--first {
+  border-top-left-radius: var(--radius-sm);
+  border-top-right-radius: var(--radius-sm);
+}
+
+.shlCalendar__option--last {
+  border-bottom-right-radius: var(--radius-sm);
+  border-bottom-left-radius: var(--radius-sm);
+  user-select: none;
+}
+
+.shlCalendar__option:hover {
+  background-color: var(--color-surface-secondary);
+}
+
+.shlCalendar__option--preselected {
+  background: var(--shl-dp-preselected);
+}
+
+.shlCalendar__option--selected {
+  border-radius: var(--radius-sm);
+  background: var(--color-accent);
+  color: var(--shl-dp-on-accent-ink);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* The times of the day, at the calendar's side */
+.shlCalendar__timeContainer {
+  display: flex;
+  flex-grow: 1;
+  padding: var(--space-4) 0;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.shlCalendar__timeContainer--focus {
+  background: var(--color-accent-callout-fill);
+}
+
+.shlCalendar__timeColumn {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  padding-left: var(--space-1);
+}
+
+.shlCalendar__timeBox {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+}
+
+.shlCalendar__timeList {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  align-items: center;
+  height: 204px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.shlCalendar__time {
+  margin-bottom: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  color: var(--color-text-secondary);
+  line-height: var(--font-size-xs);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.shlCalendar__time:hover {
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.shlCalendar__time--preselected {
+  background: var(--shl-dp-preselected);
+}
+
+.shlCalendar__time--selected {
+  border-radius: 4px;
+  background-color: var(--color-accent);
+  color: var(--color-on-accent);
+}

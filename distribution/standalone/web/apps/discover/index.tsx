@@ -349,7 +349,7 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
       showSearchError(failure);
       return undefined;
     }
-    const record: RequestRecord = { name: 'data', index: indexPattern.title, body, startedAt: Date.now() };
+    const record: RequestRecord = { name: 'data', index: indexPattern.title, indexPatternId: indexPattern.id, description: 'This request queries OpenSearch to fetch the data for the search.', body, startedAt: Date.now() };
     setLoading(true);
     services.search
       .search(indexPattern.title, body, { signal: controller.signal, record })
@@ -828,7 +828,7 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
         />
       )}
       {dialog === 'inspect' && (
-        <Inspector title={saved?.attributes.title ?? 'Discover'} requests={records} onClose={() => setDialog(undefined)} />
+        <Inspector title={saved?.attributes.title} requests={records} onClose={() => setDialog(undefined)} />
       )}
     </div>
   );

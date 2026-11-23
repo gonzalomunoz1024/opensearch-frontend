@@ -4,8 +4,11 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   addedFields,
+  aliasIndexesError,
+  aliasNameError,
   changedSettings,
   comparableComponent,
+  componentUsers,
   countChanges,
   countFields,
   dataStreamNameErrors,
@@ -29,6 +32,7 @@ import {
   newTemplate,
   ordered,
   parsedObject,
+  pluginOrder,
   presetTemplate,
   priorityError,
   propertiesOf,
@@ -41,11 +45,28 @@ import {
   simulatedTemplateBody,
   suggestedTemplates,
   templateSettingsErrors,
+  valueAt,
   withFields,
   withType,
   type MappingField,
   type StreamTemplate,
 } from '../../web/apps/index_management/index_model';
+import { tableCaption } from '../../web/apps/index_management/model';
+
+describe('the caption of a table, which a screen reader reads', () => {
+  it('says how many rows a page shows of how many there are, and which page it is', () => {
+    assert.equal(tableCaption(9, 9, 20, 0, true), 'This table contains 9 rows out of 9 rows; Page 1 of 1.');
+    assert.equal(tableCaption(4, 9, 5, 5, true), 'This table contains 4 rows out of 9 rows; Page 2 of 2.');
+  });
+
+  it('counts no page when there is no row, as the theme does', () => {
+    assert.equal(tableCaption(0, 0, 20, 0, true), 'This table contains 0 rows; Page 1 of 0.');
+  });
+
+  it('says only how many rows a table without pages shows', () => {
+    assert.equal(tableCaption(1, 1, Number.MAX_SAFE_INTEGER, 0, false), 'This table contains 1 rows.');
+  });
+});
 
 describe('the fields of mappings', () => {
   const properties = {
@@ -476,5 +497,73 @@ describe('the template of a data stream', () => {
       'No matching index template found for data stream []',
     ]);
     assert.deepEqual(dataStreamNameErrors('Logs', true), ['Invalid data stream name.']);
+  });
+});
+
+describe('an alias in its dialog', () => {
+  it('has a name an index could have, and one sentence for whatever is wrong with it', () => {
+    assert.equal(aliasNameError('logs'), undefined);
+    assert.equal(aliasNameError('logs-1_all'), undefined);
+    for (const name of ['', undefined, 'Logs', '-logs', '_logs', 'lo*gs', 'logs?', 'a/b']) {
+      assert.equal(aliasNameError(name), 'Invalid alias name.');
+    }
+  });
+
+  it('points to one index at least', () => {
+    assert.equal(aliasIndexesError(['logs-1']), undefined);
+    assert.equal(aliasIndexesError(['logs-*', 'audit']), undefined);
+    assert.equal(aliasIndexesError([]), 'At least one index should be selected.');
+    assert.equal(aliasIndexesError(undefined), 'At least one index should be selected.');
+  });
+});
+
+describe('the list of component templates', () => {
+  it('knows the index templates each component is part of', () => {
+    const users = componentUsers([
+      { name: 'logs', composed_of: ['base', 'mappings'] },
+      { name: 'metrics', composed_of: ['base'] },
+      { name: 'plain' },
+      { name: 'odd', composed_of: ['constructor'] },
+    ]);
+    assert.deepEqual(users.get('base'), ['logs', 'metrics']);
+    assert.deepEqual(users.get('mappings'), ['logs']);
+    assert.deepEqual(users.get('constructor'), ['odd']);
+    assert.equal(users.get('toString'), undefined);
+  });
+
+  it('reads a value at a path as lodash does', () => {
+    const item = { a: { b: { c: 'x', n: null } }, zero: 0 };
+    assert.equal(valueAt(item, 'a.b.c', 0), 'x');
+    assert.equal(valueAt(item, 'a.b.n', 0), null);
+    assert.equal(valueAt(item, 'a.b.n.d', 0), 0);
+    assert.equal(valueAt(item, 'a.missing.c', 7), 7);
+    assert.equal(valueAt(item, 'zero', 1), 0);
+  });
+
+  it('orders the rows as the plugin, whose comparator says no two are equal', () => {
+    const row = (name: string, description: string | undefined, count: number) => ({
+      name,
+      component_template: description === undefined ? {} : { _meta: { description } },
+      associatedCount: count,
+    });
+    // As the server sends them
+    const rows = [
+      row('comp-alias', undefined, 0),
+      row('comp-none', 'nothing', 0),
+      row('comp', 'test component', 1),
+      row('comp-all', 'all three', 2),
+    ];
+    const names = (field: string, direction: string) => pluginOrder(rows, field, direction).map((item) => item.name);
+    assert.deepEqual(names('name', 'desc'), ['comp-none', 'comp-all', 'comp-alias', 'comp']);
+    assert.deepEqual(names('name', 'asc'), ['comp', 'comp-alias', 'comp-all', 'comp-none']);
+    // A row without a description is never before nor after another: where it ends is the sort's
+    const description = 'component_template._meta.description';
+    assert.deepEqual(names(description, 'asc'), ['comp-alias', 'comp-all', 'comp-none', 'comp']);
+    assert.deepEqual(names(description, 'desc'), ['comp-alias', 'comp', 'comp-none', 'comp-all']);
+    assert.deepEqual(names('associatedCount', 'asc'), ['comp-alias', 'comp-none', 'comp', 'comp-all']);
+    assert.deepEqual(names('associatedCount', 'desc'), ['comp-all', 'comp', 'comp-alias', 'comp-none']);
+    // A field no row has leaves them as they came
+    assert.deepEqual(names('templateTypes', 'desc'), ['comp-alias', 'comp-none', 'comp', 'comp-all']);
+    assert.deepEqual(rows.map((item) => item.name), ['comp-alias', 'comp-none', 'comp', 'comp-all']);
   });
 });

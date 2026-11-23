@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ChartMessage } from '../charts/core';
 import { ErrorBoundary } from '../components/basic';
-import type { Table } from '../lib/aggs';
+import type { AggContext, Table } from '../lib/aggs';
 import type { TimeRange } from '../lib/dates';
 import type { Filter } from '../lib/types';
 import { visType, type UiState, type Vis } from '../lib/vis';
@@ -40,6 +40,8 @@ import '../styles/vis.css';
 export interface VisInspectData {
   requests: RequestRecord[];
   table?: Table;
+  /** What the table's columns were asked with, which Inspect's cell filters are made from */
+  context?: AggContext;
   vega?: VegaDebugValues;
   tsvb?: TsvbData | TsvbTableData;
 }
@@ -125,7 +127,7 @@ function AggVisualization({ vis: saved, input, tick, uiState, onUiState, onFilte
         setError(undefined);
         setLoading(false);
         reportError.current?.(undefined);
-        report.current?.({ requests: answer.requests, table: answer.table });
+        report.current?.({ requests: answer.requests, table: answer.table, context: answer.context });
       })
       .catch((failure) => {
         if ((failure as Error).name === 'AbortError') return;
