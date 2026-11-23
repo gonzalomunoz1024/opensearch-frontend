@@ -201,6 +201,11 @@
   padding: 0 9px;
 }
 
+/* The kit's pages keep the room they have under one of its tables; the original's have none here */
+.visTable__paginationItem > .atlPagination {
+  margin-top: 0;
+}
+
 /* Where a cell's text is measured: hidden, in the small type, with 4px around it */
 .visTable__measure {
   position: absolute;
