@@ -5,19 +5,25 @@
 import {
   Fragment,
   createContext,
-  useCallback,
   useContext,
   useEffect,
+  useId,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { Button, IconButton, cx } from '../components/basic';
+import { Button, cx } from '../components/basic';
 import { Icon, type IconName } from '../components/icon';
-import { Popover } from '../components/overlay';
 import { appUrl } from '../lib/url';
 import { href, useLocation } from '../router';
 import { services } from '../services';
+import { helpExtensionOf } from './chrome_layout';
+import { HeaderBreadcrumbs, useBreadcrumbLimit } from './header_breadcrumbs';
+import { HeaderIcon } from './header_icon';
+import { HeaderTooltip } from './header_popover';
+import { HelpMenu } from './help_menu';
+import { countRequests, useLoadingCount } from './loading_count';
 import {
   currentGlobalParam,
   readStored,
@@ -27,6 +33,7 @@ import {
 } from './state';
 import { UserBannerList } from './user_banner';
 import '../styles/shell.css';
+import '../styles/chrome.css';
 
 interface NavLink {
   id: string;
@@ -126,29 +133,42 @@ export interface TopNavItem {
   testId?: string;
   /** What the button is put in: a popover it opens under itself, as the original's Options */
   wrap?: (button: ReactNode) => ReactNode;
+  /**
+   * The widths of the window it is not shown at, by the component library's breakpoints, as the
+   * original's `eui-hideFor--s eui-hideFor--xs` on a dashboard's Edit
+   */
+  hideFor?: Array<'xs' | 's' | 'm'>;
 }
 
-/** A page's actions as the header's row of links */
+/** A page's actions as the header's row of links, as the original's top navigation menu */
 export function TopNav({ items }: { items: TopNavItem[] }) {
+  if (items.length === 0) return null;
   return (
     <HeaderActions>
-      {items.map((item) => {
-        const button = (
-          <Button
-            key={item.id}
-            variant={item.emphasize ? 'default' : 'empty'}
-            icon={item.icon}
-            onClick={item.onClick}
-            to={item.to}
-            disabled={item.disabled}
-            title={item.title}
-            testId={item.testId ?? `topNav-${item.id}`}
-          >
-            {item.label}
-          </Button>
-        );
-        return item.wrap ? <Fragment key={item.id}>{item.wrap(button)}</Fragment> : button;
-      })}
+      <nav className="shlTopNav" aria-label="App navigation" data-test-subj="top-nav">
+        <div className="shlTopNav__list">
+          {items.map((item) => {
+            const button = (
+              <Button
+                key={item.id}
+                variant={item.emphasize ? 'default' : 'empty'}
+                icon={item.icon}
+                onClick={item.onClick}
+                to={item.to}
+                disabled={item.disabled}
+                title={item.title}
+                testId={item.testId ?? `topNav-${item.id}`}
+                className={
+                  item.hideFor?.map((size) => `shlTopNav__item--hideFor-${size}`).join(' ') || undefined
+                }
+              >
+                {item.label}
+              </Button>
+            );
+            return item.wrap ? <Fragment key={item.id}>{item.wrap(button)}</Fragment> : button;
+          })}
+        </div>
+      </nav>
     </HeaderActions>
   );
 }
@@ -157,7 +177,77 @@ function Logo({ size = 24 }: { size?: number }) {
   return <img src={href('/logo.svg')} width={size} height={size} alt="" />;
 }
 
-function Navigation({ docked, onDock, onClose }: { docked: boolean; onDock: () => void; onClose: () => void }) {
+/**
+ * The link home, as the original's HomeLoader: the product's mark, and in its place a spinner
+ * for as long as a request is under way
+ */
+function HomeLink() {
+  const loading = useLoadingCount() > 0;
+  return (
+    <HeaderTooltip content="Go to home page" delay="long">
+      <a
+        className="shlHeader__button shlHeader__home"
+        href={href('/app/home')}
+        rel="noreferrer"
+        aria-label="Go to home page"
+        data-test-subj="homeLoader"
+      >
+        <span className="shlHeader__homeContent">
+          {!loading && (
+            <span className="shlHeader__homeIcon">
+              <img
+                src={href('/logo.svg')}
+                width={24}
+                height={24}
+                alt={`${services.boot.name} home`}
+                data-test-subj="defaultMark"
+              />
+            </span>
+          )}
+          <span className="shlHeader__loader">
+            <LoadingSpinner loading={loading} />
+          </span>
+        </span>
+      </a>
+    </HeaderTooltip>
+  );
+}
+
+function LoadingSpinner({ loading }: { loading: boolean }) {
+  return (
+    <span
+      className={cx('atlSpinner', !loading && 'shlHeader__spinner--hidden')}
+      data-test-subj={loading ? 'globalLoadingIndicator' : 'globalLoadingIndicator-hidden'}
+      aria-hidden={!loading}
+      aria-label="Loading content"
+    />
+  );
+}
+
+/** What a page that hides the header shows while a request is under way: a bar across the top */
+function LoadingBar() {
+  const loading = useLoadingCount() > 0;
+  return (
+    <div
+      className={cx('shlLoadingBar', !loading && 'shlLoadingBar--hidden')}
+      data-test-subj={loading ? 'globalLoadingIndicator' : 'globalLoadingIndicator-hidden'}
+      aria-hidden={!loading}
+      aria-label="Loading content"
+    />
+  );
+}
+
+function Navigation({
+  id,
+  docked,
+  onDock,
+  onClose,
+}: {
+  id: string;
+  docked: boolean;
+  onDock: () => void;
+  onClose: () => void;
+}) {
   const location = useLocation();
   const recent = useRecentlyAccessed();
   const [closed, setClosed] = useState<Record<string, boolean>>(() => readStored('navClosed', {}));
@@ -183,7 +273,7 @@ function Navigation({ docked, onDock, onClose }: { docked: boolean; onDock: () =
   );
 
   return (
-    <nav className={cx('shlNav', docked && 'shlNav--docked')} aria-label="Primary" data-test-subj="collapsibleNav">
+    <nav id={id} className={cx('shlNav', docked && 'shlNav--docked')} aria-label="Primary" data-test-subj="collapsibleNav">
       <div className="shlNav__scroll">
         {section(
           'recent',
@@ -229,36 +319,6 @@ function Navigation({ docked, onDock, onClose }: { docked: boolean; onDock: () =
   );
 }
 
-function HelpMenu() {
-  const [open, setOpen] = useState(false);
-  const close = useCallback(() => setOpen(false), []);
-  return (
-    <Popover
-      open={open}
-      onClose={close}
-      align="right"
-      padded
-      button={<IconButton icon="help" label="Help menu" onClick={() => setOpen(!open)} testId="helpMenuButton" className="shlHeader__help" />}
-    >
-      <div className="atlStack" style={{ width: 240 }}>
-        <div className="atlRow">
-          <Logo size={28} />
-          <div>
-            <div className="atlTitleXxs">{services.boot.name}</div>
-            <div className="atlSubdued atlSmall">Version {services.boot.version}</div>
-          </div>
-        </div>
-        <a href="https://opensearch.org/docs/latest/dashboards/" target="_blank" rel="noreferrer">
-          OpenSearch Dashboards documentation
-        </a>
-        <a href="https://opensearch.org/docs/latest/query-dsl/" target="_blank" rel="noreferrer">
-          Query DSL reference
-        </a>
-      </div>
-    </Popover>
-  );
-}
-
 export function Chrome({ children }: { children: ReactNode }) {
   const { breadcrumbs, fullScreen } = useChromeState();
   const [docked, setDocked] = useState<boolean>(() => readStored('navDocked', false));
@@ -266,8 +326,13 @@ export function Chrome({ children }: { children: ReactNode }) {
   const [actions, setActions] = useState<HTMLElement | null>(null);
   const location = useLocation();
   const narrow = useNarrow();
+  const crumbLimit = useBreadcrumbLimit();
+  const navId = useId();
+  const menuButton = useRef<HTMLButtonElement>(null);
   const isDocked = docked && !narrow;
   const navShown = !fullScreen && (isDocked || open);
+  // Every request counts toward the home link's spinner, from the first a page makes
+  useState(() => countRequests(services.http));
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -277,62 +342,49 @@ export function Chrome({ children }: { children: ReactNode }) {
     return () => document.removeEventListener('keydown', onKey);
   }, [open]);
 
-  // Without a trail the header names the application
-  const trail =
-    breadcrumbs.length > 0
-      ? breadcrumbs
-      : [
-          {
-            text:
-              navGroups()
-                .flatMap((group) => group.links)
-                .find((link) => isActive(link, location.pathname))?.label ?? 'Home',
-          },
-        ];
-
   return (
     <ActionsContext.Provider value={actions}>
       <div className={cx('shlApp', isDocked && !fullScreen && 'shlApp--docked', fullScreen && 'shlApp--fullScreen')}>
-        {!fullScreen && (
+        {fullScreen ? (
+          <LoadingBar />
+        ) : (
           <header className="shlHeader" data-test-subj="headerGlobalNav">
-            <IconButton
-              icon="menu"
-              label="Toggle primary navigation"
-              className="shlHeader__menu"
-              aria-expanded={navShown}
-              onClick={() => (isDocked ? setDocked(false) : setOpen(!open))}
-              testId="toggleNavButton"
-            />
-            <a className="shlHeader__logo" href={href('/app/home')} aria-label={`${services.boot.name} home`} data-test-subj="logo">
-              <Logo />
-            </a>
-            <nav className="shlHeader__trail" aria-label="Breadcrumbs" data-test-subj="breadcrumbs">
-              {trail.map((crumb, index) => {
-                const last = index === trail.length - 1;
-                return (
-                  <span key={`${crumb.text}-${index}`} className={cx('shlCrumb', last && 'shlCrumb--last')}>
-                    {index > 0 && <span className="shlCrumb__separator">/</span>}
-                    {crumb.to && !last ? (
-                      <a href={href(crumb.to)} className="atlTruncate">
-                        {crumb.text}
-                      </a>
-                    ) : (
-                      <span className="atlTruncate" data-test-subj={last ? 'breadcrumb last' : undefined}>
-                        {crumb.text}
-                      </span>
-                    )}
-                  </span>
-                );
-              })}
-            </nav>
-            <div className="shlHeader__actions" ref={setActions} />
-            <HelpMenu />
+            <div className="shlHeader__section shlHeader__section--left">
+              <div className="shlHeader__item">
+                <button
+                  ref={menuButton}
+                  type="button"
+                  className="shlHeader__button"
+                  aria-label="Toggle primary navigation"
+                  aria-expanded={navShown}
+                  aria-pressed={navShown}
+                  aria-controls={navId}
+                  onClick={() => (isDocked ? setDocked(false) : setOpen(!open))}
+                  data-test-subj="toggleNavButton"
+                >
+                  <HeaderIcon name="menu" className="shlHeader__icon" title="Menu" />
+                </button>
+              </div>
+              <div className="shlHeader__item">
+                <HomeLink />
+              </div>
+            </div>
+            <HeaderBreadcrumbs breadcrumbs={breadcrumbs} limit={crumbLimit} />
+            <div className="shlHeader__section shlHeader__section--right">
+              <div className="shlHeader__item">
+                <div className="shlHeader__actions" data-test-subj="headerAppActionMenu" ref={setActions} />
+              </div>
+              <div className="shlHeader__item">
+                <HelpMenu version={services.boot.version} extension={helpExtensionOf(location.pathname)} />
+              </div>
+            </div>
           </header>
         )}
         {navShown && (
           <>
             {!isDocked && <div className="shlNav__scrim" onClick={() => setOpen(false)} />}
             <Navigation
+              id={navId}
               docked={isDocked}
               onClose={() => setOpen(false)}
               onDock={() => {

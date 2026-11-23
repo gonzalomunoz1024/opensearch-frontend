@@ -12,9 +12,10 @@ keeps working, and parts of it are derived from it under the Apache License, Ver
   - the reading of a Vega spec (web/vis/vega): its settings, the requests it makes to OpenSearch,
     its warnings and its error texts,
   - the palette of chart colours, which is that of the OpenSearch UI framework,
-  - the icons (web/components/icon.tsx): the drawings of the OpenSearch UI framework (OUI)
-    1.24.2, the component library OpenSearch Dashboards 3.9.0 is built with, copied as data from
-    the icons it holds,
+  - the icons (web/components/icon.tsx, and the mark beside the help menu's link to GitHub in
+    web/shell/help_menu.tsx): the drawings of the OpenSearch UI framework (OUI) 1.24.2, the
+    component library OpenSearch Dashboards 3.9.0 is built with, copied as data from the icons
+    it holds,
   - the sample data sets (server/sample_data/data_sets): their documents (the *.json.gz files,
     copied as they are from src/plugins/home/server/services/sample_data/data_sets of
     OpenSearch Dashboards 3.9.0), the field mappings of their indices, and their saved objects
