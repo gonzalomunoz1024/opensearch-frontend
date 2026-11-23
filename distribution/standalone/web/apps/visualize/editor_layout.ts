@@ -6,6 +6,9 @@
  * bar between them or its arrow keys change; and the bar above them shows what the kind asks for.
  */
 
+import type { AggConfig } from '../../lib/aggs';
+import { serializeAggs, type AggEnv } from './agg_params';
+
 /** A kind's `editorConfig.defaultSize` in the original */
 export type EditorSize = 'small' | 'medium' | 'large';
 
@@ -103,3 +106,23 @@ export function editorHeading(title: string | undefined, typeTitle: string, save
     ? `${title ?? ''} ${typeTitle} visualization`
     : `Visualization of type ${typeTitle} embedded into ${originatingApp || 'dashboards'} app`;
 }
+
+/**
+ * The aggregations the editor shows and draws: those of the address, each with every parameter of
+ * its type and the defaults of those it lacks, as the original's `AggConfig` takes them (the
+ * address Discover's "Visualize" writes names only a few), or else those that were saved
+ */
+export function editorAggs(fromUrl: AggConfig[] | undefined, saved: AggConfig[], aggBased: boolean, env: AggEnv): AggConfig[] {
+  if (!fromUrl) return saved;
+  return aggBased ? serializeAggs(fromUrl, env) : fromUrl;
+}
+
+/**
+ * Whether the sidebar holds changes Update has not applied, the original's `isDirty`. What the
+ * sidebar's editors fill in by themselves as they show a state (a split chart in rows, the empty
+ * buckets of the last bucket under a parent pipeline) is no change, as the original's editors make
+ * those before its sidebar listens: the draft counts from the moment someone uses the sidebar,
+ * against what it was then (`clean`, undefined until then).
+ */
+export const hasUnappliedChanges = (draft: string | undefined, clean: string | undefined): boolean =>
+  draft !== undefined && clean !== undefined && draft !== clean;

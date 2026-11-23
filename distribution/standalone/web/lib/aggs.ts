@@ -195,10 +195,17 @@ export function dateInterval(agg: AggConfig, context: AggContext): Interval & { 
   if ((requested === 'auto' || !parseInterval(requested)) && !range) {
     return { ...parseInterval('1d')!, scaled: false };
   }
-  return resolveInterval(requested, duration, {
+  const resolved = resolveInterval(requested, duration, {
     targetBuckets: context.barTarget ?? 50,
     maxBuckets: context.maxBars ?? 100,
   });
+  // An interval the time range chose, auto or widened, is a length of time, which the original
+  // writes (convertDurationToNormalizedOpenSearchInterval) in the largest of weeks, days, hours,
+  // minutes and seconds it is a whole number of: its month is "30d" and its year "365d", fixed
+  if (requested !== 'auto' && parseInterval(requested) && !resolved.scaled) return resolved;
+  const unit = (['w', 'd', 'h', 'm', 's'] as const).find((name) => resolved.ms % UNIT_MS[name] === 0 && resolved.ms >= UNIT_MS[name]);
+  const length = unit ? parseInterval(`${resolved.ms / UNIT_MS[unit]}${unit}`) : parseInterval(`${resolved.ms}ms`);
+  return length ? { ...length, scaled: resolved.scaled } : resolved;
 }
 
 function dateIntervalClause(interval: Interval): Dsl {

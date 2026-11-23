@@ -7,7 +7,7 @@ import { Markdown } from '../../web/lib/markdown';
 import { evaluateMath } from '../../web/lib/math_expression';
 import { renderTemplate } from '../../web/lib/template';
 import { buildHash, parseHash, parseQuery } from '../../web/lib/url';
-import { metricLabel, ruleFor, seriesFormatter, splitColors, type ColorRule } from '../../web/vis/tsvb/data';
+import { metricLabel, ruleFor, seriesFormatter, splitColors, type ColorRule, type TsvbMetric } from '../../web/vis/tsvb/data';
 
 const html = (text: string, openLinksInNewTab = false) =>
   renderToStaticMarkup(<Markdown text={text} openLinksInNewTab={openLinksInNewTab} />);
@@ -112,6 +112,14 @@ describe('TSVB series', () => {
       'Derivative of Max of bytes'
     );
     assert.equal(metricLabel({ id: 's', metrics: [] }), 'Unknown');
+  });
+
+  it('are named as the product names a positive rate and a metric worked out from a percentile', () => {
+    assert.equal(metricLabel({ id: 's', metrics: [{ id: '1', type: 'positive_rate', field: 'bytes', unit: '' }] }), 'Positive Rate of bytes');
+    const percentile: TsvbMetric = { id: '1', type: 'percentile', field: 'bytes', percentiles: [{ id: 'a', value: 50, mode: 'line' }] };
+    assert.equal(metricLabel({ id: 's', metrics: [percentile, { id: '2', type: 'derivative', field: '1[50.0]' }] }), 'Derivative of Percentile of bytes (50.0)');
+    // A metric that names none of the series' metrics is worked out from an unknown one
+    assert.equal(metricLabel({ id: 's', metrics: [{ id: '2', type: 'cumulative_sum', field: '9' }] }), 'Cumulative Sum of Unknown');
   });
 
   it('colour the terms they are split by from their own colour, darkening, or leave it to the chart', () => {

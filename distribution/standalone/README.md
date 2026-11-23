@@ -19,6 +19,18 @@ What it keeps, so that it can stand where OpenSearch Dashboards stood:
 - **The settings.** `opensearch.hosts`, `server.basePath` and the rest carry the same names, in
   the same file, and the same environment variables (`OPENSEARCH_HOSTS`). The image has the
   layout of the OpenSearch Dashboards image, so the Helm chart in `../helm` runs it unchanged.
+  A value is checked as OpenSearch Dashboards checks it, in its words, and a setting it does not
+  know stops the start, as there. Honoured as there: `server.host`, `port`, `basePath`,
+  `rewriteBasePath`, `name`, `maxPayloadBytes`, `customResponseHeaders`, `xsrf.*`,
+  `compression.*`, `keepaliveTimeout`, `socketTimeout` and `ssl.*` (with PEM files);
+  `opensearch.hosts`, `username`, `password`, `customHeaders`, `requestHeadersWhitelist`,
+  `requestTimeout`, `pingTimeout`, `shardTimeout`, `memoryCircuitBreaker.*` and `ssl.*` (PEM
+  files); `console.enabled` and `console.proxyFilter`; `logging.quiet`, `silent` and
+  `verbose`. A setting of OpenSearch Dashboards that this
+  server has no use for is named once at start; one whose absence would leave the server less
+  safe than the file asks, or listening or storing elsewhere (a PKCS#12 keystore or truststore,
+  `server.cors: true`, `server.autoListen: false`, `savedObjects.permission.enabled: true`), stops
+  the start and says why.
 - **The look of a saved visualization.** Axes, ticks, bar widths, gauge and pie measures and the
   order of the palette follow OpenSearch Dashboards, in the Atlas design.
 

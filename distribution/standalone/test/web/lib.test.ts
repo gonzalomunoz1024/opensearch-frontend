@@ -184,6 +184,36 @@ describe('numbers', () => {
     );
   });
 
+  it('reads the rest of a pattern as numeral 2.5.1 reads it: bytes by 1000, a leading point, an optional point, letters', () => {
+    // What the reference's numeral writes for each (numeral().set(value).format(pattern))
+    const cases: Array<[number, string, string]> = [
+      [1234.5678, '0.0 bd', '1.2 kB'],
+      [1e21, '0.0 bd', '1.0 ZB'],
+      [1234.5678, '0bb', '1KiB'],
+      [1536, '0.0bitb', '1.5Kibit'],
+      [5767168, '0 bitd', '6 Mbit'],
+      [1234.5678, '.00', '.57'],
+      [-1234.5678, '.00', '-.57'],
+      [0.5, '.00', '.50'],
+      [0.5, '0[.]00', '0.50'],
+      [1, '0[.]00', '1'],
+      [1.005, '0[.]00', '1.01'],
+      [1234.5678, '0.0e+0', '+1234.568'],
+      [-1.5, '0.0e+0', '-1.500'],
+      [0, '0.0e+0', '+0.000'],
+      [1, '0 a', '1 '],
+      [1234.5678, '0 a', '1 k'],
+      [1234.5678, '0.0 kg', '1234.5678'],
+      [1234.5678, '', '1,235'],
+      [42, '[0]', '42'],
+      [Number.MAX_VALUE, '0.00%', 'NaN%'],
+    ];
+    assert.deepEqual(
+      cases.map(([value, pattern]) => formatNumber(value, pattern)),
+      cases.map(([, , expected]) => expected)
+    );
+  });
+
   it('writes a pattern with a colon as a time, as numeral does', () => {
     // What the reference writes for a number field whose pattern is 00:00:00
     const cases: Array<[number, string, string]> = [
@@ -315,8 +345,8 @@ describe('numbers', () => {
     );
     assert.equal(createFormatter({ id: 'bytes' })('2048').text, '2KB');
     assert.equal(createFormatter({ id: 'percent' })(Number.NaN).text, '');
-    // and no value in a list is a dash still, as under every format
-    assert.deepEqual([number([null]).text, number([1, null, 'x']).text], ['-', '1, -, ']);
+    // and no value in a list is a dash still, as under every format: with a space each side there
+    assert.deepEqual([number([null]).text, number([1, null, 'x']).text], [' - ', '1,  - , ']);
   });
 
   it('writes a list in a list value by value, as the original does', () => {

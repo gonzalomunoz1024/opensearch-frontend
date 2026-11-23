@@ -1,10 +1,11 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { bucketFilter, otherBucketTerms, tabify, type AggConfig, type AggContext, type TableColumn } from '../../web/lib/aggs';
+import { aggLabel, bucketFilter, buildAggsDsl, otherBucketTerms, tabify, type AggConfig, type AggContext, type TableColumn } from '../../web/lib/aggs';
 import { DEFAULT_FORMAT_SETTINGS } from '../../web/lib/field_formats';
 import type { Filter, IndexPattern } from '../../web/lib/types';
 import { splitDrawing, splitParts, splitTables, splitTimeFilter } from '../../web/vis/types';
@@ -22,6 +23,7 @@ import {
   stackSeries,
   type VislibSeries,
 } from '../../web/vis/vislib/point_series_data';
+import { hoverAfter } from '../../web/vis/vislib/legend';
 import { layoutPointSeries } from '../../web/vis/vislib/point_series_layout';
 import { keptPieLabels, pieTooSmall } from '../../web/vis/vislib/pie_chart';
 import { splitTooltipDetail } from '../../web/vis/vislib/series_events';
@@ -48,7 +50,7 @@ import {
 import { bandScale, linearNice, linearTicks, tickCount, utcTicks, zonedTimeTicks } from '../../web/vis/vislib/scales';
 import { dimmingOpacity, zoneOffset } from '../../web/vis/vislib/settings';
 import { arcCentroid, arcPath } from '../../web/vis/vislib/shapes';
-import { placeTooltip } from '../../web/vis/vislib/tooltip';
+import { fitTooltipCells, placeTooltip } from '../../web/vis/vislib/tooltip';
 
 const HOUR = 3600000;
 const DAY = 24 * HOUR;
@@ -258,7 +260,8 @@ const columnOf = (id: string, name: string, agg: AggConfig, extra: Partial<Table
   kind: agg.schema === 'metric' ? 'metric' : 'bucket',
   agg,
   schema: agg.schema,
-  format: (value) => (value === '' ? '-' : String(value)),
+  // As the string format writes a value, an empty one as nothing
+  format: (value) => String(value),
   ...extra,
 });
 
@@ -285,6 +288,30 @@ describe('the series of a chart', () => {
     );
     assert.equal(data.xLabel, 'timestamp per day');
     assert.equal(data.yLabel, 'Count');
+  });
+
+  it('write an empty term with the format of its column, as vislib formats every key', () => {
+    // A static lookup writes its text for the values it does not list, an empty one too
+    const lookup = (value: unknown) => (value === 'css' ? 'Stylesheet' : 'other');
+    const byGroup = buildPointSeries(
+      [x, { ...group, format: lookup }, count],
+      [
+        { 'col-0-2': 0, 'col-1-3': 'css', 'col-2-1': 3 },
+        { 'col-0-2': 0, 'col-1-3': '', 'col-2-1': 1 },
+      ]
+    );
+    assert.deepEqual(
+      byGroup.series.map((series) => series.label),
+      ['Stylesheet', 'other']
+    );
+    const terms = columnOf('col-0-4', 'extension', aggOf('4', 'terms', 'segment'), { format: lookup });
+    const byTerm = buildPointSeries([terms, count], [{ 'col-0-4': '', 'col-2-1': 1 }]);
+    assert.equal(byTerm.xFormat(''), 'other');
+    const pie = buildSlices({ columns: [terms, count], rows: [{ 'col-0-4': '', 'col-2-1': 1 }] });
+    assert.deepEqual(
+      pie.children.map((slice) => slice.name),
+      ['other']
+    );
   });
 
   it('name each measure apart when there are several', () => {
@@ -463,6 +490,58 @@ describe('the tooltip of a chart', () => {
       _top: 'north',
       _left: 'west',
     });
+  });
+
+  // A tooltip laid out at its size, with the first row's cells and the label and value containers
+  const laidOut = (size: { width: number; height: number }, cellWidths: number[]) => {
+    const cells = cellWidths.map((width) => ({ getBoundingClientRect: () => ({ width }) }));
+    const labels = cellWidths.slice(0, cellWidths.length === 3 ? 2 : 1).map(() => ({ style: { maxWidth: '' } }));
+    const values = cellWidths.length === 2 ? [{ style: { maxWidth: '' } }] : [];
+    const element = {
+      getBoundingClientRect: () => size,
+      querySelectorAll: (selector: string) => {
+        if (selector === 'tbody > tr:nth-of-type(1) > td') return cells;
+        if (selector === '.visTooltip__labelContainer') return labels;
+        if (selector === '.visTooltip__valueContainer') return values;
+        return [...labels, ...values];
+      },
+      querySelector: (selector: string) => cells[Number(/nth-child\((\d)\)/.exec(selector)?.[1] ?? 0) - 1] ?? null,
+    };
+    return { element: element as unknown as HTMLElement, labels, values };
+  };
+
+  it("narrows a pie's field and bucket to share what its measure leaves, each time it is measured", () => {
+    const { element, labels } = laidOut({ width: 320, height: 86 }, [180.9, 39.9, 83.1875]);
+    // The pointer moves: the tooltip is measured again, and its labels keep their width
+    for (const move of [1, 2]) {
+      assert.deepEqual(fitTooltipCells(element), { width: 320, height: 86 }, `move ${move}`);
+      assert.deepEqual(
+        labels.map((label) => label.style.maxWidth),
+        ['102.40625px', '102.40625px'],
+        `move ${move}`
+      );
+    }
+  });
+
+  it("is dark in the dark theme too, as vislib's atlasdark style sheet has it: the secondary surface, white text", () => {
+    const sheet = readFileSync('web/styles/vislib.css', 'utf8');
+    const tokens = readFileSync('web/styles/tokens.css', 'utf8');
+    const dark = tokens.slice(tokens.indexOf(':root.themeDark {'));
+    const tokenOf = (name: string | undefined) => (name ? new RegExp(`\\s${name}:\\s*([^;]+);`).exec(dark)?.[1] : undefined);
+    const rule = /:root\.themeDark \.visTooltip \{([^}]*)\}/.exec(sheet)?.[1] ?? '';
+    const tokenIn = (property: string) => /var\((--[\w-]+)\)/.exec(new RegExp(`(?:^|[;\\s])${property}:\\s*([^;]+);`).exec(rule)?.[1] ?? '')?.[1];
+    assert.equal(tokenOf(tokenIn('background-color')), '#1c1c1e');
+    assert.equal(tokenOf(tokenIn('color')), '#ffffff');
+  });
+
+  it('leaves the values their room, or half of it when they are wider, as vislib narrows the labels', () => {
+    const narrow = laidOut({ width: 200, height: 40 }, [120, 60]);
+    fitTooltipCells(narrow.element);
+    assert.deepEqual([narrow.labels[0].style.maxWidth, narrow.values[0].style.maxWidth], ['116px', '']);
+    // A value wider than half of a tooltip as wide as it goes: both halves
+    const wide = laidOut({ width: 320, height: 40 }, [100, 200]);
+    fitTooltipCells(wide.element);
+    assert.deepEqual([wide.labels[0].style.maxWidth, wide.values[0].style.maxWidth], ['128px', '128px']);
   });
 });
 
@@ -890,6 +969,13 @@ describe('the buckets of a chart', () => {
       parts.map((part) => part.label),
       [': extension.keyword']
     );
+    // as the format writes it: a static lookup names the values it does not list, an empty one too
+    const lookup = { ...split, format: (value: unknown) => (value === 'css' ? 'Stylesheet' : 'other') };
+    const named = splitTables({ columns: [lookup, count], rows: [{ 'col-0-4': '', 'col-1-1': 1 }] });
+    assert.deepEqual(
+      named.map((part) => part.label),
+      ['other: extension.keyword']
+    );
   });
 
   it('leave a chart that is not split whole', () => {
@@ -1154,5 +1240,58 @@ describe('a gauge', () => {
     assert.equal(draw(150, false).value.startsWith('M0,325.01875A'), true);
     assert.equal(draw(150, true).value, draw(100, true).value);
     assert.equal(draw(150, true).scale, undefined);
+  });
+});
+
+describe('the interval of a date histogram over a long time range', () => {
+  const pattern: IndexPattern = {
+    id: 'logs',
+    title: 'logs',
+    timeFieldName: 'timestamp',
+    fields: [{ name: 'timestamp', type: 'date', searchable: true, aggregatable: true, esTypes: ['date'] }],
+    fieldFormatMap: {},
+  };
+  const over = (days: number, interval = 'auto') => {
+    const agg: AggConfig = { id: '2', enabled: true, type: 'date_histogram', schema: 'segment', params: { field: 'timestamp', interval } };
+    const start = Date.UTC(2020, 0, 1);
+    const context: AggContext = { indexPattern: pattern, timeZone: 'UTC', timeRange: { from: new Date(start), to: new Date(start + days * DAY) } };
+    const count: AggConfig = { id: '1', enabled: true, type: 'count', schema: 'metric', params: {} };
+    const dsl = buildAggsDsl([count, agg], context)['2'] as { date_histogram: Record<string, unknown> };
+    const { fixed_interval: fixed, calendar_interval: calendar } = dsl.date_histogram;
+    return { fixed, calendar, label: aggLabel(agg, context) };
+  };
+
+  it('asks for a month the time range chose as 30 fixed days, and a year as 365, as the original writes a length of time', () => {
+    // About 22 and 73 days a bar: the original's month, which it asks for as 30 days
+    assert.deepEqual(over(1096), { fixed: '30d', calendar: undefined, label: 'timestamp per 30 days' });
+    assert.deepEqual(over(3653), { fixed: '30d', calendar: undefined, label: 'timestamp per 30 days' });
+    // More than a year a bar: the original's year of 365 days
+    assert.deepEqual(over(21915), { fixed: '365d', calendar: undefined, label: 'timestamp per 365 days' });
+    // Weeks, days and hours as before
+    assert.deepEqual(over(365), { fixed: undefined, calendar: '1w', label: 'timestamp per week' });
+    assert.deepEqual(over(7), { fixed: '3h', calendar: undefined, label: 'timestamp per 3 hours' });
+    assert.deepEqual(over(1), { fixed: '30m', calendar: undefined, label: 'timestamp per 30 minutes' });
+  });
+
+  it('widens an interval asked for that gives too many bars to 30 fixed days, and keeps a month or a year asked for', () => {
+    assert.deepEqual(over(7305, 'w'), { fixed: '30d', calendar: undefined, label: 'timestamp per 30 days' });
+    assert.deepEqual(over(1096, 'M'), { fixed: undefined, calendar: '1M', label: 'timestamp per month' });
+    assert.deepEqual(over(21915, 'y'), { fixed: undefined, calendar: '1y', label: 'timestamp per year' });
+  });
+});
+
+describe('pointing at a series of a chart or its legend', () => {
+  it('lights up the series pointed at, and leaves every mark its whole opacity when the pointer goes', () => {
+    assert.deepEqual(hoverAfter({ touched: false }, 'css'), { label: 'css', touched: true });
+    assert.deepEqual(hoverAfter({ label: 'css', touched: true }, undefined), { touched: true });
+  });
+
+  it('dims nothing for a series without a name, an empty term, as vislib returns at an empty data-label', () => {
+    const untouched = { touched: false };
+    assert.equal(hoverAfter(untouched, ''), untouched);
+    const left = { touched: true };
+    assert.equal(hoverAfter(left, ''), left);
+    // vislib's unHighlight sets the opacity of every mark even when its highlight did nothing
+    assert.deepEqual(hoverAfter(hoverAfter(untouched, ''), undefined), { touched: true });
   });
 });
