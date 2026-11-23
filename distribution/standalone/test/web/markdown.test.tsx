@@ -46,9 +46,9 @@ describe('Markdown, as the Markdown visualization and TSVB draw it', () => {
     assert.equal(html(''), '');
   });
 
-  it('sets its HTML in a div with the class and the test id its caller gives, as the original', () => {
+  it('sets its HTML in a div with the class and the data-test-subj its caller gives, as the original', () => {
     assert.equal(
-      renderToStaticMarkup(<Markdown text="**a**" className="visMarkdownBody" testId="markdownBody" />),
+      renderToStaticMarkup(<Markdown text="**a**" className="visMarkdownBody" data-test-subj="markdownBody" />),
       '<div class="atlMarkdown visMarkdownBody" data-test-subj="markdownBody"><p><strong>a</strong></p>\n</div>'
     );
     assert.equal(renderToStaticMarkup(<Markdown text="" />), '<div class="atlMarkdown"></div>');
