@@ -6,7 +6,7 @@
  */
 
 import type { AbsoluteRange } from './dates';
-import { kueryToDsl, parseKuery } from './kuery';
+import { kueryToDsl, parseKuery, timeZone } from './kuery';
 import type { Field, Filter, IndexPattern, Query } from './types';
 
 type Dsl = Record<string, unknown>;
@@ -14,7 +14,7 @@ type Dsl = Record<string, unknown>;
 export interface QueryConfig {
   /** The setting query:queryString:options */
   queryStringOptions?: Record<string, unknown>;
-  /** The setting dateFormat:tz, when it names a zone */
+  /** The setting dateFormat:tz: a zone, or "Browser" for the browser's own; no zone is named without it */
   dateFormatTZ?: string;
   /** The setting courier:ignoreFilterIfFieldNotInIndex */
   ignoreFilterIfFieldNotInIndex?: boolean;
@@ -54,7 +54,7 @@ function migrateDeprecatedMatch(query: Dsl): Dsl {
 }
 
 function wrapNestedFilter(clause: Dsl, filter: Filter, indexPattern?: IndexPattern): Dsl {
-  const field: Field | undefined = indexPattern?.fields.find((candidate) => candidate.name === filter.meta.key);
+  const field: Field | undefined = indexPattern?.fields.find((candidate) => candidate.name === filter.meta?.key);
   const path = field?.subType?.nested?.path;
   if (!path || 'nested' in clause) return clause;
   return { nested: { path, query: clause } };
@@ -73,6 +73,14 @@ export function timeRangeFilter(indexPattern: IndexPattern | undefined, range: A
   };
 }
 
+// The options of query:queryString:options over a query_string's own, and the zone of the dates
+// in it unless one is named: the browser's own when the setting says "Browser"
+function decorateQueryString(queryString: Dsl, config: QueryConfig): Dsl {
+  const decorated: Dsl = { ...queryString, ...(config.queryStringOptions ?? { analyze_wildcard: true }) };
+  if (config.dateFormatTZ && decorated.time_zone === undefined) decorated.time_zone = timeZone(config.dateFormatTZ);
+  return decorated;
+}
+
 export function buildQuery(
   indexPattern: IndexPattern | undefined,
   queries: Query | Query[] | undefined,
@@ -84,8 +92,11 @@ export function buildQuery(
   for (const query of ([] as Array<Query | undefined>).concat(queries ?? [])) {
     if (!query) continue;
     if (typeof query.query !== 'string') {
-      // A query written as OpenSearch DSL is used as it is
-      if (query.query && Object.keys(query.query).length) bool.must.push(query.query);
+      // A query written as OpenSearch DSL is used as it is, but for a Lucene query_string, which
+      // gets the options and the zone like one that was typed (the original's decorateQuery)
+      const dsl: Dsl | undefined = query.query && Object.keys(query.query).length ? query.query : undefined;
+      const inner = query.language === 'lucene' && dsl && isRecord(dsl.query_string) ? dsl.query_string : undefined;
+      if (dsl) bool.must.push(inner && 'query' in inner ? { ...dsl, query_string: decorateQueryString(inner, config) } : dsl);
       continue;
     }
     const text = query.query;
@@ -93,10 +104,7 @@ export function buildQuery(
       if (text.trim() === '') {
         bool.must.push({ match_all: {} });
       } else {
-        // the options of query:queryString:options, and the time zone unless they name one
-        const queryString: Dsl = { query: text, ...(config.queryStringOptions ?? { analyze_wildcard: true }) };
-        if (config.dateFormatTZ && queryString.time_zone === undefined) queryString.time_zone = config.dateFormatTZ;
-        bool.must.push({ query_string: queryString });
+        bool.must.push({ query_string: decorateQueryString({ query: text }, config) });
       }
     } else if (query.language === 'kuery') {
       // DQL as typed, an empty query too: it asks for everything, as in OpenSearch Dashboards

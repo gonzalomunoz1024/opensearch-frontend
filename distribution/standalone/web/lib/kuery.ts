@@ -805,7 +805,8 @@ const wildcardQueryString = (node: WildcardNode) => node.value.split(WILDCARD).m
 const wildcardTest = (node: WildcardNode, text: string) =>
   new RegExp(`^${node.value.split(WILDCARD).map(escapeRegExp).join('[\\s\\S]*')}$`).test(text);
 
-function timeZone(dateFormatTZ: string): string {
+/** The zone a query names, as the original's getTimeZoneFromSettings: the browser's own for "Browser" */
+export function timeZone(dateFormatTZ: string): string {
   return dateFormatTZ === 'Browser' ? Intl.DateTimeFormat().resolvedOptions().timeZone : dateFormatTZ;
 }
 
