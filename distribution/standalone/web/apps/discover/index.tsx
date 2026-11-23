@@ -40,6 +40,7 @@ import { bucketSpan, parseBucketInterval, shortestBucket } from './histogram_sca
 import { aggContext, buildDiscoverRequest, histogramAgg, searchTimeRange } from './search';
 import { Sidebar } from './sidebar';
 import { openingQueryState } from './open_state';
+import { indexPatternStore, keepPopularity, popularizeField } from './popularity';
 import { normalizeSort } from './sort';
 import '../../styles/discover.css';
 
@@ -447,6 +448,17 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
 
   // --- What the page does ---
   const toggleColumn = useCallback((name: string) => writeApp(columnToggled(columns, sort, name)), [columns, sort, writeApp]);
+  // As the original's: a field added as a column, taken out or moved counts once more, written into
+  // the index pattern, before the columns change; "Popular fields" is drawn with the count at once
+  const [, setPopularized] = useState(0);
+  const popularize = useCallback(
+    (name: string) => {
+      if (!indexPattern) return;
+      void popularizeField(indexPattern, name, indexPatternStore(services.savedObjects));
+      setPopularized((count) => count + 1);
+    },
+    [indexPattern]
+  );
   const moveColumn = useCallback(
     (name: string, by: number) => {
       const from = columns.indexOf(name);
@@ -531,6 +543,7 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
           // As the original's: a column drawn is taken out, another added; the time column the
           // table adds of itself is no chosen column, so taking it out does nothing
           onToggleColumn: (name) => {
+            popularize(name);
             if (drawn.includes(name) === columns.includes(name)) toggleColumn(name);
           },
           onFilter: addFilter,
@@ -538,7 +551,7 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
         }}
       />
     ),
-    [indexPattern, basePath, filters, columns, toggleColumn, addFilter, addExists]
+    [indexPattern, basePath, filters, columns, toggleColumn, popularize, addFilter, addExists]
   );
 
   // The zone the chart is drawn in: the setting dateFormat:tz, or the browser's own
@@ -724,14 +737,22 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
               const kept = new Map(indexPattern.fields.map((field) => [field.name, field]));
               const merged = fields.map((field) => ({ ...field, count: kept.get(field.name)?.count ?? 0 }));
               for (const field of indexPattern.fields) if (field.scripted) merged.push({ ...field, count: field.count ?? 0 });
-              setIndexPattern({ ...indexPattern, fields: merged });
+              const refreshed = { ...indexPattern, fields: merged };
+              // The counts go on being written for the pattern as it is now, and the pattern as it
+              // was read before is read again where it is asked for next
+              keepPopularity(indexPattern, refreshed);
+              services.indexPatterns.clear(indexPattern.id);
+              setIndexPattern(refreshed);
               services.toasts.success('The field list was refreshed');
             })
             .catch((failure) => services.toasts.error(failure, 'The fields could not be read'));
         }}
         columns={columns}
         rows={rows}
-        onToggleColumn={toggleColumn}
+        onToggleColumn={(name) => {
+          popularize(name);
+          toggleColumn(name);
+        }}
         onFilter={addFilter}
         onFilterExists={addExists}
         onVisualize={visualize}
@@ -873,11 +894,15 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
               sort={sort}
               onSort={(next) => writeApp({ sort: next })}
               onRemoveColumn={(name) => {
+                popularize(name);
                 // A default column the table adds of itself is no chosen column: the original
                 // leaves the columns as they are
                 if (columns.includes(name)) toggleColumn(name);
               }}
-              onMoveColumn={moveColumn}
+              onMoveColumn={(name, by) => {
+                popularize(name);
+                moveColumn(name, by);
+              }}
               onFilter={addFilter}
               details={details}
               onBackToTop={() => {
