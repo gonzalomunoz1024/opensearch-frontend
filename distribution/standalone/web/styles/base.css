@@ -27,6 +27,8 @@ body {
   font-family: var(--font-family);
   font-size: var(--font-size-s);
   line-height: 1.43;
+  /* As the original's reset: the font's kerning, wherever the text is drawn */
+  font-kerning: normal;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizelegibility;
 }
@@ -191,10 +193,11 @@ kbd {
   font: inherit;
 }
 
-/* Thin scroll bars that take the theme */
+/* Thin scroll bars that take the theme: the thumb in the subdued text's colour at half strength,
+   as the Atlas theme's html sets it */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--color-border) transparent;
+  scrollbar-color: color-mix(in srgb, var(--color-text-secondary) 50%, transparent) transparent;
 }
 
 @media (prefers-reduced-motion: reduce) {

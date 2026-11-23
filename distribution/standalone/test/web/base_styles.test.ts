@@ -46,6 +46,17 @@ describe('the page', () => {
   it('gives a heading kept for screen readers the text’s face, as the original’s reset does', () => {
     assert.ok(declarationsOf('.atlScreenReaderOnly').includes('font: inherit'));
   });
+
+  it('kerns its text with the font’s own kerning, as the original’s reset', () => {
+    assert.ok(declarationsOf('body').includes('font-kerning: normal'));
+  });
+
+  it('draws the scroll bars’ thumb in the subdued text’s colour at half strength, as the Atlas theme', () => {
+    assert.deepEqual(declarationsOf('*'), [
+      'scrollbar-width: thin',
+      'scrollbar-color: color-mix(in srgb, var(--color-text-secondary) 50%, transparent) transparent',
+    ]);
+  });
 });
 
 describe('accessibility:disableAnimations', () => {
