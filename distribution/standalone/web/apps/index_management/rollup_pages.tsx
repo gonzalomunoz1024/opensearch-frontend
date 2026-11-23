@@ -8,7 +8,15 @@ import { useLocation } from '../../router';
 import { useBreadcrumbs } from '../../shell/state';
 import { go, ism, renderTime, toasts } from './common';
 import { AggregationTables, ConfigureRollup, Schedule } from './create_rollup';
-import { InfoGrid, JobDetailsHeader, JobDetailsPage, JobJsonModal, Spacer, TitledPanel } from './job_parts';
+import {
+  InfoGrid,
+  JobDetailsHeader,
+  JobDetailsPage,
+  JobEditPage,
+  JobJsonModal,
+  Spacer,
+  TitledPanel,
+} from './job_parts';
 import {
   INTERVAL_REQUIRED,
   editOf,
@@ -237,14 +245,14 @@ export function EditRollup() {
   };
 
   return (
-    <div className="ismPage ismPage--form ismPage--edit">
-      <h1 className="ismPageTitle">Edit rollup job</h1>
+    <JobEditPage title="Edit rollup job">
       <ConfigureRollup
         isEdit
         rollupId={job?._id ?? ''}
         description={edit.description}
         onChangeDescription={(description) => change({ description })}
       />
+      <Spacer />
       <Schedule
         isEdit
         values={{ ...edit, enabled: job?.rollup.enabled ?? false, continuous: job?.rollup.continuous ?? false }}
@@ -255,14 +263,15 @@ export function EditRollup() {
           setIntervalError(interval === undefined ? INTERVAL_REQUIRED : undefined);
         }}
       />
-      <div className="ismButtons">
-        <Button variant="empty" size="s" onClick={() => go(ROUTES.ROLLUPS)} testId="editRollupCancelButton">
+      <Spacer />
+      <div className="ismJobEdit__buttons">
+        <Button variant="empty" onClick={() => go(ROUTES.ROLLUPS)} testId="editRollupCancelButton">
           Cancel
         </Button>
-        <Button variant="primary" size="s" loading={busy} onClick={() => void submit()} testId="editRollupSaveChangesButton">
+        <Button variant="primary" loading={busy} onClick={() => void submit()} testId="editRollupSaveChangesButton">
           Save changes
         </Button>
       </div>
-    </div>
+    </JobEditPage>
   );
 }

@@ -111,6 +111,7 @@ export function ConfigureTransform({
       isEdit={isEdit}
       onChangeName={onChangeName}
       onChangeDescription={onChangeDescription}
+      transform
     />
   );
 }

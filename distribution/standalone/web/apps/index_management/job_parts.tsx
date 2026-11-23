@@ -651,6 +651,17 @@ export function JobDetailsPage({ children }: { children: ReactNode }) {
   return <div className="ismJd">{children}</div>;
 }
 
+/** The page that changes a job, padded 25 px and 50 px, its title at 28 px 24 px over the panels */
+export function JobEditPage({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="ismJobEdit">
+      <h1 className="atlTitleL">{title}</h1>
+      <Spacer />
+      {children}
+    </div>
+  );
+}
+
 /**
  * The row over a job's details, as the plugin's: its name at 28 px, whether it is enabled, and its
  * buttons, 10 px in from the panels' edges and 24 px over the first of them
@@ -836,6 +847,7 @@ export function ConfigureJob({
   isEdit,
   onChangeName,
   onChangeDescription,
+  transform,
 }: {
   jobId: string;
   jobIdError?: string;
@@ -844,10 +856,17 @@ export function ConfigureJob({
   isEdit?: boolean;
   onChangeName?: (name: string) => void;
   onChangeDescription: (description: string) => void;
+  /**
+   * The transform's panel: its title straight in the panel, and "– optional" a subdued heading
+   * beside "Description", where the rollup's is a small subdued line centred on it
+   */
+  transform?: boolean;
 }) {
   return (
-    <FormPanel title="Job name and description">
-      <FieldRow title="Name" help="Specify a unique, descriptive name." error={jobIdError}>
+    <TitledPanel title="Job name and description" itemTitle={transform}>
+      {/* The page that edits a transform has 8 px more over the name */}
+      {transform && isEdit && <Spacer size="s" />}
+      <PluginRow title="Name" help="Specify a unique, descriptive name." error={jobIdError}>
         <TextField
           compact
           value={jobId}
@@ -856,11 +875,33 @@ export function ConfigureJob({
           invalid={Boolean(jobIdError)}
           disabled={isEdit}
         />
-      </FieldRow>
-      <FieldRow title="Description" optional>
-        <TextArea value={description} onChange={onChangeDescription} rows={3} testId="description" />
-      </FieldRow>
-    </FormPanel>
+      </PluginRow>
+      <Spacer />
+      <div className={cx('ismOptional', transform && 'ismOptional--heading')}>
+        <h3 className="ismPr__title">Description</h3>
+        {transform ? (
+          <h3 className="ismPr__title ismOptional__text">
+            <i> – optional</i>
+          </h3>
+        ) : (
+          <div className="ismOptional__text">
+            <i> – optional</i>
+          </div>
+        )}
+      </div>
+      <Spacer size="xs" />
+      <div className="ismPr">
+        <div className="ismPr__field ismPr__field--area">
+          <TextArea
+            className="ismJobTextArea"
+            value={description}
+            onChange={onChangeDescription}
+            rows={3}
+            testId="description"
+          />
+        </div>
+      </div>
+    </TitledPanel>
   );
 }
 

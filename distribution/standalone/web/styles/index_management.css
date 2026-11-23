@@ -1392,6 +1392,65 @@
   right: 5px;
 }
 
+/* The page that changes a job, as the plugin pads it, and its buttons at the right, 8 px apart */
+.ismJobEdit {
+  padding: 25px 50px;
+}
+
+.ismJobEdit__buttons {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* A field's name and "– optional" beside it, 4 px apart: the rollup's a small subdued line in the
+   middle of the name's height, the transform's a heading of its own */
+.ismOptional {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.ismOptional--heading {
+  align-items: stretch;
+}
+
+.ismOptional__text {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+/* The plugin's compressed text area: three lines of 21 px, 8 px in (7 inside the kit's border),
+   79 px high; set on the line of its row, which leaves 2 px under it */
+.ismPr__field--area {
+  line-height: 14px;
+}
+
+.atlField.ismJobTextArea {
+  display: inline-block;
+  box-sizing: border-box;
+  width: 100%;
+  height: 79px;
+  padding: 7px;
+  line-height: 21px;
+  vertical-align: baseline;
+  resize: vertical;
+}
+
+/* What the plugin writes under a pair of fields, as wide as a field */
+.ismPr__help--block {
+  max-width: 400px;
+}
+
+/* A number with what is wrong with it under it, beside its unit */
+.ismPaired__row {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
 /* A title and its number in brackets, two headings 4 px apart */
 .ismCounted {
   display: flex;
@@ -2977,7 +3036,7 @@
   display: grid;
   grid-template-columns: 200px minmax(0, 152px);
   gap: var(--space-6);
-  align-items: center;
+  align-items: start;
 }
 
 .ismPaired--interval {

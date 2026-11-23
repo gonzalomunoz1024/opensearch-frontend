@@ -20,7 +20,9 @@ import {
   FieldRow,
   FormPanel,
   Paired,
+  PluginRow,
   Spacer,
+  TitledPanel,
   Wizard,
   nameOptions,
   useIndexNames,
@@ -48,6 +50,7 @@ import {
   rollupBody,
   setMetricKind,
   toggleMetric,
+  unitOption,
   type DimensionItem,
   type FieldItem,
   type MetricItem,
@@ -589,8 +592,10 @@ export function Schedule({
   change: (changes: Partial<ScheduleValues>) => void;
   onChangeInterval: (interval: number | undefined) => void;
 }) {
+  // As the plugin's: rows 16 px apart, the interval and the delay a title over a number of 200 px
+  // and its unit beside it, the delay's help under both
   return (
-    <FormPanel title="Schedule">
+    <TitledPanel title="Schedule">
       {!isEdit && (
         <Checkbox
           checked={values.enabled}
@@ -600,18 +605,21 @@ export function Schedule({
         />
       )}
       {!isEdit && (
-        <FieldRow title="Continuous" minor>
-          <RadioGroup
-            options={[
-              { id: 'no', label: 'No' },
-              { id: 'yes', label: 'Yes' },
-            ]}
-            value={values.continuous ? 'yes' : 'no'}
-            onChange={(id) => change({ continuous: id === 'yes' })}
-          />
-        </FieldRow>
+        <>
+          <PluginRow title="Continuous">
+            <RadioGroup
+              options={[
+                { id: 'no', label: 'No' },
+                { id: 'yes', label: 'Yes' },
+              ]}
+              value={values.continuous ? 'yes' : 'no'}
+              onChange={(id) => change({ continuous: id === 'yes' })}
+            />
+          </PluginRow>
+          <Spacer size="m" />
+        </>
       )}
-      <FieldRow title="Rollup execution frequency">
+      <PluginRow title="Rollup execution frequency">
         <Select
           compact
           id="continuousDefinition"
@@ -622,39 +630,47 @@ export function Schedule({
           value={values.continuousDefinition}
           onChange={(definition) => change({ continuousDefinition: definition === 'cron' ? 'cron' : 'fixed' })}
         />
-      </FieldRow>
+      </PluginRow>
+      <Spacer size="m" />
       {values.continuousDefinition === 'fixed' ? (
-        <FieldRow title="Rollup interval" error={intervalError}>
+        <>
+          <h3 className="ismPr__title">Rollup interval</h3>
           <Paired>
-            <NumberField
-              compact
-              value={values.interval}
-              onChange={onChangeInterval}
-              invalid={Boolean(intervalError)}
-              aria-label="Rollup interval"
-            />
+            <div className="ismPaired__row">
+              <NumberField
+                compact
+                value={values.interval}
+                onChange={onChangeInterval}
+                invalid={Boolean(intervalError)}
+                aria-label="Rollup interval"
+              />
+              {intervalError && <div className="ismPr__error">{intervalError}</div>}
+            </div>
             <Select
               compact
               id="selectIntervalTimeunit"
               className={values.interval === undefined || values.interval <= 0 ? 'atlField--invalid' : undefined}
               options={SCHEDULE_TIMEUNITS}
-              value={values.intervalTimeunit}
+              value={unitOption(values.intervalTimeunit)}
               onChange={(intervalTimeunit) => change({ intervalTimeunit })}
               aria-label="Rollup interval unit"
             />
           </Paired>
-        </FieldRow>
+        </>
       ) : (
         <>
-          <FieldRow title="Define by cron expression">
-            <TextArea
-              value={values.cronExpression}
-              onChange={(cronExpression) => change({ cronExpression })}
-              rows={3}
-              aria-label="Cron expression"
-            />
-          </FieldRow>
-          <FieldRow title="Timezone" help={TIMEZONE_HELP}>
+          <PluginRow title="Define by cron expression">
+            <div className="ismPr__field--area">
+              <TextArea
+                className="ismJobTextArea"
+                value={values.cronExpression}
+                onChange={(cronExpression) => change({ cronExpression })}
+                rows={3}
+                aria-label="Cron expression"
+              />
+            </div>
+          </PluginRow>
+          <PluginRow title="Timezone" help={TIMEZONE_HELP}>
             <Select
               compact
               id="timezone"
@@ -662,10 +678,11 @@ export function Schedule({
               value={values.cronTimezone}
               onChange={(cronTimezone) => change({ cronTimezone })}
             />
-          </FieldRow>
+          </PluginRow>
         </>
       )}
-      <FieldRow
+      <Spacer size="m" />
+      <PluginRow
         title="Page per execution"
         help="The number of pages every execution processes. A larger number means faster execution and higher costs on memory."
       >
@@ -677,30 +694,31 @@ export function Schedule({
           onChange={(pageSize) => change({ pageSize })}
           aria-label="Page per execution"
         />
-      </FieldRow>
-      <FieldRow
-        title="Execution delay"
-        optional
-        help="The amount of time the job waits for data ingestion to accommodate any necessary processing time."
-      >
-        <Paired>
-          <NumberField
-            compact
-            value={values.delayTime}
-            onChange={(delayTime) => change({ delayTime })}
-            aria-label="Execution delay"
-          />
-          <Select
-            compact
-            id="selectTimeunit"
-            options={DELAY_TIMEUNITS}
-            value={values.delayTimeunit}
-            onChange={(delayTimeunit) => change({ delayTimeunit })}
-            aria-label="Execution delay unit"
-          />
-        </Paired>
-      </FieldRow>
-    </FormPanel>
+      </PluginRow>
+      <Spacer size="m" />
+      <h3 className="ismPr__title">
+        Execution delay<i> – optional</i>
+      </h3>
+      <Paired>
+        <NumberField
+          compact
+          value={values.delayTime}
+          onChange={(delayTime) => change({ delayTime })}
+          aria-label="Execution delay"
+        />
+        <Select
+          compact
+          id="selectTimeunit"
+          options={DELAY_TIMEUNITS}
+          value={values.delayTimeunit}
+          onChange={(delayTimeunit) => change({ delayTimeunit })}
+          aria-label="Execution delay unit"
+        />
+      </Paired>
+      <div className="ismPr__help ismPr__help--block">
+        The amount of time the job waits for data ingestion to accommodate any necessary processing time.
+      </div>
+    </TitledPanel>
   );
 }
 

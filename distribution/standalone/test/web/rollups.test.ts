@@ -29,6 +29,7 @@ import {
   scheduleText,
   setMetricKind,
   toggleMetric,
+  unitOption,
   wildcardOption,
   type Rollup,
   type RollupForm,
@@ -355,7 +356,7 @@ describe('a rollup job read back', () => {
     ]);
   });
 
-  it('opens for editing with the schedule it has, the unit as the form spells it', () => {
+  it('opens for editing with the schedule it has, the unit as OpenSearch spells it', () => {
     const edit = editOf(
       stored({
         description: 'Daily',
@@ -368,13 +369,22 @@ describe('a rollup job read back', () => {
       description: 'Daily',
       continuousDefinition: 'fixed',
       interval: 3,
-      intervalTimeunit: 'HOURS',
+      intervalTimeunit: 'Hours',
       cronExpression: '',
       cronTimezone: 'UTC',
       pageSize: 500,
       delayTime: 120,
       delayTimeunit: 'MINUTES',
     });
+    // The select shows the job's own unit
+    assert.equal(unitOption(edit.intervalTimeunit), 'HOURS');
+    assert.equal(unitOption('MINUTES'), 'MINUTES');
+  });
+
+  it('sends the unit back as OpenSearch spelt it while it is not changed', () => {
+    const job = stored({ schedule: { interval: { start_time: NOW, unit: 'Days', period: 1 } } });
+    const { rollup } = editedRollup(job, editOf(job), NOW + 60);
+    assert.deepEqual(rollup.schedule, { interval: { start_time: NOW + 60, unit: 'Days', period: 1 } });
   });
 
   it('opens a job that runs by cron with its expression and its time zone', () => {
