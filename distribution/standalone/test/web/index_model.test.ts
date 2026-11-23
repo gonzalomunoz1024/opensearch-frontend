@@ -51,6 +51,22 @@ import {
   type MappingField,
   type StreamTemplate,
 } from '../../web/apps/index_management/index_model';
+import { tableCaption } from '../../web/apps/index_management/model';
+
+describe('the caption of a table, which a screen reader reads', () => {
+  it('says how many rows a page shows of how many there are, and which page it is', () => {
+    assert.equal(tableCaption(9, 9, 20, 0, true), 'This table contains 9 rows out of 9 rows; Page 1 of 1.');
+    assert.equal(tableCaption(4, 9, 5, 5, true), 'This table contains 4 rows out of 9 rows; Page 2 of 2.');
+  });
+
+  it('counts no page when there is no row, as the theme does', () => {
+    assert.equal(tableCaption(0, 0, 20, 0, true), 'This table contains 0 rows; Page 1 of 0.');
+  });
+
+  it('says only how many rows a table without pages shows', () => {
+    assert.equal(tableCaption(1, 1, Number.MAX_SAFE_INTEGER, 0, false), 'This table contains 1 rows.');
+  });
+});
 
 describe('the fields of mappings', () => {
   const properties = {

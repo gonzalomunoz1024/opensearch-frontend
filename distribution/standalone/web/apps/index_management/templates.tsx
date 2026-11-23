@@ -154,6 +154,7 @@ function AssociatedComponents({
       <Flyout title="Associated component templates" onClose={onClose}>
         <LocalTable
           fixed
+          caption
           columns={[
             {
               field: 'name',
@@ -397,6 +398,7 @@ export function Templates() {
       <div className="ismTemplatesTable" data-test-subj="templatesTable">
         <Table
           fixed
+          caption
           columns={columns}
           rows={rows}
           total={all.length}
@@ -488,6 +490,7 @@ function AssociatedTemplates({
       <Flyout title="Associated index templates" onClose={onClose}>
         <LocalTable
           fixed
+          caption
           columns={[
             {
               field: 'name',
@@ -808,6 +811,7 @@ export function ComposableTemplates() {
       <div className="ismComponentTemplatesTable" data-test-subj="templatesTable">
         <Table
           fixed
+          caption
           columns={columns}
           rows={rows}
           total={all.length}

@@ -116,6 +116,15 @@
   justify-content: flex-end;
 }
 
+/* The theme's caption: read aloud and not seen, yet a pixel high above the rows, as the plugin's */
+.ismTable__caption {
+  position: relative;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
 /* What a list says when it has nothing to show sits in the cell as the theme's empty prompt does */
 .ismTable--fixed .ismTable__empty {
   display: block;
@@ -568,6 +577,107 @@ tr:hover .ismRowActions > *,
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-2);
+}
+
+/* A page's title with its buttons at the right, 24 px from it and 20 px apart, as the plugin's */
+.ismPageTitleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.ismPageTitleRow > .ismTextTitle {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+.ismPageTitleRow__buttons {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-5);
+}
+
+/* --- The plugin's panel of a part of a page (TitledPanel) and its grid of descriptions ----------- */
+
+/* The heading of a small text as the panel's title: 22 px on 28 */
+.ismPanelTitle--l {
+  font-size: var(--font-size-xl);
+  line-height: 28px;
+  letter-spacing: -0.021em;
+}
+
+/* The title in the plugin's flex group: 2 px up and to the left, the rule 2 px closer */
+.ismPanelTitle--grouped {
+  margin: -2px 0 -2px -2px;
+}
+
+/* What the panel is for: the theme's extra small text in the subdued colour */
+.ismTitledPanel__subtitle {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+.ismTitledPanel__subtitle p {
+  margin: 0;
+}
+
+.ismFactGrid {
+  display: grid;
+  gap: var(--space-6);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+.ismFactGrid__item {
+  min-width: 0;
+  margin: 0;
+}
+
+.ismFactGrid__item dt {
+  font-weight: var(--font-weight-semibold);
+}
+
+.ismFactGrid__item dd {
+  margin: 0;
+  overflow-wrap: break-word;
+}
+
+/* A value with a tip, in the theme's tooltip anchor: a line 24 px high */
+.ismFactGrid__tip {
+  display: inline-block;
+  height: 24px;
+  vertical-align: top;
+}
+
+/* The theme's small text */
+.ismTextS {
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+.ismTextS p {
+  margin: 0;
+}
+
+/* The field of a data stream's name: the theme's combo box, 400 px wide at most */
+.ismNameField {
+  display: flex;
+  width: 100%;
+  max-width: 400px;
+}
+
+/* A template's settings, named a size smaller, 24 px apart */
+.ismSettings--template .ismCustomRow + .ismCustomRow {
+  margin-top: var(--space-6);
+}
+
+.ismCustomRow__title.ismCustomRow__title--s,
+.ismDescribed__title.ismCustomRow__title--s {
+  font-size: var(--font-size-m);
+  line-height: 20px;
+  letter-spacing: normal;
 }
 
 /* --- The bar of unsaved changes (bottom_bar.tsx): the theme's bottom bar, held to the bottom ----- */

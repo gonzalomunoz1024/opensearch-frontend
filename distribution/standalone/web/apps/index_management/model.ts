@@ -233,3 +233,13 @@ export function pageChanges<C extends { from?: number; size?: number }>(changes:
   if (changes.from === undefined) return changes;
   return { ...changes, from: Math.floor(changes.from / (changes.size ?? size)) };
 }
+
+/** The theme's caption of a table, which a screen reader reads: how many rows it shows of how many */
+export function tableCaption(shown: number, total: number, size: number, from: number, paged: boolean): string {
+  if (!paged) return `This table contains ${shown} rows.`;
+  const page = Math.floor(from / size) + 1;
+  const pages = Math.ceil(total / size);
+  return total > 0
+    ? `This table contains ${shown} rows out of ${total} rows; Page ${page} of ${pages}.`
+    : `This table contains ${shown} rows; Page ${page} of ${pages}.`;
+}

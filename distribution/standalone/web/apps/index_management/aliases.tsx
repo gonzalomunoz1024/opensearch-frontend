@@ -85,6 +85,7 @@ export function FewNames({
           <div data-test-subj={testId}>
             <LocalTable
               fixed
+              caption
               columns={[{ field, name: column, render: (row: { name: string }) => row.name }]}
               rows={names.map((name) => ({ name }))}
               rowId={(row) => row.name}
@@ -496,6 +497,7 @@ export function Aliases() {
       <div data-test-subj="aliases-table">
         <Table
           fixed
+          caption
           columns={columns}
           rows={rows}
           total={all.length}

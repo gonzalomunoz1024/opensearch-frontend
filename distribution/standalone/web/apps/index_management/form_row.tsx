@@ -12,6 +12,8 @@ import { cx } from '../../components/basic';
 export interface FormRowProps {
   /** A title, drawn as the plugin's small heading */
   title?: ReactNode;
+  /** The title a size smaller, as the plugin's fourth heading of a small text (15 px on 20) */
+  small?: boolean;
   /** A label, drawn as the theme's label of a field, for a row without a title */
   label?: ReactNode;
   help?: ReactNode;
@@ -33,6 +35,7 @@ function Optional({ optional }: { optional?: boolean }) {
 
 export function FormRow({
   title,
+  small,
   label,
   help,
   helpAt = 'top',
@@ -48,10 +51,17 @@ export function FormRow({
     return (
       <div className={cx('ismDescribed', className)}>
         <div className="ismDescribed__text">
-          <h3 className="ismDescribed__title">
-            {title ?? label}
-            <Optional optional={optional} />
-          </h3>
+          {small ? (
+            <h4 className="ismDescribed__title ismCustomRow__title--s">
+              {title ?? label}
+              <Optional optional={optional} />
+            </h4>
+          ) : (
+            <h3 className="ismDescribed__title">
+              {title ?? label}
+              <Optional optional={optional} />
+            </h3>
+          )}
           {help && <div className="ismDescribed__help">{help}</div>}
         </div>
         <div className="ismDescribed__fields">
@@ -69,10 +79,17 @@ export function FormRow({
     <div className={cx('ismCustomRow', fullWidth && 'ismCustomRow--full', className)} data-test-subj={testId}>
       {title ? (
         <div className={cx('ismCustomRow__label', Boolean(error) && 'ismCustomRow__label--invalid')}>
-          <h3 className="ismCustomRow__title">
-            {title}
-            <Optional optional={optional} />
-          </h3>
+          {small ? (
+            <h4 className="ismCustomRow__title ismCustomRow__title--s">
+              {title}
+              <Optional optional={optional} />
+            </h4>
+          ) : (
+            <h3 className="ismCustomRow__title">
+              {title}
+              <Optional optional={optional} />
+            </h3>
+          )}
         </div>
       ) : label ? (
         <div className={cx('ismCustomRow__label', Boolean(error) && 'ismCustomRow__label--invalid')}>

@@ -639,6 +639,7 @@ export function Indices() {
       <hr className="ismContentPanel__rule" />
       <Table
         fixed
+        caption
         columns={columns}
         rows={rows}
         total={total}

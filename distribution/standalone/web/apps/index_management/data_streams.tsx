@@ -305,6 +305,7 @@ export function DataStreams() {
       <div data-test-subj="dataStreamsTable">
         <Table
           fixed
+          caption
           columns={columns}
           rows={rows}
           total={all.length}

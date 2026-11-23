@@ -339,6 +339,7 @@ export function SettingsFields({
   errors = {},
   withShards = true,
   forTemplate,
+  forDataStream,
   across = isEdit,
 }: {
   value: Settings | undefined;
@@ -350,6 +351,8 @@ export function SettingsFields({
   withShards?: boolean;
   /** The settings a template gives: every one of them can be set, and none has to be */
   forTemplate?: boolean;
+  /** The settings a data stream takes from its template, whose shards row is as wide as the page too */
+  forDataStream?: boolean;
   across?: boolean;
 }) {
   const settings = value ?? {};
@@ -366,11 +369,14 @@ export function SettingsFields({
     const now = settings[name];
     return now === undefined || now === '' ? undefined : Number(now);
   };
+  // A template's settings are named a size smaller, 24 px apart, as the plugin's
   return (
-    <div className="ismSettings">
+    <div className={cx('ismSettings', forTemplate && 'ismSettings--template')}>
       {withShards && (
         <FormRow
           title="Number of primary shards"
+          small={forTemplate}
+          fullWidth={forTemplate && forDataStream}
           across={across}
           testId={forTemplate ? 'form-row-template.settings.index.number_of_shards' : 'form-name-index.number_of_shards'}
           error={errors['index.number_of_shards']}
@@ -400,6 +406,8 @@ export function SettingsFields({
       )}
       <FormRow
         title="Number of replicas"
+        small={forTemplate}
+        fullWidth={forTemplate}
         across={across}
         testId={forTemplate ? 'form-row-template.settings.index.number_of_replicas' : 'form-name-index.number_of_replicas'}
         error={errors['index.number_of_replicas']}
@@ -419,6 +427,7 @@ export function SettingsFields({
       </FormRow>
       <FormRow
         title="Refresh interval"
+        small={forTemplate}
         across={across}
         testId={forTemplate ? 'form-row-template.settings.index.refresh_interval' : 'form-name-index.refresh_interval'}
         help={
@@ -438,7 +447,7 @@ export function SettingsFields({
           />
         )}
       </FormRow>
-      <div className="ismSpacer ismSpacer--m" />
+      <div className={cx('ismSpacer', forTemplate ? 'ismSpacer--l' : 'ismSpacer--m')} />
       <AdvancedSettings
         value={settings}
         old={old}

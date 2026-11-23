@@ -8,7 +8,7 @@
  */
 
 import type { CSSProperties, ReactNode } from 'react';
-import { Button, cx, type ButtonProps } from '../../components/basic';
+import { Button, Panel, cx, type ButtonProps } from '../../components/basic';
 
 export function ContentPanel({
   title,
@@ -128,6 +128,53 @@ export function TitleHelp({ children, half }: { children: ReactNode; half?: bool
   return (
     <div className="ismCustomRow__help">
       <div className={half ? 'ismContentPanel__half' : undefined}>{children}</div>
+    </div>
+  );
+}
+
+/**
+ * The plugin's panel of one part of a page: the theme's panel, its small title (`large`: the
+ * heading of a small text, 22 px), what it is for in small grey text, a rule 8 px under them, and
+ * what it holds. The plugin often puts the title in a flex group (`grouped`), which draws it 2 px up
+ * and to the left and the rule 2 px closer.
+ */
+export function TitledPanel({
+  title,
+  large,
+  grouped,
+  subtitle,
+  children,
+}: {
+  title: ReactNode;
+  large?: boolean;
+  grouped?: boolean;
+  subtitle?: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <Panel className="ismTitledPanel">
+      <h2 className={cx('ismPanelTitle', large && 'ismPanelTitle--l', grouped && 'ismPanelTitle--grouped')}>{title}</h2>
+      {subtitle && (
+        <div className="ismTitledPanel__subtitle">
+          <p>{subtitle}</p>
+        </div>
+      )}
+      <hr className="ismRule" />
+      {children}
+    </Panel>
+  );
+}
+
+/** What something is, as the plugin's grid of descriptions: a name over each value, four to a row, 24 px apart */
+export function FactGrid({ items, columns = 4 }: { items: Array<[string, ReactNode]>; columns?: number }) {
+  return (
+    <div className="ismFactGrid" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
+      {items.map(([title, value]) => (
+        <dl key={title} className="ismFactGrid__item">
+          <dt>{title}</dt>
+          <dd>{value}</dd>
+        </dl>
+      ))}
     </div>
   );
 }

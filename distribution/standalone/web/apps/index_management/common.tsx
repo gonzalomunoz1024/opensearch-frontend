@@ -18,6 +18,7 @@ import { tokenizeJson } from '../../lib/json_text';
 import { getLocation, navigate, navigateHash, useLocation } from '../../router';
 import { services } from '../../services';
 import { errorMessage, type FetchOptions } from '../../services/http';
+import { tableCaption } from './model';
 import { SNAPSHOT_MANAGEMENT_PATH } from './routes';
 
 export const APP_PATH = '/app/opensearch_index_management_dashboards';
@@ -316,6 +317,8 @@ export interface TableProps<Row> {
   paged?: boolean;
   /** Laid out as the theme's tables are: the columns of fixed widths, the others sharing the rest */
   fixed?: boolean;
+  /** The theme's caption, which says how many rows there are: read aloud, and a pixel high */
+  caption?: boolean;
 }
 
 export function Table<Row>({
@@ -335,6 +338,7 @@ export function Table<Row>({
   pageSizes = PAGE_SIZES,
   paged = true,
   fixed,
+  caption,
 }: TableProps<Row>) {
   const ids = new Set((selected ?? []).map(rowId));
   const tickable = rows.filter((row) => (selectable ? selectable(row) : true));
@@ -345,6 +349,11 @@ export function Table<Row>({
     <div className={cx('ismTable', loading && 'ismTable--loading', fixed && 'ismTable--fixed')}>
       <div className="ismTable__scroll">
         <table className="atlTable" data-test-subj={testId}>
+          {caption && (
+            <caption className="ismTable__caption">
+              {tableCaption(rows.length, total, query.size, query.from, paged)}
+            </caption>
+          )}
           <thead>
             <tr>
               {onSelect && (
@@ -931,6 +940,7 @@ export function LocalTable<Row>({
   onSelect,
   selectable,
   fixed,
+  caption,
 }: {
   columns: Array<TableColumn<Row>>;
   rows: Row[];
@@ -945,6 +955,7 @@ export function LocalTable<Row>({
   onSelect?: (rows: Row[]) => void;
   selectable?: (row: Row) => boolean;
   fixed?: boolean;
+  caption?: boolean;
 }) {
   const [query, setQuery] = useState<Pick<ListQuery, 'from' | 'size' | 'sortField' | 'sortDirection'>>({
     from: 0,
@@ -971,6 +982,7 @@ export function LocalTable<Row>({
       onSelect={onSelect}
       selectable={selectable}
       fixed={fixed}
+      caption={caption}
     />
   );
 }
