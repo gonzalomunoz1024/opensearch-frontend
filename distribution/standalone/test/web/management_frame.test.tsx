@@ -3,7 +3,15 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { ManagementLanding, ManagementNav, readManagementPath } from '../../web/apps/management/frame';
+import {
+  MANAGEMENT_CRUMB,
+  ManagementLanding,
+  ManagementNav,
+  managementTrail,
+  readManagementPath,
+  sectionCrumb,
+} from '../../web/apps/management/frame';
+import { MANAGEMENT_CRUMB as OBJECTS_SECTION_CRUMB, OBJECTS_CRUMB } from '../../web/apps/management/saved_objects_parts';
 
 const count = (text: string, part: string) => text.split(part).length - 1;
 
@@ -21,13 +29,19 @@ describe('where a path of Dashboards Management leads', () => {
     });
   });
 
-  it('stands a page alone on its short address, as the original mounts it outside the frame', () => {
-    assert.deepEqual(readManagementPath('/app/objects/savedDashboards/edf84fe0'), {
-      section: 'objects',
-      rest: ['savedDashboards', 'edf84fe0'],
+  it('stands advanced settings alone on its short address, as the original mounts it outside the frame', () => {
+    assert.deepEqual(readManagementPath('/app/settings'), { section: 'settings', rest: [], alone: true });
+    assert.deepEqual(readManagementPath('/app/settings/dateFormat:tz'), {
+      section: 'settings',
+      rest: ['dateFormat:tz'],
       alone: true,
     });
-    assert.deepEqual(readManagementPath('/app/settings'), { section: 'settings', rest: [], alone: true });
+  });
+
+  it('has no short address for index patterns and saved objects, which 3.9.0 does not know', () => {
+    for (const path of ['/app/objects', '/app/objects/savedDashboards/edf84fe0', '/app/indexPatterns']) {
+      assert.deepEqual(readManagementPath(path), { rest: [], alone: false }, path);
+    }
   });
 
   it('opens the landing page on the root, with or without its last slash, and on what it does not know', () => {
@@ -73,6 +87,28 @@ describe('the side navigation of Dashboards Management', () => {
       ['settings', '/app/management/opensearch-dashboards/settings', 'Advanced settings', 'mgtNav__link'],
     ]);
     assert.equal(count(renderToStaticMarkup(<ManagementNav />), 'mgtNav__link--selected'), 0);
+  });
+});
+
+describe('the trail of the pages of Dashboards Management', () => {
+  it('starts at the section, linked to its root with the last slash, as the original', () => {
+    assert.deepEqual(MANAGEMENT_CRUMB, { text: 'Dashboards Management', to: '/app/management/' });
+    assert.equal(OBJECTS_SECTION_CRUMB, MANAGEMENT_CRUMB);
+  });
+
+  it('links an application to its root with the last slash, on the application’s first page too', () => {
+    assert.deepEqual(sectionCrumb('indexPatterns'), {
+      text: 'Index patterns',
+      to: '/app/management/opensearch-dashboards/indexPatterns/',
+    });
+    assert.deepEqual(sectionCrumb('objects'), { text: 'Saved objects', to: '/app/management/opensearch-dashboards/objects/' });
+    assert.deepEqual(OBJECTS_CRUMB, sectionCrumb('objects'));
+  });
+
+  it('has only the page’s own crumb on the short address of advanced settings', () => {
+    const own = [{ text: 'Advanced settings' }];
+    assert.deepEqual(managementTrail('/app/settings', own), own);
+    assert.deepEqual(managementTrail('/app/management/opensearch-dashboards/settings', own), [MANAGEMENT_CRUMB, ...own]);
   });
 });
 

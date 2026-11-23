@@ -21,8 +21,8 @@ export function MarkdownVis({ vis }: { vis: Vis }) {
   const params = vis.params as MarkdownParams;
   return (
     <div className="visMarkdownVis">
-      <div className="visMarkdownVis__panel" style={{ fontSize: `${params.fontSize ?? 12}pt` }} data-test-subj="markdownBody">
-        <Markdown className="visMarkdownBody" text={params.markdown ?? ''} openLinksInNewTab={params.openLinksInNewTab} />
+      <div className="visMarkdownVis__panel" style={{ fontSize: `${params.fontSize ?? 12}pt` }}>
+        <Markdown className="visMarkdownBody" data-test-subj="markdownBody" text={params.markdown ?? ''} openLinksInNewTab={params.openLinksInNewTab} />
       </div>
     </div>
   );
