@@ -10,6 +10,7 @@
 
 import {
   UNIT_MS,
+  addUnits,
   formatDate,
   parseDateMath,
   parseInterval,
@@ -17,6 +18,7 @@ import {
   scaledDateFormat,
   type AbsoluteRange,
   type Interval,
+  type TimeUnit,
 } from './dates';
 import {
   DEFAULT_FORMAT_SETTINGS,
@@ -30,6 +32,7 @@ import {
   customFilter,
   existsFilter,
   phraseFilter,
+  phrasesFilter,
   rangeFilter,
   type FilterField,
   type RangeParams,
@@ -885,23 +888,6 @@ function metricValue(column: TableColumn, bucket: Bucket): unknown {
   }
 }
 
-// As the original's: a range of numbers is "≥ from and < to", an open end being an infinity
-const numberRangeText = (key: RangeKey, format: (value: unknown) => string) => {
-  const end = (value: unknown, open: number) => {
-    const number = value === undefined || value === null ? open : Number(value);
-    if (Number.isFinite(number)) return format(number);
-    return number < 0 ? '-∞' : '∞';
-  };
-  return `≥ ${end(key.gte, -Infinity)} and < ${end(key.lt, Infinity)}`;
-};
-
-// As the original's: a range of dates is "Before to", "After from" or "from to to"
-const dateRangeText = (key: RangeKey, format: (value: unknown) => string) => {
-  if (!key.gte) return `Before ${format(key.lt)}`;
-  if (!key.lt) return `After ${format(key.gte)}`;
-  return `${format(key.gte)} to ${format(key.lt)}`;
-};
-
 function bucketColumn(agg: AggConfig, context: AggContext, id: string): TableColumn {
   const settings = context.formatSettings ?? DEFAULT_FORMAT_SETTINGS;
   const base: TableColumn = {
@@ -929,19 +915,31 @@ function bucketColumn(agg: AggConfig, context: AggContext, id: string): TableCol
     case 'histogram':
       return { ...base, interval: numberInterval(agg, context), format: fieldFormat };
     case 'range':
-      return { ...base, format: (value) => numberRangeText((value ?? {}) as RangeKey, fieldFormat) };
-    case 'date_range':
+      // As the original's range format: an open end is an infinity, written by the field's format
       return {
         ...base,
-        format: (value) =>
-          dateRangeText((value ?? {}) as RangeKey, (end) =>
-            formatDate(new Date(end as number), settings.dateFormat, settings.timeZone)
-          ),
+        format: (value) => {
+          const key = (value ?? {}) as RangeKey;
+          return `≥ ${fieldFormat(key.gte ?? -Infinity)} and < ${fieldFormat(key.lt ?? Infinity)}`;
+        },
+      };
+    case 'date_range':
+      // As the original's convertDateRangeToString
+      return {
+        ...base,
+        format: (value) => {
+          const key = (value ?? {}) as RangeKey;
+          const date = (end: unknown) =>
+            end === undefined || end === null ? '-' : formatDate(new Date(end as number), settings.dateFormat, settings.timeZone);
+          if (!key.gte) return `Before ${date(key.lt)}`;
+          if (!key.lt) return `After ${date(key.gte)}`;
+          return `${date(key.gte)} to ${date(key.lt)}`;
+        },
       };
     case 'ip_range':
+      // As the original's convertIPRangeToString: a mask as it is, a range from one address to another
       return {
         ...base,
-        // As the original's: a mask as it is asked, or "from to to"
         format: (value) => {
           const key = (value ?? {}) as RangeKey;
           if (param<string>(agg, 'ipRangeType', 'fromTo') === 'mask') return key.label ?? '';
@@ -1113,13 +1111,36 @@ export function filterFieldOf(column: TableColumn, context: AggContext): FilterF
   return context.indexPattern?.fields.find((field) => field.name === name) ?? { name };
 }
 
+/** Where a bucket was clicked: the table of its chart and the row of the mark, slice or cell */
+export interface BucketCell {
+  table: Table;
+  row: TableRow;
+}
+
+const sameKey = (a: unknown, b: unknown) =>
+  a === b || (typeof a === 'object' && a !== null && typeof b === 'object' && b !== null && JSON.stringify(a) === JSON.stringify(b));
+
+/**
+ * The terms beside the "Other" bucket of a column, as the original's getOtherBucketFilterTerms
+ * finds them for a click: the column's values in the rows that agree with the clicked one on every
+ * column before it, once each, the other and the missing buckets left out.
+ */
+export function otherBucketTerms(column: TableColumn, { table, row }: BucketCell): unknown[] {
+  const before = table.columns.slice(0, Math.max(table.columns.indexOf(column), 0));
+  const rows = table.rows.filter((candidate) => before.every((other) => sameKey(candidate[other.id], row[other.id])));
+  const terms = rows.map((candidate) => candidate[column.id]).filter((term) => term !== OTHER_KEY && term !== MISSING_KEY);
+  return [...new Set(terms)];
+}
+
 /**
  * The filter that narrows a search to one bucket: what clicking a bar or a slice adds, as the
  * original's createFilter of each aggregation (buckets/create_filter). A range's filter says what
  * its bucket is called, "≥ 0 and < 1,000", an open end being infinite; a histogram's, its key as
- * the field writes it.
+ * the field writes it. The "Other" bucket of a terms aggregation takes the documents in none of
+ * the terms beside it where it was clicked (`cell`): no filter without the cell. The original also
+ * adds an exists filter when those terms hold the missing bucket, which a click leaves out of them.
  */
-export function bucketFilter(column: TableColumn, key: unknown, context: AggContext): Filter | undefined {
+export function bucketFilter(column: TableColumn, key: unknown, context: AggContext, cell?: BucketCell): Filter | undefined {
   const { agg } = column;
   const indexId = context.indexPattern?.id;
   const field = filterFieldOf(column, context);
@@ -1134,20 +1155,29 @@ export function bucketFilter(column: TableColumn, key: unknown, context: AggCont
         filter.meta.negate = true;
         return filter;
       }
-      if (key === OTHER_KEY) return undefined;
+      if (key === OTHER_KEY) {
+        if (!cell || agg.type !== 'terms' || !agg.params?.otherBucket) return undefined;
+        const filter = phrasesFilter(field, otherBucketTerms(column, cell), indexId, format);
+        filter.meta.negate = true;
+        return filter;
+      }
       return phraseFilter(field, key, indexId);
-    case 'date_histogram':
+    case 'date_histogram': {
       if (!field || typeof key !== 'number') return undefined;
+      // The bucket ends an interval on, days and longer counted by the calendar, as moment adds them
+      const step = /^(\d+(?:\.\d+)?)(ms|[smhdwMy])$/.exec(dateInterval(agg, context).expression);
+      const end = step ? addUnits(new Date(key), Number(step[1]), step[2] as TimeUnit).getTime() : key + (column.interval ?? UNIT_MS.d);
       return rangeFilter(
         field,
         {
           gte: new Date(key).toISOString(),
-          lt: new Date(key + (column.interval ?? UNIT_MS.d)).toISOString(),
+          lt: new Date(end).toISOString(),
           format: 'strict_date_optional_time',
         },
         indexId,
         format
       );
+    }
     case 'histogram':
       if (!field || typeof key !== 'number') return undefined;
       return rangeFilter(field, { gte: key, lt: key + (column.interval ?? 1) }, indexId, format, format(key));
@@ -1209,19 +1239,30 @@ export function brushFilter(column: TableColumn, from: number, to: number, conte
 
 const OTHER_AGG = 'other-filter';
 
+/** What the bucket of everything else that a request put in an answer stands for, for the requests of the buckets under it */
+const otherBucketFilters = new WeakMap<object, Filter[]>();
+
+const groupsOthers = (agg: AggConfig) => agg.type === 'terms' && Boolean(agg.params?.otherBucket);
+
+/** The terms aggregations with "Group other values in separate bucket", in the order their rest is asked */
+export const otherBucketAggs = (aggs: AggConfig[]) => enabled(aggs).filter(isBucketAgg).filter(groupsOthers);
+
 /**
  * What a terms aggregation with "Group other values in separate bucket" still has to ask once
  * its answer is in: per list of terms, the documents that are in none of them, with the same
- * aggregations under them. `apply` puts the answer in the first answer as one more bucket.
+ * aggregations under them. `apply` puts the answer in the first answer as one more bucket. Each
+ * such aggregation asks in turn, the first one unless `aggId` says which, and one under another
+ * asks under its rest too, as the original's postFlightRequest of each.
  */
 export function planOtherBucket(
   aggs: AggConfig[],
   dsl: Dsl,
   response: { aggregations?: Record<string, unknown> },
-  context: AggContext
+  context: AggContext,
+  aggId?: string
 ): { aggs: Dsl; apply: (answer: Record<string, unknown> | undefined) => void } | undefined {
   const buckets = enabled(aggs).filter(isBucketAgg);
-  const level = buckets.findIndex((agg) => agg.type === 'terms' && Boolean(agg.params?.otherBucket));
+  const level = buckets.findIndex((agg) => groupsOthers(agg) && (aggId === undefined || agg.id === aggId));
   if (level === -1) return undefined;
   const other = buckets[level];
   const fieldName = fieldNameOf(other);
@@ -1236,7 +1277,7 @@ export function planOtherBucket(
   const columns = buckets.map((agg, at) => bucketColumn(agg, context, `other-${at}`));
   const indexId = context.indexPattern?.id;
   const filters: Record<string, Dsl> = {};
-  const targets: Record<string, { buckets?: unknown }> = {};
+  const targets: Record<string, { list: { buckets?: unknown }; shown: Filter[]; missing: boolean }> = {};
   let empty = false;
   const visit = (container: Bucket, at: number, above: Filter[], name: string) => {
     const agg = buckets[at];
@@ -1247,23 +1288,29 @@ export function planOtherBucket(
     }
     if (at < level) {
       for (const { key, bucket } of list) {
-        const filter = bucketFilter(columns[at], key, context);
+        // The rest of a bucket above stands for what its own request said
+        const own = otherBucketFilters.get(bucket);
+        const filter = own ? undefined : bucketFilter(columns[at], key, context);
         const part = key !== null && typeof key === 'object' ? String((key as { label?: string }).label ?? '') : String(key);
-        visit(bucket, at + 1, filter ? [...above, filter] : above, `${name}-${part}`);
+        visit(bucket, at + 1, own ? [...above, ...own] : filter ? [...above, filter] : above, `${name}-${part}`);
       }
       return;
     }
     const all = [...above];
-    // Documents without the field are the "missing" bucket's, when it is shown, and not the rest's
-    if (!other.params?.missingBucket || list.some(({ key }) => key === MISSING_KEY)) all.push(existsFilter(field, indexId));
+    const missing = list.some(({ key }) => key === MISSING_KEY);
+    // Documents without the field are the "missing" bucket's, when it is shown, and not the rest's;
+    // a scripted field is not asked whether it exists, as in the original
+    if (!field.scripted && (!other.params?.missingBucket || missing)) all.push(existsFilter(field, indexId));
+    const shown: Filter[] = [];
     for (const { key } of list) {
       if (key === MISSING_KEY) continue;
-      const shown = phraseFilter(field, key, indexId);
-      shown.meta.negate = true;
-      all.push(shown);
+      const filter = phraseFilter(field, key, indexId);
+      filter.meta.negate = true;
+      shown.push(filter);
     }
+    all.push(...shown);
     filters[name] = buildQuery(context.indexPattern, [], all) as unknown as Dsl;
-    targets[name] = container[agg.id] as { buckets?: unknown };
+    targets[name] = { list: container[agg.id] as { buckets?: unknown }, shown, missing };
   };
   visit((response.aggregations ?? {}) as Bucket, 0, [], '');
   // As in OpenSearch Dashboards, one list without terms and nothing is asked
@@ -1275,8 +1322,18 @@ export function planOtherBucket(
       const found = (answer?.[OTHER_AGG] as { buckets?: Record<string, Bucket> } | undefined)?.buckets ?? {};
       for (const [name, bucket] of Object.entries(found)) {
         const target = targets[name];
-        if (!target || !Array.isArray(target.buckets) || !bucket.doc_count) continue;
-        target.buckets.push({ ...bucket, key: OTHER_KEY });
+        if (!target || !Array.isArray(target.list.buckets) || !bucket.doc_count) continue;
+        const rest: Bucket = { ...bucket, key: OTHER_KEY };
+        // As the original's mergeOtherBucketAggResponse: none of the terms its request named as
+        // phrases (a scripted field's, none), and the field, when the missing bucket is shown
+        const terms = target.shown.flatMap((filter) => {
+          const phrase = (filter.query as { match_phrase?: Record<string, unknown> } | undefined)?.match_phrase;
+          return phrase && field.name in phrase ? [phrase[field.name]] : [];
+        });
+        const none = phrasesFilter(field, terms, indexId);
+        none.meta.negate = true;
+        otherBucketFilters.set(rest, target.missing ? [none, existsFilter(field, indexId)] : [none]);
+        target.list.buckets.push(rest);
       }
     },
   };

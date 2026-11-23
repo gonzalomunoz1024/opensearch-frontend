@@ -1,0 +1,585 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/*
+ * The data table, the metric, the tag cloud and the Markdown visualization, as the original's
+ * vis_type_table, vis_type_metric, vis_type_tagcloud and vis_type_markdown draw them in the
+ * Atlas theme, and what a visualization with no results says.
+ */
+
+/* --- Data table -------------------------------------------------------------------------- */
+
+/*
+ * The tables: one, or one per value of a split, one under another or side by side, 24px apart as
+ * the component library's large gutter sets them, and scrolled together. The text is set solid,
+ * as the original's page sets it.
+ */
+.visTable {
+  display: flex;
+  flex: 1 0 0;
+  flex-direction: column;
+  align-items: stretch;
+  margin: -12px;
+  overflow: auto;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  line-height: 1;
+}
+
+.visTable--row {
+  flex-direction: row;
+  align-items: flex-start;
+}
+
+.visTable > .visTable__item,
+.visTable > .visTable__group {
+  margin: 12px;
+}
+
+.visTable__item {
+  display: flex;
+  flex-grow: 1;
+  flex-basis: 0%;
+  flex-direction: column;
+}
+
+.visTable__group {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+}
+
+/* The title of a table of a split: the component library's smallest title, centred */
+.visTable__title {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-m);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+  text-align: center;
+}
+
+.visTable__export {
+  display: flex;
+}
+
+/* The component library's smallest empty button, its 12px icon where its text would begin */
+.visTable__exportButton.atlButton {
+  width: 38px;
+  height: 24px;
+  padding: 0 17px 0 9px;
+}
+
+.visTable__container table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+/* On the baseline, as the component library's reset sets a table's cells: the titles at the top */
+.visTable__header {
+  position: relative;
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--color-border-light);
+  overflow: visible;
+  text-align: left;
+  vertical-align: baseline;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color var(--duration-fast);
+}
+
+.visTable__headerContent {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+/* A title cut short keeps its room and pushes the arrow out, as the original's */
+.visTable__headerContent > .atlTooltipAnchor {
+  min-width: auto;
+}
+
+.visTable__headerText {
+  display: inline-block;
+  vertical-align: top;
+}
+
+/* The arrow of the order shows only under the pointer, whichever way the column is sorted */
+.visTable__sortIcon {
+  margin-left: var(--space-1);
+  opacity: 0;
+  transition: opacity var(--duration-fast);
+}
+
+.visTable__header:hover .visTable__sortIcon,
+.visTable__header:focus .visTable__sortIcon {
+  opacity: 1;
+}
+
+.visTable__resize {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  bottom: 0;
+  z-index: 2;
+  width: 7px;
+  border-right: 2px solid var(--color-surface-secondary);
+  background-color: var(--color-surface-secondary);
+  cursor: col-resize;
+}
+
+.visTable__resize:hover,
+.visTable__resize:active {
+  border-right-color: var(--color-accent);
+}
+
+.visTable__container td {
+  position: relative;
+  padding: var(--space-2);
+  vertical-align: top;
+  word-break: break-word;
+}
+
+/* The line between two rows: the original writes its grey into the page, the same in both themes */
+.visTable__container .visTable__separator {
+  height: 1px;
+  padding: 0;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.visTable__cell {
+  position: relative;
+  width: 100%;
+}
+
+.visTable__cellValue {
+  word-break: break-word;
+}
+
+/* A bucket's filters, over the end of its cell while the pointer is on it */
+.visTable__cellFilter {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 10;
+  display: none;
+  align-items: center;
+  padding-left: var(--space-1);
+  background-color: color-mix(in srgb, var(--color-surface) 90%, transparent);
+}
+
+.visTable__cell:hover .visTable__cellFilter {
+  display: flex;
+}
+
+/* The component library's smallest icon button: round, 24px */
+.visTable__filterButton.atlButton {
+  width: 24px;
+  height: 24px;
+  margin-left: var(--space-1);
+  border-radius: 50%;
+}
+
+.visTable__pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: var(--space-1) -12px -12px;
+  padding: var(--space-1) 0;
+}
+
+.visTable__paginationItem {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  margin: 12px;
+}
+
+/* The component library's small empty button: its border's pixel, and 8px before its arrow */
+.visTable__rowsButton.atlButton {
+  gap: var(--space-2);
+  padding: 0 9px;
+}
+
+/* Where a cell's text is measured: hidden, in the small type, with 4px around it */
+.visTable__measure {
+  position: absolute;
+  visibility: hidden;
+  box-sizing: content-box;
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  height: auto;
+  margin: 0;
+  padding: var(--space-1);
+  border: none;
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+
+/* In a narrow window the component library's groups wrap, each item on a line of its own */
+@media only screen and (max-width: 767px) {
+  .visTable,
+  .visTable__pagination {
+    flex-wrap: wrap;
+    margin-right: 0;
+    margin-left: 0;
+  }
+
+  .visTable > .visTable__item,
+  .visTable > .visTable__group,
+  .visTable__pagination > .visTable__paginationItem {
+    width: 100%;
+    flex-basis: 100%;
+    margin-right: 0;
+    margin-bottom: 16px;
+    margin-left: 0;
+  }
+}
+
+/* --- No results ---------------------------------------------------------------------------- */
+
+.visNoResults {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  text-align: center;
+}
+
+.visNoResults__item--top {
+  align-self: flex-start;
+}
+
+.visNoResults__item--bottom {
+  align-self: flex-end;
+}
+
+.visNoResults__text {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+.visNoResults__text p {
+  margin: 0;
+}
+
+.visNoResults__spacer {
+  height: var(--space-2);
+}
+
+/* Metric */
+
+.visMetric {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: space-around;
+  min-height: 0;
+  padding: var(--space-2);
+  overflow: auto;
+}
+
+.visMetric__item {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+
+.visMetric__value {
+  max-width: 100%;
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.visMetric__label {
+  font-size: var(--font-size-m);
+  line-height: 1.3;
+}
+
+/* Tag cloud */
+
+.visTagCloud {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.visTagCloud__label {
+  height: 22px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-align: center;
+}
+
+/* Markdown */
+
+/* A Markdown visualization: the original's panel, 8px in, scrolled when the text is longer */
+.visMarkdownVis {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--space-2);
+  overflow: auto;
+}
+
+/*
+ * The original's Markdown body (`osdMarkdown__body`): every size is in em of the base size the
+ * visualization sets, as the original's are of its 14px, so that the base size scales them all.
+ * Its lines are the text's colour at 15%, its fills at 5%.
+ */
+.atlMarkdown.visMarkdownBody {
+  --vis-markdown-line: color-mix(in srgb, var(--color-text-primary) 15%, transparent);
+  --vis-markdown-fill: color-mix(in srgb, var(--color-text-primary) 5%, transparent);
+
+  line-height: normal;
+}
+
+.atlMarkdown.visMarkdownBody p,
+.atlMarkdown.visMarkdownBody blockquote,
+.atlMarkdown.visMarkdownBody ul,
+.atlMarkdown.visMarkdownBody ol,
+.atlMarkdown.visMarkdownBody dl,
+.atlMarkdown.visMarkdownBody table,
+.atlMarkdown.visMarkdownBody pre {
+  margin-top: 0;
+  margin-bottom: 1.1429em;
+  line-height: 1.5em;
+}
+
+.atlMarkdown.visMarkdownBody strong {
+  font-weight: var(--font-weight-semibold);
+}
+
+.atlMarkdown.visMarkdownBody a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.atlMarkdown.visMarkdownBody a:hover {
+  text-decoration: underline dotted;
+}
+
+.atlMarkdown.visMarkdownBody a:not([href]) {
+  text-decoration: none;
+}
+
+.atlMarkdown.visMarkdownBody h1,
+.atlMarkdown.visMarkdownBody h2,
+.atlMarkdown.visMarkdownBody h3,
+.atlMarkdown.visMarkdownBody h4,
+.atlMarkdown.visMarkdownBody h5,
+.atlMarkdown.visMarkdownBody h6 {
+  margin-top: 0;
+  margin-bottom: 0.5714em;
+}
+
+/* The first two levels are large and light, as in the original */
+.atlMarkdown.visMarkdownBody h1 {
+  font-size: 2.5714em;
+  font-weight: 300;
+  line-height: 1.3333em;
+}
+
+.atlMarkdown.visMarkdownBody h2 {
+  font-size: 2em;
+  font-weight: 300;
+  line-height: 1.4286em;
+}
+
+.atlMarkdown.visMarkdownBody h3 {
+  font-size: 1.4286em;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.6em;
+}
+
+.atlMarkdown.visMarkdownBody h4 {
+  font-size: 1.1429em;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.5em;
+}
+
+.atlMarkdown.visMarkdownBody h5 {
+  font-size: 1em;
+  font-weight: 700;
+  line-height: 1.1429em;
+}
+
+.atlMarkdown.visMarkdownBody h6 {
+  font-size: 0.8571em;
+  font-weight: 700;
+  line-height: 1.3333em;
+  text-transform: uppercase;
+}
+
+.atlMarkdown.visMarkdownBody > :first-child {
+  margin-top: 0;
+}
+
+.atlMarkdown.visMarkdownBody > :last-child {
+  margin-bottom: 0;
+}
+
+.atlMarkdown.visMarkdownBody img {
+  max-width: 100%;
+  box-sizing: content-box;
+  border-style: none;
+}
+
+.atlMarkdown.visMarkdownBody blockquote {
+  padding: 0 1em;
+  border-left: 4px solid var(--vis-markdown-line);
+  color: inherit;
+}
+
+.atlMarkdown.visMarkdownBody hr {
+  height: 2px;
+  margin: 1.7143em 0;
+  padding: 0;
+  border: 0;
+  background-color: var(--vis-markdown-line);
+  overflow: hidden;
+}
+
+.atlMarkdown.visMarkdownBody ul,
+.atlMarkdown.visMarkdownBody ol {
+  padding-left: 1.7143em;
+}
+
+.atlMarkdown.visMarkdownBody ul {
+  list-style-type: disc;
+}
+
+.atlMarkdown.visMarkdownBody ol {
+  list-style-type: decimal;
+}
+
+.atlMarkdown.visMarkdownBody ul ul {
+  list-style-type: circle;
+}
+
+.atlMarkdown.visMarkdownBody ol ol,
+.atlMarkdown.visMarkdownBody ul ol {
+  list-style-type: lower-roman;
+}
+
+.atlMarkdown.visMarkdownBody ul ul ol,
+.atlMarkdown.visMarkdownBody ul ol ol,
+.atlMarkdown.visMarkdownBody ol ul ol,
+.atlMarkdown.visMarkdownBody ol ol ol {
+  list-style-type: lower-alpha;
+}
+
+.atlMarkdown.visMarkdownBody dd {
+  margin-left: 0;
+}
+
+.atlMarkdown.visMarkdownBody ul ul,
+.atlMarkdown.visMarkdownBody ul ol,
+.atlMarkdown.visMarkdownBody ol ol,
+.atlMarkdown.visMarkdownBody ol ul {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.atlMarkdown.visMarkdownBody li > p {
+  margin-bottom: 0.5714em;
+}
+
+.atlMarkdown.visMarkdownBody li + li {
+  margin-top: 0.2857em;
+}
+
+.atlMarkdown.visMarkdownBody table {
+  display: block;
+  width: 100%;
+  border-left: 1px solid var(--vis-markdown-line);
+  border-spacing: 0;
+  border-collapse: collapse;
+  overflow: auto;
+}
+
+.atlMarkdown.visMarkdownBody th,
+.atlMarkdown.visMarkdownBody td {
+  padding: 0.2857em 0.8571em;
+  border: 0;
+  border-top: 1px solid var(--vis-markdown-line);
+  border-bottom: 1px solid var(--vis-markdown-line);
+}
+
+.atlMarkdown.visMarkdownBody th:last-child,
+.atlMarkdown.visMarkdownBody td:last-child {
+  border-right: 1px solid var(--vis-markdown-line);
+}
+
+.atlMarkdown.visMarkdownBody tr {
+  border-top: 1px solid var(--vis-markdown-line);
+  background-color: transparent;
+}
+
+/* Code in the original's own face, not the kit's: the text is the original's to draw */
+.atlMarkdown.visMarkdownBody code,
+.atlMarkdown.visMarkdownBody pre {
+  margin-bottom: 0.5714em;
+  font-family: Monaco, Menlo, "Ubuntu Mono", Consolas, source-code-pro, monospace;
+  font-size: 0.8571em;
+}
+
+.atlMarkdown.visMarkdownBody code {
+  margin: 0;
+  padding: 0.2857em 0;
+  line-height: 1.5;
+  border-radius: var(--radius-xs);
+  background-color: var(--vis-markdown-fill);
+}
+
+.atlMarkdown.visMarkdownBody code::before,
+.atlMarkdown.visMarkdownBody code::after {
+  content: "\00a0";
+  letter-spacing: -0.2em;
+}
+
+.atlMarkdown.visMarkdownBody pre {
+  padding: 1.1429em;
+  border-radius: var(--radius-xs);
+  background-color: var(--vis-markdown-fill);
+  line-height: 1.3333em;
+  overflow: auto;
+  overflow-wrap: normal;
+}
+
+.atlMarkdown.visMarkdownBody pre code {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background-color: transparent;
+  line-height: inherit;
+  white-space: pre;
+  overflow: visible;
+  overflow-wrap: normal;
+}
+
+.atlMarkdown.visMarkdownBody pre code::before,
+.atlMarkdown.visMarkdownBody pre code::after {
+  content: normal;
+}
+

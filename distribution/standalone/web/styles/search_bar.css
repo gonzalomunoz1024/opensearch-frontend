@@ -1,0 +1,389 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/*
+ * The pieces every search page shares, as the original's Atlas build draws them: the query and
+ * the list under it, the language, the button that applies, and the room the dates make while
+ * the query is typed. Sizes the original's theme writes literally are written so here.
+ */
+
+/* --- The query: a compressed group of the component library, its text box drawn on its own ---- */
+
+.shlQuery {
+  position: relative;
+  /* Over what follows, so that the text that grows covers it, as the original's (its content menu's layer) */
+  z-index: 2000;
+  display: flex;
+  flex: 1 1 0;
+  align-items: stretch;
+  min-width: 0;
+  height: var(--control-height);
+  padding: 1px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  box-shadow: inset 0 0 0 1px var(--color-border-light);
+  font-size: var(--font-size-s);
+  line-height: var(--font-size-s);
+}
+
+.shlQuery__combobox {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.shlQuery__wrap {
+  position: relative;
+  display: flex;
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+/*
+ * The text box keeps the field's own look, its hairline included, and lies one pixel up and left
+ * over the group's, as the original's does. Out of focus it is one line whose ends fade; with the
+ * focus it wraps, and the bar makes it as tall as its text.
+ */
+.shlQuery__textarea {
+  z-index: 2000;
+  width: 100%;
+  max-width: 100%;
+  height: 29px;
+  margin: 0;
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface-secondary);
+  box-shadow: inset 0 0 0 1px var(--color-border-light);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-s);
+  line-height: 21px;
+  resize: none;
+  outline: none;
+  transform: translate(-1px, -1px);
+  transition:
+    box-shadow var(--duration-fast) ease-in,
+    background-color var(--duration-fast) ease-in;
+  scrollbar-width: thin;
+}
+
+.shlQuery__textarea::placeholder {
+  color: var(--color-text-tertiary);
+  opacity: 1;
+}
+
+/* The theme writes an empty field's text in the colour of its placeholder */
+.shlQuery__textarea:placeholder-shown {
+  color: var(--color-text-tertiary);
+}
+
+.shlQuery__textarea:not(:focus) {
+  overflow-x: hidden;
+  overflow-y: auto;
+  white-space: nowrap;
+}
+
+.shlQuery__textarea:not(:focus):not([aria-invalid="true"]) {
+  mask-image: linear-gradient(
+    rgb(255 0 0 / 10%) 0%,
+    rgb(255 0 0) 7.5px,
+    rgb(255 0 0) calc(100% - 7.5px),
+    rgb(255 0 0 / 10%) 100%
+  );
+}
+
+.shlQuery__textarea:focus {
+  overflow: auto;
+  white-space: normal;
+  box-shadow:
+    inset 0 0 0 1px var(--color-accent),
+    0 0 0 2px var(--color-focus-ring);
+}
+
+.shlQuery__textarea[aria-invalid="true"] {
+  box-shadow: inset 0 0 0 1px var(--color-critical);
+}
+
+/* The language, at the end of the group: an empty button whose tint fills its box */
+.shlQuery__languageAnchor {
+  flex: none;
+  height: 30px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.shlQuery__language {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-left: 1px solid transparent;
+  border-radius: 0;
+  background: none;
+  color: var(--color-accent-button-text);
+  font: inherit;
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 21px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) ease-out,
+    color var(--duration-fast) ease-out;
+}
+
+.shlQuery__language:hover,
+.shlQuery__language:focus-visible {
+  background-color: var(--color-accent-tint);
+  outline: none;
+}
+
+/* A popover with the component library's small padding and its title over a line */
+.shlPopoverSmall {
+  padding: var(--space-2);
+}
+
+.shlPopoverTitle {
+  margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) var(--space-2);
+  padding: var(--space-3) var(--space-2);
+  border-bottom: 1px solid var(--color-border-light);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+.shlPopoverText {
+  margin: 0;
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+/* The component library's link: darker and underlined under the pointer, its external icon after it */
+.shlLink {
+  color: var(--color-accent);
+}
+
+.shlLink:hover,
+.shlLink:focus-visible {
+  color: var(--color-accent-callout-text);
+  text-decoration: underline;
+}
+
+.shlLink__external {
+  margin-left: var(--space-1);
+  vertical-align: baseline;
+}
+
+/* The row of the language's switch, 16 px under the text, its label in small type */
+.shlLanguageForm {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  margin-top: var(--space-4);
+}
+
+.shlLanguageForm__label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 18px;
+}
+
+/* --- The list under the query --------------------------------------------------------------- */
+
+.shlTypeahead {
+  position: fixed;
+  z-index: 4001;
+  max-height: 60vh;
+}
+
+.shlTypeahead__popover {
+  position: relative;
+  z-index: 2000;
+  width: 100%;
+  max-height: 60vh;
+  overflow-y: auto;
+  border: 1px solid var(--color-border-light);
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+  scrollbar-width: thin;
+}
+
+.shlTypeahead__popover--small {
+  max-height: 20vh;
+}
+
+.shlTypeahead__popover--bottom {
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+}
+
+.shlTypeahead__popover--top {
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  box-shadow: var(--shadow-md);
+}
+
+.shlTypeahead__item {
+  height: 32px;
+  font-size: var(--font-size-xs);
+  line-height: normal;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.shlTypeahead__item:first-child {
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
+.shlTypeahead__item:last-child {
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+}
+
+.shlTypeahead__item--active {
+  background-color: var(--color-surface-secondary);
+}
+
+.shlSuggestion {
+  display: flex;
+  flex-grow: 1;
+  align-items: center;
+  height: 100%;
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+  /* The tint of each kind of suggestion: a tenth of its colour, a fifth on the chosen one */
+  --shl-tile-share: 10%;
+  --shl-tile-share-active: 20%;
+}
+
+:root.themeDark .shlSuggestion {
+  --shl-tile-share: 50%;
+  --shl-tile-share-active: 40%;
+}
+
+.shlSuggestion__type {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: var(--space-1);
+  overflow: hidden;
+}
+
+.shlSuggestion__text {
+  flex: 0 0 auto;
+  padding: var(--space-1) var(--space-2);
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-family: var(--font-family-code);
+  text-overflow: ellipsis;
+}
+
+.shlSuggestion__description {
+  flex: 1 1 0%;
+  margin-left: 32px;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  text-overflow: ellipsis;
+}
+
+.shlSuggestion__description:empty {
+  flex-grow: 0;
+  margin-left: 0;
+}
+
+.shlSuggestion--value .shlSuggestion__text {
+  flex: 1 1 50%;
+}
+
+.shlTypeahead__item--active .shlSuggestion__text,
+.shlTypeahead__item--active .shlSuggestion__type {
+  color: var(--color-full-shade);
+}
+
+/* Each kind in its colour, as the original's list: fields, values, operators, conjunctions */
+.shlSuggestion--field .shlSuggestion__type {
+  background-color: color-mix(in srgb, var(--color-warning) var(--shl-tile-share), var(--color-surface));
+  color: var(--color-warning-graphic);
+}
+
+.shlSuggestion--value .shlSuggestion__type {
+  background-color: color-mix(in srgb, var(--color-healthy) var(--shl-tile-share), var(--color-surface));
+  color: var(--color-healthy-graphic);
+}
+
+.shlSuggestion--operator .shlSuggestion__type {
+  background-color: color-mix(in srgb, var(--color-accent) var(--shl-tile-share), var(--color-surface));
+  color: var(--color-accent);
+}
+
+/* The component library's fourth colour of a chart, which the original gives a conjunction */
+.shlSuggestion--conjunction .shlSuggestion__type {
+  background-color: color-mix(in srgb, #9170b8 var(--shl-tile-share), var(--color-surface));
+  color: #9170b8;
+}
+
+.shlTypeahead__item--active .shlSuggestion--field .shlSuggestion__type {
+  background-color: color-mix(in srgb, var(--color-warning) var(--shl-tile-share-active), var(--color-surface));
+}
+
+.shlTypeahead__item--active .shlSuggestion--value .shlSuggestion__type {
+  background-color: color-mix(in srgb, var(--color-healthy) var(--shl-tile-share-active), var(--color-surface));
+}
+
+.shlTypeahead__item--active .shlSuggestion--operator .shlSuggestion__type {
+  background-color: color-mix(in srgb, var(--color-accent) var(--shl-tile-share-active), var(--color-surface));
+}
+
+.shlTypeahead__item--active .shlSuggestion--conjunction .shlSuggestion__type {
+  background-color: color-mix(in srgb, #9170b8 var(--shl-tile-share-active), var(--color-surface));
+}
+
+.shlSuggestion--recentSearch .shlSuggestion__type {
+  background-color: var(--color-border);
+  color: var(--color-text-tertiary);
+}
+
+.shlTypeahead__item--active .shlSuggestion--recentSearch .shlSuggestion__type {
+  color: var(--color-full-shade);
+}
+
+/* --- The dates and the button that applies ---------------------------------------------------- */
+
+/* No wider than two fifths of the window, and out of the way while the query has the focus */
+.shlSearchBar__dates {
+  display: flex;
+  flex: 0 0 auto;
+  max-width: 40vw;
+  min-width: 0;
+}
+
+.shlSearchBar__dates > .shlTime {
+  min-width: 0;
+}
+
+.shlSearchBar__dates--hidden {
+  width: 0;
+  max-width: 0;
+  overflow: hidden;
+}
+
+.shlUpdateButton {
+  min-width: 118px;
+}
+
+/* Narrow, the button is its icon */
+@media (max-width: 767px) {
+  .shlUpdateButton {
+    min-width: 0;
+  }
+
+  .shlUpdateButton .shlUpdateButton__text {
+    display: none;
+  }
+}

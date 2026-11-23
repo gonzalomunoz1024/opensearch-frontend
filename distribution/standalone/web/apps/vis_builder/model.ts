@@ -44,6 +44,11 @@ export interface VisualizationState {
   activeVisualization?: ActiveVisualization;
   /** Kept as the object's reference when saved, not in `visualizationState` */
   indexPattern?: string;
+  /**
+   * The saved query the page has loaded, kept in the address only. The original also writes it
+   * into `visualizationState`, which its own check of a saved object then refuses to open.
+   */
+  savedQuery?: string;
 }
 
 export type StyleState = Record<string, unknown>;
@@ -266,7 +271,7 @@ export function visBuilderToSavedObject(
   attributes: VisBuilderAttributes;
   references: SavedObjectReference[];
 } {
-  const { indexPattern, searchField, activeVisualization: active, ...rest } = saved.state.visualization;
+  const { indexPattern, searchField, activeVisualization: active, savedQuery: _savedQuery, ...rest } = saved.state.visualization;
   // Written with the keys in the order the original writes them, though the address sorts them
   const stored: VisualizationState = {
     searchField,
