@@ -790,7 +790,7 @@ describe('the bar over a dashboard', () => {
   const embedded = { ...page, headerShown: false };
   const shown = (bars: DashboardBars) =>
     Object.entries(bars)
-      .filter(([, visible]) => visible)
+      .filter(([part, visible]) => visible && part !== 'inlineMenu')
       .map(([part]) => part);
   const all = ['topMenu', 'queryInput', 'datePicker', 'filterBar'];
 
@@ -814,6 +814,14 @@ describe('the bar over a dashboard', () => {
     assert.deepEqual(shown(dashboardBars({}, { ...page, fullScreen: true })), []);
     assert.deepEqual(shown(dashboardBars({}, { ...page, fullScreen: true, hasFilters: true })), ['filterBar']);
     assert.deepEqual(shown(dashboardBars({ embed: 'true', 'show-top-menu': 'true', 'show-time-filter': 'true' }, { ...embedded, fullScreen: true })), []);
+  });
+
+  it('draws the menu in the page while the address has embed with a value, even one put there after the page loaded', () => {
+    // Under the header then, as the original's top nav mounts its menu in the page (setMenuMountPoint)
+    assert.deepEqual(dashboardBars({ embed: 'true' }, page), { ...dashboardBars({}, page), inlineMenu: true });
+    assert.equal(dashboardBars({}, page).inlineMenu, false);
+    assert.equal(dashboardBars({ embed: 'true', 'show-top-menu': 'true' }, embedded).inlineMenu, true);
+    assert.equal(dashboardBars({ embed: '', 'show-top-menu': 'true' }, embedded).inlineMenu, false);
   });
 
   it('takes the page as embedded when it was opened with embed in its address, with a value or not', () => {

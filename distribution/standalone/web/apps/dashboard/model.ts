@@ -714,6 +714,8 @@ export const panelTitleHidden = (panel: Pick<PanelState, 'embeddableConfig'>, da
 /** The parts of the bar over a dashboard that are shown */
 export interface DashboardBars {
   topMenu: boolean;
+  /** The menu is drawn in the page, over the bar, not in the header */
+  inlineMenu: boolean;
   queryInput: boolean;
   datePicker: boolean;
   filterBar: boolean;
@@ -731,7 +733,8 @@ export const openedEmbedded = (hash: string): boolean => 'embed' in parseHash(ha
  * stay, unless the address asks for the menu (`show-top-menu`), the query (`show-query-input`)
  * or the time (`show-time-filter`), or takes the filters away (`hide-filter-bar`): those count
  * with `embed` and a value, as `embed` itself does here. In full screen only the filters stay,
- * and only when the dashboard has some of its own.
+ * and only when the dashboard has some of its own. The menu is drawn in the page while the
+ * address has `embed` with a value, even one put there after the page loaded, under the header.
  */
 export function dashboardBars(
   params: Readonly<Record<string, string | undefined>>,
@@ -742,6 +745,7 @@ export function dashboardBars(
   const shown = (force: boolean) => (force || page.headerShown) && !page.fullScreen;
   return {
     topMenu: shown(asked('show-top-menu')),
+    inlineMenu: embedded,
     queryInput: shown(asked('show-query-input')),
     datePicker: shown(asked('show-time-filter')),
     filterBar: !asked('hide-filter-bar') && (page.hasFilters || !page.fullScreen),

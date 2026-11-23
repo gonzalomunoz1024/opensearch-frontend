@@ -725,7 +725,7 @@ function DashboardPage({ savedId }: { savedId?: string }) {
 
   return (
     <div className={`dshPage${fullScreen ? ' dshPage--fullScreen' : ''}`} data-test-subj="dashboardViewport">
-      {bars.topMenu && (HEADER_SHOWN ? <TopNav items={navItems} /> : <InlineTopNav items={navItems} />)}
+      {bars.topMenu && (bars.inlineMenu ? <InlineTopNav items={navItems} /> : <TopNav items={navItems} />)}
       {!bars.queryInput && !bars.datePicker ? (
         bars.filterBar && (
           // The filters alone, without the row of the query and the time, as the original's bar has them
