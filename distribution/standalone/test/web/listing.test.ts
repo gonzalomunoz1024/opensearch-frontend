@@ -63,4 +63,10 @@ describe('a popover placed as the original places it', () => {
     assert.equal(Math.round(at.left * 10) / 10, 92.3);
     assert.equal(at.top, 513.5);
   });
+
+  it('centres a popover on its button when asked to', () => {
+    // The dashboard's Options in edit mode (the reference's popover is at 794.5 under it)
+    const at = placeLikeOriginal({ left: 890.5, top: 52, width: 70, height: 32 }, { width: 262, height: 136 }, 'downCenter', view);
+    assert.deepEqual(at, { left: 794.5, top: 92 });
+  });
 });

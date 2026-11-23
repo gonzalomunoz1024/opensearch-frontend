@@ -104,7 +104,6 @@ export function Listing({
   const [page, setPage] = useState(0);
   const initialPageSize = services.uiSettings.get<number>('savedObjects:perPage', 20);
   const [pageSize, setPageSize] = useState(initialPageSize);
-  const [sizesOpen, setSizesOpen] = useState(false);
   const limit = services.uiSettings.get<number>('savedObjects:listingLimit', 1000);
   const dateFormat = services.uiSettings.get<string>('dateFormat', 'MMM D, YYYY @ HH:mm:ss.SSS');
   const typeKey = types.join(',');
@@ -340,87 +339,17 @@ export function Listing({
         </tbody>
       </table>
       {sorted.length > 0 && (
-        <div className="shlListing__pagination">
-          <Popover
-            open={sizesOpen}
-            onClose={() => setSizesOpen(false)}
-            position="upRight"
-            button={
-              <button
-                type="button"
-                className="shlListing__perPage"
-                data-test-subj="tablePaginationPopoverButton"
-                onClick={() => setSizesOpen((was) => !was)}
-              >
-                <span>Rows per page: {pageSize}</span>
-                <Icon name="chevronDown" />
-              </button>
-            }
-          >
-            <ContextMenu
-              onDone={() => setSizesOpen(false)}
-              panels={[
-                {
-                  id: 'sizes',
-                  items: pageSizeOptions(initialPageSize).map((size) => ({
-                    label: `${size} rows`,
-                    icon: size === pageSize ? 'check' : undefined,
-                    testId: `tablePagination-${size}-rows`,
-                    onClick: () => {
-                      setPageSize(size);
-                      changePage(0);
-                    },
-                  })),
-                },
-              ]}
-            />
-          </Popover>
-          <nav className="shlListing__pages">
-            <button
-              type="button"
-              className="shlListing__arrow"
-              disabled={page === 0}
-              aria-label="Previous page"
-              data-test-subj="pagination-button-previous"
-              onClick={() => changePage(page - 1)}
-            >
-              <Icon name="chevronLeft" />
-            </button>
-            <ul className="shlListing__pageList">
-              {pageButtons(page, pages).map((shown, index) =>
-                shown === 'gap' ? (
-                  <li key={`gap${index}`} className="shlListing__gap" aria-label="Skipping pages">
-                    …
-                  </li>
-                ) : (
-                  <li key={shown}>
-                    <button
-                      type="button"
-                      className={cx('shlListing__page', shown === page && 'shlListing__page--current')}
-                      aria-label={`Page ${shown + 1} of ${pages}`}
-                      aria-current={shown === page || undefined}
-                      disabled={shown === page}
-                      data-test-subj={`pagination-button-${shown}`}
-                      onClick={() => changePage(shown)}
-                    >
-                      {shown + 1}
-                    </button>
-                  </li>
-                )
-              )}
-            </ul>
-            <button
-              type="button"
-              className="shlListing__arrow"
-              disabled={page >= pages - 1}
-              aria-label="Next page"
-              data-test-subj="pagination-button-next"
-              onClick={() => changePage(page + 1)}
-            >
-              <Icon name="chevronRight" />
-            </button>
-          </nav>
-        </div>
+        <TablePagination
+          page={page}
+          pages={pages}
+          pageSize={pageSize}
+          sizes={pageSizeOptions(initialPageSize)}
+          onPage={changePage}
+          onPageSize={(size) => {
+            setPageSize(size);
+            changePage(0);
+          }}
+        />
       )}
     </div>
   );
@@ -512,6 +441,105 @@ export function Listing({
 }
 
 /** What a list with nothing in it says instead, as the original's empty prompt lays it out */
+/** The original's table pagination: "Rows per page" and its sizes, and up to five page buttons */
+export function TablePagination({
+  page,
+  pages,
+  pageSize,
+  sizes,
+  onPage,
+  onPageSize,
+}: {
+  page: number;
+  pages: number;
+  pageSize: number;
+  sizes: number[];
+  onPage: (page: number) => void;
+  onPageSize: (size: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="shlListing__pagination">
+      <Popover
+        open={open}
+        onClose={() => setOpen(false)}
+        position="upRight"
+        button={
+          <button
+            type="button"
+            className="shlListing__perPage"
+            data-test-subj="tablePaginationPopoverButton"
+            onClick={() => setOpen((was) => !was)}
+          >
+            <span>Rows per page: {pageSize}</span>
+            <Icon name="chevronDown" />
+          </button>
+        }
+      >
+        <ContextMenu
+          onDone={() => setOpen(false)}
+          panels={[
+            {
+              id: 'sizes',
+              items: sizes.map((size) => ({
+                label: `${size} rows`,
+                icon: size === pageSize ? 'check' : undefined,
+                testId: `tablePagination-${size}-rows`,
+                onClick: () => onPageSize(size),
+              })),
+            },
+          ]}
+        />
+      </Popover>
+      <nav className="shlListing__pages">
+        <button
+          type="button"
+          className="shlListing__arrow"
+          disabled={page === 0}
+          aria-label="Previous page"
+          data-test-subj="pagination-button-previous"
+          onClick={() => onPage(page - 1)}
+        >
+          <Icon name="chevronLeft" />
+        </button>
+        <ul className="shlListing__pageList">
+          {pageButtons(page, pages).map((shown, index) =>
+            shown === 'gap' ? (
+              <li key={`gap${index}`} className="shlListing__gap" aria-label="Skipping pages">
+                …
+              </li>
+            ) : (
+              <li key={shown}>
+                <button
+                  type="button"
+                  className={cx('shlListing__page', shown === page && 'shlListing__page--current')}
+                  aria-label={`Page ${shown + 1} of ${pages}`}
+                  aria-current={shown === page || undefined}
+                  disabled={shown === page}
+                  data-test-subj={`pagination-button-${shown}`}
+                  onClick={() => onPage(shown)}
+                >
+                  {shown + 1}
+                </button>
+              </li>
+            )
+          )}
+        </ul>
+        <button
+          type="button"
+          className="shlListing__arrow"
+          disabled={page >= pages - 1}
+          aria-label="Next page"
+          data-test-subj="pagination-button-next"
+          onClick={() => onPage(page + 1)}
+        >
+          <Icon name="chevronRight" />
+        </button>
+      </nav>
+    </div>
+  );
+}
+
 export function ListingEmpty({
   icon,
   title,

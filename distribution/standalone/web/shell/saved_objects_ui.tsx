@@ -64,6 +64,7 @@ export function SaveModal({
         const found = await services.savedObjects.find<{ title: string }>({
           type: savedObjectType ?? typeFor(objectType),
           search: `"${title.trim()}"`,
+          rawSearch: true,
           searchFields: ['title'],
           fields: ['title'],
           perPage: 10,
@@ -123,6 +124,7 @@ export function SaveModal({
         {!showDescription && intro && <p className="atlSubdued atlSaveModal__intro">{intro}</p>}
         {existing && (
           <Switch
+            compressed
             checked={asNew}
             onChange={setAsNew}
             label={`Save as new ${objectType}`}

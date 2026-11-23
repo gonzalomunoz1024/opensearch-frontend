@@ -11,6 +11,7 @@ import {
   useSyncExternalStore,
   type CSSProperties,
   type ReactNode,
+  type RefObject,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { href as toHref } from '../router';
@@ -47,6 +48,9 @@ export interface PopoverProps {
    */
   position?: PopoverPosition;
 }
+
+/** Where the popovers open now hang from: a dialog under one of them leaves the Escape key to it */
+const openAnchors = new Set<HTMLElement>();
 
 export function Popover({
   button,
@@ -114,6 +118,8 @@ export function Popover({
 
   useEffect(() => {
     if (!open) return undefined;
+    const opened = anchor.current;
+    if (opened) openAnchors.add(opened);
     const onDown = (event: MouseEvent) => {
       const target = event.target as Node;
       if (anchor.current?.contains(target) || panel.current?.contains(target)) return;
@@ -130,6 +136,7 @@ export function Popover({
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
     return () => {
+      if (opened) openAnchors.delete(opened);
       document.removeEventListener('mousedown', onDown);
       document.removeEventListener('keydown', onKey);
     };
@@ -371,14 +378,18 @@ export function ContextMenu({
   );
 }
 
-function useEscape(onClose: () => void) {
+/** Closes a dialog on Escape, unless a popover opened from inside it is open: that closes first */
+function useEscape(onClose: () => void, layer: RefObject<HTMLElement | null>) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key !== 'Escape') return;
+      const inside = layer.current;
+      if (inside && [...openAnchors].some((element) => inside.contains(element))) return;
+      onClose();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onClose, layer]);
 }
 
 export function Modal({
@@ -401,8 +412,8 @@ export function Modal({
   /** 'l': the larger title the original's save dialogs have */
   titleSize?: 'm' | 'l';
 }) {
-  useEscape(onClose);
   const box = useRef<HTMLDivElement>(null);
+  useEscape(onClose, box);
   useEffect(() => {
     const first = box.current?.querySelector<HTMLElement>(
       'input:not([type=hidden]), textarea, select, [data-autofocus]'
@@ -513,11 +524,19 @@ export function Flyout({
   mask?: boolean;
   className?: string;
 }) {
-  useEscape(onClose);
+  const box = useRef<HTMLElement>(null);
+  useEscape(onClose, box);
+  // One that dims the page owns the focus, as the original's do: it moves to its first control
+  useEffect(() => {
+    const flyout = box.current;
+    if (!mask || !flyout || flyout.contains(document.activeElement)) return;
+    flyout.querySelector<HTMLElement>('button:not(:disabled), [href], input:not(:disabled), select, textarea, [tabindex="0"]')?.focus();
+  }, [mask]);
   return (
     <Portal>
       {mask && <div className="atlFlyoutMask" onMouseDown={onClose} />}
       <aside
+        ref={box}
         className={cx('atlFlyout', wide && 'atlFlyout--wide', className)}
         role="dialog"
         data-test-subj={testId}

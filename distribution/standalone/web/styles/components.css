@@ -337,12 +337,33 @@ select.atlField {
   transition: transform var(--duration-normal) var(--ease-out-quint);
 }
 
+/* In the accent when on, as the theme draws the original's switches */
 .atlSwitch__track[aria-checked="true"] {
-  background: var(--color-healthy);
+  background: var(--color-accent);
 }
 
 .atlSwitch__track[aria-checked="true"]::after {
   transform: translateX(16px);
+}
+
+/* The original's compressed switch, in forms and popovers */
+.atlSwitch--compressed {
+  line-height: 16px;
+}
+
+.atlSwitch--compressed .atlSwitch__track {
+  width: 28px;
+  height: 16px;
+  border-radius: 8px;
+}
+
+.atlSwitch--compressed .atlSwitch__track::after {
+  width: 12px;
+  height: 12px;
+}
+
+.atlSwitch--compressed .atlSwitch__track[aria-checked="true"]::after {
+  transform: translateX(12px);
 }
 
 .atlSwitch__track:disabled {

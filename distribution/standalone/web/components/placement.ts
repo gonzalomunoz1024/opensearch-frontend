@@ -2,7 +2,7 @@
 
 /* Where a popover goes beside the button that opened it, as the original's popovers choose. */
 
-export type PopoverPosition = 'downLeft' | 'downRight' | 'upLeft' | 'upRight';
+export type PopoverPosition = 'downLeft' | 'downCenter' | 'downRight' | 'upLeft' | 'upRight';
 
 interface Box {
   left: number;
@@ -27,7 +27,7 @@ export function placeLikeOriginal(
   const offset = 8;
   const arrow = 22;
   const down = position.startsWith('down');
-  const align = position.endsWith('Left') ? 'left' : 'right';
+  const align = position.endsWith('Left') ? 'left' : position.endsWith('Center') ? 'center' : 'right';
   const centerX = anchor.left + anchor.width / 2;
   const centerY = anchor.top + anchor.height / 2;
   const sides = down ? ['down', 'up', 'left', 'right'] : ['up', 'down', 'left', 'right'];
@@ -35,7 +35,8 @@ export function placeLikeOriginal(
     if (side === 'down' || side === 'up') {
       const top = side === 'down' ? anchor.top + anchor.height + offset : anchor.top - offset - panel.height;
       if (top < buffer || top + panel.height > view.height - buffer) continue;
-      let left = align === 'left' ? anchor.left : anchor.left + anchor.width - panel.width;
+      let left =
+        align === 'left' ? anchor.left : align === 'center' ? centerX - panel.width / 2 : anchor.left + anchor.width - panel.width;
       left = Math.max(Math.min(left, centerX - arrow), centerX + arrow - panel.width);
       left = Math.max(buffer, Math.min(left, view.width - buffer - panel.width));
       if (centerX - arrow < left - 0.5 || centerX + arrow > left + panel.width + 0.5) continue;
