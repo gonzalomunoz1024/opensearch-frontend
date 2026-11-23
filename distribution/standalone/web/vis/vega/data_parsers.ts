@@ -10,32 +10,19 @@
 
 import { buildQuery, type BoolQuery, type QueryConfig } from '../../lib/query';
 import type { Filter, Query } from '../../lib/types';
+import { contextFilters, uniqueQueries } from '../request';
 import { isPlainObject } from './utils';
 
 export type SpecObject = Record<string, unknown>;
 
-/** The page's queries without repeats, as the original merges them */
-function uniqueQueries(queries: Array<Query | undefined>): Query[] {
-  const seen = new Set<string>();
-  const result: Query[] = [];
-  for (const query of queries) {
-    if (!query) continue;
-    const key = JSON.stringify(query.query);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    result.push(query);
-  }
-  return result;
-}
-
 /**
  * The page's queries and filters as one boolean query: what %context% and the dashboard clauses
  * stand for, as the original's request handler builds it. An empty query in the query language is
- * one match_all among the filter clauses, as the original parses it.
+ * one match_all among the filter clauses, as the original parses it. A query or a filter that
+ * repeats an earlier one asks once (the context's uniqBy and uniqFilters).
  */
 export function contextQuery(queries: Array<Query | undefined>, filters: Filter[], config: QueryConfig): BoolQuery {
-  const enabled = filters.filter((filter) => !filter.meta?.disabled);
-  return buildQuery(undefined, uniqueQueries(queries), enabled, config);
+  return buildQuery(undefined, uniqueQueries(queries), contextFilters(filters), config);
 }
 
 /**

@@ -854,6 +854,8 @@ describe('the page\'s query and filters, as the original\'s request handler buil
     const on: Filter = { meta: { disabled: false }, query: { match_phrase: { a: 1 } } };
     const off: Filter = { meta: { disabled: true }, query: { match_phrase: { b: 2 } } };
     assert.deepEqual(contextQuery([], [on, off], {}).bool.filter, [{ match_phrase: { a: 1 } }]);
+    // a filter of the page that the visualization carries too asks once
+    assert.deepEqual(contextQuery([], [on, { ...on, $state: { store: 'globalState' } }], {}).bool.filter, [{ match_phrase: { a: 1 } }]);
   });
 });
 
