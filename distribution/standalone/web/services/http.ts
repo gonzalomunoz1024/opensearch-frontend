@@ -82,7 +82,8 @@ export class Http {
       });
     } catch (error) {
       if ((error as Error).name === 'AbortError') throw error;
-      throw new HttpFetchError(0, 'The server cannot be reached');
+      // As the original's: the browser's own words ("Failed to fetch")
+      throw new HttpFetchError(0, error instanceof Error ? error.message : 'Failed to fetch');
     }
 
     const text = await response.text();
