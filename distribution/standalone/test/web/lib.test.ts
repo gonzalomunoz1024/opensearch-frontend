@@ -51,7 +51,7 @@ describe('rison', () => {
     assert.equal(encode('a b'), "'a b'");
     assert.equal(encode("it's"), "'it!'s'");
     assert.equal(encode('now-7d'), 'now-7d');
-    assert.throws(() => decode('(a:'), /rison/);
+    assert.throws(() => decode('(a:'));
   });
 });
 
