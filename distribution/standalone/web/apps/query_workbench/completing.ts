@@ -17,7 +17,7 @@ export interface Listed {
   list: CompletionList;
   /** Where the word the list is for begins */
   base: number;
-  /** The row chosen, or -1 between the last row and the first */
+  /** The row chosen: a list that is open always has one */
   row: number;
 }
 
@@ -65,8 +65,8 @@ export function listAfterEdit(
 
 /**
  * What a key does to the open list, by the name Ace binds it under (`Ctrl-ArrowUp`): another row,
- * the list closed, or a row to put into the text. Undefined for a key that is not the list's, and
- * for Enter with no row chosen, which is the editor's line break then.
+ * the list closed, or a row to put into the text. Undefined for a key that is not the list's.
+ * The arrows go round from one end to the other; a page is a row fewer than the list shows.
  */
 export function listKey(
   listed: Listed,
@@ -79,8 +79,7 @@ export function listKey(
     case 'ArrowUp':
       return at(listed.row <= 0 ? last : listed.row - 1);
     case 'ArrowDown':
-      // Past the last row no row is chosen, and the next key down chooses the first
-      return at(listed.row >= last ? -1 : listed.row + 1);
+      return at(listed.row >= last ? 0 : listed.row + 1);
     case 'Ctrl-ArrowUp':
     case 'Ctrl-Home':
       return at(0);
@@ -88,17 +87,15 @@ export function listKey(
     case 'Ctrl-End':
       return at(last);
     case 'PageUp':
-      return at(Math.max(0, Math.max(0, listed.row) - page));
+      return at(Math.max(0, listed.row - page));
     case 'PageDown':
-      return at(Math.min(last, Math.max(0, listed.row) + page));
+      return at(Math.min(last, listed.row + page));
     case 'Escape':
       return {};
     case 'Enter':
-      return listed.row < 0 ? undefined : { insert: listed.row };
     case 'Shift-Enter':
-      return listed.row < 0 ? { listed } : { insert: listed.row };
     case 'Tab':
-      return listed.row < 0 ? at(0) : { insert: listed.row };
+      return { insert: listed.row };
     default:
       return undefined;
   }
@@ -116,5 +113,9 @@ export function insertCompletion(
   if (!item) return undefined;
   const from = Math.max(0, start - listed.list.filterText.length);
   const cursor = from + item.value.length;
-  return { text: `${text.slice(0, from)}${item.value}${text.slice(end)}`, start: cursor, end: cursor };
+  return {
+    text: `${text.slice(0, from)}${item.value}${text.slice(end)}`,
+    start: cursor,
+    end: cursor,
+  };
 }

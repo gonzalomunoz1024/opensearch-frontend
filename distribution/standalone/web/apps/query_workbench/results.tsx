@@ -58,7 +58,17 @@ interface Opening {
   show: (row: string, name: string) => void;
 }
 
-function Cells({ data, columns, path, opening }: { data: unknown; columns: string[]; path: string; opening: Opening }) {
+function Cells({
+  data,
+  columns,
+  path,
+  opening,
+}: {
+  data: unknown;
+  columns: string[];
+  path: string;
+  opening: Opening;
+}) {
   if (columns.length === 0) {
     return <td className="qwbCell">{cellText(data, '').text}</td>;
   }
@@ -151,7 +161,11 @@ function Rows({
                       <span className={cx(shown && 'qwbNames__name--open')}>{name}</span>
                     </div>
                     {shown && (
-                      <Nested value={(data as Record<string, unknown>)[name]} path={inner} opening={opening} />
+                      <Nested
+                        value={(data as Record<string, unknown>)[name]}
+                        path={inner}
+                        opening={opening}
+                      />
                     )}
                   </li>
                 );
@@ -261,12 +275,33 @@ function ResultTableView({
           <MenuButton
             align="right"
             items={[
-              { id: 'jdbc', label: 'Download JDBC', onClick: () => onDownload('jdbc'), testId: 'downloadJdbc' },
-              { id: 'csv', label: 'Download CSV', onClick: () => onDownload('csv'), testId: 'downloadCsv' },
-              { id: 'text', label: 'Download Text', onClick: () => onDownload('text'), testId: 'downloadText' },
+              {
+                id: 'jdbc',
+                label: 'Download JDBC',
+                onClick: () => onDownload('jdbc'),
+                testId: 'downloadJdbc',
+              },
+              {
+                id: 'csv',
+                label: 'Download CSV',
+                onClick: () => onDownload('csv'),
+                testId: 'downloadCsv',
+              },
+              {
+                id: 'text',
+                label: 'Download Text',
+                onClick: () => onDownload('text'),
+                testId: 'downloadText',
+              },
             ]}
             button={(toggle) => (
-              <Button size="s" icon="chevronDown" iconSide="right" onClick={toggle} testId="downloadButton">
+              <Button
+                size="s"
+                icon="chevronDown"
+                iconSide="right"
+                onClick={toggle}
+                testId="downloadButton"
+              >
                 Download
               </Button>
             )}
@@ -392,9 +427,19 @@ export function Results(props: ResultsProps) {
         <h3 className="atlTitleS">Results</h3>
         {results.length > 0 &&
           (fullScreen ? (
-            <IconButton icon="cross" label="Exit full screen" id="exit-fullscreen-button" onClick={() => onFullScreen(false)} />
+            <IconButton
+              icon="cross"
+              label="Exit full screen"
+              id="exit-fullscreen-button"
+              onClick={() => onFullScreen(false)}
+            />
           ) : (
-            <Button size="s" icon="fullScreen" onClick={() => onFullScreen(true)} testId="fullScreenView">
+            <Button
+              size="s"
+              icon="fullScreen"
+              onClick={() => onFullScreen(true)}
+              testId="fullScreenView"
+            >
               Full screen view
             </Button>
           ))}

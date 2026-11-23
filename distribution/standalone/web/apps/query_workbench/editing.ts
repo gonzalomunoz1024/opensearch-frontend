@@ -250,7 +250,8 @@ function selectedRows(text: string, start: number, end: number) {
 /** The column a place of a line is drawn at: a tab reaches the next step */
 export function screenColumn(line: string, column: number): number {
   let at = 0;
-  for (let index = 0; index < column; index += 1) at = line[index] === '\t' ? at + TAB - (at % TAB) : at + 1;
+  for (let index = 0; index < column; index += 1)
+    at = line[index] === '\t' ? at + TAB - (at % TAB) : at + 1;
   return at;
 }
 
@@ -348,7 +349,8 @@ function removal(
   }
   const removed = text.slice(start, end);
   const own = end;
-  const paired = pairs && removed.length === 1 && PAIRS[removed] !== undefined && text[end] === PAIRS[removed];
+  const paired =
+    pairs && removed.length === 1 && PAIRS[removed] !== undefined && text[end] === PAIRS[removed];
   if (paired) end += 1;
   else if (removed.endsWith('\n')) {
     // The line that comes up is taken whole when spaces are all it holds
@@ -430,7 +432,10 @@ export function editorKey(
         : memory.maybe;
     // Between a pair the kit's editor would take both away: the one character goes from here
     const alone =
-      !taken.edit && key.key === 'Backspace' && start === end && KIT_PAIRS.includes(text.slice(start - 1, start + 1))
+      !taken.edit &&
+      key.key === 'Backspace' &&
+      start === end &&
+      KIT_PAIRS.includes(text.slice(start - 1, start + 1))
         ? replace(text, start - 1, start, '', start - 1)
         : undefined;
     return { edit: taken.edit ?? alone, memory: { ...memory, maybe }, kind };

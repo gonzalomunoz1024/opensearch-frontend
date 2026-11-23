@@ -23,6 +23,15 @@ import { cx } from '../../components/basic';
 import { CodeEditor, type CodeEditorHandle } from '../../components/code_editor';
 import { Portal } from '../../components/overlay';
 import {
+  LIST_ROWS,
+  insertCompletion,
+  listAfterEdit,
+  listKey,
+  followList,
+  openList,
+  type Listed,
+} from './completing';
+import {
   editorKey,
   matchingBracket,
   screenColumn,
@@ -33,13 +42,9 @@ import {
 import {
   SQL_WORDS,
   completionMeta,
-  completionPrefix,
   completionRuns,
-  completionsDone,
   indentGuides,
-  openCompletions,
   tokenizeSql,
-  type CompletionList,
   type Language,
 } from './model';
 
@@ -51,7 +56,6 @@ const HEIGHT = 140;
 const LIST_WIDTH = 280;
 /** A row of the list: 1.4 lines of its text, as the browser lays them out */
 const LIST_ROW = 19.59375;
-const LIST_ROWS = 8;
 
 const sqlLines = (text: string) => indentGuides(tokenizeSql(text));
 const textLines = (text: string) => indentGuides(text.split('\n').map((line) => [{ text: line }]));
@@ -61,14 +65,6 @@ interface Selected {
   end: number;
   /** Made towards the start of the text: the cursor is at `start` */
   backwards: boolean;
-}
-
-/** The list of completions while it is open: what it offers, where its word begins, its row */
-interface Listed {
-  list: CompletionList;
-  base: number;
-  /** The row chosen, or -1 between the last and the first */
-  row: number;
 }
 
 /** Where the list is in the window: under the line of its word, or over it */
@@ -168,56 +164,22 @@ export function QueryEditor({
 
   // --- The list of completions, as Ace's language tools run it --------------------------------
 
-  const closeList = () => {
-    if (!listed.current) return;
-    listed.current = undefined;
-    setPlace(undefined);
-    setHover(-1);
+  /** The list as it is now; one that opens, or opens again, is placed where its word begins */
+  const showList = (next: Listed | undefined) => {
+    const was = listed.current;
+    if (next === was) return;
+    listed.current = next;
+    if (!next) setPlace(undefined);
+    else if (!was || next.list !== was.list) placing.current = true;
+    if (!next || !was || next.list !== was.list) setHover(-1);
     redraw();
   };
 
-  /** A new list for the word before the cursor */
-  const openList = (text: string, cursor: number) => {
-    const list = openCompletions(text, cursor);
-    if (completionsDone(list)) {
-      closeList();
-      return;
-    }
-    listed.current = { list, base: cursor - list.filterText.length, row: 0 };
-    placing.current = true;
-    setHover(-1);
-    redraw();
-  };
-
-  /** The open list after the cursor moved or the text changed: fewer rows, or closed */
-  const followList = (text: string, cursor: number, backspace: boolean) => {
-    const open = listed.current;
-    if (!open) return;
-    // Backspace with no word left closes the list, and so does a cursor out of the word's line
-    // or before its start
-    if (
-      (backspace && !completionPrefix(text, cursor)) ||
-      cursor < open.base ||
-      text.slice(open.base, cursor).includes('\n')
-    ) {
-      closeList();
-      return;
-    }
-    const prefix = text.slice(open.base, cursor);
-    if (prefix === open.list.filterText) return;
-    open.list.setFilter(prefix);
-    if (completionsDone(open.list) || !prefix) {
-      closeList();
-      return;
-    }
-    open.row = 0;
-    redraw();
-  };
+  const closeList = () => showList(undefined);
 
   /** What follows an edit or a key that typed: the list opens for a word, or follows it */
   const afterEdit = (text: string, cursor: number, kind: EditKind) => {
-    if (listed.current) followList(text, cursor, kind === 'backspace');
-    else if (kind === 'insert' && words && completionPrefix(text, cursor)) openList(text, cursor);
+    if (words) showList(listAfterEdit(listed.current, text, cursor, kind));
   };
 
   // --- Edits ----------------------------------------------------------------------------------
@@ -268,23 +230,10 @@ export function QueryEditor({
   const insertMatch = (row: number) => {
     const open = listed.current;
     const input = area();
-    const item = open?.list.filtered[row];
-    if (!open || !input || !item) return false;
-    const text = input.value;
-    const from = Math.max(0, input.selectionStart - open.list.filterText.length);
-    const cursor = from + item.value.length;
-    listed.current = undefined;
-    setPlace(undefined);
-    apply(
-      {
-        text: `${text.slice(0, from)}${item.value}${text.slice(input.selectionEnd)}`,
-        start: cursor,
-        end: cursor,
-      },
-      'other'
-    );
-    redraw();
-    return true;
+    if (!open || !input) return;
+    const edit = insertCompletion(open, row, input.value, input.selectionStart, input.selectionEnd);
+    closeList();
+    if (edit) apply(edit, 'other');
   };
 
   const handleChange = (next: string) => {
@@ -299,57 +248,20 @@ export function QueryEditor({
   // --- Keys -----------------------------------------------------------------------------------
 
   /** The keys of the open list, as Ace binds them. Tells whether the key was one of them. */
-  const listKey = (event: KeyboardEvent<HTMLTextAreaElement>): boolean => {
+  const onListKey = (event: KeyboardEvent<HTMLTextAreaElement>): boolean => {
     const open = listed.current;
     if (!open) return false;
-    const last = open.list.filtered.length - 1;
-    const page = Math.max(1, Math.min(LIST_ROWS, last + 1) - 1);
-    const name = `${modifiers(event)}${event.key}`;
-    switch (name) {
-      case 'ArrowUp':
-        open.row = open.row <= 0 ? last : open.row - 1;
-        break;
-      case 'ArrowDown':
-        // Past the last row no row is chosen, and the next key down chooses the first
-        open.row = open.row >= last ? -1 : open.row + 1;
-        break;
-      case 'Ctrl-ArrowUp':
-      case 'Ctrl-Home':
-        open.row = 0;
-        break;
-      case 'Ctrl-ArrowDown':
-      case 'Ctrl-End':
-        open.row = last;
-        break;
-      case 'PageUp':
-        open.row = Math.max(0, Math.max(0, open.row) - page);
-        break;
-      case 'PageDown':
-        open.row = Math.min(last, Math.max(0, open.row) + page);
-        break;
-      case 'Escape':
-        closeList();
-        return true;
-      case 'Enter':
-        // With no row chosen the key is the editor's: a line break
-        return insertMatch(open.row);
-      case 'Shift-Enter':
-        insertMatch(open.row);
-        return true;
-      case 'Tab':
-        if (!insertMatch(open.row)) open.row = 0;
-        break;
-      default:
-        return false;
-    }
-    redraw();
+    const done = listKey(open, `${modifiers(event)}${event.key}`);
+    if (!done) return false;
+    if (done.insert !== undefined) insertMatch(done.insert);
+    else showList(done.listed);
     return true;
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     command.current = 'other';
     if (event.nativeEvent.isComposing || event.key === 'Process') return;
-    if (listKey(event)) {
+    if (onListKey(event)) {
       event.preventDefault();
       return;
     }
@@ -359,8 +271,9 @@ export function QueryEditor({
     const backwards = input.selectionDirection === 'backward' && start !== end;
     const name = `${modifiers(event)}${event.key}`;
     if (words && (name === 'Ctrl- ' || name === 'Ctrl-Shift- ' || name === 'Alt- ')) {
+      // A fresh list, as Ace gathers one, in place of the one open
       event.preventDefault();
-      openList(text, backwards ? start : end);
+      showList(openList(text, backwards ? start : end));
       return;
     }
     if (event.key === 'Escape') {
@@ -427,7 +340,8 @@ export function QueryEditor({
       const input = area();
       if (!input || document.activeElement !== input) return;
       const now = sync();
-      if (now && listed.current) followList(input.value, now.backwards ? now.start : now.end, false);
+      const open = listed.current;
+      if (now && open) showList(followList(open, input.value, now.backwards ? now.start : now.end));
     };
     document.addEventListener('selectionchange', onSelectionChange);
     return () => document.removeEventListener('selectionchange', onSelectionChange);
@@ -578,7 +492,11 @@ export function QueryEditor({
   return (
     <div
       ref={box}
-      className={cx('qwbCode', sql ? 'qwbCode--sql' : 'qwbCode--text', editing && 'qwbCode--editing')}
+      className={cx(
+        'qwbCode',
+        sql ? 'qwbCode--sql' : 'qwbCode--text',
+        editing && 'qwbCode--editing'
+      )}
       style={{ '--qwb-digits': digits } as CSSProperties}
       data-test-subj={sql ? 'sqlCodeEditor' : 'pplCodeEditor'}
       onFocus={(event) => {
@@ -640,7 +558,10 @@ export function QueryEditor({
               left: place.left,
               top: place.top,
               bottom: place.bottom,
-              height: Math.min(Math.min(LIST_ROWS, open.list.filtered.length) * LIST_ROW, place.room),
+              height: Math.min(
+                Math.min(LIST_ROWS, open.list.filtered.length) * LIST_ROW,
+                place.room
+              ),
             }}
             onMouseLeave={() => setHover(-1)}
             data-test-subj="sqlCodeEditorCompletions"
@@ -658,8 +579,7 @@ export function QueryEditor({
                 onMouseDown={(event) => {
                   // The text keeps the focus; the row is chosen, and the click puts it in
                   event.preventDefault();
-                  open.row = index;
-                  redraw();
+                  showList({ ...open, row: index });
                 }}
                 onClick={() => insertMatch(index)}
                 onMouseMove={() => setHover(index)}

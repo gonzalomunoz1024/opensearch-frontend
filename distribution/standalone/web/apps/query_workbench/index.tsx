@@ -39,14 +39,20 @@ async function ask(route: string, query: string): Promise<QueryAnswer> {
   try {
     return readAnswer(await services.http.post(`${ROUTE}/${route}`, { body: { query } }));
   } catch (error) {
-    const body = error instanceof HttpFetchError ? (error.body as { message?: unknown } | undefined) : undefined;
+    const body =
+      error instanceof HttpFetchError
+        ? (error.body as { message?: unknown } | undefined)
+        : undefined;
     return readAnswer(undefined, reasonOf(body?.message) || (error as Error).message);
   }
 }
 
 // --- The indices --------------------------------------------------------------------------------
 
-type Tree = { state: 'loading' } | { state: 'loaded'; names: string[] } | { state: 'failed'; message: string };
+type Tree =
+  | { state: 'loading' }
+  | { state: 'loaded'; names: string[] }
+  | { state: 'failed'; message: string };
 
 function IndexTree() {
   const [tree, setTree] = useState<Tree>({ state: 'loading' });
@@ -55,13 +61,18 @@ function IndexTree() {
     void (async () => {
       let next: Tree;
       try {
-        const answer = readAnswer(await services.http.post(`${ROUTE}/sqlquery`, { body: { query: INDICES_QUERY } }));
+        const answer = readAnswer(
+          await services.http.post(`${ROUTE}/sqlquery`, { body: { query: INDICES_QUERY } })
+        );
         const names = indexNames(answer);
         next = names.length
           ? { state: 'loaded', names }
           : { state: 'failed', message: 'Failed to load OpenSearch indices' };
       } catch {
-        next = { state: 'failed', message: 'Failed to load OpenSearch indices, please check user permissions' };
+        next = {
+          state: 'failed',
+          message: 'Failed to load OpenSearch indices, please check user permissions',
+        };
       }
       if (!stale) setTree(next);
     })();
@@ -115,7 +126,10 @@ function readTranslation(response: unknown): Translation {
   return { fulfilled: true, data: data.resp };
 }
 
-const FILE_KINDS: Record<DownloadKind, { route?: string; extension: string; type: string; name: string }> = {
+const FILE_KINDS: Record<
+  DownloadKind,
+  { route?: string; extension: string; type: string; name: string }
+> = {
   jdbc: { extension: 'json', type: 'text/json', name: 'JDBC' },
   csv: { route: 'sqlcsv', extension: 'csv', type: 'text/csv', name: 'CSV' },
   text: { route: 'sqltext', extension: 'txt', type: 'text/plain', name: 'Text' },
@@ -167,7 +181,9 @@ export function QueryWorkbench() {
     const got = await Promise.all(
       list.map(async (query) => {
         try {
-          return readTranslation(await services.http.post(`${ROUTE}/${route}`, { body: { query } }));
+          return readTranslation(
+            await services.http.post(`${ROUTE}/${route}`, { body: { query } })
+          );
         } catch {
           return readTranslation(undefined);
         }
@@ -175,7 +191,9 @@ export function QueryWorkbench() {
     );
     setQueries(list);
     setTranslations(got);
-    setMessages(got.map((translation) => (translation.data ? 'Success' : (translation.errorMessage ?? ''))));
+    setMessages(
+      got.map((translation) => (translation.data ? 'Success' : (translation.errorMessage ?? '')))
+    );
     setExplaining((now) => (now ? 'shown' : undefined));
   };
 
@@ -247,7 +265,12 @@ export function QueryWorkbench() {
           </aside>
           <div className="qwbMain">
             <div className="qwbTop">
-              <div className="atlSegments" role="group" aria-label="Query language" data-test-subj="switch-button">
+              <div
+                className="atlSegments"
+                role="group"
+                aria-label="Query language"
+                data-test-subj="switch-button"
+              >
                 {(['SQL', 'PPL'] as const).map((id) => (
                   <button
                     key={id}
@@ -267,7 +290,12 @@ export function QueryWorkbench() {
                   </button>
                 ))}
               </div>
-              <a className="atlButton atlButton--s" href={docs.link} target="_blank" rel="noopener noreferrer">
+              <a
+                className="atlButton atlButton--s"
+                href={docs.link}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 {docs.title}
                 <Icon name="external" />
               </a>
@@ -277,13 +305,26 @@ export function QueryWorkbench() {
               {language === 'PPL' && <h3 className="atlTitleS qwbEditor__title">Query editor</h3>}
               <QueryEditor key={language} language={language} value={text} onChange={setText} />
               <div className="qwbActions">
-                <Button variant="primary" size="s" onClick={() => void run()} testId={language === 'SQL' ? 'sqlRunButton' : 'pplRunButton'}>
+                <Button
+                  variant="primary"
+                  size="s"
+                  onClick={() => void run()}
+                  testId={language === 'SQL' ? 'sqlRunButton' : 'pplRunButton'}
+                >
                   Run
                 </Button>
-                <Button size="s" onClick={clear} testId={language === 'SQL' ? 'sqlClearButton' : 'pplClearButton'}>
+                <Button
+                  size="s"
+                  onClick={clear}
+                  testId={language === 'SQL' ? 'sqlClearButton' : 'pplClearButton'}
+                >
                   Clear
                 </Button>
-                <Button size="s" onClick={() => void explain()} testId={language === 'SQL' ? 'sqlExplainButton' : 'pplExplainButton'}>
+                <Button
+                  size="s"
+                  onClick={() => void explain()}
+                  testId={language === 'SQL' ? 'sqlExplainButton' : 'pplExplainButton'}
+                >
                   Explain
                 </Button>
               </div>
@@ -324,7 +365,9 @@ export function QueryWorkbench() {
           )}
         </Modal>
       )}
-      {downloadError && <DownloadError message={downloadError} onClose={() => setDownloadError(undefined)} />}
+      {downloadError && (
+        <DownloadError message={downloadError} onClose={() => setDownloadError(undefined)} />
+      )}
     </div>
   );
 }
