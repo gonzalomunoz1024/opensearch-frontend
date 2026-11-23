@@ -8,10 +8,35 @@
  * %dashboard_context-…% clauses) worked out as the original works them out, with its messages.
  */
 
-import type { BoolQuery } from '../../lib/query';
+import { buildQuery, type BoolQuery, type QueryConfig } from '../../lib/query';
+import type { Filter, Query } from '../../lib/types';
 import { isPlainObject } from './utils';
 
 export type SpecObject = Record<string, unknown>;
+
+/** The page's queries without repeats, as the original merges them */
+function uniqueQueries(queries: Array<Query | undefined>): Query[] {
+  const seen = new Set<string>();
+  const result: Query[] = [];
+  for (const query of queries) {
+    if (!query) continue;
+    const key = JSON.stringify(query.query);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(query);
+  }
+  return result;
+}
+
+/**
+ * The page's queries and filters as one boolean query: what %context% and the dashboard clauses
+ * stand for, as the original's request handler builds it. An empty query in the query language is
+ * one match_all among the filter clauses, as the original parses it.
+ */
+export function contextQuery(queries: Array<Query | undefined>, filters: Filter[], config: QueryConfig): BoolQuery {
+  const enabled = filters.filter((filter) => !filter.meta?.disabled);
+  return buildQuery(undefined, uniqueQueries(queries), enabled, config);
+}
 
 /** A data object of the spec, and its `url` taken out of it */
 export interface DataRequest {
