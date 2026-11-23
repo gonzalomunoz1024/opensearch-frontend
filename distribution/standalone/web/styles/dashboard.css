@@ -154,18 +154,26 @@ body.dshDragging {
 
 /* An untitled panel says so while the dashboard is edited */
 .dshPanel__noTitle {
+  overflow: hidden;
   color: var(--color-text-tertiary);
   font-weight: var(--font-weight-regular);
+  text-overflow: ellipsis;
 }
 
+/* The space after the title is its spans', as in the original: a long one ends where it does */
 .dshPanel__title {
   flex: 1 1 auto;
   min-width: 0;
-  padding: 0 var(--space-2);
+  padding: 0 0 0 var(--space-2);
   /* the original's panel titles are 13 pixels, between the theme's two small sizes */
   font-size: 13px;
   font-weight: var(--font-weight-semibold);
   line-height: 24px;
+}
+
+/* A long title is cut short before the options button, which keeps its size */
+.dshPanel__menuAnchor {
+  flex: none;
 }
 
 /* The original's options button: a tab in the panel's corner, tinted with the text's colour */
@@ -226,7 +234,12 @@ body.dshDragging {
   padding: 0;
 }
 
-/* A description beside the title: the original's icon, its tooltip telling it */
+/* A description beside the title: the original's icon, its tooltip telling it; a long title is
+   cut short before the icon */
+.dshPanel__title > .atlTooltipAnchor {
+  max-width: 100%;
+}
+
 .dshPanel__titleInner {
   display: inline-flex;
   align-items: center;

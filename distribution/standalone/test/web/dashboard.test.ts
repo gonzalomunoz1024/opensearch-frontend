@@ -1,7 +1,10 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { cloneBase, cloneTitle, fullAppState, ownTime, sameQuery, type UrlAppState } from '../../web/apps/dashboard/app_state';
 import {
   MIN_PANEL,
@@ -43,6 +46,8 @@ import {
   type GridItem,
   type PanelState,
 } from '../../web/apps/dashboard/model';
+import { PanelMenu } from '../../web/apps/dashboard/panel_menu';
+import { PanelTitle } from '../../web/apps/dashboard/panel_title';
 import { existsFilter, phraseFilter, uniqueFilters } from '../../web/lib/query';
 import type { Filter, Query } from '../../web/lib/types';
 import { decodeState, encodeState } from '../../web/lib/url';
@@ -728,6 +733,54 @@ describe("a panel's title", () => {
     assert.equal(panelTitleHidden(titled({ hidePanelTitles: false }), true), true);
     assert.equal(panelTitleHidden(titled({ hidePanelTitles: true }), false), true);
     assert.equal(panelTitleHidden(titled({}), false), false);
+  });
+});
+
+// As the original's panel header marks it up (panel_header.tsx), compared with its page
+describe("a panel's heading", () => {
+  const heading = (props: Partial<Parameters<typeof PanelTitle>[0]> = {}) =>
+    renderToStaticMarkup(
+      createElement(PanelTitle, { labelId: 'l', title: 'Sales', showTitle: true, showBar: true, description: '', ...props })
+    );
+  // The declarations of a rule of the dashboard's stylesheet
+  const ruleOf = (selector: string): string => {
+    const sheet = readFileSync('web/styles/dashboard.css', 'utf8');
+    const start = sheet.indexOf(`\n${selector} {`);
+    assert.ok(start >= 0, `${selector} has a rule`);
+    return sheet.slice(start, sheet.indexOf('}', start));
+  };
+
+  it('holds the title in a span of its own, with a description or without', () => {
+    // What a script reads as the title is the title, after the words of a screen reader
+    assert.equal(
+      heading(),
+      '<h2 class="dshPanel__title atlTruncate" title="Sales" data-test-subj="dashboardPanelTitle">' +
+        '<span id="l" class="atlScreenReaderOnly">Dashboard panel: Sales</span>' +
+        '<span class="dshPanel__titleInner"><span class="dshPanel__titleText">Sales</span></span></h2>'
+    );
+    assert.match(
+      heading({ description: 'About sales' }),
+      /<span class="dshPanel__titleInner"><span class="dshPanel__titleText">Sales<\/span> <svg[^>]*class="atlIcon[^"]*dshPanel__info"/
+    );
+  });
+
+  it('puts "[No Title]" in place of the title while the dashboard is edited', () => {
+    assert.match(heading({ title: '' }), /<span class="dshPanel__titleInner"><span class="dshPanel__noTitle">\[No Title\]<\/span><\/span><\/h2>$/);
+    const described = heading({ title: '', description: 'About sales' });
+    assert.match(described, /<span class="dshPanel__titleInner"><span class="dshPanel__noTitle">\[No Title\]<\/span> <svg/);
+    assert.ok(!described.includes('dshPanel__titleText'));
+  });
+
+  it('is no heading on a panel without a bar, only what a screen reader calls it', () => {
+    assert.equal(heading({ title: '', showTitle: false, showBar: false }), '<span id="l" class="atlScreenReaderOnly">Dashboard panel</span>');
+  });
+
+  it('leaves the options button and the description in the panel beside a long title', () => {
+    // The button's anchor keeps its size, and the title's anchor no wider than the heading: what
+    // does not fit of a long title is cut short before them, as in the original
+    assert.match(renderToStaticMarkup(createElement(PanelMenu, { editing: false, items: [] })), /^<span class="dshPanel__menuAnchor"[ >]/);
+    assert.match(ruleOf('.dshPanel__menuAnchor'), /flex: none;/);
+    assert.match(ruleOf('.dshPanel__title > .atlTooltipAnchor'), /max-width: 100%;/);
   });
 });
 

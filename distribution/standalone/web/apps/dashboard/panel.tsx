@@ -48,6 +48,7 @@ import {
   type PanelState,
 } from './model';
 import { EDIT_NAMES, PanelMenu, type PanelAction } from './panel_menu';
+import { PanelTitle } from './panel_title';
 
 export interface LoadedObject {
   object?: SavedObject<Record<string, unknown>>;
@@ -515,21 +516,7 @@ export const DashboardPanel = memo(function DashboardPanel({
         className={cx('dshPanel__header', !showPanelBar && 'dshPanel__header--floating')}
         onPointerDown={editing && onDragStart ? (event) => onDragStart(event, id) : undefined}
       >
-        <h2 className="dshPanel__title atlTruncate" title={showTitle ? title : undefined} data-test-subj="dashboardPanelTitle">
-          <span id={labelId} className="atlScreenReaderOnly">
-            {showPanelBar && title ? `Dashboard panel: ${title}` : 'Dashboard panel'}
-          </span>
-          {description ? (
-            <Tooltip content={description}>
-              <span className="dshPanel__titleInner">
-                {showTitle && <span className="dshPanel__titleText">{title || <span className="dshPanel__noTitle">[No Title]</span>}</span>}{' '}
-                <Icon name="info" className="dshPanel__info" />
-              </span>
-            </Tooltip>
-          ) : (
-            showTitle && (title || <span className="dshPanel__noTitle">[No Title]</span>)
-          )}
-        </h2>
+        <PanelTitle labelId={labelId} title={title} showTitle={showTitle} showBar={showPanelBar} description={description} />
         <PanelMenu editing={editing && !labDisabled} items={items} />
       </header>
       {failure && (
