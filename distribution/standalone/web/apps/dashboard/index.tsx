@@ -10,7 +10,7 @@ import { uniqueFilters } from '../../lib/query';
 import { parseSearchSource } from '../../lib/search_source';
 import type { Filter, IndexPattern, Query } from '../../lib/types';
 import { appUrl, decodeState, encodeQueryValue, encodeState } from '../../lib/url';
-import { getLocation, href, navigate, setHashParams, setLeaveGuard, useLocation } from '../../router';
+import { getLocation, href, locationState, navigate, setHashParams, setLeaveGuard, setLocationState, useLocation } from '../../router';
 import { services } from '../../services';
 import { errorMessage } from '../../services/http';
 import type { SavedObject } from '../../services/saved_objects';
@@ -44,6 +44,7 @@ import {
   dashboardToSavedObject,
   emptyDashboard,
   findPlace,
+  handedPanel,
   layoutsDiffer,
   newPanelIndex,
   orderAsOriginal,
@@ -54,6 +55,8 @@ import {
   readingOrder,
   samePanels,
   settleLayout,
+  withHandedPanel,
+  type ContainerInfo,
   type Dashboard,
   type DashboardAttributes,
   type DashboardOptions,
@@ -214,6 +217,9 @@ function DashboardPage({ savedId }: { savedId?: string }) {
   const heldQuery = asHeld(query, held.current.query ?? (cameWith.current.query === undefined ? saved?.query ?? defaultQuery : undefined));
   const heldOptions = asHeld(options, held.current.options ?? (cameWith.current.options === undefined ? saved?.options : undefined));
   const title = urlState.title ?? saved?.title ?? '';
+  // The dashboard as its panels name it to the editor they are sent to: its title, and the id of
+  // its saved object, none while it is new
+  const container = useMemo<ContainerInfo>(() => ({ containerName: title, containerId: savedId ?? '' }), [title, savedId]);
   const description = urlState.description ?? saved?.description ?? '';
   const timeRestore = urlState.timeRestore ?? saved?.timeRestore ?? false;
 
@@ -290,6 +296,24 @@ function DashboardPage({ savedId }: { savedId?: string }) {
     if (full !== raw) setHashParams({ _a: full }, { replace: true });
   }, [saved, rawApp, defaultQuery]);
 
+  // A panel an editor hands back as it comes back, as the original's dashboard takes it when it
+  // opens: the panel sent there, given what the editor gives it, or else a new one. It is taken
+  // once, which a reload, keeping what the entry of the history carries, does not undo.
+  useEffect(() => {
+    if (!saved) return;
+    const handed = handedPanel(locationState<unknown>());
+    if (!handed) return;
+    setLocationState(undefined);
+    const current = panelsNow.current;
+    const next = withHandedPanel(current, handed, newPanelIndex);
+    if (!next) return;
+    if (next.length === current.length) setPanels(next);
+    else {
+      const settled = settle(next, current.map((panel) => panel.panelIndex));
+      setPanels(settled.panels, settled.order);
+    }
+  }, [saved, setPanels]);
+
   const panelKey = panels.map((panel) => `${panel.type}:${panel.id}`).join(',');
   useEffect(() => {
     const missing = [...new Set(panelKey.split(',').filter((key) => key && !(key in objects)))];
@@ -332,10 +356,18 @@ function DashboardPage({ savedId }: { savedId?: string }) {
   useEffect(() => {
     let live = true;
     const ids = patternIds ? patternIds.split(',') : [];
-    Promise.allSettled(ids.map((id) => services.indexPatterns.get(id))).then((results) => {
-      if (!live) return;
-      setPatterns(results.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : [])));
-    });
+    Promise.allSettled(ids.map((id) => services.indexPatterns.get(id)))
+      .then(async (results) => {
+        const found = results.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []));
+        if (found.length > 0) return found;
+        // As the original: with none behind the panels, as on a new dashboard, the bars work on
+        // the default index pattern, and "Add filter" offers its fields
+        const fallback = await services.indexPatterns.getDefault().catch(() => undefined);
+        return fallback ? [fallback] : [];
+      })
+      .then((found) => {
+        if (live) setPatterns(found);
+      });
     return () => {
       live = false;
     };
@@ -732,6 +764,7 @@ function DashboardPage({ savedId }: { savedId?: string }) {
                 editing={editing && !fullScreen}
                 hideTitle={options.hidePanelTitles === true}
                 expanded={expanded === panel.panelIndex}
+                container={container}
                 dragging={handlers.dragging}
                 onDragStart={handlers.onDragStart}
                 onResizeStart={handlers.onResizeStart}

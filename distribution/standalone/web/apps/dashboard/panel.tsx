@@ -37,7 +37,7 @@ import { DocDetails } from '../discover/doc_viewer';
 import { valueFilter } from '../discover/filters';
 import { buildDiscoverRequest } from '../discover/search';
 import { normalizeSort } from '../discover/sort';
-import { existingFilter, takenAgain, type PanelState } from './model';
+import { editorStateFor, existingFilter, offersInspector, takenAgain, type ContainerInfo, type PanelState } from './model';
 import { EDIT_NAMES, PanelMenu, type PanelAction } from './panel_menu';
 
 export interface LoadedObject {
@@ -259,6 +259,8 @@ export interface DashboardPanelProps {
   editing: boolean;
   hideTitle: boolean;
   expanded: boolean;
+  /** The dashboard, as "Edit visualization" names it to the editor, which comes back to it */
+  container: ContainerInfo;
   dragging?: boolean;
   onDragStart?: (event: ReactPointerEvent, panelIndex: string) => void;
   onResizeStart?: (event: ReactPointerEvent, panelIndex: string) => void;
@@ -311,6 +313,7 @@ export const DashboardPanel = memo(function DashboardPanel({
   editing,
   hideTitle,
   expanded,
+  container,
   dragging,
   onDragStart,
   onResizeStart,
@@ -381,8 +384,10 @@ export const DashboardPanel = memo(function DashboardPanel({
   const showPanelBar = (editing && !labDisabled) || showTitle || description !== '';
   const labelId = useId();
 
-  // The inspector is offered for what asked for data, as the original offers it
+  // The inspector is offered for what asked for data, as the original offers it, but not for the
+  // kinds of visualization the original gives it nothing for
   const [inspectable, setInspectable] = useState(false);
+  const inspectorOffered = inspectable && (!vis || offersInspector(vis.type));
   const reportData = useCallback(
     (data: PanelData) => {
       if (data.requests.length > 0 || data.table) setInspectable(true);
@@ -448,7 +453,17 @@ export const DashboardPanel = memo(function DashboardPanel({
     ? []
     : [
         ...(editing && usable && editTo
-          ? [{ id: 'edit', label: `Edit ${EDIT_NAMES[panel.type] ?? panel.type}`, icon: 'pencil' as const, to: editTo, testId: 'embeddablePanelAction-editPanel' }]
+          ? [
+              {
+                id: 'edit',
+                label: `Edit ${EDIT_NAMES[panel.type] ?? panel.type}`,
+                icon: 'pencil' as const,
+                to: editTo,
+                // What the original's edit action hands the editor, to come back with the panel
+                state: editorStateFor(id, container),
+                testId: 'embeddablePanelAction-editPanel',
+              },
+            ]
           : []),
         ...(editing && usable
           ? [{ id: 'clone', label: 'Clone panel', icon: 'copy' as const, onClick: () => onAction('clone', id), testId: 'embeddablePanelAction-clonePanel' }]
@@ -464,19 +479,20 @@ export const DashboardPanel = memo(function DashboardPanel({
               },
             ]
           : []),
-        ...(inspectable
+        ...(inspectorOffered
           ? [{ id: 'inspect', label: 'Inspect', icon: 'inspect' as const, onClick: () => onAction('inspect', id), testId: 'embeddablePanelAction-openInspector' }]
           : []),
         {
           id: 'expand',
           label: expanded ? 'Minimize' : 'Maximize panel',
-          icon: expanded ? 'collapse' : 'expand',
+          // The original draws both with the same icon, OUI having none for the way back
+          icon: 'expand',
           onClick: () => onAction('expand', id),
           testId: 'embeddablePanelAction-togglePanel',
         },
         ...(editing
           ? [
-              { id: 'replace', label: 'Replace panel', icon: 'refresh' as const, onClick: () => onAction('replace', id), testId: 'embeddablePanelAction-replacePanel' },
+              { id: 'replace', label: 'Replace panel', icon: 'kqlOperand' as const, onClick: () => onAction('replace', id), testId: 'embeddablePanelAction-replacePanel' },
               { id: 'remove', label: 'Delete from dashboard', icon: 'trash' as const, onClick: () => onAction('remove', id), testId: 'embeddablePanelAction-deletePanel' },
             ]
           : []),

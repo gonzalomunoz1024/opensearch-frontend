@@ -610,3 +610,91 @@ export const takenAgain = (filter: Filter, negate: boolean): Filter => ({
   meta: { ...filter.meta, disabled: false, negate },
   $state: { store: 'appState' },
 });
+
+// --- What a panel's menu offers ------------------------------------------------------------------
+
+/**
+ * The kinds of visualization whose panel the original offers no Inspect for: their types give the
+ * inspector nothing to show (`inspectorAdapters: {}`), the controls, Markdown, TSVB and Timeline
+ */
+const NOT_INSPECTED = new Set(['input_control_vis', 'markdown', 'metrics', 'timelion']);
+
+/** Whether a panel drawing a visualization of this kind offers Inspect, as in the original */
+export const offersInspector = (visType: string): boolean => !NOT_INSPECTED.has(visType);
+
+// --- The round trip to an editor -----------------------------------------------------------------
+
+/** The original's id of the dashboards app: where an editor sent from a dashboard goes back to */
+export const DASHBOARDS_APP = 'dashboards';
+
+/** The dashboard a panel is in, as the original names it to the editor it sends the panel to */
+export interface ContainerInfo {
+  containerName: string;
+  containerId: string;
+}
+
+/** What the original's "Edit visualization" hands the editor in the history (EmbeddableEditorState) */
+export interface EditorState {
+  originatingApp: string;
+  valueInput?: Record<string, unknown>;
+  embeddableId?: string;
+  containerInfo?: ContainerInfo;
+}
+
+/** What the original's edit action hands the editor for a panel, which is by reference */
+export const editorStateFor = (panelIndex: string, container: ContainerInfo): EditorState => ({
+  originatingApp: DASHBOARDS_APP,
+  valueInput: undefined,
+  embeddableId: panelIndex,
+  containerInfo: container,
+});
+
+/** What an editor hands back to the dashboard it came from (the original's EmbeddablePackageState) */
+export interface HandedPanel {
+  type: string;
+  input: { savedObjectId?: string } & Record<string, unknown>;
+  embeddableId?: string;
+  containerInfo?: unknown;
+}
+
+/** The state of the history read as a panel handed back: a type, and an input that is an object */
+export function handedPanel(state: unknown): HandedPanel | undefined {
+  if (state === null || typeof state !== 'object') return undefined;
+  const { type, input } = state as { type?: unknown; input?: unknown };
+  if (typeof type !== 'string' || input === null || typeof input !== 'object' || Array.isArray(input)) return undefined;
+  return state as HandedPanel;
+}
+
+/**
+ * The panels with what an editor handed back in them, as the original's dashboard takes it when it
+ * opens: the panel it was sent from, still in its place, with the type and the input it was given
+ * over its own; else a new panel where "Add panels" puts one, after the others. A new panel the
+ * dashboard could not draw, with no saved object, is left out. `undefined` when nothing changes.
+ */
+export function withHandedPanel(panels: PanelState[], handed: HandedPanel, newIndex: () => string): PanelState[] | undefined {
+  const { id: _id, savedObjectId, title, ...config } = handed.input;
+  const ownTitle = typeof title === 'string' ? { title } : {};
+  const sentFrom = handed.embeddableId === undefined ? undefined : panels.find((panel) => panel.panelIndex === handed.embeddableId);
+  if (sentFrom) {
+    const replaced: PanelState = {
+      ...sentFrom,
+      type: handed.type,
+      id: typeof savedObjectId === 'string' ? savedObjectId : sentFrom.id,
+      embeddableConfig: { ...sentFrom.embeddableConfig, ...config },
+      ...ownTitle,
+    };
+    return panels.map((panel) => (panel === sentFrom ? replaced : panel));
+  }
+  if (typeof savedObjectId !== 'string') return undefined;
+  const panelIndex = newIndex();
+  const place = findPlace(panels.map((panel) => panel.gridData));
+  const added: PanelState = {
+    panelIndex,
+    gridData: { x: place.x, y: place.y, w: DEFAULT_PANEL.w, h: DEFAULT_PANEL.h, i: panelIndex },
+    type: handed.type,
+    id: savedObjectId,
+    embeddableConfig: config,
+    ...ownTitle,
+  };
+  return [...panels, added];
+}

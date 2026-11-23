@@ -9,11 +9,14 @@ import {
   compact,
   dashboardFromSavedObject,
   dashboardToSavedObject,
+  editorStateFor,
   emptyDashboard,
   existingFilter,
   findPlace,
+  handedPanel,
   moveItem,
   newPanelIndex,
+  offersInspector,
   orderAsOriginal,
   panelsDiffer,
   panelsFromUrl,
@@ -28,6 +31,7 @@ import {
   startSizing,
   takenAgain,
   timeAsSaved,
+  withHandedPanel,
   type Dashboard,
   type GridItem,
   type PanelState,
@@ -514,5 +518,71 @@ describe('the filters a saved search panel makes', () => {
     const added = uniqueFilters([pinned, notFemale, takenAgain(currency, true)]);
     assert.deepEqual(keys(added), ['-currency', '-customer_gender']);
     assert.deepEqual(added[0].$state, { store: 'globalState' });
+  });
+});
+
+describe('what a panel offers', () => {
+  it('offers no Inspect for the kinds of visualization the original gives no inspector', () => {
+    for (const type of ['input_control_vis', 'markdown', 'metrics', 'timelion']) assert.equal(offersInspector(type), false, type);
+    for (const type of ['area', 'pie', 'table', 'vega', 'region_map', 'tile_map']) assert.equal(offersInspector(type), true, type);
+  });
+});
+
+describe('the round trip to an editor', () => {
+  const container = { containerName: 'My dashboard', containerId: 'mine' };
+
+  it('hands the editor what the original edit action hands it: the panel by reference', () => {
+    const state = editorStateFor('7', container);
+    assert.deepEqual(Object.keys(state), ['originatingApp', 'valueInput', 'embeddableId', 'containerInfo']);
+    assert.deepEqual(state, { originatingApp: 'dashboards', valueInput: undefined, embeddableId: '7', containerInfo: container });
+    assert.deepEqual(Object.keys(state.containerInfo ?? {}), ['containerName', 'containerId']);
+  });
+
+  it('reads as a panel handed back only a type and an input that is an object', () => {
+    const handed = { type: 'visualization', input: { savedObjectId: 'v' }, embeddableId: '7' };
+    assert.equal(handedPanel(handed), handed);
+    assert.equal(handedPanel(undefined), undefined);
+    assert.equal(handedPanel(null), undefined);
+    assert.equal(handedPanel({ originatingApp: 'dashboards', embeddableId: '7' }), undefined);
+    assert.equal(handedPanel({ type: 'visualization', input: null }), undefined);
+    assert.equal(handedPanel({ type: 'visualization', input: 'v' }), undefined);
+    assert.equal(handedPanel({ type: 7, input: {} }), undefined);
+  });
+
+  it('gives the panel it was sent from what comes back, in its place, its own settings kept', () => {
+    const sent = panel('7', 24, 0, { embeddableConfig: { vis: { legendOpen: false } }, title: 'Mine' });
+    const panels = [panel('1', 0, 0), sent];
+    const next = withHandedPanel(panels, { type: 'visualization', input: { savedObjectId: 'other' }, embeddableId: '7' }, () => 'new');
+    assert.deepEqual(next, [panels[0], { ...sent, id: 'other' }]);
+    // The input handed over goes over the panel's own, as the original's explicit input does
+    const titled = withHandedPanel(panels, { type: 'search', input: { title: 'Theirs', columns: ['a'] }, embeddableId: '7' }, () => 'new');
+    assert.deepEqual(titled?.[1], {
+      ...sent,
+      type: 'search',
+      embeddableConfig: { vis: { legendOpen: false }, columns: ['a'] },
+      title: 'Theirs',
+    });
+  });
+
+  it('adds a new panel where Add panels puts one, after the others, as addNewEmbeddable does', () => {
+    const panels = [panel('1', 0, 0), panel('2', 24, 0)];
+    const next = withHandedPanel(panels, { type: 'visualization', input: { savedObjectId: 'made' } }, () => 'new');
+    assert.deepEqual(next, [
+      ...panels,
+      { panelIndex: 'new', gridData: { x: 0, y: 15, w: 24, h: 15, i: 'new' }, type: 'visualization', id: 'made', embeddableConfig: {} },
+    ]);
+    // A panel it was not sent from, gone since, is a new one too
+    assert.equal(withHandedPanel(panels, { type: 'visualization', input: { savedObjectId: 'made' }, embeddableId: 'gone' }, () => 'new')?.length, 3);
+    assert.deepEqual(withHandedPanel([], { type: 'visualization', input: { savedObjectId: 'made' } }, () => 'new')?.[0]?.gridData, {
+      x: 0,
+      y: 0,
+      w: 24,
+      h: 15,
+      i: 'new',
+    });
+  });
+
+  it('leaves out a new panel with no saved object, which it could not draw or save', () => {
+    assert.equal(withHandedPanel([panel('1', 0, 0)], { type: 'visualization', input: { savedVis: {} } }, () => 'new'), undefined);
   });
 });

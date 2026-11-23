@@ -298,7 +298,7 @@ export function ExitFullScreen({ onExit }: { onExit: () => void }) {
         <span className="dshExitFullScreen__text" data-test-subj="exitFullScreenModeText">
           Exit full screen
         </span>
-        <Icon name="expand" className="dshExitFullScreen__icon" />
+        <Icon name="fullScreen" className="dshExitFullScreen__icon" />
       </button>
     </div>
   );

@@ -14,7 +14,7 @@ import {
   type RefObject,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { href as toHref } from '../router';
+import { navigate, href as toHref } from '../router';
 import { services } from '../services';
 import type { Toast } from '../services/toasts';
 import { Button, CallOut, CodeBlock, IconButton, cx } from './basic';
@@ -321,6 +321,11 @@ export function MenuButton({
 export interface ContextMenuItem extends MenuItem {
   /** The panel this item opens in the menu's place */
   panel?: string;
+  /**
+   * What a link hands the page it opens, in the new entry of the history, as the original's
+   * actions do with `navigateToApp(app, { path, state })`; a click that opens a new tab hands none
+   */
+  state?: unknown;
 }
 
 export interface ContextMenuPanel {
@@ -399,7 +404,14 @@ export function ContextMenu({
             href={toHref(item.to)}
             title={item.title}
             data-test-subj={item.testId}
-            onClick={choose}
+            onClick={(event) => {
+              const plain = event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+              if (item.to !== undefined && item.state !== undefined && plain) {
+                event.preventDefault();
+                navigate(item.to, { state: item.state });
+              }
+              choose();
+            }}
           >
             {content}
           </a>
