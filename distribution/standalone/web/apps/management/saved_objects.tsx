@@ -23,8 +23,6 @@ import {
   MANAGEMENT_CRUMB,
   errorText,
   Check,
-  closeOnEscape,
-  holdFocus,
   InMemoryTable,
   RelationshipsIcon,
   RowAction,
@@ -481,20 +479,9 @@ function ObjectsTable({ allowedTypes }: { allowedTypes: string[] }) {
 function ExportPopover({ disabled, onExport }: { disabled: boolean; onExport: (includeReferencesDeep: boolean) => Promise<void> }) {
   const [open, setOpen] = useState(false);
   const [deep, setDeep] = useState(true);
-  // As the original's popover, which holds the focus: its switch has it once the popover is placed
-  // (until then it is hidden), Tab goes round its controls, and the focus goes back to the button
-  // when it closes from inside
-  const body = useRef<HTMLDivElement>(null);
-  const opener = useRef<HTMLElement | null>(null);
-  useEffect(() => {
-    if (!open) return;
-    const frame = requestAnimationFrame(() => body.current?.querySelector<HTMLElement>('input, button')?.focus({ preventScroll: true }));
-    return () => cancelAnimationFrame(frame);
-  }, [open]);
-  const close = () => {
-    setOpen(false);
-    if (body.current?.contains(document.activeElement)) opener.current?.focus();
-  };
+  // As the original's popover, the kit's holds the focus: its switch has it when it opens, Tab goes
+  // round its controls, and the focus goes back to the button when it closes from inside
+  const close = () => setOpen(false);
   return (
     <Popover
       open={open}
@@ -508,22 +495,14 @@ function ExportPopover({ disabled, onExport }: { disabled: boolean; onExport: (i
           icon="chevronDown"
           iconSide="right"
           disabled={disabled}
-          onClick={(event) => {
-            opener.current = event.currentTarget;
-            setOpen(!open);
-          }}
+          onClick={() => setOpen(!open)}
           className="sobExportButton"
         >
           Export
         </Button>
       }
     >
-      <div
-        ref={body}
-        onKeyDown={(event) => {
-          if (!closeOnEscape(event, close)) holdFocus(event, [...event.currentTarget.querySelectorAll<HTMLElement>('input, button')]);
-        }}
-      >
+      <div>
         <div className="sobFormRow">
           <span className="sobLabel">Options</span>
           <SmallSwitch name="includeReferencesDeep" label="Include related objects" checked={deep} onChange={() => setDeep(!deep)} />

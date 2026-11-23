@@ -891,6 +891,11 @@ select.atlField {
   animation: atlPop var(--duration-fast) var(--ease-out-quint);
 }
 
+/* A panel that holds the focus itself, having nothing else that takes it, shows no ring, as the original's */
+.atlPopover:focus {
+  outline: none;
+}
+
 .atlPopover--padded {
   padding: var(--space-3);
 }

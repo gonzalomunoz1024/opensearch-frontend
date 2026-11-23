@@ -5,11 +5,13 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
@@ -17,10 +19,39 @@ import { services } from '../services';
 import type { Toast } from '../services/toasts';
 import { Button, CallOut, CodeBlock, IconButton, cx } from './basic';
 import { Icon, type IconName } from './icon';
+import { createLayerStack, isTextField, tabbablesIn, wrapTab } from './layers';
 
 export function Portal({ children }: { children: ReactNode }) {
   return createPortal(children, document.body);
 }
+
+// The popovers, dialogs and flyouts shown, in the order they opened: Escape closes the last one only
+const layers = createLayerStack();
+let listening = false;
+
+/**
+ * Puts what floats over the page on the stack while it is shown, so that Escape closes it only when
+ * it is on top, as the original's focus traps do: a popover over a flyout or a dialog closes alone.
+ * Something that uses Escape itself (a list it closes) stops the key or prevents its default.
+ */
+export function useLayer(shown: boolean, onEscape: () => void) {
+  const latest = useRef(onEscape);
+  useLayoutEffect(() => {
+    latest.current = onEscape;
+  });
+  useLayoutEffect(() => {
+    if (!shown) return undefined;
+    if (!listening) {
+      listening = true;
+      document.addEventListener('keydown', layers.onKeyDown);
+    }
+    return layers.push({ escape: () => latest.current() });
+  }, [shown]);
+}
+
+// Where a panel is laid out before it is placed: on the screen, so that what it holds can take the
+// focus as it appears (a field's autoFocus); it is placed before anything is painted
+const UNPLACED: CSSProperties = { left: 0, top: 0 };
 
 export interface PopoverProps {
   /** What opens it; it is given the place the popover hangs from */
@@ -51,6 +82,20 @@ export interface PopoverProps {
   anchorClassName?: string;
   /** Above its button when there is room, as the original's `up` positions */
   above?: boolean;
+  /**
+   * As the original's `ownFocus`, its default: the panel is a dialog that takes the focus once it is
+   * placed (what `initialFocus` names, else the first thing in it that takes the focus, else the
+   * panel itself, unless something in it has the focus already), keeps Tab in it, and gives the
+   * focus back to what had it when it closes from inside. A list under a field (`matchWidth`,
+   * `fitWidth`) leaves the focus in the field, as the original's input popover, and so does a
+   * popover opened from a field text is typed in, as its colour picker opened by a click; `true`
+   * takes the focus from the field all the same (its colour picker opened with the down key).
+   */
+  ownFocus?: boolean;
+  /** A selector of what has the focus when it opens; `false` leaves the focus where it is */
+  initialFocus?: string | false;
+  /** What a screen reader calls the dialog */
+  ariaLabel?: string;
 }
 
 export function Popover({
@@ -70,11 +115,17 @@ export function Popover({
   anchorStyle,
   anchorClassName,
   above: preferAbove = false,
+  ownFocus,
+  initialFocus,
+  ariaLabel,
 }: PopoverProps) {
   const anchor = useRef<HTMLSpanElement>(null);
   const panel = useRef<HTMLDivElement>(null);
-  const [style, setStyle] = useState<CSSProperties>({ visibility: 'hidden' });
+  const [style, setStyle] = useState<CSSProperties>(UNPLACED);
   const [placement, setPlacement] = useState<'top' | 'bottom'>('bottom');
+  const own = ownFocus ?? !(matchWidth || fitWidth);
+  const announcement = useId();
+  const opener = useRef<HTMLElement | null>(null);
 
   const place = useCallback(() => {
     const anchorBox = anchor.current?.getBoundingClientRect();
@@ -120,7 +171,7 @@ export function Popover({
 
   useLayoutEffect(() => {
     if (!open) {
-      setStyle({ visibility: 'hidden' });
+      setStyle(UNPLACED);
       return undefined;
     }
     place();
@@ -147,19 +198,60 @@ export function Popover({
       if ((target as Element).closest?.('.atlPopover') && isNested(panel.current, target)) return;
       onClose();
     };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.stopPropagation();
-        onClose();
-      }
-    };
     document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
+    return () => document.removeEventListener('mousedown', onDown);
   }, [open, onClose]);
+
+  useLayer(open, onClose);
+
+  // What had the focus when it opened: the button, unless a field in the panel took it already
+  useLayoutEffect(() => {
+    if (!open || !own) return;
+    const active = document.activeElement;
+    opener.current =
+      active instanceof HTMLElement && active !== document.body && !panel.current?.contains(active)
+        ? active
+        : (anchor.current && tabbablesIn(anchor.current)[0]) ?? null;
+  }, [open, own]);
+
+  // Once it is placed the panel takes the focus, as the original's: what it names, else the first
+  // thing in it that takes the focus, else itself. Opened from a field text is typed in, it leaves
+  // the focus there, unless `ownFocus` says to take it.
+  const fieldKeepsFocus = ownFocus === undefined;
+  useEffect(() => {
+    if (!open || !own || initialFocus === false) return undefined;
+    const frame = requestAnimationFrame(() => {
+      const element = panel.current;
+      if (!element || element.contains(document.activeElement)) return;
+      if (fieldKeepsFocus && isTextField(opener.current) && anchor.current?.contains(opener.current)) return;
+      const named = initialFocus ? element.querySelector<HTMLElement>(initialFocus) : null;
+      (named ?? tabbablesIn(element)[0] ?? element).focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [open, own, initialFocus, fieldKeepsFocus]);
+
+  // When it closes with the focus in it, the focus goes back to what had it before
+  useEffect(() => {
+    if (!open || !own) return undefined;
+    return () => {
+      const active = document.activeElement;
+      const back = opener.current;
+      if ((!active || active === document.body) && back?.isConnected) back.focus({ preventScroll: true });
+    };
+  }, [open, own]);
+
+  // Tab goes round the panel and what it holds, as the original's focus trap: from the last thing
+  // in it to the panel itself, and on to the first
+  const holdTab = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const element = panel.current;
+    if (event.key !== 'Tab' || event.defaultPrevented || !element) return;
+    // A popover opened from this one is drawn outside it and holds the focus itself
+    if (!element.contains(document.activeElement)) return;
+    const target = wrapTab([element, ...tabbablesIn(element)], document.activeElement as HTMLElement | null, event.shiftKey);
+    if (!target) return;
+    event.preventDefault();
+    target.focus();
+  };
 
   return (
     <>
@@ -178,7 +270,19 @@ export function Popover({
             style={style}
             data-placement={placement}
             data-popover-depth={depthOf(anchor.current) + 1}
+            role={own ? 'dialog' : undefined}
+            aria-modal={own ? true : undefined}
+            aria-label={ariaLabel}
+            aria-live={own ? 'off' : undefined}
+            aria-describedby={own ? announcement : undefined}
+            tabIndex={own ? 0 : undefined}
+            onKeyDown={own ? holdTab : undefined}
           >
+            {own && (
+              <p id={announcement} className="atlScreenReaderOnly">
+                You are in a dialog. To close this dialog, hit escape.
+              </p>
+            )}
             {children}
           </div>
         </Portal>
@@ -294,16 +398,6 @@ export function MenuButton({
   );
 }
 
-function useEscape(onClose: () => void) {
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
-}
-
 export function Modal({
   title,
   children,
@@ -324,7 +418,7 @@ export function Modal({
   /** 'l': the larger title the original's save dialogs have */
   titleSize?: 'm' | 'l';
 }) {
-  useEscape(onClose);
+  useLayer(true, onClose);
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const first = box.current?.querySelector<HTMLElement>(
@@ -429,7 +523,7 @@ export function Flyout({
   mask?: boolean;
   className?: string;
 }) {
-  useEscape(onClose);
+  useLayer(true, onClose);
   return (
     <Portal>
       {mask && <div className="atlFlyoutMask" onMouseDown={onClose} />}
@@ -470,7 +564,9 @@ export function ToastList() {
           <div className="atlToasts" role="region" aria-live="polite" data-test-subj="globalToastList">
             {items.map((toast) => (
               <div key={toast.id} className={`atlToast atlMaterial atlToast--${toast.kind}`}>
-                <div className="atlToast__header">
+                {/* As the original's toast: what a screen reader says before it */}
+                <p className="atlScreenReaderOnly">A new notification appears</p>
+                <div className="atlToast__header" aria-label="Notification" data-test-subj="euiToastHeader">
                   <Icon name={TOAST_ICONS[toast.kind]} />
                   <div className="atlToast__title">{toast.title}</div>
                 </div>

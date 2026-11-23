@@ -332,8 +332,8 @@ export function ImportFlyout({ onClose, onDone }: { onClose: () => void; onDone:
   return (
     <Flyout
       title="Import saved objects"
-      // The flyout stays while a conflict is asked about: Escape answers the question
-      onClose={conflictingRecord ? () => undefined : onClose}
+      // While a conflict is asked about, its dialog is on top: Escape answers it, and the flyout stays
+      onClose={onClose}
       mask
       className="sobFlyout sobFlyout--s sobImportFlyout"
       footer={
