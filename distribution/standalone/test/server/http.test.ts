@@ -195,6 +195,34 @@ describe('the body of a request', () => {
     }
   });
 
+  it('over the limit is answered once all of it has come, as hapi reads it to its end first', async () => {
+    const served = await bodyServer();
+    try {
+      // The head and a part of the body, then the rest 200 ms later: what came before the rest
+      const answered = async (head: string, first: string, rest: string) => {
+        const socket = net.connect(served.port, '127.0.0.1');
+        socket.on('error', () => undefined);
+        const chunks: Buffer[] = [];
+        socket.on('data', (chunk: Buffer) => chunks.push(chunk));
+        const closed = new Promise<void>((resolve) => socket.on('close', () => resolve()));
+        await new Promise<void>((resolve) => socket.on('connect', () => resolve()));
+        socket.write(`POST / HTTP/1.1\r\nHost: x\r\nConnection: close\r\n${head}\r\n${first}`);
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        const early = Buffer.concat(chunks).toString('latin1');
+        socket.write(rest);
+        await closed;
+        return [early, Buffer.concat(chunks).toString('latin1').split('\r\n')[0]];
+      };
+      assert.deepEqual(await answered('Content-Length: 40\r\n', 'x'.repeat(20), 'x'.repeat(20)), ['', 'HTTP/1.1 413 Payload Too Large']);
+      assert.deepEqual(
+        await answered('Transfer-Encoding: chunked\r\n', `14\r\n${'x'.repeat(20)}\r\n`, `14\r\n${'x'.repeat(20)}\r\n0\r\n\r\n`),
+        ['', 'HTTP/1.1 413 Payload Too Large']
+      );
+    } finally {
+      await served.close();
+    }
+  });
+
   it('of a client that goes away in the middle of it is no failure of the server', async () => {
     let caught: (error: unknown) => void = () => undefined;
     const failure = new Promise<unknown>((resolve) => {

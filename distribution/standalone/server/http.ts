@@ -237,32 +237,26 @@ export const payloadTooLarge = (maxBytes: number) =>
 
 /**
  * A request's body, up to `maxBytes`. Past that, with a length declared or not, the answer is a
- * 413: what is left of the body is read and dropped (by Node, once the answer is sent), so the
- * client reads the answer and the connection can carry its next request.
+ * 413, once the rest of the body has come and been dropped, as hapi reads it to its end before it
+ * answers (route.js drain): the client reads the answer, also on a connection it asked to close,
+ * and the connection can carry its next request.
  */
 export function readBody(req: IncomingMessage, maxBytes: number): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const declared = Number(req.headers['content-length'] ?? 0);
-    if (declared > maxBytes) {
-      req.resume();
-      reject(payloadTooLarge(maxBytes));
-      return;
-    }
     const chunks: Buffer[] = [];
     let size = 0;
-    const onData = (chunk: Buffer) => {
+    let tooLarge = Number(req.headers['content-length'] ?? 0) > maxBytes;
+    req.on('data', (chunk: Buffer) => {
+      if (tooLarge) return;
       size += chunk.length;
       if (size > maxBytes) {
-        req.off('data', onData);
+        tooLarge = true;
         chunks.length = 0;
-        req.resume();
-        reject(payloadTooLarge(maxBytes));
         return;
       }
       chunks.push(chunk);
-    };
-    req.on('data', onData);
-    req.on('end', () => resolve(Buffer.concat(chunks)));
+    });
+    req.on('end', () => (tooLarge ? reject(payloadTooLarge(maxBytes)) : resolve(Buffer.concat(chunks))));
     // A client that goes away in the middle of its body is no failure of the server
     req.on('error', () => reject(new ClientClosedError()));
     req.on('close', () => {
