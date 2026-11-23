@@ -509,16 +509,23 @@
   color: var(--inp-danger-text);
 }
 
-/* The badges of a pattern in the list, after the em space the original writes */
+/*
+ * The badges of a pattern in the list, after the em space the original writes: EuiBadgeGroup,
+ * each badge in the middle of a line of text, in a block of its own
+ */
 .inpBadgeGroup {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  display: block;
   margin: calc(var(--space-1) * -1);
 }
 
-.inpBadgeGroup > .inpBadge {
+.inpBadgeGroup__item {
+  display: inline-block;
+  max-width: 100%;
   margin: var(--space-1);
+}
+
+.inpBadgeGroup__item > .inpBadge {
+  vertical-align: middle;
 }
 
 .inpBadges {
@@ -1095,15 +1102,22 @@
   flex: 1 1 auto;
 }
 
-/* The actions of a row are grey until the pointer is on the row */
+/*
+ * The actions of a row are grey until the pointer is on the row. Each sits on a line of text, in
+ * its middle, as in EUI's tooltip anchor, whose line makes the row a little taller than the button.
+ */
 .inpTable__action {
-  display: inline-flex;
+  display: block;
   flex: none;
   opacity: 0.7;
   filter: grayscale(100%);
   transition:
     opacity var(--duration-normal) var(--ease-out-quint),
     filter var(--duration-normal) var(--ease-out-quint);
+}
+
+.inpTable__action > .inpButtonIcon {
+  vertical-align: middle;
 }
 
 .inpTable__row:hover .inpTable__action,

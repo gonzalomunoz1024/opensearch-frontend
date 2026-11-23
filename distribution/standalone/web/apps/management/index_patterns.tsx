@@ -316,9 +316,9 @@ function PatternList() {
             {' '}
             <span className="inpBadgeGroup">
               {item.tags.map((tag) => (
-                <Badge key={tag.key} tone="default">
-                  {tag.name}
-                </Badge>
+                <span key={tag.key} className="inpBadgeGroup__item">
+                  <Badge tone="default">{tag.name}</Badge>
+                </span>
               ))}
             </span>
           </>
