@@ -483,6 +483,8 @@ function PaginationControls({
           open={open}
           onClose={close}
           side={side}
+          above={side === 'below'}
+          offset={8}
           button={
             <Button
               variant="ghost"
