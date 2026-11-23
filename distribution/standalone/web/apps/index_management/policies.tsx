@@ -5,7 +5,7 @@
  * that shows one with its templates and states.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Button, CallOut, Spinner } from '../../components/basic';
 import { FormRow, TextField } from '../../components/form';
 import { Modal, copyText } from '../../components/overlay';
@@ -14,17 +14,13 @@ import { useBreadcrumbs } from '../../shell/state';
 import {
   BottomBar,
   ConfirmationModal,
-  ContentPanel,
   DeleteModal,
-  Detail,
-  Details,
   ExternalLink,
   JSONModal,
   JsonEditor,
   LocalTable,
   PageTitle,
   PanelButton,
-  SearchRow,
   Section,
   SubmitError,
   Table,
@@ -36,6 +32,7 @@ import {
   useListQuery,
   type TableColumn,
 } from './common';
+import { ListEmptyPrompt, ListPanel, ListSearch, Rule, Spacer, TitledPanel, useListLoad } from './job_parts';
 import { DEFAULT_POLICY_JSON, templatesOf, type IsmTemplate, type PolicyDocument } from './policy_model';
 import { StatesPanel, VisualCreatePolicy } from './policy_visual';
 import { CRUMBS, ROUTES } from './routes';
@@ -135,12 +132,19 @@ const COLUMNS: Array<TableColumn<PolicyDocument>> = [
     name: 'Policy',
     sortable: true,
     render: (row) => (
-      <a href={`#${ROUTES.POLICY_DETAILS}?id=${encodeURIComponent(row.id)}`} data-test-subj={`policyLink_${row.id}`}>
-        {row.id}
-      </a>
+      <div className="ismCell">
+        <a href={`#${ROUTES.POLICY_DETAILS}?id=${encodeURIComponent(row.id)}`} data-test-subj={`policyLink_${row.id}`}>
+          {row.id}
+        </a>
+      </div>
     ),
   },
-  { field: 'policy.description', name: 'Description', sortable: true, render: (row) => row.policy.description },
+  {
+    field: 'policy.description',
+    name: 'Description',
+    sortable: true,
+    render: (row) => <div className="ismCell">{row.policy.description}</div>,
+  },
   {
     field: 'policy.last_updated_time',
     name: 'Last updated time',
@@ -148,6 +152,36 @@ const COLUMNS: Array<TableColumn<PolicyDocument>> = [
     render: (row) => renderTime(row.policy.last_updated_time),
   },
 ];
+
+/** What the list of policies says when it has no rows, and what it offers to do */
+export function PolicyEmptyPrompt({
+  loading,
+  filtered,
+  onReset,
+  onCreate,
+}: {
+  loading: boolean;
+  filtered: boolean;
+  onReset: () => void;
+  onCreate: () => void;
+}) {
+  return (
+    <ListEmptyPrompt
+      body={loading ? EMPTY.loading : filtered ? EMPTY.filtered : EMPTY.none}
+      actions={
+        loading ? null : filtered ? (
+          <Button variant="primary" onClick={onReset} testId="policyEmptyPromptRestFilters">
+            Reset Filters
+          </Button>
+        ) : (
+          <Button variant="primary" icon="plus" onClick={onCreate}>
+            Create policy
+          </Button>
+        )
+      }
+    />
+  );
+}
 
 export function Policies() {
   useBreadcrumbs([CRUMBS.INDEX_MANAGEMENT, CRUMBS.INDEX_POLICIES]);
@@ -176,10 +210,7 @@ export function Policies() {
     }
     setLoading(false);
   };
-  useEffect(() => {
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query.from, query.size, query.search, query.sortField, query.sortDirection]);
+  const reload = useListLoad(load, [query.from, query.size, query.search, query.sortField, query.sortDirection]);
 
   const deletePolicies = async () => {
     const results = await Promise.all(
@@ -190,52 +221,56 @@ export function Policies() {
         return answer.ok;
       })
     );
-    if (results.every(Boolean)) await load();
+    if (results.every(Boolean)) reload();
   };
 
   const what = selected.length === 1 ? selected[0].id : `${selected.length} policies`;
   const filtered = query.search !== '';
   const close = () => setDialog(undefined);
+  const pages = Math.ceil(total / query.size) || 1;
 
   return (
-    <ContentPanel
+    <ListPanel
       title="State management policies"
       count={total}
       actions={
         <>
-          <PanelButton text="Delete" disabled={selected.length === 0} onClick={() => setDialog('delete')} />
-          <PanelButton text="Edit" disabled={selected.length !== 1} onClick={() => setDialog('edit')} />
-          <PanelButton text="Create policy" onClick={() => setDialog('create')} />
+          <PanelButton text="Delete" size="m" disabled={selected.length === 0} onClick={() => setDialog('delete')} />
+          <PanelButton text="Edit" size="m" disabled={selected.length !== 1} onClick={() => setDialog('edit')} />
+          <PanelButton text="Create policy" size="m" onClick={() => setDialog('create')} />
         </>
       }
     >
-      <SearchRow search={query.search} onSearch={(search) => setQuery({ search, from: 0 })} />
-      <Table
-        columns={COLUMNS}
-        rows={policies}
-        total={total}
-        query={query}
-        onQuery={setQuery}
-        rowId={(row) => row.id}
-        selected={selected}
-        onSelect={setSelected}
-        loading={loading}
-        empty={
-          <div className="ismEmpty">
-            <p>{loading ? EMPTY.loading : filtered ? EMPTY.filtered : EMPTY.none}</p>
-            {!loading &&
-              (filtered ? (
-                <Button variant="primary" size="s" onClick={() => setQuery({ search: '' })} testId="policyEmptyPromptRestFilters">
-                  Reset Filters
-                </Button>
-              ) : (
-                <Button variant="primary" size="s" icon="plus" onClick={() => setDialog('create')}>
-                  Create policy
-                </Button>
-              ))}
-          </div>
-        }
+      <ListSearch
+        search={query.search}
+        onSearch={(search) => setQuery({ search, from: 0 })}
+        page={Math.floor(query.from / query.size)}
+        pages={pages}
+        onPage={(page) => setQuery({ from: page * query.size })}
+        paginationTestId="policyControlsPagination"
       />
+      <Rule />
+      <div className="ismFixed">
+        <Table
+          columns={COLUMNS}
+          rows={policies}
+          total={total}
+          query={query}
+          onQuery={setQuery}
+          rowId={(row) => row.id}
+          selected={selected}
+          onSelect={setSelected}
+          loading={loading}
+          empty={
+            <PolicyEmptyPrompt
+              loading={loading}
+              filtered={filtered}
+              onReset={() => setQuery({ search: '' })}
+              onCreate={() => setDialog('create')}
+            />
+          }
+        />
+      </div>
       {dialog === 'create' && <EditorChoiceModal onClose={close} onContinue={createPolicy} />}
       {dialog === 'edit' && selected.length === 1 && (
         <EditorChoiceModal isEdit onClose={close} onContinue={(visual) => editPolicy(selected[0].id, visual)} />
@@ -249,7 +284,7 @@ export function Policies() {
           onAction={deletePolicies}
         />
       )}
-    </ContentPanel>
+    </ListPanel>
   );
 }
 
@@ -443,7 +478,7 @@ export function PolicyDetails() {
 
   if (!document) {
     return (
-      <div className="ismPage ismPage--loading">
+      <div className="ismLoadingCenter">
         <Spinner size="l" />
       </div>
     );
@@ -465,52 +500,63 @@ export function PolicyDetails() {
     }
   };
 
+  const settings: Array<[string, ReactNode]> = [
+    ['Policy name', policyId],
+    [
+      'Error notification',
+      policy.error_notification ? (
+        <button type="button" className="atlLinkButton" onClick={() => setDialog('notification')}>
+          View code
+        </button>
+      ) : (
+        '-'
+      ),
+    ],
+    ['Primary term', document.primaryTerm],
+    ['Last updated', policy.last_updated_time ? new Date(policy.last_updated_time).toLocaleString() : '-'],
+    ['Policy description', policy.description || '-'],
+    ['Sequence number', document.seqNo],
+  ];
+
   return (
-    <div className="ismPage ismPage--details">
-      <PageTitle
-        title={policyId}
-        actions={
-          <>
-            <Button size="s" onClick={() => setDialog('edit')} testId="policy-details-edit-button">
-              Edit
-            </Button>
-            <Button size="s" variant="danger" onClick={() => setDialog('delete')} testId="deleteButton">
-              Delete
-            </Button>
-            <Button size="s" onClick={() => setDialog('json')} testId="viewButton">
-              View JSON
-            </Button>
-          </>
-        }
-      />
-      <Section title="Policy settings">
-        <Details>
-          <Detail name="Policy name">{policyId}</Detail>
-          <Detail name="Error notification">
-            {policy.error_notification ? (
-              <button type="button" className="atlLinkButton" onClick={() => setDialog('notification')}>
-                View code
-              </button>
-            ) : (
-              '-'
-            )}
-          </Detail>
-          <Detail name="Primary term">{document.primaryTerm}</Detail>
-          <Detail name="Last updated">
-            {policy.last_updated_time ? new Date(policy.last_updated_time).toLocaleString() : '-'}
-          </Detail>
-          <Detail name="Policy description">{policy.description || '-'}</Detail>
-          <Detail name="Sequence number">{document.seqNo}</Detail>
-        </Details>
-      </Section>
-      <Section title={`ISM Templates (${templates.length})`}>
-        <LocalTable
-          columns={TEMPLATE_COLUMNS}
-          rows={templates}
-          rowId={(_, index) => String(index)}
-          empty="No items found"
-        />
-      </Section>
+    <div className="ismPolicyPage">
+      <div className="ismDetailsHeader">
+        <h1 className="atlTitleL">{policyId}</h1>
+        <div className="ismDetailsHeader__actions">
+          <Button onClick={() => setDialog('edit')} testId="policy-details-edit-button">
+            Edit
+          </Button>
+          <Button variant="danger" onClick={() => setDialog('delete')} testId="deleteButton">
+            Delete
+          </Button>
+          <Button onClick={() => setDialog('json')} testId="viewButton">
+            View JSON
+          </Button>
+        </div>
+      </div>
+      <Spacer />
+      <TitledPanel title="Policy settings">
+        <div className="ismPolicySettings">
+          {settings.map(([term, value]) => (
+            <dl key={term}>
+              <dt>{term}</dt>
+              <dd>{value}</dd>
+            </dl>
+          ))}
+        </div>
+      </TitledPanel>
+      <Spacer />
+      <TitledPanel title={`ISM Templates (${templates.length})`}>
+        <div className="ismFixed">
+          <LocalTable
+            columns={TEMPLATE_COLUMNS}
+            rows={templates}
+            rowId={(_, index) => String(index)}
+            empty="No items found"
+          />
+        </div>
+      </TitledPanel>
+      <Spacer />
       <StatesPanel policy={policy} readOnly />
       {dialog === 'edit' && (
         <EditorChoiceModal isEdit onClose={close} onContinue={(visual) => editPolicy(policyId, visual)} />

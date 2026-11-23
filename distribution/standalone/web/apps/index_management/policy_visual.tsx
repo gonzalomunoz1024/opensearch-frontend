@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Accordion, Button, CallOut, IconButton } from '../../components/basic';
+import { Accordion, Button, CallOut, IconButton, cx } from '../../components/basic';
 import { ComboBox } from '../../components/combo_box';
 import { Icon } from '../../components/icon';
 import { NumberField, RadioGroup, Select, Switch, TextArea, TextField } from '../../components/form';
@@ -56,6 +56,7 @@ import {
   type Transition,
 } from './policy_model';
 import { CRUMBS, ROUTES } from './routes';
+import { DocsLink, Rule, Spacer } from './job_parts';
 
 const DOCS = 'https://opensearch.org/docs/im-plugin/ism/index/';
 const POLICY_DOCS = 'https://opensearch.org/docs/im-plugin/ism/policies/';
@@ -65,11 +66,12 @@ const newId = () => `ism-${(counter += 1)}`;
 
 // --- States, as the details of a policy show them and as its editor changes them --------------------------
 
+/** A word and its number in a small round badge, as a state's summary shows its actions and transitions */
 function Count({ text, number }: { text: string; number: number }) {
   return (
-    <span className="ismCount">
-      {text} <b>{number}</b>
-    </span>
+    <p className="ismCount">
+      {text} <span className="ismCount__badge">{number}</span>
+    </p>
   );
 }
 
@@ -87,33 +89,50 @@ function StateRow({
   onDelete: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
+  const [open, setOpen] = useState(false);
   const actions = state.actions ?? [];
   const transitions = state.transitions ?? [];
   return (
-    <div className="ismState">
-      <Accordion
-        initiallyOpen={false}
-        title={
+    <div className={cx('ismState', open && 'ismState--open')}>
+      <div className="ismState__trigger">
+        <button type="button" className="ismState__button" aria-expanded={open} onClick={() => setOpen(!open)}>
+          <span className="ismState__arrow">
+            <Icon name="chevronRight" />
+          </span>
           <span className="ismState__title">
-            <strong>{state.name}</strong>
+            <strong className="ismState__name">{state.name}</strong>
             {initial && <span className="ismState__initial">Initial state</span>}
             {actions.length > 0 && <Count text="Actions" number={actions.length} />}
             {transitions.length > 0 && <Count text="Transitions" number={transitions.length} />}
           </span>
-        }
-        extra={
-          !readOnly && (
-            <>
-              <IconButton icon="trash" label="Delete state" onClick={() => setConfirming(true)} testId="state-delete-button" />
-              <IconButton icon="pencil" label="Edit state" onClick={onEdit} />
-            </>
-          )
-        }
-      >
+        </button>
+        {!readOnly && (
+          <div className="ismState__extra">
+            <IconButton
+              icon="trash"
+              label="Delete"
+              title="Delete state"
+              variant="dangerEmpty"
+              className="ismRoundButton"
+              onClick={() => setConfirming(true)}
+              testId="state-delete-button"
+            />
+            <IconButton
+              icon="pencil"
+              label="Edit"
+              title="Edit state"
+              variant="empty"
+              className="ismRoundButton"
+              onClick={onEdit}
+            />
+          </div>
+        )}
+      </div>
+      {open && (
         <div className="ismState__body">
           <h5>Actions</h5>
           {actions.length === 0 ? (
-            <p>No actions. Edit state to add actions.</p>
+            <p className="ismState__none">No actions. Edit state to add actions.</p>
           ) : (
             <div className="ismChips">
               {actions.map((action, index) => (
@@ -125,7 +144,7 @@ function StateRow({
           )}
           <h5>Transitions</h5>
           {transitions.length === 0 ? (
-            <p>No transitions. Edit state to add transitions.</p>
+            <p className="ismState__none">No transitions. Edit state to add transitions.</p>
           ) : (
             <div className="ismChips">
               {transitions.map((transition, index) => (
@@ -139,7 +158,7 @@ function StateRow({
             </div>
           )}
         </div>
-      </Accordion>
+      )}
       {confirming && (
         <ConfirmationModal
           title="Delete state"
@@ -176,55 +195,68 @@ export function StatesPanel({
 }) {
   const states = policy.states ?? [];
   const add = (
-    <Button size="s" onClick={onAdd} testId="states-add-state-button">
+    <Button onClick={onAdd} testId="states-add-state-button">
       Add state
     </Button>
   );
   return (
-    <Section
-      title={`States (${states.length})`}
-      description={
-        <>
-          You can think of policies as state machines. "Actions" are the operations ISM performs when an index is in a
-          certain state.
-          <br />
-          "Transitions" define when to move from one state to another.{' '}
-          <ExternalLink href={`${POLICY_DOCS}#states`} />
-        </>
-      }
-    >
-      {!readOnly && (
-        <div className="ismInitial">
-          <span className="ismInitial__label">Initial state</span>
-          <Select
-            compact
-            value={policy.default_state}
-            onChange={(name) => onDefault?.(name)}
-            options={states.map((state) => ({ value: state.name, label: state.name }))}
-          />
+    <section className="atlPanel ismStates">
+      <h2 className="atlTitleS">{`States (${states.length})`}</h2>
+      <p className="ismStates__description">
+        You can think of policies as state machines. "Actions" are the operations ISM performs when an index is in a
+        certain state.
+        <br />
+        "Transitions" define when to move from one state to another. <DocsLink href={`${POLICY_DOCS}#states`} />
+      </p>
+      <Rule />
+      <div>
+        {!readOnly && (
+          <>
+            <div className="ismInitial">
+              <label className="ismInitial__label" htmlFor="ismInitialState">
+                Initial state
+              </label>
+              <Select
+                id="ismInitialState"
+                compact
+                className="ismInitial__select"
+                value={policy.default_state}
+                onChange={(name) => onDefault?.(name)}
+                options={states.map((state) => ({ value: state.name, label: state.name }))}
+              />
+            </div>
+            <Rule />
+          </>
+        )}
+        <div className="ismStates__list">
+          {states.map((state, index) => (
+            <StateRow
+              key={state.name}
+              state={state}
+              initial={state.name === policy.default_state}
+              readOnly={readOnly}
+              onEdit={() => onEdit?.(state)}
+              onDelete={() => onDelete?.(index)}
+            />
+          ))}
         </div>
-      )}
-      {states.map((state, index) => (
-        <StateRow
-          key={state.name}
-          state={state}
-          initial={state.name === policy.default_state}
-          readOnly={readOnly}
-          onEdit={() => onEdit?.(state)}
-          onDelete={() => onDelete?.(index)}
-        />
-      ))}
-      {!readOnly &&
-        (states.length > 0 ? (
-          <div>{add}</div>
-        ) : (
-          <div className="ismEmpty">
-            <h3 className="atlTitleXs">No states</h3>
-            <p>Your policy currently has no states defined. Add states to manage your index lifecycle.</p>
-            {add}
-          </div>
-        ))}
-    </Section>
+        {!readOnly &&
+          (states.length > 0 ? (
+            <>
+              <Spacer />
+              {add}
+            </>
+          ) : (
+            <div className="ismStates__empty">
+              <h3>No states</h3>
+              <Spacer size="m" />
+              <p>Your policy currently has no states defined. Add states to manage your index lifecycle.</p>
+              <Spacer />
+              {add}
+            </div>
+          ))}
+      </div>
+    </section>
   );
 }
 

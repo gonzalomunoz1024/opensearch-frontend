@@ -440,71 +440,157 @@
   color: var(--color-text-secondary);
 }
 
-/* States */
+/* A policy's states, each an accordion as the plugin's: its name and counts in the button, the buttons
+   that change it at the right, and, opened, its actions and transitions in small panels */
+/* The title in a row of its own, 2 px out of it on every side, as the plugin's */
+.ismStates > h2 {
+  margin: -2px;
+}
+
+.ismStates__description {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 350;
+  line-height: 18px;
+}
+
+.ismDocs__icon {
+  margin-left: var(--space-1);
+}
+
 .ismState {
+  padding: 15px;
   border-bottom: 1px solid var(--color-border-light);
-  padding: var(--space-3) var(--space-2);
+}
+
+.ismState__trigger {
+  display: flex;
+  align-items: center;
+}
+
+.ismState__button {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  line-height: 21px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ismState__arrow {
+  display: inline-flex;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0 var(--space-2) 0 var(--space-1);
+  border-radius: 8px;
+}
+
+.ismState__arrow .atlIcon {
+  transition: transform var(--duration-normal) var(--ease-out-quint);
+}
+
+.ismState--open .ismState__arrow .atlIcon {
+  transform: rotate(90deg);
 }
 
 .ismState__title {
-  display: inline-flex;
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.ismState__name {
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-semibold);
+  line-height: 21px;
+}
+
+.ismState__initial {
+  padding: 0 10px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.ismCount {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.ismCount__badge {
+  display: inline-block;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 var(--space-1);
+  border-radius: 999px;
+  background: var(--color-surface-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: 16px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.ismState__extra {
+  display: flex;
+  flex: none;
   align-items: center;
   gap: var(--space-4);
 }
 
-.ismState__initial {
-  padding: 0 var(--space-3);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-xs);
-}
-
-.ismCount {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
-}
-
-.ismCount b {
-  display: inline-block;
-  min-width: 16px;
-  padding: 0 var(--space-1);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-tertiary);
-  text-align: center;
-  font-weight: var(--font-weight-medium);
+/* The component library's small icon buttons are round */
+.ismRoundButton {
+  border-radius: 50%;
 }
 
 .ismState__body {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
+  gap: var(--space-6);
+  padding: var(--space-6);
 }
 
-.ismState__body h5,
-.ismTemplates h5 {
+.ismState__body h5 {
   margin: 0;
   font-size: var(--font-size-s);
   font-weight: var(--font-weight-semibold);
+  line-height: 20px;
 }
 
-.ismState__body p {
-  margin: 0;
+.ismState__none {
+  font-size: var(--font-size-s);
+  line-height: 21px;
 }
 
 .ismChips {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3);
+  gap: var(--space-6);
 }
 
 .ismChip {
   margin: 0;
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-2);
   border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   background: var(--color-surface);
+  box-shadow: var(--shadow-card);
   font-size: var(--font-size-s);
+  line-height: 21px;
 }
 
 .ismChip dt {
@@ -512,22 +598,65 @@
 }
 
 .ismChip dd {
-  margin: 0 0 var(--space-1);
+  margin: 0;
 }
 
+.ismChip dd + dt {
+  margin-top: 14px;
+}
+
+/* The initial state: a select with its name before it, in one box */
 .ismInitial {
   display: flex;
-  align-items: center;
   max-width: 300px;
-  margin-bottom: var(--space-3);
+  height: var(--control-height);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  overflow: hidden;
 }
 
 .ismInitial__label {
+  display: flex;
   flex: none;
-  padding: 0 var(--space-3);
+  align-items: center;
+  padding: var(--space-2);
+  background: var(--color-border-light);
+  color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
+  line-height: 14px;
   white-space: nowrap;
+}
+
+.ismInitial .ismInitial__select {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+}
+
+/* A policy with no states yet: the plugin's empty prompt */
+.ismStates__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 36em;
+  margin: 0 auto;
+  padding: var(--space-6);
+  text-align: center;
+}
+
+.ismStates__empty h3 {
+  font-size: var(--font-size-l);
+  font-weight: var(--font-weight-semibold);
+  line-height: 22px;
+}
+
+.ismStates__empty p {
+  color: var(--color-text-secondary);
+  line-height: 21px;
 }
 
 .ismTemplates {
@@ -574,6 +703,214 @@
   max-width: 1200px;
 }
 
+/* --- Policies, managed indexes, rollup jobs and transform jobs, as the plugin draws them -------------- */
+
+.ismSpacer {
+  flex: none;
+}
+
+.ismSpacer--xs {
+  height: var(--space-1);
+}
+
+.ismSpacer--s {
+  height: var(--space-2);
+}
+
+.ismSpacer--m {
+  height: var(--space-4);
+}
+
+.ismSpacer--l {
+  height: var(--space-6);
+}
+
+.ismSpacer--xl {
+  height: var(--space-8);
+}
+
+.ismRuleXs {
+  flex: none;
+  width: 100%;
+  height: 1px;
+  margin: var(--space-2) 0;
+  border: 0;
+  background: var(--color-border-light);
+}
+
+/* The panel of a list: the plugin's ContentPanel */
+.ismLp {
+  padding: var(--space-4) 0;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.ismLp__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-6);
+  padding: 0 var(--space-4);
+}
+
+.ismLp__title {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.ismLp__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+/* The panel of the lists of jobs: the title and the buttons in a row, the list under them */
+.ismJp__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+  padding: 0 10px;
+}
+
+.ismJp__title {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.ismJp__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* A panel of a form or of details: its title, a line, what it holds */
+.ismTp__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1);
+  margin: -2px;
+}
+
+.ismTp__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* The search box over a list and the pages beside it */
+.ismLs {
+  display: flex;
+  gap: var(--space-6);
+  padding: 0 5px;
+}
+
+.ismLs__search {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.ismLs__pages {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+
+.ismLs__pages .atlPagination {
+  padding: 0;
+}
+
+/* A table whose columns share the width alike, as the plugin's tables do */
+.ismFixed .atlTable {
+  table-layout: fixed;
+}
+
+.ismCell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* What a list says when it has no rows: the plugin's empty prompt in the table's one cell */
+.ismFixed .ismTable__empty,
+.ismAuto .ismTable__empty {
+  display: block;
+  max-width: none;
+  padding: 0;
+}
+
+.ismPrompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 45em;
+  margin: 0 auto;
+  padding: var(--space-6);
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.ismPrompt p {
+  line-height: 21px;
+}
+
+.ismPrompt__actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-4);
+}
+
+/* The page of one policy: its name and buttons over its settings, templates and states */
+.ismPolicyPage {
+  padding: 5px 50px;
+}
+
+.ismDetailsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+}
+
+.ismDetailsHeader__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ismPolicySettings {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-6);
+}
+
+.ismPolicySettings dl,
+.ismPolicySettings dt,
+.ismPolicySettings dd {
+  margin: 0;
+  font-size: var(--font-size-s);
+  line-height: 21px;
+  overflow-wrap: break-word;
+}
+
+.ismPolicySettings dt {
+  font-weight: var(--font-weight-semibold);
+}
+
+.ismLoadingCenter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 100px;
+}
 
 /* --- A form that describes an index ------------------------------------------------------------- */
 

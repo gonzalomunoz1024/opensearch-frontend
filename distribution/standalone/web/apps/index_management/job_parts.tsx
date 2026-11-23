@@ -1,14 +1,189 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
-/* What the pages of rollup jobs and of transform jobs are both made of. */
+/*
+ * What the pages of policies, managed indexes, rollup jobs and transform jobs are made of: the
+ * panels, titles and spaces of the plugin's pages, and the parts the two kinds of job share.
+ */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button, Panel, cx } from '../../components/basic';
-import { TextArea, TextField } from '../../components/form';
+import { SearchField, TextArea, TextField } from '../../components/form';
+import { Icon } from '../../components/icon';
 import { Modal } from '../../components/overlay';
+import { Pagination } from '../../components/table';
 import { LocalTable, ism, toasts, type Answer, type TableColumn } from './common';
 import { useSpaced } from './index_select';
+import { leadingDebounce } from './jobs';
 import { wildcardOption, type FieldItem } from './rollup_model';
+
+// --- The panels and spaces of the plugin's pages ------------------------------------------------------
+
+/** An empty space between two parts, of the sizes the component library has */
+export function Spacer({ size = 'l' }: { size?: 'xs' | 's' | 'm' | 'l' | 'xl' }) {
+  return <div className={`ismSpacer ismSpacer--${size}`} />;
+}
+
+/** The thin line under a panel's title, with the 8 px above and below it the plugin gives it */
+export function Rule() {
+  return <hr className="ismRuleXs" />;
+}
+
+/** A link to the documentation, opened in a new tab, with the small arrow the component library puts after it */
+export function DocsLink({ href, children = 'Learn more' }: { href: string; children?: ReactNode }) {
+  return (
+    <a className="ismDocs" href={href} target="_blank" rel="noopener noreferrer">
+      {children}
+      <Icon name="external" size="s" className="ismDocs__icon" />
+      <span className="atlScreenReaderOnly">(opens in a new tab or window)</span>
+    </a>
+  );
+}
+
+/**
+ * The panel of a list as the plugin's ContentPanel draws it: the title at 28 px with the count
+ * of what is listed, the buttons at its right, a line, and the list across the whole panel.
+ */
+export function ListPanel({
+  title,
+  count = 0,
+  actions,
+  children,
+  testId,
+}: {
+  title: ReactNode;
+  count?: number;
+  actions?: ReactNode;
+  children?: ReactNode;
+  testId?: string;
+}) {
+  return (
+    <section className="ismLp" data-test-subj={testId}>
+      <div className="ismLp__header">
+        <h1 className="ismLp__title atlTitleL">
+          {title}
+          <span className="panel-header-count"> {count > 0 ? `(${count})` : null} </span>
+        </h1>
+        {actions && <div className="ismLp__actions">{actions}</div>}
+      </div>
+      <Rule />
+      {children && <div>{children}</div>}
+    </section>
+  );
+}
+
+/** The panel of the lists of rollup jobs and transform jobs: the title and the buttons in one row */
+export function JobsPanel({ title, actions, children }: { title: ReactNode; actions: ReactNode; children: ReactNode }) {
+  return (
+    <section className="atlPanel ismJp">
+      <div className="ismJp__header">
+        <h1 className="ismJp__title atlTitleL">{title}</h1>
+        <div className="ismJp__actions">{actions}</div>
+      </div>
+      <div>{children}</div>
+    </section>
+  );
+}
+
+/** A panel of a form or of a page of details: the title at 17 px over a line, and what it holds */
+export function TitledPanel({
+  title,
+  actions,
+  children,
+  testId,
+}: {
+  title: ReactNode;
+  actions?: ReactNode;
+  children?: ReactNode;
+  testId?: string;
+}) {
+  return (
+    <section className="atlPanel ismTp" data-test-subj={testId}>
+      <div className="ismTp__header">
+        <h2 className="atlTitleS ismTp__title">{title}</h2>
+        {actions && <div className="ismTp__actions">{actions}</div>}
+      </div>
+      <Rule />
+      {children}
+    </section>
+  );
+}
+
+/**
+ * The search box over a list, and the pages of the list beside it when there is more than one,
+ * as the plugin's list controls have them.
+ */
+export function ListSearch({
+  search,
+  onSearch,
+  placeholder = 'Search',
+  page,
+  pages = 1,
+  onPage,
+  paginationTestId,
+  children,
+}: {
+  search: string;
+  onSearch: (text: string) => void;
+  placeholder?: string;
+  page?: number;
+  pages?: number;
+  onPage?: (page: number) => void;
+  paginationTestId?: string;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="ismLs">
+      <div className="ismLs__search">
+        <SearchField compact value={search} onChange={onSearch} placeholder={placeholder} aria-label={placeholder} />
+      </div>
+      {children}
+      {pages > 1 && page !== undefined && onPage && (
+        <div className="ismLs__pages" data-test-subj={paginationTestId}>
+          <Pagination page={page} pages={pages} onPage={onPage} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** What a list says in place of its rows when it has none, and what it offers to do then */
+export function ListEmptyPrompt({ body, actions }: { body: ReactNode; actions?: ReactNode }) {
+  return (
+    <div className="ismPrompt">
+      <p>{body}</p>
+      {actions && (
+        <>
+          <Spacer />
+          <div className="ismPrompt__actions">{actions}</div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Loads a list when the page opens and whenever what it shows changes, at most once in half a
+ * second after the first time, as the plugin's lists do: the first change is asked for at once,
+ * the last of those that follow it half a second after it was made.
+ */
+export function useListLoad(load: () => Promise<void> | void, deps: unknown[]) {
+  const latest = useRef(load);
+  latest.current = load;
+  const debounced = useRef<ReturnType<typeof leadingDebounce<[]>>>();
+  if (!debounced.current) {
+    debounced.current = leadingDebounce(() => void latest.current(), 500, {
+      setTimeout: (run, ms) => window.setTimeout(run, ms),
+      clearTimeout: (handle) => window.clearTimeout(handle as number),
+    });
+  }
+  useEffect(() => {
+    debounced.current?.call();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+  useEffect(() => () => debounced.current?.cancel(), []);
+  // Asking again by hand goes the same way, as the plugin's Refresh does
+  return useCallback(() => debounced.current?.call(), []);
+}
 
 /** The steps of a form at its left: the ones not reached yet are pale */
 export function Steps({ titles, step }: { titles: string[]; step: number }) {
