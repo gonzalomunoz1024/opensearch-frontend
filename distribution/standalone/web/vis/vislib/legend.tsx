@@ -158,6 +158,11 @@ export function VisLegend({
   const anchors = useRef(new Map<string, HTMLDivElement>());
   const side = anchorOf(position);
   const select = (label: string | undefined) => setSelected((current) => (current === label ? undefined : label));
+  // A filter or a colour chosen closes the popover, as the original's legend is drawn anew after either
+  const chosen = (choose: () => void) => {
+    setSelected(undefined);
+    choose();
+  };
   // Escape on a name closes its popover
   const onNameKey = (event: KeyboardEvent) => {
     if (event.key === 'Escape') {
@@ -232,7 +237,7 @@ export function VisLegend({
                               aria-label={`Filter for value ${label}`}
                               title={`Filter for value ${label}`}
                               data-test-subj={`legend-${label}-filterIn`}
-                              onClick={() => onFilter?.(label, false)}
+                              onClick={() => chosen(() => onFilter?.(label, false))}
                             >
                               <Icon name="plusCircle" />
                             </button>
@@ -242,7 +247,7 @@ export function VisLegend({
                               aria-label={`Filter out value ${label}`}
                               title={`Filter out value ${label}`}
                               data-test-subj={`legend-${label}-filterOut`}
-                              onClick={() => onFilter?.(label, true)}
+                              onClick={() => chosen(() => onFilter?.(label, true))}
                             >
                               <Icon name="minusCircle" />
                             </button>
@@ -256,7 +261,7 @@ export function VisLegend({
                         </span>
                         {LEGEND_COLORS.map((choice) => {
                           const isSelected = choice === color;
-                          const pick = () => onColor?.(label, choice);
+                          const pick = () => chosen(() => onColor?.(label, choice));
                           return (
                             <LegendDot
                               key={choice}
