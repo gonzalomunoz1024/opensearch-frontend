@@ -5,6 +5,7 @@
 import { ChartMessage, rampColor, readableOn } from '../charts/core';
 import { bucketFilter } from '../lib/aggs';
 import { bucketColumns, metricColumns, numberOf, type VisRenderProps } from './types';
+import '../styles/vis_basic.css';
 
 interface Range {
   from: number;
