@@ -10,6 +10,7 @@ import { Button, CallOut, Health } from '../../components/basic';
 import { ComboBox } from '../../components/combo_box';
 import { Switch, TextField } from '../../components/form';
 import { Modal, copyText, type MenuItem } from '../../components/overlay';
+import { readSearch } from '../../lib/search_syntax';
 import { useBreadcrumbs } from '../../shell/state';
 import {
   ActionsMenu,
@@ -615,7 +616,11 @@ export function Indices() {
         className="ismIndexControls"
         clearable
         search={query.search}
-        onSearch={(search) => setQuery({ search, from: 0 })}
+        onSearch={(search) => {
+          // A text that cannot be read as a search leaves the last readable one in place, as the plugin's
+          if (readSearch(search) === undefined) return;
+          setQuery({ search, from: 0 });
+        }}
       >
         {/* The search bar's filter, 8 px from its box */}
         {showDataStreams && (
