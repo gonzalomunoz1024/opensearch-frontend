@@ -32,6 +32,9 @@ export const UNIT_NAMES: Record<TimeUnit, [string, string]> = {
 
 export function addUnits(date: Date, amount: number, unit: TimeUnit): Date {
   const result = new Date(date.getTime());
+  // Nothing to add leaves the moment alone: setting the date it has would move a moment in the
+  // hour that repeats when clocks go back to the first pass of that hour
+  if (amount === 0) return result;
   switch (unit) {
     // A year is twelve months, as the original counts it: a year from 29 February is 28 February
     case 'y':
@@ -75,14 +78,15 @@ export function startOf(date: Date, unit: TimeUnit, weekStart = 0): Date {
       result.setHours(0, 0, 0, 0);
       break;
     case 'h':
-      result.setMinutes(0, 0, 0);
-      break;
     case 'm':
-      result.setSeconds(0, 0);
+    case 's': {
+      // Counted from the moment by the clock's offset then, as the original does: setting the
+      // minutes of a moment in the hour that repeats when clocks go back lands in its first pass
+      const size = UNIT_MS[unit];
+      const local = result.getTime() - result.getTimezoneOffset() * 60000;
+      result.setTime(result.getTime() - (((local % size) + size) % size));
       break;
-    case 's':
-      result.setMilliseconds(0);
-      break;
+    }
     default:
   }
   return result;
