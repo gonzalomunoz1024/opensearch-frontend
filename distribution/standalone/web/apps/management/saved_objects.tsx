@@ -22,6 +22,7 @@ import {
   MANAGEMENT_CRUMB,
   errorText,
   Check,
+  IMPORT_ICON,
   InMemoryTable,
   RowAction,
   SearchBar,
@@ -427,7 +428,7 @@ function ObjectsTable({ allowedTypes }: { allowedTypes: string[] }) {
             <Button variant="empty" icon="upload" onClick={() => setShowExportAll(true)} testId="exportAllObjects">
               Export all objects
             </Button>
-            <Button variant="empty" icon="importAction" onClick={() => setShowImport(true)} testId="importObjects">
+            <Button variant="empty" icon={IMPORT_ICON} onClick={() => setShowImport(true)} testId="importObjects">
               Import
             </Button>
             <Button variant="empty" icon="refresh" onClick={refresh}>

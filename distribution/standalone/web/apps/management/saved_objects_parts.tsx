@@ -51,16 +51,20 @@ const META_ICONS: Record<string, IconName> = {
 
 export const iconOfMeta = (icon?: string): IconName => (icon ? META_ICONS[icon] : undefined) ?? 'grid';
 
+/** The icon of the Import button and of the file to import: the original's `importAction` */
+export const IMPORT_ICON: IconName = 'importAction';
+
 /**
- * The icon of a type, as the original's tables draw it: small, an application's (`…App`) in its two
- * colours, with its name when the pointer is on it
+ * The icon of a type, as the original's tables draw it: small (12 px), with its name when the
+ * pointer is on it. An application's icon (`dashboardApp`) is given no colour by the original, so
+ * it has its two.
  */
 export function TypeIcon({ type, icon, testId = 'objectType' }: { type: string; icon?: string; testId?: string }) {
   const label = getSavedObjectLabel(type);
   return (
     <Tooltip content={label}>
       <span className="sobTypeIcon" role="img" aria-label={label} data-test-subj={testId}>
-        <Icon name={iconOfMeta(icon)} size="s" app={/.App$/.test(icon ?? '')} />
+        <Icon name={iconOfMeta(icon)} size="s" app={icon !== undefined && /.+App$/.test(icon)} />
       </span>
     </Tooltip>
   );

@@ -74,8 +74,9 @@ export function pointsAlong(points: XYPoint[], xValues: Array<number | string>, 
 }
 
 // The kinds that lay out the charts of a split themselves, in vislib's frame: one legend for them
-// all, and a pie's titles beside the rows or under the columns (a gauge names itself under its gauges)
-const VISLIB_SPLITS = new Set(['pie', 'gauge', 'goal']);
+// all, and the titles of pies and point series beside the rows or under the columns (a gauge names
+// itself under its gauges); point series share their axes too
+const VISLIB_SPLITS = new Set(['pie', 'gauge', 'goal', 'area', 'line', 'histogram', 'horizontal_bar', 'heatmap']);
 
 /**
  * Who draws the split of a kind of visualization: 'frame', its own drawing, from the parts, as
@@ -101,7 +102,9 @@ export function splitParts(table: Table): SplitPart[] | undefined {
     const key = keyText(row[split.id]);
     let group = groups.get(key);
     if (!group) {
-      group = { label: `${split.format(row[split.id])}: ${split.name}`, key: row[split.id], first: row, rows: [] };
+      // As vislib titles a chart: by its bucket as the format writes it, an empty text as nothing
+      const value = row[split.id];
+      group = { label: `${value === '' ? '' : split.format(value)}: ${split.name}`, key: value, first: row, rows: [] };
       groups.set(key, group);
     }
     group.rows.push(row);
