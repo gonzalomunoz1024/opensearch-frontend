@@ -36,6 +36,7 @@ import {
   openingMarks,
   ownTime,
   restoredOptions,
+  viewedFromAddress,
   type ChangeMarks,
   type UrlAppState,
 } from './app_state';
@@ -63,6 +64,7 @@ import {
   newPanelIndex,
   openedEmbedded,
   orderAsOriginal,
+  panelsDiffer,
   panelsFromUrl,
   panelsToUrl,
   placeBeside,
@@ -245,8 +247,9 @@ function DashboardPage({ savedId }: { savedId?: string }) {
   const description = urlState.description ?? saved?.description ?? '';
   const timeRestore = urlState.timeRestore ?? saved?.timeRestore ?? false;
 
-  // While the dashboard is edited its panels are in the address, as the original keeps them
-  const urlPanelsKey = editing && urlState.panels !== undefined ? JSON.stringify(urlState.panels) : '';
+  // While the dashboard is edited its panels are in the address, as the original keeps them; those
+  // an address carries while it is looked at are the ones shown, as the original takes them
+  const urlPanelsKey = urlState.panels !== undefined ? JSON.stringify(urlState.panels) : '';
   const urlPanels = useMemo(() => (urlPanelsKey ? panelsFromUrl(JSON.parse(urlPanelsKey)) : undefined), [urlPanelsKey]);
   const panels = useStablePanels(urlPanels ?? viewPanels ?? saved?.panels ?? NO_PANELS);
   const panelsNow = useRef(panels);
@@ -305,13 +308,21 @@ function DashboardPage({ savedId }: { savedId?: string }) {
     };
   }, [savedId]);
 
-  // Once open, the address holds the dashboard's whole state, as the original writes it
+  // Once open, the address holds the dashboard's whole state, as the original writes it: while the
+  // dashboard is looked at, without its panels, those it carried kept as the ones shown before
+  // they leave it (else, between the two, the page would show the saved ones for a moment)
   useEffect(() => {
     if (!saved) return;
     const raw = getLocation().hashParams._a;
-    const full = encodeState(fullAppState(saved, decodeState<UrlAppState>(raw), panelsNow.current, defaultQuery));
+    const current = decodeState<UrlAppState>(raw);
+    const shown = viewedFromAddress(saved, current);
+    if (shown && (!viewPanels || panelsDiffer(shown, viewPanels))) {
+      setViewPanels(shown);
+      return;
+    }
+    const full = encodeState(fullAppState(saved, current, panelsNow.current, defaultQuery));
     if (full !== raw) setHashParams({ _a: full }, { replace: true });
-  }, [saved, rawApp, defaultQuery]);
+  }, [saved, rawApp, defaultQuery, viewPanels]);
 
   // A panel an editor hands back as it comes back, as the original's dashboard takes it when it
   // opens: the panel sent there, given what the editor gives it, or else a new one. It is taken

@@ -13,6 +13,7 @@ import {
   openingMarks,
   ownTime,
   sameQuery,
+  viewedFromAddress,
   type ChangeMarks,
   type UrlAppState,
 } from '../../web/apps/dashboard/app_state';
@@ -569,6 +570,20 @@ describe('a dashboard in the address', () => {
     assert.deepEqual(edited.panels, panelsToUrl(saved.panels));
     // A new dashboard opens to be edited
     assert.equal(fullAppState(emptyDashboard(), {}, [], query).viewMode, 'edit');
+  });
+
+  it('shows the panels it carries while looked at, then leaves them out of it', () => {
+    const saved: Dashboard = { ...emptyDashboard(), id: 'mine', title: 'Mine', panels: [panel('a', 0, 0)] };
+    const query = { query: '', language: 'kuery' };
+    const given = [panel('b', 24, 0, { title: 'From the address' }), panel('a', 0, 0)];
+    const viewed: UrlAppState = { viewMode: 'view', panels: panelsToUrl(given) };
+    assert.deepEqual(viewedFromAddress(saved, viewed), given);
+    assert.deepEqual(viewedFromAddress(saved, { panels: panelsToUrl(given) }), given);
+    assert.equal(fullAppState(saved, viewed, given, query).panels, undefined);
+    // While it is edited they stay in the address, which is where the page reads them from
+    assert.equal(viewedFromAddress(saved, { ...viewed, viewMode: 'edit' }), undefined);
+    assert.equal(viewedFromAddress({ id: undefined }, { panels: panelsToUrl(given) }), undefined);
+    assert.equal(viewedFromAddress(saved, { viewMode: 'view' }), undefined);
   });
 
   it('compares queries by their text and language', () => {

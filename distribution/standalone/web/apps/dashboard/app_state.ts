@@ -8,7 +8,15 @@
 import type { TimeRange } from '../../lib/dates';
 import { encodeState } from '../../lib/url';
 import type { Filter, Query, RefreshInterval } from '../../lib/types';
-import { dashboardQuery, panelsDiffer, panelsToUrl, type Dashboard, type DashboardOptions, type PanelState } from './model';
+import {
+  dashboardQuery,
+  panelsDiffer,
+  panelsFromUrl,
+  panelsToUrl,
+  type Dashboard,
+  type DashboardOptions,
+  type PanelState,
+} from './model';
 
 export interface UrlAppState {
   description?: string;
@@ -51,6 +59,15 @@ export function fullAppState(
   if (viewMode === 'edit') state.panels = current.panels ?? panelsToUrl(panels);
   else delete state.panels;
   return state;
+}
+
+/**
+ * The panels an address carries while the dashboard is looked at: the original shows them, as it
+ * shows those of a dashboard edited, and leaves them out of the address (`fullAppState`)
+ */
+export function viewedFromAddress(saved: Pick<Dashboard, 'id'>, current: UrlAppState): PanelState[] | undefined {
+  const viewMode = current.viewMode ?? (saved.id ? 'view' : 'edit');
+  return viewMode === 'view' && current.panels !== undefined ? panelsFromUrl(current.panels) : undefined;
 }
 
 /** Whether two values are the same whatever the order of their keys */
