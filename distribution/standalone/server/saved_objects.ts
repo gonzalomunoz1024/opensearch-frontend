@@ -7,8 +7,9 @@
 
 import { randomUUID } from 'node:crypto';
 import { type SavedObject, type SavedObjectReference } from '../common/saved_objects';
-import { migrateDocument } from './saved_objects_migrations';
+import { migrateDocument, type MigrationDocument } from './saved_objects_migrations';
 import { HttpError, badRequest } from './http';
+import { silentLogger, type Logger } from './logger';
 import { OpenSearchError, type OpenSearchClient } from './opensearch';
 import mappings from './saved_objects_mappings.json';
 import { badRequestError, filterToKueryNode, getSearchDsl, includedFields, type IndexMapping } from './saved_objects_search';
@@ -102,6 +103,12 @@ export interface CreateOptions {
   migrationVersion?: Record<string, string>;
   originId?: string;
   version?: string;
+  /**
+   * Written into the document, as the original writes them although its workspaces and
+   * permissions are off: the index has no place for them, so OpenSearch refuses such a document
+   */
+  workspaces?: string[];
+  permissions?: unknown;
 }
 
 export interface BulkCreateObject {
@@ -112,7 +119,11 @@ export interface BulkCreateObject {
   migrationVersion?: Record<string, string>;
   originId?: string;
   version?: string;
-  initialNamespaces?: string[];
+  /** Refused when given at all, as no type spans namespaces; an import passes on what its file has */
+  initialNamespaces?: unknown;
+  /** Written for an object that overwrites another; a new one gets those of the request */
+  workspaces?: unknown;
+  permissions?: unknown;
 }
 
 export interface BulkUpdateObject {
@@ -205,7 +216,9 @@ const namespacesOf = (type: string, source: RawSource) =>
 export class SavedObjectsRepository {
   constructor(
     private readonly client: OpenSearchClient,
-    private readonly index: string
+    private readonly index: string,
+    /** Where a migration that fails says so, as the original's migrator logs it */
+    private readonly log: Logger = silentLogger
   ) {}
 
   /**
@@ -263,7 +276,18 @@ export class SavedObjectsRepository {
   ): Promise<SavedObject & { namespaces?: string[] }> {
     this.assertType(type);
     const id = options.id ?? randomUUID();
-    const source = this.toSource(type, attributes, { ...options, id });
+    // As the original's create hands it to its migrator: an id made here is not known to it yet
+    const source = this.toSource({
+      id: options.id,
+      type,
+      originId: options.originId,
+      attributes,
+      migrationVersion: options.migrationVersion,
+      updated_at: new Date().toISOString(),
+      references: options.references ?? [],
+      ...(Array.isArray(options.workspaces) ? { workspaces: options.workspaces } : {}),
+      ...(options.permissions ? { permissions: options.permissions } : {}),
+    });
     const overwrite = Boolean(options.id && options.overwrite);
     const result = await this.call<RawDocument>({
       method: 'PUT',
@@ -441,7 +465,7 @@ export class SavedObjectsRepository {
     return errors;
   }
 
-  async bulkCreate(objects: BulkCreateObject[], options: { overwrite?: boolean } = {}): Promise<BulkResult[]> {
+  async bulkCreate(objects: BulkCreateObject[], options: { overwrite?: boolean; workspaces?: string[] } = {}): Promise<BulkResult[]> {
     if (objects.length === 0) return [];
     const time = new Date().toISOString();
     type Prepared =
@@ -459,7 +483,20 @@ export class SavedObjectsRepository {
       }
       const method = object.id && options.overwrite ? 'index' : 'create';
       const id = object.id ?? randomUUID();
-      const source = this.toSource(object.type, object.attributes, { ...object, id }, time);
+      // The request's workspaces go to an object made new, the object's own to one that overwrites
+      const workspaces = method === 'create' ? options.workspaces : object.workspaces;
+      // As the original's bulk create hands it to its migrator
+      const source = this.toSource({
+        id,
+        type: object.type,
+        attributes: object.attributes,
+        migrationVersion: object.migrationVersion,
+        updated_at: time,
+        references: object.references || [],
+        originId: object.originId,
+        ...(workspaces ? { workspaces } : {}),
+        ...(object.permissions ? { permissions: object.permissions } : {}),
+      });
       return { kind: 'write', object, method, id, source };
     });
     const lines: string[] = [];
@@ -577,29 +614,18 @@ export class SavedObjectsRepository {
     return `/${encodeURIComponent(this.index)}/_doc/${encodeURIComponent(`${type}:${id}`)}`;
   }
 
-  /** The document an object is written as, migrated as the original's migrator does */
-  private toSource(
-    type: string,
-    attributes: Record<string, unknown>,
-    options: CreateOptions & { id: string },
-    time = new Date().toISOString()
-  ) {
-    const migrated = migrateDocument({
-      id: options.id,
-      type,
-      attributes,
-      migrationVersion: options.migrationVersion,
-      updated_at: time,
-      references: options.references ?? [],
-      originId: options.originId,
-    });
+  /** The document an object is written as, migrated as the original's migrator does, its keys in the original serializer's order */
+  private toSource(document: MigrationDocument): RawSource {
+    const migrated = migrateDocument(document, this.log);
     return {
-      [type]: migrated.attributes,
-      type,
+      [migrated.type]: migrated.attributes,
+      type: migrated.type,
       references: migrated.references ?? [],
       ...(migrated.originId ? { originId: migrated.originId } : {}),
       ...(migrated.migrationVersion ? { migrationVersion: migrated.migrationVersion } : {}),
-      updated_at: time,
+      ...(migrated.updated_at ? { updated_at: migrated.updated_at } : {}),
+      ...(migrated.workspaces ? { workspaces: migrated.workspaces } : {}),
+      ...(migrated.permissions ? { permissions: migrated.permissions } : {}),
     } as RawSource;
   }
 

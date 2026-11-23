@@ -2,137 +2,199 @@
 
 /*
  * Numbers written by a pattern such as "0,0.[000]", "0.0%", "0.[0]b" or "$0,0.00": the pattern
- * language OpenSearch Dashboards uses for a field's number format (it comes from the numeral
- * library). This reads the patterns people use: thousands separators, fixed and optional
- * decimals, percent, bytes, abbreviations (1.2k), ordinals, a sign, and text before or after.
+ * language OpenSearch Dashboards uses for a field's number format, read step by step as the
+ * numeral library it comes from (@elastic/numeral 2.5.1, its English language) reads it: a
+ * currency sign, then a percent sign, then a colon, then a "b" choose how the number is written;
+ * then parentheses or a plus, an abbreviation (1.2k), an ordinal, the decimals after the first
+ * point, thousands separators. Other letters of a pattern are not written, as numeral writes none.
  */
 
-const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
-const BIT_UNITS = ['bit', 'kbit', 'Mbit', 'Gbit', 'Tbit', 'Pbit', 'Ebit', 'Zbit', 'Ybit'];
-const ABBREVIATIONS: Array<[number, string]> = [
-  [1e12, 't'],
-  [1e9, 'b'],
-  [1e6, 'm'],
-  [1e3, 'k'],
-];
+const ABBREVIATIONS = { thousand: 'k', million: 'm', billion: 'b', trillion: 't' };
 
-interface Parsed {
-  prefix: string;
-  suffix: string;
-  thousands: boolean;
-  minDecimals: number;
-  maxDecimals: number;
-  percent: boolean;
-  bytes: 'b' | 'bb' | 'bitd' | undefined;
-  abbreviate: boolean;
-  ordinal: boolean;
-  forceSign: boolean;
-  parentheses: boolean;
-  spaceBeforeUnit: boolean;
+/**
+ * numeral's toFixed: the value moved by its decimals as text, rounded half up with its sign, so
+ * that 1.005 is 1.01 and -2.5 is -2; optional decimals that end in zeros are left out
+ */
+function toFixed(value: number, maxDecimals: number, optionals = 0): string {
+  const split = value.toString().split('.');
+  const minDecimals = maxDecimals - optionals;
+  // The fewest decimals the value has, within those asked for
+  const bounded = split.length === 2 ? Math.min(Math.max(split[1].length, minDecimals), maxDecimals) : minDecimals;
+  const power = Math.pow(10, bounded);
+  let output = (Math.round(Number(`${value}e+${bounded}`)) / power).toFixed(bounded);
+  if (optionals > maxDecimals - bounded) {
+    output = output.replace(new RegExp(`\\.?0{1,${optionals - (maxDecimals - bounded)}}$`), '');
+  }
+  return output;
 }
 
-const cache = new Map<string, Parsed>();
-
-function parsePattern(pattern: string): Parsed {
-  const cached = cache.get(pattern);
-  if (cached) return cached;
-  let rest = pattern;
-  const parsed: Parsed = {
-    prefix: '',
-    suffix: '',
-    thousands: false,
-    minDecimals: 0,
-    maxDecimals: 0,
-    percent: false,
-    bytes: undefined,
-    abbreviate: false,
-    ordinal: false,
-    forceSign: false,
-    parentheses: false,
-    spaceBeforeUnit: false,
-  };
-
-  if (/^\(.*\)$/.test(rest)) {
-    parsed.parentheses = true;
-    rest = rest.slice(1, -1);
-  }
-  // The number part starts at the first 0 (or a sign before it) and ends at the last 0 or ]
-  const start = rest.search(/[+-]?0/);
-  if (start === -1) {
-    cache.set(pattern, parsed);
-    return parsed;
-  }
-  parsed.prefix = rest.slice(0, start);
-  rest = rest.slice(start);
-  if (rest.startsWith('+')) {
-    parsed.forceSign = true;
-    rest = rest.slice(1);
-  } else if (rest.startsWith('-')) {
-    rest = rest.slice(1);
-  }
-  const body = /^[0,]*(\.(0*)(\[(0+)\])?|\[\.\](0+))?/.exec(rest)![0];
-  let tail = rest.slice(body.length);
-  parsed.thousands = body.includes(',');
-  const decimals = /\.(0*)(?:\[(0+)\])?$/.exec(body);
-  const optionalPoint = /\[\.\](0+)$/.exec(body);
-  if (optionalPoint) {
-    parsed.maxDecimals = optionalPoint[1].length;
-  } else if (decimals) {
-    parsed.minDecimals = decimals[1].length;
-    parsed.maxDecimals = decimals[1].length + (decimals[2]?.length ?? 0);
-  }
-
-  if (tail.startsWith(' ')) {
-    parsed.spaceBeforeUnit = true;
-    tail = tail.slice(1);
-  }
-  if (tail.startsWith('bitd')) {
-    parsed.bytes = 'bitd';
-    tail = tail.slice(4);
-  } else if (tail.startsWith('bb')) {
-    parsed.bytes = 'bb';
-    tail = tail.slice(2);
-  } else if (tail.startsWith('b')) {
-    parsed.bytes = 'b';
-    tail = tail.slice(1);
-  } else if (tail.startsWith('a')) {
-    parsed.abbreviate = true;
-    tail = tail.slice(1);
-  } else if (tail.startsWith('o')) {
-    parsed.ordinal = true;
-    tail = tail.slice(1);
-  }
-  if (tail.startsWith('%')) {
-    parsed.percent = true;
-    tail = tail.slice(1);
-  } else if (parsed.prefix.endsWith('%')) {
-    parsed.percent = true;
-  }
-  if (parsed.spaceBeforeUnit && !parsed.bytes && !parsed.abbreviate && !parsed.percent) {
-    tail = ` ${tail}`;
-    parsed.spaceBeforeUnit = false;
-  }
-  parsed.suffix = tail;
-  cache.set(pattern, parsed);
-  return parsed;
+// numeral's English ordinal, of the value as it is, not as it is rounded: 3.14 is "3th"
+function ordinal(value: number): string {
+  const last = value % 10;
+  if (Math.trunc((value % 100) / 10) === 1) return 'th';
+  return last === 1 ? 'st' : last === 2 ? 'nd' : last === 3 ? 'rd' : 'th';
 }
 
-// numeral's toFixed: the value moved by the decimals as text, then rounded half up with its sign,
-// so that 1.005 is 1.01 and -2.5 is -2, as the original's numeral writes them
-const roundAsNumeral = (value: number, decimals: number) => Math.round(Number(`${value}e+${decimals}`)) / 10 ** decimals;
+/** numeral's formatNumber: a plain number, after the signs of currency, percent and bytes are taken out */
+function plainNumber(input: number, pattern: string): string {
+  let value = input;
+  let format = pattern;
+  let parentheses = false;
+  let signed = false;
+  let optionalPoint = false;
+  let abbreviation = '';
+  let ordinalText = '';
+  let decimals = '';
+  let negative = false;
+  const abs = Math.abs(value);
+  // What JavaScript writes with an exponent is written so, before it is abbreviated
+  const exponent = /e[+-]/.test(value.toString());
 
-function digits(value: number, parsed: Parsed): string {
-  const decimals = Math.min(parsed.maxDecimals, 20);
-  const fixed = Math.abs(roundAsNumeral(value, decimals)).toFixed(decimals);
-  let [whole, fraction = ''] = fixed.split('.');
-  while (fraction.length > parsed.minDecimals && fraction.endsWith('0')) fraction = fraction.slice(0, -1);
-  if (parsed.thousands) whole = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return fraction ? `${whole}.${fraction}` : whole;
+  // Parentheses for a negative number, or a sign for every one; parentheses when both
+  if (format.indexOf('(') > -1) {
+    parentheses = true;
+    format = format.slice(1, -1);
+  } else if (format.indexOf('+') > -1) {
+    signed = true;
+    format = format.replace(/\+/g, '');
+  }
+
+  if (format.indexOf('a') > -1) {
+    const toThousands = format.indexOf('aK') >= 0;
+    const toMillions = format.indexOf('aM') >= 0;
+    const toBillions = format.indexOf('aB') >= 0;
+    const toTrillions = format.indexOf('aT') >= 0;
+    const forced = toThousands || toMillions || toBillions || toTrillions;
+    if (format.indexOf(' a') > -1) {
+      abbreviation = ' ';
+      format = format.replace(' a', '');
+    } else {
+      format = format.replace('a', '');
+    }
+    if ((abs >= Math.pow(10, 12) && !forced) || toTrillions) {
+      abbreviation += ABBREVIATIONS.trillion;
+      value /= Math.pow(10, 12);
+    } else if ((abs < Math.pow(10, 12) && abs >= Math.pow(10, 9) && !forced) || toBillions) {
+      abbreviation += ABBREVIATIONS.billion;
+      value /= Math.pow(10, 9);
+    } else if ((abs < Math.pow(10, 9) && abs >= Math.pow(10, 6) && !forced) || toMillions) {
+      abbreviation += ABBREVIATIONS.million;
+      value /= Math.pow(10, 6);
+    } else if ((abs < Math.pow(10, 6) && abs >= Math.pow(10, 3) && !forced) || toThousands) {
+      abbreviation += ABBREVIATIONS.thousand;
+      value /= Math.pow(10, 3);
+    }
+  }
+
+  if (format.indexOf('o') > -1) {
+    if (format.indexOf(' o') > -1) {
+      ordinalText = ' ';
+      format = format.replace(' o', '');
+    } else {
+      format = format.replace('o', '');
+    }
+    ordinalText += ordinal(value);
+  }
+
+  // "[.]": the point and the decimals only when they are not all zeros
+  if (format.indexOf('[.]') > -1) {
+    optionalPoint = true;
+    format = format.replace('[.]', '.');
+  }
+
+  let whole: string;
+  // Everything after the first point counts as a decimal, letters too: "0.0e+0" has three
+  const precision = format.split('.')[1];
+  if (precision && !exponent) {
+    if (precision.indexOf('[') > -1) {
+      const [fixed, optional = ''] = precision.replace(']', '').split('[');
+      decimals = toFixed(value, fixed.length + optional.length, optional.length);
+    } else {
+      decimals = toFixed(value, precision.length);
+    }
+    whole = decimals.split('.')[0];
+    const fraction = decimals.indexOf('.') !== -1 ? decimals.split('.')[1] : '';
+    decimals = fraction.length ? `.${fraction}` : '';
+    if (optionalPoint && Number(decimals.slice(1)) === 0) decimals = '';
+  } else {
+    // An exponent is written as JavaScript writes it, anything else without decimals
+    whole = exponent ? value.toString() : toFixed(value, 0);
+  }
+
+  if (whole.indexOf('-') === 0) {
+    whole = whole.slice(1);
+    negative = true;
+  }
+  if (format.indexOf(',') > -1) whole = whole.replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1,');
+  // A pattern that starts with its point writes no whole part
+  if (format.indexOf('.') === 0) whole = '';
+
+  return (
+    (parentheses && negative ? '(' : '') +
+    (!parentheses && negative ? '-' : '') +
+    (!negative && signed ? '+' : '') +
+    whole +
+    decimals +
+    ordinalText +
+    abbreviation +
+    (parentheses && negative ? ')' : '')
+  );
+}
+
+function currency(value: number, pattern: string): string {
+  const symbolIndex = pattern.indexOf('$');
+  const openParenIndex = pattern.indexOf('(');
+  const minusSignIndex = pattern.indexOf('-');
+  let format = pattern;
+  let space = '';
+  if (format.indexOf(' $') > -1) {
+    space = ' ';
+    format = format.replace(' $', '');
+  } else if (format.indexOf('$ ') > -1) {
+    space = ' ';
+    format = format.replace('$ ', '');
+  } else {
+    format = format.replace('$', '');
+  }
+  const output = plainNumber(value, format);
+  // The sign where the pattern has it: before the number, or after it
+  if (symbolIndex <= 1) {
+    if (output.indexOf('(') > -1 || output.indexOf('-') > -1) {
+      const characters = output.split('');
+      characters.splice(symbolIndex < openParenIndex || symbolIndex < minusSignIndex ? 0 : 1, 0, `$${space}`);
+      return characters.join('');
+    }
+    return `$${space}${output}`;
+  }
+  if (output.indexOf(')') > -1) {
+    const characters = output.split('');
+    characters.splice(-1, 0, `${space}$`);
+    return characters.join('');
+  }
+  return `${output}${space}$`;
+}
+
+function percentage(value: number, pattern: string): string {
+  let format = pattern;
+  let space = '';
+  if (format.indexOf(' %') > -1) {
+    space = ' ';
+    format = format.replace(' %', '');
+  } else {
+    format = format.replace('%', '');
+  }
+  const output = plainNumber(value * 100, format);
+  if (output.indexOf(')') > -1) {
+    const characters = output.split('');
+    characters.splice(-1, 0, `${space}%`);
+    return characters.join('');
+  }
+  return `${output}${space}%`;
 }
 
 // numeral's formatTime, for a pattern with a colon: the value as seconds, written as whole hours,
 // minutes and rounded seconds, whatever else the pattern says ("00:00:00" writes 3725 as 1:02:05)
-function timeOf(value: number): string {
+function time(value: number): string {
   const total = Math.abs(value);
   const hours = Math.floor(total / 60 / 60);
   const minutes = Math.floor((total - hours * 60 * 60) / 60);
@@ -141,59 +203,93 @@ function timeOf(value: number): string {
   return `${value < 0 ? '-' : ''}${hours}:${twoDigits(minutes)}:${twoDigits(seconds)}`;
 }
 
-// numeral's English ordinal, of the value as it is, not as it is rounded: 3.14 is "3th"
-function ordinalSuffix(value: number): string {
-  if (Math.trunc((value % 100) / 10) === 1) return 'th';
-  const last = value % 10;
-  return last === 1 ? 'st' : last === 2 ? 'nd' : last === 3 ? 'rd' : 'th';
+const BYTE_SUFFIXES = {
+  binary: ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'],
+  decimal: ['B', 'kB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'],
+  iec: ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'],
+  bits: ['bit', 'kbit', 'Mbit', 'Gbit', 'Tbit', 'Pbit', 'Ebit', 'Zbit', 'Ybit'],
+  iecBits: ['bit', 'Kibit', 'Mibit', 'Gibit', 'Tibit', 'Pibit', 'Eibit', 'Zibit', 'Yibit'],
+};
+
+/**
+ * Bytes and bits: "b" counts by 1024 (KB), "bb" by 1024 with the IEC names (KiB), "bd" by 1000
+ * (kB); "bitb" and "bitd" are bits by 1024 and by 1000
+ */
+function bytes(input: number, pattern: string): string {
+  let format = pattern;
+  let space = '';
+  let decimal = false;
+  let standard = false;
+  let bits = false;
+  const takeOut = (unit: string) => {
+    if (format.indexOf(` ${unit}`) > -1) {
+      space = ' ';
+      format = format.replace(` ${unit}`, '');
+    } else {
+      format = format.replace(unit, '');
+    }
+  };
+  if (format.indexOf('bitd') > -1) {
+    takeOut('bitd');
+    decimal = true;
+    standard = true;
+    bits = true;
+  } else if (format.indexOf('bitb') > -1) {
+    takeOut('bitb');
+    standard = true;
+    bits = true;
+  } else if (format.indexOf('bd') > -1) {
+    takeOut('bd');
+    decimal = true;
+    standard = true;
+  } else if (format.indexOf('bb') > -1) {
+    takeOut('bb');
+    standard = true;
+  } else {
+    takeOut('b');
+  }
+  const base = decimal ? 1000 : 1024;
+  const suffixes = bits
+    ? decimal
+      ? BYTE_SUFFIXES.bits
+      : BYTE_SUFFIXES.iecBits
+    : !decimal && standard
+      ? BYTE_SUFFIXES.iec
+      : decimal
+        ? BYTE_SUFFIXES.decimal
+        : BYTE_SUFFIXES.binary;
+  let value = input;
+  let suffix = suffixes[0];
+  const abs = Math.abs(input);
+  if (!(abs < base)) {
+    let matched = false;
+    for (let power = 1; power < suffixes.length; power += 1) {
+      const min = Math.pow(base, power);
+      if (abs >= min && abs < Math.pow(base, power + 1)) {
+        matched = true;
+        suffix = suffixes[power];
+        value = input / min;
+        break;
+      }
+    }
+    // At or above 1024 (or 1000) of the largest unit: still in that unit
+    if (!matched) {
+      value = input / Math.pow(base, suffixes.length - 1);
+      suffix = suffixes[suffixes.length - 1];
+    }
+  }
+  return `${plainNumber(value, format)}${space}${suffix}`;
 }
 
 export function formatNumber(value: number, pattern: string): string {
   if (typeof value !== 'number' || Number.isNaN(value)) return String(value);
   if (!Number.isFinite(value)) return value > 0 ? '∞' : '-∞';
-  // As numeral chooses: a currency or percent sign first, then a colon
-  if (pattern.includes(':') && !pattern.includes('$') && !pattern.includes('%')) return timeOf(value);
-  const parsed = parsePattern(pattern);
-  let scaled = value;
-  let unit = '';
-
-  if (parsed.percent) {
-    scaled = value * 100;
-    unit = '%';
-  } else if (parsed.bytes) {
-    const base = parsed.bytes === 'b' ? 1024 : 1000;
-    const units = parsed.bytes === 'bitd' ? BIT_UNITS : BYTE_UNITS;
-    let power = 0;
-    let magnitude = Math.abs(value);
-    while (magnitude >= base && power < units.length - 1) {
-      magnitude /= base;
-      power += 1;
-    }
-    scaled = Math.sign(value) * magnitude;
-    unit = units[power];
-  } else if (parsed.abbreviate) {
-    const found = ABBREVIATIONS.find(([threshold]) => Math.abs(value) >= threshold);
-    if (found) {
-      scaled = value / found[0];
-      unit = found[1];
-    }
-  } else if (parsed.ordinal) {
-    unit = ordinalSuffix(value);
-  }
-
-  // A number JavaScript writes with an exponent (before it is abbreviated) is written so, without
-  // decimals, as numeral writes it
-  const exponent = /e[+-]/.test(String(parsed.abbreviate ? value : scaled));
-  const shown = String(Math.abs(scaled));
-  const text = !exponent
-    ? digits(scaled, parsed)
-    : parsed.thousands
-      ? shown.replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1,')
-      : shown;
-  // What rounds to zero carries no sign
-  const negative = scaled < 0 && Number(text.replace(/,/g, '')) !== 0;
-  const sign = negative ? (parsed.parentheses ? '' : '-') : parsed.forceSign ? '+' : '';
-  const body = `${parsed.prefix.replace(/%$/, '')}${text}${parsed.spaceBeforeUnit && unit ? ' ' : ''}${unit}${parsed.suffix}`;
-  if (negative && parsed.parentheses) return `(${body})`;
-  return `${sign}${body}`;
+  // As numeral chooses: a currency sign first, then a percent sign, a colon and a "b"; numeral
+  // writes an empty pattern as its default, 0,0
+  const format = pattern || '0,0';
+  if (format.indexOf('$') > -1) return currency(value, format);
+  if (format.indexOf('%') > -1) return percentage(value, format);
+  if (format.indexOf(':') > -1) return time(value);
+  if (format.indexOf('b') > -1) return bytes(value, format);
+  return plainNumber(value, format);
 }
