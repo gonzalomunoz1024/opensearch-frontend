@@ -189,7 +189,7 @@ function ObjectEditor({
       }}
     >
       <JsonEditor value={text} readOnly={readOnly} height={height} testId={testId} onChange={setText} />
-      {broken && <div className="ismFormRow__error">{JSON_FORMAT_ERROR}</div>}
+      {broken && <div className="ismCustomRow__error">{JSON_FORMAT_ERROR}</div>}
     </div>
   );
 }
@@ -292,7 +292,7 @@ export function AdvancedSettings({
             {isEdit && !readOnly ? (
               // The settings as they are, or, switched on, what the index has beside them
               <>
-                <div className="ismSpacer" />
+                <div className="ismSpacer ismSpacer--l" />
                 <Switch
                   checked={compare}
                   onChange={(next) => {
@@ -300,7 +300,7 @@ export function AdvancedSettings({
                   }}
                   label="Compare previously saved settings"
                 />
-                <div className="ismSpacer" />
+                <div className="ismSpacer ismSpacer--l" />
                 {compare ? (
                   <DiffEditor original={ordered(old ?? {})} value={value} onChange={take} onChecked={checked} />
                 ) : (
@@ -522,7 +522,7 @@ function FieldRow({
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const shown = (name: string) => (showErrors || touched[name] ? errors[name] : undefined);
   const types = TYPE_OPTIONS.includes(field.type) ? TYPE_OPTIONS : [...TYPE_OPTIONS, field.type];
-  const label = (text: string) => (showLabels ? <div className="ismFormRow__label">{text}</div> : null);
+  const label = (text: string) => (showLabels ? <div className="ismCustomRow__label">{text}</div> : null);
   return (
     // The row's clicks stay in it: the tree's node around it opens and closes on its own
     <div className="ismFieldRow" onClick={(event) => event.stopPropagation()}>
@@ -538,7 +538,7 @@ function FieldRow({
           invalid={Boolean(shown('fieldName'))}
           testId={`${id}-field-name`}
         />
-        {shown('fieldName') && <div className="ismFormRow__error">{shown('fieldName')}</div>}
+        {shown('fieldName') && <div className="ismCustomRow__error">{shown('fieldName')}</div>}
       </div>
       <div className="ismFieldRow__item ismFieldRow__item--type">
         {label('Field type')}
@@ -552,7 +552,7 @@ function FieldRow({
       </div>
       {(mappingType(field.type)?.fields ?? []).map((option) => (
         <div key={option.name} className="ismFieldRow__item ismFieldRow__item--type">
-          <div className="ismFormRow__label">{option.label}</div>
+          <div className="ismCustomRow__label">{option.label}</div>
           <TextField
             compact
             value={String(field[option.name] ?? '')}
@@ -562,7 +562,7 @@ function FieldRow({
             }}
             invalid={Boolean(shown(option.name))}
           />
-          {shown(option.name) && <div className="ismFormRow__error">{shown(option.name)}</div>}
+          {shown(option.name) && <div className="ismCustomRow__error">{shown(option.name)}</div>}
         </div>
       ))}
       <div className="ismFieldRow__item">
@@ -762,7 +762,7 @@ export function MappingEditor({
           {readOnly ? 'JSON' : 'JSON Editor'}
         </button>
       </div>
-      <div className="ismSpacer" />
+      <div className="ismSpacer ismSpacer--l" />
       {mode === 'VISUAL' ? (
         <>
           {!fieldsArePlain(added) && (
@@ -770,7 +770,7 @@ export function MappingEditor({
               <CallOut tone="warning" size="s" title="You have advanced configurations not supported by the visual editor">
                 To view or modify all of your configurations, switch to the JSON editor.
               </CallOut>
-              <div className="ismSpacer" />
+              <div className="ismSpacer ismSpacer--l" />
             </>
           )}
           {fields.length > 0 ? (
@@ -789,7 +789,7 @@ export function MappingEditor({
           )}
           {!readOnly && (
             <>
-              <div className="ismSpacer" />
+              <div className="ismSpacer ismSpacer--l" />
               <div className="ismMappingEditor__buttons">
                 <Button onClick={() => setFields([...fields, { fieldName: '', type: 'text' }])} testId="createIndexAddFieldButton">
                   Add new field
@@ -808,7 +808,7 @@ export function MappingEditor({
               <Button onClick={() => setPrevious(true)} testId="previousMappingsJsonButton">
                 See previous mappings
               </Button>
-              <div className="ismSpacer" />
+              <div className="ismSpacer ismSpacer--l" />
             </>
           )}
           {readOnly ? (

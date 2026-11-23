@@ -149,17 +149,30 @@
 
 /* --- The theme's spacers, titles and descriptions as the plugin's pages put them ------------------ */
 
+/* The spacer is also in index_management.css, for the policies' and the snapshots' pages, with the
+   same sizes: the class alone has no height, so that neither sheet undoes a size of the other */
 .ismSpacer {
   flex: none;
-  height: var(--space-6);
+}
+
+.ismSpacer--xs {
+  height: var(--space-1);
+}
+
+.ismSpacer--s {
+  height: var(--space-2);
 }
 
 .ismSpacer--m {
   height: var(--space-4);
 }
 
-.ismSpacer--s {
-  height: var(--space-2);
+.ismSpacer--l {
+  height: var(--space-6);
+}
+
+.ismSpacer--xl {
+  height: var(--space-8);
 }
 
 /* A page's title: the theme's heading of a text, 28 px on 34 */
@@ -189,7 +202,7 @@
   padding: 0 50px;
 }
 
-.ismFormButtons {
+.ismEndButtons {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -309,21 +322,21 @@
 
 /* --- The plugin's row of a form (form_row.tsx): the theme's compressed form row ------------------- */
 
-.ismFormRow {
+.ismCustomRow {
   display: flex;
   flex-direction: column;
   max-width: 400px;
 }
 
-.ismFormRow--full {
+.ismCustomRow--full {
   max-width: 100%;
 }
 
-.ismFormRow + .ismFormRow {
+.ismCustomRow + .ismCustomRow {
   margin-top: var(--space-4);
 }
 
-.ismFormRow__label {
+.ismCustomRow__label {
   margin-bottom: var(--space-1);
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
@@ -332,7 +345,7 @@
 }
 
 /* The plugin's title of a field: the theme's heading of a small text, 17 px on 22 */
-.ismFormRow__title,
+.ismCustomRow__title,
 .ismDescribed__title {
   display: block;
   margin: 0;
@@ -343,53 +356,53 @@
   letter-spacing: -0.022em;
 }
 
-.ismFormRow__field {
+.ismCustomRow__field {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
 }
 
-.ismFormRow__field > .atlField,
-.ismFormRow__field > .atlCombo,
-.ismFormRow__field > .atlCodeEditor,
-.ismFormRow__field > .ismObjectEditor,
-.ismFormRow__field > .ismFormRow__help,
-.ismFormRow__field > div:not([class]) {
+.ismCustomRow__field > .atlField,
+.ismCustomRow__field > .atlCombo,
+.ismCustomRow__field > .atlCodeEditor,
+.ismCustomRow__field > .ismObjectEditor,
+.ismCustomRow__field > .ismCustomRow__help,
+.ismCustomRow__field > div:not([class]) {
   width: 100%;
 }
 
-.ismFormRow__help,
-.ismFormRow__error {
+.ismCustomRow__help,
+.ismCustomRow__error {
   padding-top: var(--space-1);
   color: var(--color-text-tertiary);
   font-size: var(--font-size-xs);
   line-height: 1.5;
 }
 
-.ismFormRow__help--top {
+.ismCustomRow__help--top {
   padding-top: 0;
   padding-bottom: var(--space-1);
 }
 
-.ismFormRow__help p {
+.ismCustomRow__help p {
   margin: 0;
 }
 
 /* The theme's link out of the product in a help: its icon 12 px, 4 px after the text */
 .ismHelpText .ismExternal,
-.ismFormRow__help .ismExternal,
+.ismCustomRow__help .ismExternal,
 .ismDescribed__help .ismExternal {
   gap: var(--space-1);
 }
 
 .ismHelpText .ismExternal .atlIcon,
-.ismFormRow__help .ismExternal .atlIcon,
+.ismCustomRow__help .ismExternal .atlIcon,
 .ismDescribed__help .ismExternal .atlIcon {
   width: 12px;
   height: 12px;
 }
 
-.ismFormRow__error {
+.ismCustomRow__error {
   color: var(--color-critical);
 }
 

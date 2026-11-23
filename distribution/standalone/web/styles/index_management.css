@@ -119,6 +119,11 @@
   padding: 25px;
 }
 
+/* A page the plugin's frame leaves to its own padding (index.tsx names them) */
+.ismBody--bare {
+  padding: 0;
+}
+
 /* --- The panel around a list or a part of a form ------------------------------------------------ */
 
 .ismPanel,

@@ -252,7 +252,7 @@ export function ApplyPolicyModal({ indices, onClose }: { indices: string[]; onCl
       </FormRow>
       {selected && (
         <>
-          <div className="ismSpacer" />
+          <div className="ismSpacer ismSpacer--l" />
           <h4 className="ismModal__h4 ismModal__narrow">Preview</h4>
           <div className="ismSpacer ismSpacer--s" />
           <JsonBlock text={JSON.stringify({ policy: selected.policy }, null, 4)} height={200} />
@@ -342,12 +342,12 @@ function DeleteIndexesModal({ names, onClose, onConfirm }: ConfirmProps) {
           <CallOut tone="warning" size="s">
             These indexes may contain critical system data. Deleting system indexes may break OpenSearch.
           </CallOut>
-          <div className="ismSpacer" />
+          <div className="ismSpacer ismSpacer--l" />
         </>
       )}
       <p>The following index will be permanently deleted. This action cannot be undone.</p>
       <ModalNames names={names} />
-      <div className="ismSpacer" />
+      <div className="ismSpacer ismSpacer--l" />
       <TypeTheWord word="delete" value={value} onChange={setValue} />
     </PluginModal>
   );
@@ -374,7 +374,7 @@ function CloseIndexesModal({ names, onClose, onConfirm }: ConfirmProps) {
       {names.some((name) => matchesAny(name, SYSTEM_INDEX)) && (
         <CallOut tone="warning" size="s">
           This index may contain critical system data. Closing system indexes may break OpenSearch.
-          <div className="ismSpacer" />
+          <div className="ismSpacer ismSpacer--l" />
         </CallOut>
       )}
       <p>
@@ -382,7 +382,7 @@ function CloseIndexesModal({ names, onClose, onConfirm }: ConfirmProps) {
         closed index.
       </p>
       <ModalNames names={names} />
-      <div className="ismSpacer" />
+      <div className="ismSpacer ismSpacer--l" />
       <TypeTheWord word="close" value={value} onChange={setValue} />
     </PluginModal>
   );
@@ -406,7 +406,7 @@ function OpenIndexesModal({ names, onClose, onConfirm }: ConfirmProps) {
     >
       <p>The following index will be opened.</p>
       <ModalNames names={names} />
-      <div className="ismSpacer" />
+      <div className="ismSpacer ismSpacer--l" />
     </PluginModal>
   );
 }

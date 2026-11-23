@@ -110,6 +110,17 @@ const NO_NAV_UNDER: string[] = [
   ROUTES.CREATE_COMPOSABLE_TEMPLATE,
 ];
 
+// The pages the plugin's frame puts no padding around: each brings its own (25 px above and 50 px
+// beside a policy's editor, 25 px beside Change policy, 5 and 50 px on a snapshot policy's pages)
+const NO_PADDING: string[] = [
+  ROUTES.CHANGE_POLICY,
+  ROUTES.CREATE_POLICY,
+  ROUTES.EDIT_POLICY,
+  ROUTES.SNAPSHOT_POLICY_DETAILS,
+  ROUTES.CREATE_SNAPSHOT_POLICY,
+  ROUTES.EDIT_SNAPSHOT_POLICY,
+];
+
 interface Page {
   route: string;
   /** `rest` is what follows the route in the address: the name of what the page is about */
@@ -227,7 +238,10 @@ export function IndexManagement() {
           ))}
         </nav>
       )}
-      <div className="ismBody" key={found ? `${found.page.route}/${found.rest}` : hashPath}>
+      <div
+        className={cx('ismBody', found && NO_PADDING.includes(found.page.route) && 'ismBody--bare')}
+        key={found ? `${found.page.route}/${found.rest}` : hashPath}
+      >
         {found ? (
           found.page.render(found.rest)
         ) : (
