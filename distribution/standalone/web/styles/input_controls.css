@@ -5,7 +5,8 @@
  * fork's Atlas theme (input_control_vis/public/components/editor): a panel for each control, an
  * accordion in it with the buttons that move and remove the control, the form of its kind; the
  * panel that adds one; the switches of the Options tab. The rows, fields and switches are the
- * Visualize editor's (`vze*`); what is the controls' own is here.
+ * Visualize editor's (`vze*`); what is the controls' own is here, with what the drawn controls
+ * (`visControls*` in vis.css) and the kit's combo box draw otherwise than the original.
  */
 
 /* --- The Controls tab ----------------------------------------------------------------------- */
@@ -134,9 +135,33 @@
   align-items: flex-start;
 }
 
-/* --- What the kit's combo box draws otherwise --------------------------------------------- */
+/* --- The drawn controls --------------------------------------------------------------------- */
+
+/* A field's text 8px from its outer edge, as the original's, whose hairline is drawn inside it */
+.visControls .visControls__field.atlField,
+.visControls .visControls__input.atlField {
+  padding: 0 7px;
+}
+
+/* A chosen value's pill: its text 2px under its top and its cross in the middle of the 20px line,
+   as the original's badge */
+.visControls .atlCombo__pill {
+  align-items: flex-start;
+}
+
+.visControls .atlCombo__pill > button {
+  margin-top: var(--space-1);
+}
+
+/* The original's empty buttons hold their text half a pixel lower than its filled one */
+.visControls__actions > .atlButton--empty {
+  padding-top: 1px;
+}
+
+/* --- What the kit's combo box draws otherwise, in the editor and in the drawn controls -------- */
 
 /* A single choice is a pill, as the original's combo box draws one that is not plain text */
+.visControls .atlCombo--single > .atlCombo__plain,
 .icvEditor .atlCombo--single > .atlCombo__plain {
   height: 22px;
   margin-top: 1px;
@@ -150,6 +175,7 @@
 }
 
 /* The compressed field's clear button: 12px, its cross 6px, 30px from the outer right edge */
+.visControls .atlCombo__clear,
 .icvEditor .atlCombo__clear {
   right: 29px;
   width: 12px;
@@ -158,6 +184,7 @@
   transform: none;
 }
 
+.visControls .atlCombo__clear .atlIcon,
 .icvEditor .atlCombo__clear .atlIcon {
   width: 6px;
   height: 6px;
@@ -166,16 +193,20 @@
 }
 
 /* The original's grey stays under the pointer; the dark theme's is a lighter one than the light theme's */
+.visControls .atlCombo__clear:hover,
 .icvEditor .atlCombo__clear:hover {
   background: var(--color-text-tertiary);
 }
 
+:root.themeDark .visControls .atlCombo__clear,
+:root.themeDark .visControls .atlCombo__clear:hover,
 :root.themeDark .icvEditor .atlCombo__clear,
 :root.themeDark .icvEditor .atlCombo__clear:hover {
   background: var(--color-text-secondary);
 }
 
 /* The arrow that opens the list: 12px in its 16px button */
+.visControls .atlCombo__caret > .atlIcon,
 .icvEditor .atlCombo__caret > .atlIcon {
   width: 12px;
   height: 12px;

@@ -374,9 +374,13 @@ export function rangeInputWidth(min: number, max: number): number {
   return Math.max(String(min).length, String(max).length) / 1.25 + 2;
 }
 
-/** Where a value sits along a track, as the share of the track a thumb's left edge can travel */
+/**
+ * Where a value sits along a track, as the share of the track a thumb's left edge can travel. A
+ * track whose two bounds are one value holds it at its end, as the original's, whose share of 0/0
+ * is taken for the whole.
+ */
 export function trackShare(value: number, min: number, max: number): number {
-  if (max === min) return 0;
+  if (max === min) return 1;
   return Math.min(1, Math.max(0, (value - min) / (max - min)));
 }
 

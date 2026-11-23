@@ -34,6 +34,7 @@ import {
   sameValue,
   submitFilters,
   termsAggs,
+  trackShare,
   usableControls,
   valueFromFilters,
   type ControlParam,
@@ -275,6 +276,13 @@ describe('a range typed by hand, as the original checks it', () => {
     assert.equal(rangeInputWidth(0, 19742), 6);
     assert.equal(rangeInputWidth(1, 8), 2.8);
     assert.equal(rangeInputWidth(101, 1200), 5.2);
+  });
+
+  it('places a value along the track, at the end of a track whose bounds are one value, as the original', () => {
+    assert.equal(trackShare(5, 0, 10), 0.5);
+    assert.equal(trackShare(20, 0, 10), 1);
+    assert.equal(trackShare(-5, 0, 10), 0);
+    assert.equal(trackShare(2, 2, 2), 1);
   });
 });
 
