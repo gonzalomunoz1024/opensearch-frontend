@@ -6,14 +6,14 @@
  */
 
 import { useMemo, useState } from 'react';
-import { Badge, cx } from '../../components/basic';
+import { Badge, Button, cx } from '../../components/basic';
 import { SearchField } from '../../components/form';
 import { Icon, type IconName } from '../../components/icon';
 import { Modal } from '../../components/overlay';
 import { appUrl } from '../../lib/url';
 import { VIS_TYPES, visIcon, visType, type VisType } from '../../lib/vis';
 import { navigate, navigateHash, useLocation } from '../../router';
-import { Listing, type Listed } from '../../shell/listing';
+import { Listing, ListingEmpty, type Listed, type ListingColumn } from '../../shell/listing';
 import { SavedObjectFinder } from '../../shell/saved_objects_ui';
 import { currentGlobalParam, useBreadcrumbs } from '../../shell/state';
 import { canDraw } from '../../vis/visualization';
@@ -71,6 +71,7 @@ function VisualizeList({ creating }: { creating: boolean }) {
     <>
       <Listing
         title="Visualizations"
+        headingId="visualizeListingHeading"
         entity="visualization"
         entities="visualizations"
         types={[VIS_BUILDER_TYPE, 'visualization']}
@@ -78,26 +79,25 @@ function VisualizeList({ creating }: { creating: boolean }) {
         createLabel="Create visualization"
         onCreate={() => setDialog(true)}
         linkTo={editUrl}
+        titleTestId={visTitleTestId}
         editTo={editUrl}
-        extraColumns={[
-          {
-            id: 'type',
-            name: 'Type',
-            width: 170,
-            render: (object) => {
-              const type = typeOf(object);
-              return (
-                <span className="atlRow">
-                  <Icon name={type === VIS_BUILDER_TYPE ? 'visBuilder' : (visIcon(type) as IconName)} />
-                  {typeTitle(type)}
-                </span>
-              );
-            },
-            sortValue: (object) => typeTitle(typeOf(object)),
-          },
-        ]}
-        emptyBody="You can create different visualizations based on your data."
-        testId="visualizeLandingPage"
+        typeColumn={VIS_TYPE_COLUMN}
+        padding="l"
+        deleteErrors={{ title: 'Error deleting visualization', per: 'each' }}
+        noItems={
+          <ListingEmpty
+            icon="visualize"
+            headingId="visualizeListingHeading"
+            title="Create your first visualization"
+            actions={
+              <Button variant="primary" icon="plus" onClick={() => setDialog(true)} testId="createVisualizationPromptButton">
+                Create new visualization
+              </Button>
+            }
+          >
+            <p>You can create different visualizations based on your data.</p>
+          </ListingEmpty>
+        }
       />
       {dialog && (
         <NewVisModal
@@ -110,6 +110,23 @@ function VisualizeList({ creating }: { creating: boolean }) {
     </>
   );
 }
+
+const visTitleTestId = (title: string) => `visListingTitleLink-${title.split(' ').join('-')}`;
+
+const VIS_TYPE_COLUMN: ListingColumn = {
+  field: 'typeTitle',
+  name: 'Type',
+  value: (object) => typeTitle(typeOf(object)),
+  render: (object) => {
+    const type = typeOf(object);
+    return (
+      <span className="vzeListType">
+        <Icon name={type === VIS_BUILDER_TYPE ? 'visBuilder' : (visIcon(type) as IconName)} />
+        {typeTitle(type)}
+      </span>
+    );
+  },
+};
 
 /** "New Visualization": every kind there is, then what an aggregation-based one is drawn from */
 export function NewVisModal({ onClose }: { onClose: () => void }) {

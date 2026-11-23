@@ -852,6 +852,100 @@ select.atlField {
   background: var(--color-border-light);
 }
 
+/* A popover placed as the original's: its panel as the theme draws one, opaque, without padding */
+.atlPopover--placed {
+  min-width: 0;
+  max-height: none;
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  backdrop-filter: none;
+}
+
+/* The original's context menu: rows from edge to edge, the surface under the pointer */
+.atlContextMenu {
+  display: flex;
+  flex-direction: column;
+  min-width: 112px;
+}
+
+.atlContextMenu__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px var(--space-2);
+  border: 0;
+  border-bottom: 1px solid var(--color-border-light);
+  background: none;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+  text-align: left;
+}
+
+.atlContextMenu__back {
+  width: 100%;
+  cursor: pointer;
+}
+
+.atlContextMenu__back:hover {
+  background: var(--color-surface-secondary);
+}
+
+.atlContextMenu__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  line-height: normal;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.atlContextMenu--small .atlContextMenu__item {
+  line-height: 21px;
+}
+
+.atlContextMenu__item:hover,
+.atlContextMenu__item:focus {
+  background: var(--color-surface-secondary);
+  outline: none;
+  text-decoration: none;
+}
+
+.atlContextMenu__item:disabled {
+  color: var(--color-text-tertiary);
+  cursor: not-allowed;
+  background: none;
+}
+
+.atlContextMenu__item--danger {
+  color: var(--color-critical-text);
+}
+
+.atlContextMenu__noIcon {
+  flex: none;
+  width: 16px;
+}
+
+.atlContextMenu__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.atlContextMenu__arrow {
+  margin-left: auto;
+}
+
 .atlScrim {
   position: fixed;
   inset: 0;
@@ -913,6 +1007,25 @@ select.atlField {
 
 .atlModal--wide {
   max-width: 800px;
+}
+
+/* The original's confirmation: 400 px, its buttons as tall as the theme's, the focused one tinted */
+.atlModal--confirm {
+  max-width: 400px;
+}
+
+.atlModal--confirm .atlModal__footer > .atlButton {
+  height: 40px;
+}
+
+.atlModal--confirm .atlModal__footer > .atlButton:not(.atlButton--empty) {
+  border: 1px solid transparent;
+  box-shadow: var(--shadow-sm);
+}
+
+.atlModal--confirm .atlModal__footer > .atlButton--empty:focus {
+  background: var(--color-accent-tint);
+  outline: none;
 }
 
 /* The original's save dialog: 400 px, a line on what saving is for above the title */

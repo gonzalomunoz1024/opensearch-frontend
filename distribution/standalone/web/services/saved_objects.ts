@@ -21,6 +21,10 @@ export interface FindOptions {
   sortField?: string;
   sortOrder?: 'asc' | 'desc';
   hasReference?: { type: string; id: string };
+  /** How the words searched for combine; the server's default is OR */
+  defaultSearchOperator?: 'AND' | 'OR';
+  /** The search sent as it is given, quotes and stars included, as the original's lists send it */
+  rawSearch?: boolean;
 }
 
 export interface WriteOptions {
@@ -41,7 +45,11 @@ export class SavedObjectsClient {
       query: {
         type: ([] as string[]).concat(options.type),
         // A word being typed matches what starts with it
-        search: options.search ? `${options.search.replace(/[*"]/g, '')}*` : undefined,
+        search: options.rawSearch
+          ? options.search || undefined
+          : options.search
+            ? `${options.search.replace(/[*"]/g, '')}*`
+            : undefined,
         search_fields: options.searchFields ?? (options.search ? ['title'] : undefined),
         fields: options.fields,
         page: options.page ?? 1,
@@ -49,6 +57,7 @@ export class SavedObjectsClient {
         sort_field: options.sortField,
         sort_order: options.sortOrder,
         has_reference: options.hasReference ? JSON.stringify(options.hasReference) : undefined,
+        default_search_operator: options.defaultSearchOperator,
       },
     });
   }

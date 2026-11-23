@@ -13,10 +13,14 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { href as toHref } from '../router';
 import { services } from '../services';
 import type { Toast } from '../services/toasts';
 import { Button, CallOut, CodeBlock, IconButton, cx } from './basic';
 import { Icon, type IconName } from './icon';
+import { placeLikeOriginal, type PopoverPosition } from './placement';
+
+export type { PopoverPosition };
 
 export function Portal({ children }: { children: ReactNode }) {
   return createPortal(children, document.body);
@@ -37,6 +41,11 @@ export interface PopoverProps {
   /** How the span around the button is laid out */
   anchorStyle?: CSSProperties;
   anchorClassName?: string;
+  /**
+   * Placed as the original's popovers place themselves: on this side of the button and aligned so,
+   * or on the other side, or beside it, wherever it fits first (see `placeLikeOriginal`)
+   */
+  position?: PopoverPosition;
 }
 
 export function Popover({
@@ -51,6 +60,7 @@ export function Popover({
   className,
   anchorStyle,
   anchorClassName,
+  position,
 }: PopoverProps) {
   const anchor = useRef<HTMLSpanElement>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -60,6 +70,13 @@ export function Popover({
     const anchorBox = anchor.current?.getBoundingClientRect();
     const panelBox = panel.current?.getBoundingClientRect();
     if (!anchorBox || !panelBox) return;
+    if (position && panel.current) {
+      // Its size as laid out: the box on screen is still scaled while it opens
+      const size = { width: width ?? panel.current.offsetWidth, height: panel.current.offsetHeight };
+      const at = placeLikeOriginal(anchorBox, size, position, { width: window.innerWidth, height: window.innerHeight });
+      setStyle({ left: at.left, top: at.top, width });
+      return;
+    }
     const margin = 8;
     const panelWidth = Math.max(panelBox.width, matchWidth ? anchorBox.width : 0);
     let left = align === 'right' ? anchorBox.right - panelWidth : anchorBox.left;
@@ -76,7 +93,7 @@ export function Popover({
     if (fitsBelow) next.top = anchorBox.bottom + 4;
     else next.bottom = window.innerHeight - anchorBox.top + 4;
     setStyle(next);
-  }, [align, matchWidth, width]);
+  }, [align, matchWidth, width, position]);
 
   useLayoutEffect(() => {
     if (!open) {
@@ -131,7 +148,7 @@ export function Popover({
         <Portal>
           <div
             ref={panel}
-            className={cx('atlPopover', 'atlMaterial', padded && 'atlPopover--padded', className)}
+            className={cx('atlPopover', 'atlMaterial', padded && 'atlPopover--padded', position && 'atlPopover--placed', className)}
             style={style}
             data-popover-depth={depthOf(anchor.current) + 1}
           >
@@ -250,6 +267,110 @@ export function MenuButton({
   );
 }
 
+export interface ContextMenuItem extends MenuItem {
+  /** The panel this item opens in the menu's place */
+  panel?: string;
+}
+
+export interface ContextMenuPanel {
+  id: string;
+  title?: ReactNode;
+  items: ContextMenuItem[];
+}
+
+/**
+ * The original's context menu: rows as wide as the popover, an icon before each when one of them
+ * has one, a title over them, and items that open another panel in its place (with a way back).
+ */
+export function ContextMenu({
+  panels,
+  initial,
+  onDone,
+  small,
+  testId,
+}: {
+  panels: ContextMenuPanel[];
+  /** The panel shown first; the first of them when none is named */
+  initial?: string;
+  onDone?: () => void;
+  /** The original's small menu: rows of 37px rather than 33px */
+  small?: boolean;
+  testId?: string;
+}) {
+  const [trail, setTrail] = useState<string[]>([]);
+  const menu = useRef<HTMLDivElement>(null);
+  const root = initial ?? panels[0]?.id;
+  const shownId = trail[trail.length - 1] ?? root;
+  // The original's popover takes the focus to its first item when it opens, and to the first item
+  // of a panel opened from it
+  useEffect(() => {
+    // After the popover around it is placed and shown: what is hidden cannot take the focus
+    const frame = window.requestAnimationFrame(() =>
+      menu.current?.querySelector<HTMLElement>('.atlContextMenu__item:not(:disabled)')?.focus({ preventScroll: true })
+    );
+    return () => window.cancelAnimationFrame(frame);
+  }, [shownId]);
+  const shown = panels.find((panel) => panel.id === shownId);
+  if (!shown) return null;
+  const withIcons = shown.items.some((item) => item.icon);
+  return (
+    <div ref={menu} className={cx('atlContextMenu', small && 'atlContextMenu--small')} role="menu" data-test-subj={testId}>
+      {shown.title !== undefined &&
+        (trail.length > 0 ? (
+          <button type="button" className="atlContextMenu__title atlContextMenu__back" onClick={() => setTrail(trail.slice(0, -1))}>
+            <Icon name="arrowLeft" />
+            <span>{shown.title}</span>
+          </button>
+        ) : (
+          <div className="atlContextMenu__title">{shown.title}</div>
+        ))}
+      {shown.items.map((item, index) => {
+        const content = (
+          <>
+            {withIcons && (item.icon ? <Icon name={item.icon} /> : <span className="atlContextMenu__noIcon" />)}
+            <span className="atlContextMenu__text">{item.label}</span>
+            {item.panel && <Icon name="chevronRight" className="atlContextMenu__arrow" />}
+          </>
+        );
+        const choose = () => {
+          if (item.panel) {
+            setTrail([...trail, item.panel]);
+            return;
+          }
+          item.onClick?.();
+          onDone?.();
+        };
+        return item.to !== undefined && !item.disabled ? (
+          <a
+            key={item.id ?? index}
+            role="menuitem"
+            className="atlContextMenu__item"
+            href={toHref(item.to)}
+            title={item.title}
+            data-test-subj={item.testId}
+            onClick={choose}
+          >
+            {content}
+          </a>
+        ) : (
+          <button
+            key={item.id ?? index}
+            type="button"
+            role="menuitem"
+            className={cx('atlContextMenu__item', item.danger && 'atlContextMenu__item--danger')}
+            disabled={item.disabled}
+            title={item.title}
+            data-test-subj={item.testId}
+            onClick={choose}
+          >
+            {content}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function useEscape(onClose: () => void) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -325,6 +446,8 @@ export function ConfirmModal({
   onConfirm,
   onCancel,
   busy,
+  focusCancel,
+  narrow,
 }: {
   title: ReactNode;
   children?: ReactNode;
@@ -334,22 +457,27 @@ export function ConfirmModal({
   onConfirm: () => void;
   onCancel: () => void;
   busy?: boolean;
+  /** The cancel button has the focus when it opens, as the original's does where it asks so */
+  focusCancel?: boolean;
+  /** The original's confirmation dialog: 400px wide, with buttons of 40px */
+  narrow?: boolean;
 }) {
   return (
     <Modal
       title={title}
       onClose={onCancel}
+      className={narrow ? 'atlModal--confirm' : undefined}
       testId="confirmModal"
       footer={
         <>
-          <Button variant="empty" onClick={onCancel} testId="confirmModalCancelButton">
+          <Button variant="empty" onClick={onCancel} data-autofocus={focusCancel || undefined} testId="confirmModalCancelButton">
             {cancelLabel}
           </Button>
           <Button
             variant={danger ? 'dangerFill' : 'primary'}
             onClick={onConfirm}
             loading={busy}
-            data-autofocus
+            data-autofocus={focusCancel ? undefined : true}
             testId="confirmModalConfirmButton"
           >
             {confirmLabel}

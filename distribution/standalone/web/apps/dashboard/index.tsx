@@ -3,14 +3,14 @@
 /* Dashboards: the list of them, and one of them on screen, looked at or edited. */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, EmptyPrompt, Loading } from '../../components/basic';
+import { Button, EmptyPrompt, Link, Loading } from '../../components/basic';
 import { FormRow, Switch, TextField } from '../../components/form';
 import { ConfirmModal, Flyout, Modal } from '../../components/overlay';
 import type { TimeRange } from '../../lib/dates';
 import { mergeFilters } from '../../lib/query';
 import { parseSearchSource } from '../../lib/search_source';
 import type { Filter, IndexPattern, Query } from '../../lib/types';
-import { appUrl, decodeState, encodeState } from '../../lib/url';
+import { appUrl, decodeState, encodeQueryValue, encodeState } from '../../lib/url';
 import { getLocation, href, navigate, setHashParams, setLeaveGuard, useLocation } from '../../router';
 import { services } from '../../services';
 import { errorMessage } from '../../services/http';
@@ -18,7 +18,7 @@ import type { SavedObject } from '../../services/saved_objects';
 import { TopNav, type TopNavItem } from '../../shell/chrome';
 import { isPinned, splitFilters } from '../../shell/filter_bar';
 import { Inspector } from '../../shell/inspect';
-import { Listing } from '../../shell/listing';
+import { Listing, ListingEmpty, type ListingColumn } from '../../shell/listing';
 import { defaultQueryLanguage } from '../../shell/query_bar';
 import { SaveModal, SavedObjectFinder, ShareModal } from '../../shell/saved_objects_ui';
 import { pageFiltersOf, savedQueryGlobalParam, type SavedQueryChange } from '../../shell/saved_query';
@@ -71,21 +71,70 @@ export function Dashboards() {
 
 function DashboardList() {
   useBreadcrumbs([{ text: 'Dashboards' }]);
+  const { hashParams } = useLocation();
+  const titleParam = hashParams.title;
+  const filterParam = hashParams.filter ?? '';
+
+  // An address with `?title=` opens the dashboard of that title, or lists those with it
+  useEffect(() => {
+    if (!titleParam) return;
+    services.savedObjects
+      .find<{ title?: string }>({ type: 'dashboard', search: `"${titleParam}"`, rawSearch: true, searchFields: ['title'] })
+      .then((answer) => {
+        const matching = answer.saved_objects.filter(
+          (object) => (object.attributes.title ?? '').toLowerCase() === titleParam.toLowerCase()
+        );
+        if (matching.length === 1) navigate(appUrl(BASE, `/view/${encodeURIComponent(matching[0].id)}`), { replace: true });
+        else navigate(`${BASE}#/list?filter=${encodeQueryValue(`"${titleParam}"`)}`, { replace: true });
+      })
+      .catch(() => services.toasts.warning('Unable to filter by title'));
+  }, [titleParam]);
+
   return (
     <Listing
+      key={filterParam}
       title="Dashboards"
+      headingId="dashboardListingHeading"
       entity="dashboard"
       entities="dashboards"
       types={['dashboard']}
-      createLabel="Create dashboard"
+      fields={['title', 'type', 'description', 'updated_at']}
+      searchFields={['title^3', 'type', 'description']}
+      createLabel={'Create\u00a0Dashboard'}
       createTo={appUrl(BASE, '/create')}
       linkTo={(object) => appUrl(BASE, `/view/${encodeURIComponent(object.id)}`)}
+      titleTestId={dashboardTitleTestId}
       editTo={(object) => appUrl(BASE, `/view/${encodeURIComponent(object.id)}`, { _a: { viewMode: 'edit' } })}
-      emptyBody="You can combine data views from any OpenSearch Dashboards app into one dashboard and see everything in one place."
-      testId="dashboardLandingPage"
+      typeColumn={DASHBOARD_TYPE_COLUMN}
+      initialFilter={filterParam}
+      deleteErrors={{ title: 'Error deleting dashboard', per: 'first' }}
+      noItems={
+        <ListingEmpty
+          icon="dashboard"
+          headingId="dashboardListingHeading"
+          title="Create your first dashboard"
+          actions={
+            <Button variant="primary" icon="plus" to={appUrl(BASE, '/create')} testId="createDashboardPromptButton">
+              Create new dashboard
+            </Button>
+          }
+        >
+          <p>
+            You can combine data views from any OpenSearch Dashboards app into one dashboard and see everything in one place.
+          </p>
+          <p>
+            New to OpenSearch Dashboards? <Link to="/app/import_sample_data">Install some sample data</Link> to take a test
+            drive.
+          </p>
+        </ListingEmpty>
+      }
     />
   );
 }
+
+const dashboardTitleTestId = (title: string) => `dashboardListingTitleLink-${title.split(' ').join('-')}`;
+
+const DASHBOARD_TYPE_COLUMN: ListingColumn = { field: 'type', name: 'Type', value: () => 'Dashboard' };
 
 function DashboardPage({ savedId }: { savedId?: string }) {
   const location = useLocation();
