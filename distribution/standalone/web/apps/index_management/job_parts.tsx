@@ -42,6 +42,58 @@ export function DocsLink({ href, children = 'Learn more' }: { href: string; chil
 }
 
 /**
+ * A radio button as the component library draws it: a circle of 16 px at the left of its label, on
+ * a line of 24 px, filled with the accent around a dot when it is chosen. As the original's, only the
+ * circle and the label take a click, and the test id is on what holds them.
+ */
+export function Radio({
+  id,
+  label,
+  checked,
+  onChange,
+  name,
+  disabled,
+  testId,
+}: {
+  id: string;
+  label: ReactNode;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  name?: string;
+  disabled?: boolean;
+  testId?: string;
+}) {
+  return (
+    <div className="ismRadio" data-test-subj={testId}>
+      <input
+        className="ismRadio__input"
+        type="radio"
+        id={id}
+        name={name}
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <label className="ismRadio__label" htmlFor={id}>
+        {label}
+      </label>
+    </div>
+  );
+}
+
+/**
+ * A dialog that opens with the focus on itself, as the component library's does, and not on its
+ * first field: the reference goes on anything the dialog holds.
+ */
+export function useDialogFocus<T extends HTMLElement>() {
+  const inside = useRef<T>(null);
+  useEffect(() => {
+    inside.current?.closest<HTMLElement>('[role="dialog"]')?.focus();
+  }, []);
+  return inside;
+}
+
+/**
  * The panel of a list as the plugin's ContentPanel draws it: the title at 28 px with the count
  * of what is listed, the buttons at its right, a line, and the list across the whole panel.
  */

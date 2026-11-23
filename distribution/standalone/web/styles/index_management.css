@@ -414,30 +414,110 @@
   padding: var(--space-2) var(--space-5);
 }
 
-/* The two ways to write a policy */
+/* The two ways to write a policy, in the plugin's dialog of 600 px: a line of what is asked and each
+   way in a panel, 24 px apart, with 4 px more than the dialog's own padding around them */
+.ismChoiceModal {
+  max-width: 600px;
+}
+
+.ismChoiceModal .atlModal__footer {
+  gap: var(--space-6);
+}
+
+.ismChoiceBody {
+  padding: var(--space-1);
+}
+
+.ismChoiceBody > p {
+  margin: 0 0 var(--space-4);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
 .ismChoices {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--space-4);
-}
-
-.ismChoice {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-4);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-}
-
-.ismChoice--selected {
-  border-color: var(--color-accent);
+  gap: var(--space-6);
 }
 
 .ismChoice__help {
+  padding-top: var(--space-1);
+  color: var(--color-text-tertiary);
   font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
+  line-height: 18px;
+}
+
+/* A radio button as the component library draws it: the circle 3 px down a line of 24 px, the label
+   24 px in and over the circle, so that a click on the circle is one on the label */
+.ismRadio {
+  position: relative;
+}
+
+.ismRadio__input {
+  position: absolute;
+  top: 3px;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: var(--color-surface) center no-repeat;
+  transition:
+    background-color var(--duration-fast) ease-in,
+    border-color var(--duration-fast) ease-in;
+  appearance: none;
+}
+
+.ismRadio__input:checked {
+  border-color: var(--color-accent);
+  background-color: var(--color-accent);
+  background-image: radial-gradient(circle, var(--color-surface) 0 2.5px, transparent 3.64px);
+}
+
+.ismRadio__input:disabled {
+  border-color: var(--color-border);
+  background-color: var(--color-border);
+}
+
+.ismRadio__input:checked:disabled {
+  background-image: radial-gradient(circle, rgb(94 94 98) 0 2.5px, transparent 3.64px);
+}
+
+:root.themeDark .ismRadio__input:checked:disabled {
+  background-image: radial-gradient(circle, rgb(175 175 176) 0 2.5px, transparent 3.64px);
+}
+
+.ismRadio__input:focus,
+.ismRadio__input:active:not(:disabled) {
+  border-color: var(--color-accent);
+  outline: none;
+  animation: ismFocusRing var(--duration-slow) var(--ease-out-quint) forwards;
+}
+
+@keyframes ismFocusRing {
+  from {
+    box-shadow: 0 0 0 6px transparent;
+  }
+
+  to {
+    box-shadow: 0 0 0 3px var(--color-focus-ring);
+  }
+}
+
+.ismRadio__label {
+  position: relative;
+  z-index: 1;
+  display: inline-block;
+  padding-left: var(--space-6);
+  font-size: var(--font-size-s);
+  line-height: 24px;
+  cursor: pointer;
+}
+
+.ismRadio__input:disabled ~ .ismRadio__label {
+  color: var(--color-text-tertiary);
+  cursor: not-allowed;
 }
 
 /* A policy's states, each an accordion as the plugin's: its name and counts in the button, the buttons
