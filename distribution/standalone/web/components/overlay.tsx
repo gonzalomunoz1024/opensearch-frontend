@@ -466,8 +466,40 @@ export function ContextMenu({
   const shown = panels.find((panel) => panel.id === shownId);
   if (!shown) return null;
   const withIcons = shown.items.some((item) => item.icon);
+  // As the original's menu: the arrows go down and up its items, round from the last to the first
+  // and back; left goes back to the panel this one came from, right opens the panel of the item
+  // that has the focus
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const element = menu.current;
+    if (!element || event.defaultPrevented) return;
+    if (event.key === 'ArrowLeft' && trail.length > 0) {
+      event.preventDefault();
+      setTrail(trail.slice(0, -1));
+      return;
+    }
+    const items = [...element.querySelectorAll<HTMLElement>('.atlContextMenu__item:not(:disabled)')];
+    const index = items.findIndex((item) => item === document.activeElement);
+    if (event.key === 'ArrowRight') {
+      const opens = index >= 0 ? shown.items.filter((item) => !item.disabled)[index]?.panel : undefined;
+      if (opens === undefined) return;
+      event.preventDefault();
+      setTrail([...trail, opens]);
+      return;
+    }
+    if ((event.key !== 'ArrowDown' && event.key !== 'ArrowUp') || items.length === 0) return;
+    event.preventDefault();
+    const step = event.key === 'ArrowDown' ? 1 : -1;
+    const next = index < 0 ? (step > 0 ? 0 : items.length - 1) : (index + step + items.length) % items.length;
+    items[next]?.focus();
+  };
   return (
-    <div ref={menu} className={cx('atlContextMenu', small && 'atlContextMenu--small')} role="menu" data-test-subj={testId}>
+    <div
+      ref={menu}
+      className={cx('atlContextMenu', small && 'atlContextMenu--small')}
+      role="menu"
+      data-test-subj={testId}
+      onKeyDown={onKeyDown}
+    >
       {shown.title !== undefined &&
         (trail.length > 0 ? (
           <button type="button" className="atlContextMenu__title atlContextMenu__back" onClick={() => setTrail(trail.slice(0, -1))}>

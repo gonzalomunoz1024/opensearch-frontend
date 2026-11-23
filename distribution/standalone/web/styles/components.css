@@ -1119,10 +1119,13 @@ select.atlField {
   background: var(--color-border-light);
 }
 
-/* A popover placed as the original's: its panel as the theme draws one, opaque, without padding */
+/* A popover placed as the original's: its panel as the theme draws one, opaque, without padding,
+   and not cutting what is in it, as the original's: the ring of an item's focus is drawn outside
+   it, and its first item, when it has the focus, fills the corners */
 .atlPopover--placed {
   min-width: 0;
   max-height: none;
+  overflow: visible;
   border-radius: var(--radius-lg);
   background-color: var(--color-surface);
   backdrop-filter: none;
@@ -1185,6 +1188,12 @@ select.atlField {
   background: var(--color-surface-secondary);
   outline: none;
   text-decoration: none;
+}
+
+/* The keyboard's focus has the theme's ring as well, standing off the item, as the original's */
+.atlContextMenu__item:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 .atlContextMenu__item:disabled {

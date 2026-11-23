@@ -9,7 +9,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { cx } from '../../components/basic';
 import { Icon, type IconName } from '../../components/icon';
-import { Popover, Tooltip } from '../../components/overlay';
+import { ContextMenu, Popover, Tooltip } from '../../components/overlay';
 import { HttpFetchError } from '../../services/http';
 import { getSavedObjectLabel } from './saved_objects_lib';
 import {
@@ -597,18 +597,9 @@ function TablePagination({
   const [open, setOpen] = useState(false);
   const pageCount = Math.ceil(totalItemCount / pageSize);
   // As the original's menu, in the kit's popover that holds the focus: its first item has the focus
-  // when it opens, Tab goes round the items, and the focus goes back to the button when it closes
-  // from inside; the arrows go round the items too
+  // when it opens, Tab and the arrows go round the items, and the focus goes back to the button when
+  // it closes from inside
   const close = () => setOpen(false);
-  const onMenuKey = (event: KeyboardEvent<HTMLDivElement>) => {
-    const items = [...event.currentTarget.querySelectorAll<HTMLElement>('[role=menuitem]')];
-    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-    event.preventDefault();
-    const index = items.findIndex((item) => item === document.activeElement);
-    const step = event.key === 'ArrowDown' ? 1 : -1;
-    const next = index < 0 ? (step > 0 ? 0 : items.length - 1) : (index + step + items.length) % items.length;
-    items[next]?.focus();
-  };
   // A page that is not there any more, after objects went: the last one is shown
   useEffect(() => {
     if (pageCount < pageIndex + 1) onChange({ index: pageCount - 1, size: pageSize });
@@ -619,11 +610,7 @@ function TablePagination({
       <Popover
         open={open}
         onClose={close}
-        align="right"
-        above
-        offset={8}
-        buffer={16}
-        className="sobPagination__sizes"
+        position="upRight"
         button={
           <button type="button" className="sobPagination__size" onClick={() => setOpen(!open)} data-test-subj="tablePaginationPopoverButton">
             Rows per page: {pageSize}
@@ -631,24 +618,21 @@ function TablePagination({
           </button>
         }
       >
-        <div role="menu" onKeyDown={onMenuKey}>
-          {pageSizeOptions.map((size) => (
-            <button
-              key={size}
-              type="button"
-              role="menuitem"
-              className="sobPagination__sizeItem"
-              onClick={() => {
-                close();
-                onChange({ index: 0, size });
-              }}
-              data-test-subj={`tablePagination-${size}-rows`}
-            >
-              <span className="sobPagination__sizeMark">{size === pageSize && <Icon name="check" />}</span>
-              {size} rows
-            </button>
-          ))}
-        </div>
+        <ContextMenu
+          onDone={close}
+          panels={[
+            {
+              id: 'sizes',
+              items: pageSizeOptions.map((size) => ({
+                id: String(size),
+                label: `${size} rows`,
+                icon: size === pageSize ? 'check' : 'empty',
+                onClick: () => onChange({ index: 0, size }),
+                testId: `tablePagination-${size}-rows`,
+              })),
+            },
+          ]}
+        />
       </Popover>
       <nav className="sobPagination__pages" aria-label="Pagination">
         <button

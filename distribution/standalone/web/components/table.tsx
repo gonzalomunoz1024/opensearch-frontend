@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { cx } from './basic';
 import { Checkbox } from './form';
 import { Icon } from './icon';
-import { Menu, Popover } from './overlay';
+import { ContextMenu, Popover } from './overlay';
 
 export interface Column<Row> {
   id: string;
@@ -325,13 +325,11 @@ export function Pagination({
     <div className="atlPagination">
       <div className="atlRow">
         {pageSize !== undefined && pageSizes && onPageSize && (
+          // Over its button and lined up with its right edge, as the original's ("upRight")
           <Popover
             open={open}
             onClose={close}
-            align="right"
-            above
-            offset={8}
-            buffer={16}
+            position="upRight"
             button={
               <button
                 type="button"
@@ -344,15 +342,20 @@ export function Pagination({
               </button>
             }
           >
-            <Menu
-              items={pageSizes.map((size) => ({
-                id: String(size),
-                label: `${size} rows`,
-                icon: size === pageSize ? 'check' : 'empty',
-                onClick: () => onPageSize(size),
-                testId: `tablePagination-${size}-rows`,
-              }))}
+            <ContextMenu
               onDone={close}
+              panels={[
+                {
+                  id: 'sizes',
+                  items: pageSizes.map((size) => ({
+                    id: String(size),
+                    label: `${size} rows`,
+                    icon: size === pageSize ? 'check' : 'empty',
+                    onClick: () => onPageSize(size),
+                    testId: `tablePagination-${size}-rows`,
+                  })),
+                },
+              ]}
             />
           </Popover>
         )}
