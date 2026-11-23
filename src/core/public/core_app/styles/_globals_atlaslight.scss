@@ -1,7 +1,0 @@
-// atlaslight global scope
-// ---
-// prepended to all .scss imports (from JS, when atlaslight theme selected)
-
-@import "@osd/atlas-theme/src/colors_light";
-@import "@osd/atlas-theme/src/globals";
-@import "./mixins";

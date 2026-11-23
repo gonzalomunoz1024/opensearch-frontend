@@ -1,26 +1,49 @@
-ARG NODE_VERSION=20.18.3
-FROM node:${NODE_VERSION} AS base
+# SPDX-License-Identifier: Apache-2.0
+#
+# The standalone InfraDashboard as an image. The build needs two things from outside: a Node.js 22
+# image, and the npm packages of package-lock.json (96, ten of them named in package.json) from
+# whichever registry npm is pointed at. Nothing is compiled from native code and nothing else is
+# downloaded.
+#
+#   docker build -t infradashboard:3.9.0 .
+#
+#   --build-arg NODE_IMAGE=<registry>/<node 22 image>    the base image to build and run on
+#   --build-arg NPM_CONFIG_REGISTRY=<url>                the npm registry, when it is not the default
+#
+# A registry that wants credentials: put an .npmrc beside package.json before the build. It is
+# used by the first stage only and is not in the image. Nothing here needs BuildKit, so the file
+# builds the same with docker, buildah and kaniko.
+#
+# The image keeps the layout of the OpenSearch Dashboards image (home directory, settings file,
+# user 1000, port 5601), so the Helm chart in helm/infradashboard runs it as it is.
 
-ENV HOME '.'
-RUN apt-get update && \
-    apt-get -y install xvfb gconf-service libasound2 libatk1.0-0 libc6 libcairo2 libcups2 \
-      libdbus-1-3 libexpat1 libfontconfig1 libgcc1 libgconf-2-4 libgdk-pixbuf2.0-0 libglib2.0-0 \
-      libgtk-3-0 libnspr4 libpango-1.0-0 libpangocairo-1.0-0 libstdc++6 libx11-6 libx11-xcb1 libxcb1 \
-      libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxss1 \
-      libxtst6 ca-certificates fonts-liberation libappindicator1 libnss3 lsb-release xdg-utils wget openjdk-8-jre && \
-    rm -rf /var/lib/apt/lists/*
+ARG NODE_IMAGE=node:22-bookworm-slim
 
-# Specify the version of Chrome that matches the version of chromedriver in the package.json.
-# A list of Chrome versions can be found here:
-# https://www.ubuntuupdates.org/package/google_chrome/stable/main/base/google-chrome-stable
-ARG CHROME_VERSION=119.0.6045.123-1
-RUN curl -sSL https://dl.google.com/linux/linux_signing_key.pub | apt-key add - \
-  && wget -O /tmp/chrome.deb https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-stable/google-chrome-stable_${CHROME_VERSION}_amd64.deb \
-  && apt-get update \
-  && apt-get install -y rsync jq bsdtar /tmp/chrome.deb --no-install-recommends python-pip \
-  && pip install awscli \
-  && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+FROM ${NODE_IMAGE} AS build
+ARG NPM_CONFIG_REGISTRY
+WORKDIR /build
+COPY package.json package-lock.json .npmrc* ./
+RUN npm ci --no-audit --no-fund
+COPY . .
+# The tests run as part of the build: an image is only made from code that passes them
+RUN npm run typecheck && npm test && node scripts/build.mjs
 
-RUN groupadd -r opensearch-dashboards && useradd -r -g opensearch-dashboards opensearch-dashboards && mkdir /home/opensearch-dashboards && chown opensearch-dashboards:opensearch-dashboards /home/opensearch-dashboards
+FROM ${NODE_IMAGE}
+ARG VERSION=3.9.0
+ENV NODE_ENV=production \
+    OPENSEARCH_DASHBOARDS_HOME=/usr/share/opensearch-dashboards \
+    INFRADASHBOARD_CONFIG=/usr/share/opensearch-dashboards/config/opensearch_dashboards.yml
+WORKDIR ${OPENSEARCH_DASHBOARDS_HOME}
+# Every file can be read by any user and none is written at run time, so the image runs under
+# whichever uid a cluster gives it (OpenShift's restricted policy) and on a read-only file system.
+COPY --from=build /build/config/opensearch_dashboards.yml config/opensearch_dashboards.yml
+COPY --from=build /build/dist dist
+USER 1000
+EXPOSE 5601
 
-USER opensearch-dashboards
+LABEL org.opencontainers.image.title="InfraDashboard" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.description="InfraDashboard: a dashboard for OpenSearch that keeps the saved objects and addresses of OpenSearch Dashboards ${VERSION}"
+
+CMD ["node", "dist/server/main.js"]

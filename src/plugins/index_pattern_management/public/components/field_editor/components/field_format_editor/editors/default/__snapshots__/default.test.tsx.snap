@@ -1,3 +1,0 @@
-// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
-
-exports[`DefaultFormatEditor should render nothing 1`] = `<Fragment />`;

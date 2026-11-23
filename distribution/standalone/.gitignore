@@ -1,8 +1,0 @@
-# SPDX-License-Identifier: Apache-2.0
-
-node_modules/
-dist/
-
-# The Dashboards tree ignores every package-lock.json (it installs with yarn); this project
-# installs with npm, and its lockfile is what a build is made from
-!package-lock.json
