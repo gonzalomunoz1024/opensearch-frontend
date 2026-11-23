@@ -378,7 +378,7 @@ function FilePicker({ file, onChange }: { file?: File; onChange: (file?: File) =
         onChange={(event) => onChange(event.target.files?.[0])}
       />
       <div className="sobFilePicker__prompt">
-        <Icon name="download" size="l" />
+        <Icon name="importAction" size="l" />
         <div className="sobFilePicker__text">{file ? <strong>{file.name}</strong> : 'Import'}</div>
         {file && (
           <button

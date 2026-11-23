@@ -7,9 +7,10 @@
  */
 
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { cx } from '../../components/basic';
+import { Button, cx } from '../../components/basic';
 import { Icon, type IconName } from '../../components/icon';
-import { ContextMenu, Popover, Tooltip } from '../../components/overlay';
+import { Popover, Tooltip } from '../../components/overlay';
+import { Pagination } from '../../components/table';
 import { HttpFetchError } from '../../services/http';
 import { getSavedObjectLabel } from './saved_objects_lib';
 import {
@@ -50,24 +51,18 @@ const META_ICONS: Record<string, IconName> = {
 
 export const iconOfMeta = (icon?: string): IconName => (icon ? META_ICONS[icon] : undefined) ?? 'grid';
 
-/** The icon of a type, small, with its name when the pointer is on it */
+/**
+ * The icon of a type, as the original's tables draw it: small, an application's (`…App`) in its two
+ * colours, with its name when the pointer is on it
+ */
 export function TypeIcon({ type, icon, testId = 'objectType' }: { type: string; icon?: string; testId?: string }) {
   const label = getSavedObjectLabel(type);
   return (
     <Tooltip content={label}>
       <span className="sobTypeIcon" role="img" aria-label={label} data-test-subj={testId}>
-        <Icon name={iconOfMeta(icon)} />
+        <Icon name={iconOfMeta(icon)} size="s" app={/.App$/.test(icon ?? '')} />
       </span>
     </Tooltip>
-  );
-}
-
-/** The original's `kqlSelector`: two rings, for what an object is tied to */
-export function RelationshipsIcon() {
-  return (
-    <svg className="atlIcon" viewBox="0 0 16 16" aria-hidden>
-      <path d="M6 11.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM10 11.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" />
-    </svg>
   );
 }
 
@@ -557,36 +552,19 @@ export function BasicTable<T>({
   );
 }
 
-/** The buttons of a row: only the icon, in the row's last column */
-export function RowAction({ label, description, onClick, testId, children }: { label: string; description: string; onClick: () => void; testId: string; children: ReactNode }) {
+/**
+ * The buttons of a row, in its last column: the original table's actions, icon buttons in the
+ * primary colour (round, 24 px), what they do said by the tooltip
+ */
+export function RowAction({ label, description, icon, onClick, testId }: { label: string; description: string; icon: IconName; onClick: () => void; testId: string }) {
   return (
     <Tooltip content={description}>
-      <button type="button" className="sobRowAction" aria-label={label} onClick={onClick} data-test-subj={testId}>
-        {children}
-      </button>
+      <Button variant="empty" size="xs" icon={icon} className="atlButton--round" aria-label={label} onClick={onClick} testId={testId} />
     </Tooltip>
   );
 }
 
-/** The pages of the original's pagination: at most five around the current one, the first and the last */
-export function pageButtons(pageCount: number, activePage: number): Array<number | 'skip'> {
-  const first = Math.max(0, Math.min(activePage - 2, pageCount - 5));
-  const last = Math.min(pageCount, first + 5);
-  const pages: Array<number | 'skip'> = [];
-  if (first > 0) {
-    pages.push(0);
-    if (first > 1 && first !== 2) pages.push('skip');
-    else if (first === 2) pages.push(1);
-  }
-  for (let page = first; page < last; page += 1) pages.push(page);
-  if (last < pageCount) {
-    if (last + 1 === pageCount - 1) pages.push(last);
-    else if (last < pageCount - 1) pages.push('skip');
-    pages.push(pageCount - 1);
-  }
-  return pages;
-}
-
+/** The original's pages under its table: the kit's, as the component library names them */
 function TablePagination({
   pageIndex,
   pageSize,
@@ -594,91 +572,22 @@ function TablePagination({
   pageSizeOptions,
   onChange,
 }: Paging & { onChange: (page: { index: number; size: number }) => void }) {
-  const [open, setOpen] = useState(false);
   const pageCount = Math.ceil(totalItemCount / pageSize);
-  // As the original's menu, in the kit's popover that holds the focus: its first item has the focus
-  // when it opens, Tab and the arrows go round the items, and the focus goes back to the button when
-  // it closes from inside
-  const close = () => setOpen(false);
   // A page that is not there any more, after objects went: the last one is shown
   useEffect(() => {
     if (pageCount < pageIndex + 1) onChange({ index: pageCount - 1, size: pageSize });
   }, [pageCount, pageIndex, pageSize, onChange]);
 
   return (
-    <div className="sobPagination">
-      <Popover
-        open={open}
-        onClose={close}
-        position="upRight"
-        button={
-          <button type="button" className="sobPagination__size" onClick={() => setOpen(!open)} data-test-subj="tablePaginationPopoverButton">
-            Rows per page: {pageSize}
-            <Icon name="chevronDown" />
-          </button>
-        }
-      >
-        <ContextMenu
-          onDone={close}
-          panels={[
-            {
-              id: 'sizes',
-              items: pageSizeOptions.map((size) => ({
-                id: String(size),
-                label: `${size} rows`,
-                icon: size === pageSize ? 'check' : 'empty',
-                onClick: () => onChange({ index: 0, size }),
-                testId: `tablePagination-${size}-rows`,
-              })),
-            },
-          ]}
-        />
-      </Popover>
-      <nav className="sobPagination__pages" aria-label="Pagination">
-        <button
-          type="button"
-          className="sobPagination__arrow"
-          disabled={pageIndex === 0}
-          aria-label={pageIndex === 0 ? 'Previous page' : `Previous page, ${pageIndex}`}
-          onClick={() => onChange({ index: pageIndex - 1, size: pageSize })}
-          data-test-subj="pagination-button-previous"
-        >
-          <Icon name="chevronLeft" />
-        </button>
-        <ul className="sobPagination__list">
-          {pageButtons(pageCount, pageIndex).map((page, index) =>
-            page === 'skip' ? (
-              <li key={`skip-${index}`} className="sobPagination__skip">
-                …
-              </li>
-            ) : (
-              <li key={page}>
-                <button
-                  type="button"
-                  className={cx('sobPagination__page', page === pageIndex && 'sobPagination__page--active')}
-                  aria-label={`Page ${page + 1} of ${pageCount}`}
-                  aria-current={page === pageIndex ? true : undefined}
-                  onClick={() => onChange({ index: page, size: pageSize })}
-                  data-test-subj={`pagination-button-${page}`}
-                >
-                  {page + 1}
-                </button>
-              </li>
-            )
-          )}
-        </ul>
-        <button
-          type="button"
-          className="sobPagination__arrow"
-          disabled={pageIndex === pageCount - 1}
-          aria-label={pageIndex === pageCount - 1 ? 'Next page' : `Next page, ${pageIndex + 2}`}
-          onClick={() => onChange({ index: pageIndex + 1, size: pageSize })}
-          data-test-subj="pagination-button-next"
-        >
-          <Icon name="chevronRight" />
-        </button>
-      </nav>
-    </div>
+    <Pagination
+      className="sobPagination"
+      page={pageIndex}
+      pages={pageCount}
+      onPage={(index) => onChange({ index, size: pageSize })}
+      pageSize={pageSize}
+      pageSizes={pageSizeOptions}
+      onPageSize={(size) => onChange({ index: 0, size })}
+    />
   );
 }
 
