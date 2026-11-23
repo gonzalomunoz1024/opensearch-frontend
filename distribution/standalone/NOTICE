@@ -88,6 +88,17 @@ Copyright (c) 2010, Ajax.org B.V.
 
 Their licence texts are in licenses/, and in dist/licenses/followed of a build.
 
+The tag cloud is laid out and drawn after the code of the packages OpenSearch Dashboards draws it
+with, so that its words fall, and move, where they do there, and is derived from that code under
+its licence:
+
+  - the layout of the words (web/vis/cloud_layout.ts): d3-cloud 1.2.5, BSD 3-Clause License,
+    Copyright (c) 2013, Jason Davies
+  - the scales, colours and transitions of the words (web/vis/tag_cloud_d3.ts): d3 3.5.17,
+    BSD 3-Clause License, Copyright (c) 2010-2016, Michael Bostock
+
+Their licence texts are in licenses/, and in dist/licenses/followed of a build.
+
 The drawing of Timeline charts (web/vis/timeline/plot.ts) is derived from Flot 0.8.3 and its
 time, stack, symbol, crosshair, selection, canvas and axis-label plug-ins, under the MIT License,
 Copyright (c) 2007-2014 IOLA and Ole Laursen.

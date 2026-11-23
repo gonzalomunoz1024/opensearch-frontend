@@ -345,24 +345,56 @@
   white-space: nowrap;
 }
 
-/* Tag cloud */
+/* --- Tag cloud ----------------------------------------------------------------------------- */
+
+/*
+ * The tag cloud as the original's tag_cloud.scss lays it out: the cloud fills the box but for the
+ * warning and the label under it, which take their height from it. The text is set solid, as the
+ * original's page sets it.
+ */
+.visTagCloud,
+.visTagCloud__container {
+  display: flex;
+  flex: 1 1 0;
+}
 
 .visTagCloud {
-  position: relative;
-  display: flex;
-  flex: 1 1 auto;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  line-height: 1;
+}
+
+.visTagCloud__container {
   flex-direction: column;
-  min-width: 0;
-  min-height: 0;
+}
+
+.visTagCloud__chart,
+.visTagCloud__cloud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
 }
 
+.visTagCloud__chart {
+  position: relative;
+}
+
 .visTagCloud__label {
-  height: 22px;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
+  width: 100%;
   font-weight: var(--font-weight-semibold);
   text-align: center;
+}
+
+/* The warning that the cloud is cut or its words were too many */
+.visTagCloud__warning {
+  color: var(--color-warning-graphic);
+}
+
+.visTagCloud__tip p {
+  margin: 0;
 }
 
 /* Markdown */
