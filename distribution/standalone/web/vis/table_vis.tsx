@@ -11,7 +11,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { Button, cx } from '../components/basic';
 import { Icon } from '../components/icon';
-import { Menu, Popover, Tooltip, downloadFile } from '../components/overlay';
+import { ContextMenu, Popover, Tooltip, downloadFile } from '../components/overlay';
 import { Pagination } from '../components/table';
 import type { TableRow } from '../lib/aggs';
 import type { Filter } from '../lib/types';
@@ -366,25 +366,9 @@ function DynamicTable({
   );
 }
 
-// How near the edges of the window the component library lets a popover come, and how wide the
-// original's menus of the table are
-const WINDOW_BUFFER = 16;
-const MENU_WIDTH = 112;
-
-/**
- * Whether the component library opens a menu beside its button rather than where it was asked:
- * when the menu, set where asked, would come nearer the window's sides than it lets it
- */
-function opensBeside(button: Element, left: (box: DOMRect) => number): boolean {
-  const start = left(button.getBoundingClientRect());
-  return start < WINDOW_BUFFER || start + MENU_WIDTH > window.innerWidth - WINDOW_BUFFER;
-}
-
 /** The button over a table that downloads it, raw or as shown; its menu stays open, as the original's */
 function TableExport({ title, rows, columns }: { title: string; rows: TableRow[]; columns: FormattedColumn[] }) {
   const [open, setOpen] = useState(false);
-  // Under the middle of the button, as the original asks for it, or beside it
-  const [side, setSide] = useState<'below' | 'right'>('right');
   const close = useCallback(() => setOpen(false), []);
   const download = (formatted: boolean) => {
     const csv = toCsv(
@@ -399,28 +383,32 @@ function TableExport({ title, rows, columns }: { title: string; rows: TableRow[]
   };
   return (
     <div className="visTable__export">
+      {/* Under the middle of its button, as the original asks for it ("downCenter"), or where the
+          original's placement puts it instead: beside the button near the window's edge */}
       <Popover
         open={open}
         onClose={close}
-        side={side}
-        align="center"
+        position="downCenter"
         button={
           <Button
             variant="empty"
             icon="download"
             iconSize="s"
             className="visTable__exportButton"
-            onClick={(event) => {
-              setSide(opensBeside(event.currentTarget, (box) => box.left + box.width / 2 - MENU_WIDTH / 2) ? 'right' : 'below');
-              setOpen((was) => !was);
-            }}
+            onClick={() => setOpen((was) => !was)}
           />
         }
       >
-        <Menu
-          items={[
-            { id: 'rawCsv', label: 'Raw', onClick: () => download(false) },
-            { id: 'formattedCsv', label: 'Formatted', onClick: () => download(true) },
+        <ContextMenu
+          small
+          panels={[
+            {
+              id: 'export',
+              items: [
+                { id: 'rawCsv', label: 'Raw', onClick: () => download(false) },
+                { id: 'formattedCsv', label: 'Formatted', onClick: () => download(true) },
+              ],
+            },
           ]}
         />
       </Popover>
@@ -443,18 +431,16 @@ function PaginationControls({
   onPageSize: (size: number) => void;
 }) {
   const [open, setOpen] = useState(false);
-  // Over the button, from its left edge, as the original asks for it, or beside it
-  const [side, setSide] = useState<'below' | 'right'>('below');
   const close = useCallback(() => setOpen(false), []);
   return (
     <div className="visTable__pagination" data-test-subj="tableVisPaginationControls">
       <div className="visTable__paginationItem">
+        {/* Over the button, from its left edge, as the original asks for it ("upLeft"), or where the
+            original's placement puts it instead */}
         <Popover
           open={open}
           onClose={close}
-          side={side}
-          above={side === 'below'}
-          offset={8}
+          position="upLeft"
           button={
             <Button
               variant="ghost"
@@ -462,26 +448,26 @@ function PaginationControls({
               iconSide="right"
               className="visTable__rowsButton"
               testId="tableVisRowsPerPageButton"
-              onClick={(event) => {
-                setSide(opensBeside(event.currentTarget, (box) => box.left) ? 'right' : 'below');
-                setOpen((was) => !was);
-              }}
+              onClick={() => setOpen((was) => !was)}
             >
               Rows per page: {pageSize}
             </Button>
           }
         >
-          <Menu
-            items={PAGE_SIZE_OPTIONS.map((size) => ({
-              id: `${size} rows`,
-              label: `${size} rows`,
-              icon: size === pageSize ? 'check' : 'empty',
-              testId: `tableVisRowsPerPage-${size}`,
-              onClick: () => {
-                close();
-                onPageSize(size);
+          <ContextMenu
+            onDone={close}
+            panels={[
+              {
+                id: 'sizes',
+                items: PAGE_SIZE_OPTIONS.map((size) => ({
+                  id: `${size} rows`,
+                  label: `${size} rows`,
+                  icon: size === pageSize ? 'check' : 'empty',
+                  testId: `tableVisRowsPerPage-${size}`,
+                  onClick: () => onPageSize(size),
+                })),
               },
-            }))}
+            ]}
           />
         </Popover>
       </div>

@@ -71,8 +71,7 @@ export function ShareMenu({ objectType, savedUrl, onClose }: ShareMenuProps) {
   // Under the Share button wherever it is now, as the original's hangs from it
   const placeAt = useCallback((anchor: DOMRect, panel: { width: number; height: number }) => {
     const box = shareButton()?.getBoundingClientRect() ?? anchor;
-    const at = placeLikeOriginal(box, panel, 'downLeft', { width: window.innerWidth, height: window.innerHeight });
-    return { ...at, side: at.top < box.top ? ('top' as const) : ('bottom' as const) };
+    return placeLikeOriginal(box, panel, 'downLeft', { width: window.innerWidth, height: window.innerHeight });
   }, []);
 
   // The Share button closes what it opened, as the original's: a press of it is not a click
