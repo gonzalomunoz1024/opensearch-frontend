@@ -125,7 +125,13 @@ export function useAutoRefresh(interval: RefreshInterval, onTick: () => void) {
 
 export interface Breadcrumb {
   text: string;
+  /** A path of this product the crumb leads to, which the base path is put in front of */
   to?: string;
+  /**
+   * An address the link carries as it is given, as the original's crumbs take their `href`: `#`
+   * for a crumb that leads to its application's first page, whatever page it is on
+   */
+  href?: string;
 }
 
 interface ChromeState {
