@@ -10,7 +10,7 @@ import {
   expandLiteralStrings,
   reindentJson,
 } from '../../lib/json_text';
-import { highlight, type Highlighted } from './console_highlight';
+import { highlight, rehighlight, type Highlighted } from './console_highlight';
 
 export const METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'HEAD', 'PATCH', 'OPTIONS'];
 const isComment = (line: string) => /^\s*(#|\/\/)/.test(line);
@@ -40,7 +40,15 @@ export interface ConsoleText {
   highlighted: Highlighted;
 }
 
-export const readConsole = (text: string): ConsoleText => ({ lines: text.split('\n'), highlighted: highlight(text, 'input') });
+/**
+ * The text of the console read. With the reading of the text before it, only the lines that
+ * changed are read again, and those after them as far as their state changed: what is typed
+ * into a long text costs what a few lines cost.
+ */
+export function readConsole(text: string, previous?: ConsoleText): ConsoleText {
+  const lines = text.split('\n');
+  return { lines, highlighted: previous ? rehighlight(previous.lines, previous.highlighted, lines, 'input') : highlight(text, 'input') };
+}
 
 /** What a line is to the request parser of OpenSearch Dashboards (its RowParser) */
 export const ROW = { REQUEST_START: 2, IN_REQUEST: 4, MULTI_DOC_CUR_DOC_END: 8, REQUEST_END: 16, BETWEEN_REQUESTS: 32 };

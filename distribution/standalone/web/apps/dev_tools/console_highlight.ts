@@ -398,11 +398,195 @@ export function indentGuides(value: string, tabSize: number): { guides: number; 
   return { guides: 0, rest: value };
 }
 
-/** The folding mark of a line in the gutter: where a brace opens, where one closes */
+/**
+ * The folding mark of a line in the gutter: where a bracket opens, where one closes (the C style
+ * fold mode of Ace, whose markers take parentheses as well as braces and square brackets)
+ */
 export function foldWidget(line: string): 'start' | 'end' | '' {
   if (/^\s*(\/\*).*\*\/\s*$/.test(line) && !/^\s*(\/\*|\/\/)#?region\b/.test(line) && !/^\s*(\/\*\*\*).*\*\/\s*$/.test(line)) return '';
-  if (/(\{|\[)[^\}\]]*$|^\s*(\/\*)/.test(line)) return 'start';
-  if (/^[^\[\{]*(\}|\])|^[\s\*]*(\*\/)/.test(line)) return 'end';
+  if (/([{[(])[^}\])]*$|^\s*(\/\*)/.test(line)) return 'start';
+  if (/^[^[{(]*([}\])])|^[\s*]*(\*\/)/.test(line)) return 'end';
   if (/^\s*(\/\*|\/\/)#?region\b/.test(line)) return 'start';
   return '';
+}
+
+// --- Tokens worked out as they are needed --------------------------------------------------------
+
+const RULES: Record<Exclude<HighlightMode, 'text'>, Record<string, State>> = { input: INPUT, output: OUTPUT };
+
+/** How far above a row the work from the top may be for the rows between to be read at once */
+const REACH = 2000;
+
+const textTokens = (line: string): AceToken[] => (line ? [{ type: 'text', value: line }] : []);
+
+/**
+ * The tokens of a text worked out a row at a time, as Ace's background tokenizer does: a row asked
+ * for is read from the state the row before it ended in, as far as that is known, and the rows are
+ * worked through from the top in slices of time; a row whose state comes out other than before
+ * sends the one after it to be read again.
+ */
+export class TokenCache {
+  lines: string[];
+  readonly mode: HighlightMode;
+  private rows: Array<AceToken[] | undefined>;
+  private states: Array<AceState | undefined>;
+  /** The first row the work from the top has not reached */
+  private current = 0;
+
+  constructor(lines: string[], mode: HighlightMode) {
+    this.lines = lines;
+    this.mode = mode;
+    this.rows = new Array(lines.length);
+    this.states = new Array(lines.length);
+  }
+
+  /** A cache that holds the tokens already worked out for the lines, all of them */
+  static from(lines: string[], mode: HighlightMode, known: Highlighted): TokenCache {
+    const cache = new TokenCache(lines, mode);
+    cache.rows = known.lines.slice();
+    cache.states = known.states.slice();
+    cache.current = lines.length;
+    return cache;
+  }
+
+  get done(): boolean {
+    return this.mode === 'text' || this.current >= this.lines.length;
+  }
+
+  tokens(row: number): AceToken[] {
+    if (this.mode === 'text') return textTokens(this.lines[row] ?? '');
+    const known = this.rows[row];
+    if (known) return known;
+    this.reach(row);
+    return this.tokenize(row);
+  }
+
+  /**
+   * The rows just above one asked for are read first when the work from the top is close to it, so
+   * that a row is not read from a state not yet known while a line is being typed. Ace reads them
+   * as it draws; far from the work, as at the end of a long answer just set, the row is read from
+   * what is known, as Ace reads it, and again when the work reaches it.
+   */
+  private reach(row: number): void {
+    if (this.current >= row || row - this.current > REACH) return;
+    for (let each = this.current; each < row; each += 1) if (!this.rows[each]) this.tokenize(each);
+    if (this.current < row) this.current = row;
+  }
+
+  /**
+   * The state a row ends in, as far as it is known (Ace's getState): read anew only when the work
+   * from the top has reached it, else what it was, or "start"
+   */
+  state(row: number): AceState {
+    if (this.mode === 'text') return 'start';
+    this.reach(row);
+    if (this.current === row) this.tokenize(row);
+    return this.states[row] ?? 'start';
+  }
+
+  /**
+   * The lines after a change from a row: what the change took or put in is read again, and the
+   * rows after it keep their tokens until a state that comes out otherwise sends them to be read
+   * again (Ace's $updateOnChange)
+   */
+  change(lines: string[], startRow: number, rows: number, action: 'insert' | 'remove'): void {
+    this.lines = lines;
+    if (rows === 0) {
+      this.rows[startRow] = undefined;
+    } else if (action === 'remove') {
+      this.rows = spliced(this.rows, startRow, rows + 1, 1);
+      this.states = spliced(this.states, startRow, rows + 1, 1);
+    } else {
+      this.rows = spliced(this.rows, startRow, 1, rows + 1);
+      this.states = spliced(this.states, startRow, 1, rows + 1);
+    }
+    this.current = Math.min(startRow, this.current, lines.length);
+  }
+
+  private tokenize(row: number): AceToken[] {
+    const data = lineTokens(RULES[this.mode as 'input' | 'output'], this.lines[row] ?? '', this.states[row - 1] ?? 'start');
+    if (String(this.states[row]) !== String(data.state)) {
+      this.states[row] = data.state;
+      this.rows[row + 1] = undefined;
+      if (this.current > row + 1) this.current = row + 1;
+    } else if (this.current === row) {
+      this.current = row + 1;
+    }
+    this.rows[row] = data.tokens;
+    return data.tokens;
+  }
+
+  /**
+   * Works down the rows for about a slice of time (Ace's $worker); the rows read again, when any
+   * were, for the editor to draw them anew
+   */
+  work(budget = 20, now: () => number = () => Date.now()): { first: number; last: number } | undefined {
+    if (this.done) return undefined;
+    const started = now();
+    let row = this.current;
+    const first = row;
+    let last = -1;
+    while (this.rows[row]) row += 1;
+    let processed = 0;
+    while (row < this.lines.length) {
+      this.tokenize(row);
+      last = row;
+      do row += 1;
+      while (this.rows[row]);
+      processed += 1;
+      if (processed % 5 === 0 && now() - started > budget) break;
+    }
+    this.current = row;
+    if (last === -1) last = row;
+    return first <= last ? { first, last } : undefined;
+  }
+}
+
+/** A list with some of its items taken out and empty ones put in their place */
+function spliced<T>(list: Array<T | undefined>, start: number, remove: number, insert: number): Array<T | undefined> {
+  return list.slice(0, start).concat(new Array<T | undefined>(insert), list.slice(start + remove));
+}
+
+/** The tokens of one line of a mode, read from a state */
+export function rowTokens(mode: HighlightMode, line: string, state: AceState): { tokens: AceToken[]; state: AceState } {
+  if (mode === 'text') return { tokens: textTokens(line), state: 'start' };
+  return lineTokens(RULES[mode], line, state);
+}
+
+/**
+ * The tokens of a text again after some of its lines changed: the lines before the first changed
+ * one keep theirs, and the ones after the last keep theirs once the state a line starts in is the
+ * one it started in before
+ */
+export function rehighlight(previousLines: string[], previous: Highlighted, lines: string[], mode: HighlightMode): Highlighted {
+  if (mode === 'text' || previous.lines.length !== previousLines.length) return highlight(lines.join('\n'), mode);
+  const states = RULES[mode];
+  const max = Math.min(previousLines.length, lines.length);
+  let first = 0;
+  while (first < max && previousLines[first] === lines[first]) first += 1;
+  let same = 0;
+  while (same < max - first && previousLines[previousLines.length - 1 - same] === lines[lines.length - 1 - same]) same += 1;
+  if (first === lines.length && lines.length === previousLines.length) return previous;
+  const out: AceToken[][] = previous.lines.slice(0, first);
+  const ends: AceState[] = previous.states.slice(0, first);
+  let state: AceState = first > 0 ? previous.states[first - 1] : 'start';
+  const changedEnd = lines.length - same;
+  for (let row = first; row < lines.length; row += 1) {
+    if (row >= changedEnd) {
+      const before = row - lines.length + previousLines.length;
+      const entering = before > 0 ? previous.states[before - 1] : 'start';
+      if (String(entering) === String(state)) {
+        for (let index = before; index < previousLines.length; index += 1) {
+          out.push(previous.lines[index]);
+          ends.push(previous.states[index]);
+        }
+        break;
+      }
+    }
+    const result = lineTokens(states, lines[row], state);
+    out.push(result.tokens);
+    ends.push(result.state);
+    state = result.state;
+  }
+  return { lines: out, states: ends };
 }

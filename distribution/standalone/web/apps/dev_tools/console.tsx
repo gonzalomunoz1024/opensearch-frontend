@@ -42,6 +42,7 @@ import {
   type Answer,
   type ClusterNames,
   type ConsoleRequest,
+  type ConsoleText,
   type PastRequest,
   type Suggestions,
 } from './console_model';
@@ -770,7 +771,12 @@ export function Console() {
       .catch(() => undefined);
   }, []);
 
-  const doc = useMemo(() => readConsole(text), [text]);
+  // Read again from what was read before: the lines that did not change keep their tokens
+  const read = useRef<ConsoleText | undefined>(undefined);
+  const doc = useMemo(() => {
+    read.current = readConsole(text, read.current);
+    return read.current;
+  }, [text]);
   const fromLine = lineOf(text, selection[0]);
   const toLine = lineOf(text, selection[1]);
   const marked = useMemo(() => expandToRequests(doc, fromLine, toLine), [doc, fromLine, toLine]);
@@ -914,7 +920,7 @@ export function Console() {
       openDocs();
     } else if (event.ctrlKey && event.key === ' ') {
       event.preventDefault();
-      openMenu(text, event.currentTarget.selectionStart);
+      openMenu(text, editor.current?.selection()[0] ?? selection[0]);
     } else if (mod && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
       event.preventDefault();
       jump(event.key === 'ArrowUp' ? -1 : 1);
@@ -925,7 +931,7 @@ export function Console() {
     const pasted = event.clipboardData.getData('text/plain');
     if (!looksLikeCurl(pasted)) return;
     event.preventDefault();
-    const { selectionStart, selectionEnd } = event.currentTarget;
+    const [selectionStart, selectionEnd] = editor.current?.selection() ?? selection;
     change(selectionStart, selectionEnd, parseCurl(pasted));
   };
 
