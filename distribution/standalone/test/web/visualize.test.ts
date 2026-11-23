@@ -16,6 +16,7 @@ import {
   axisName,
   changeAggType,
   fallbackMetric,
+  firstOrderBy,
   newVis,
   nextAggId,
   nextAxisId,
@@ -26,7 +27,7 @@ import {
   visProblems,
 } from '../../web/apps/visualize/defaults';
 import { classicTimeTicks } from '../../web/charts/core';
-import { OTHER_KEY, buildAggsDsl, otherBucketAggs, planOtherBucket, tabify, type AggConfig, type AggContext } from '../../web/lib/aggs';
+import { OTHER_KEY, buildAggsDsl, otherBucketAggs, planOtherBucket, responseAggs, tabify, type AggConfig, type AggContext } from '../../web/lib/aggs';
 import type { Field, IndexPattern } from '../../web/lib/types';
 import { visType } from '../../web/lib/vis';
 import { createServices, type BootData } from '../../web/services';
@@ -156,8 +157,16 @@ describe('adding and changing aggregations', () => {
 describe('what a terms bucket is ordered by, and what a parent pipeline works on', () => {
   const average: AggConfig = { id: '2', enabled: true, type: 'avg', schema: 'metric', params: { field: 'bytes' } };
   const median: AggConfig = { id: '3', enabled: true, type: 'median', schema: 'metric', params: { field: 'bytes' } };
-  const ranks: AggConfig = { id: '4', enabled: true, type: 'percentile_ranks', schema: 'metric', params: { field: 'bytes', values: [5000] } };
+  const ranks: AggConfig = { id: '4', enabled: true, type: 'percentile_ranks', schema: 'metric', params: { field: 'bytes', values: [5000, 1.5] } };
   const metrics = [count, average, median, ranks];
+
+  it('is ordered, when nothing says, by the first value that can order it: a percentile rank is one', () => {
+    assert.equal(firstOrderBy([median, ranks, average], context), '4.5000');
+    assert.equal(firstOrderBy(metrics, context), '1');
+    assert.equal(firstOrderBy([median], context), '_key');
+    const made = changeAggType({ id: '9', enabled: true, type: '', schema: 'segment', params: {} }, 'terms', logs, [median, ranks]);
+    assert.equal(made.params?.orderBy, '4.5000');
+  });
 
   it('gives way to the alphabet when the metric is gone or cannot order the terms, as the original', () => {
     assert.equal(fallbackMetric('1', metrics, orderableMetric, '_key'), undefined);
@@ -165,7 +174,16 @@ describe('what a terms bucket is ordered by, and what a parent pipeline works on
     assert.equal(fallbackMetric('7', metrics, orderableMetric, '_key'), '_key');
     assert.equal(fallbackMetric('3', metrics, orderableMetric, '_key'), '_key');
     // OpenSearch orders by one rank, not by all of them: the original offers each rank on its own
-    assert.equal(fallbackMetric('4', metrics, orderableMetric, '_key'), '_key');
+    const values = metrics.flatMap((metric) => responseAggs(metric, context));
+    const usable = (item: { agg: AggConfig }) => orderableMetric(item.agg);
+    assert.deepEqual(
+      values.map((item) => item.id),
+      ['1', '2', '3', '4.5000', "4['1.5']"]
+    );
+    assert.equal(fallbackMetric('4.5000', values, usable, '_key'), undefined);
+    assert.equal(fallbackMetric("4['1.5']", values, usable, '_key'), undefined);
+    assert.equal(fallbackMetric('4', values, usable, '_key'), '_key');
+    assert.equal(fallbackMetric('3', values, usable, '_key'), '_key');
     for (const kept of ['_key', 'custom', '']) assert.equal(fallbackMetric(kept, metrics, orderableMetric, '_key'), undefined, kept);
   });
 
@@ -198,12 +216,24 @@ describe('what a terms bucket is ordered by, and what a parent pipeline works on
     assert.match(pipeline, option('1', 'Metric: Count', false));
     assert.match(pipeline, option('2', 'Metric: Average bytes', false));
     assert.match(pipeline, option('3', 'Metric: Median bytes', true));
-    assert.match(pipeline, option('4', 'Metric: Percentile ranks of bytes', true));
+    assert.match(pipeline, option('4.5000', 'Metric: Percentile rank 5,000 of &quot;bytes&quot;', true));
+    assert.match(pipeline, option('4\\[&#x27;1.5&#x27;\\]', 'Metric: Percentile rank 1.5 of &quot;bytes&quot;', true));
     assert.match(pipeline, option('custom', 'Custom metric', false));
     const order = draw(terms);
     assert.match(order, option('2', 'Metric: Average bytes', false));
     assert.match(order, option('3', 'Metric: Median bytes', true));
-    assert.match(order, option('4', 'Metric: Percentile ranks of bytes', true));
+    assert.match(order, option('4.5000', 'Metric: Percentile rank 5,000 of &quot;bytes&quot;', false));
+    assert.match(order, option('4\\[&#x27;1.5&#x27;\\]', 'Metric: Percentile rank 1.5 of &quot;bytes&quot;', false));
+    // Each percentile and each bound of a standard deviation is listed, switched off
+    const more: AggConfig[] = [
+      { id: '7', enabled: true, type: 'percentiles', schema: 'metric', params: { field: 'bytes', percents: [50, 95] } },
+      { id: '8', enabled: true, type: 'std_dev', schema: 'metric', params: { field: 'bytes' } },
+    ];
+    const wide = renderToStaticMarkup(createElement(AggEditor, { agg: terms, types: ['terms'], indexPattern: logs, aggs: [...more, terms], context, onChange: () => undefined }));
+    assert.match(wide, option('7.50', 'Metric: 50th percentile of bytes', true));
+    assert.match(wide, option('7.95', 'Metric: 95th percentile of bytes', true));
+    assert.match(wide, option('8.std_lower', 'Metric: Lower Standard Deviation of bytes', true));
+    assert.match(wide, option('8.std_upper', 'Metric: Upper Standard Deviation of bytes', true));
     assert.match(order, option('_key', 'Alphabetical', false));
   });
 });

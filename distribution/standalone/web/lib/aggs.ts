@@ -98,6 +98,7 @@ export const BUCKET_TYPES = [
   'filters',
   'significant_terms',
   'geohash_grid',
+  'geotile_grid',
 ] as const;
 
 const SIBLING_PIPELINES = new Set(['avg_bucket', 'sum_bucket', 'min_bucket', 'max_bucket']);
@@ -135,6 +136,7 @@ export const AGG_TITLES: Record<string, string> = {
   filters: 'Filters',
   significant_terms: 'Significant Terms',
   geohash_grid: 'Geohash',
+  geotile_grid: 'Geotile',
 };
 
 const param = <T>(agg: AggConfig, name: string, fallback: T): T => {
@@ -183,11 +185,23 @@ const INTERVAL_NAMES: Record<string, string> = {
   y: 'year',
 };
 
-/** The interval of a date histogram: the one it asks for, or one that suits the time range */
-export function dateInterval(agg: AggConfig, context: AggContext): Interval & { scaled: boolean } {
+/** The interval a date histogram is asked for, as it is saved: "auto" when it says nothing */
+function requestedInterval(agg: AggConfig): string {
   let requested = param<string>(agg, 'interval', 'auto');
   if (requested === 'custom') requested = param<string>(agg, 'customInterval', 'auto');
-  if (INTERVAL_NAMES[requested]) requested = `1${requested}`;
+  return requested;
+}
+
+/**
+ * The interval of a date histogram: the one it asks for, or one that suits the time range. One
+ * that is asked for and not widened is said to OpenSearch (`asked`) and described the way the
+ * original normalizes it: 24h is a day, 1.5d is 36 hours, 2y is 730 days.
+ */
+export function dateInterval(agg: AggConfig, context: AggContext): Interval & { scaled: boolean; asked?: string } {
+  let requested = requestedInterval(agg);
+  // As the original reads it: "0d" and "1 d" are a day
+  const written = requested === 'auto' ? undefined : normalizedInterval(requested);
+  if (written) requested = `${Number.parseFloat(requested) || 1}${/(ms|[smhdwMy])$/.exec(requested.trim())?.[1] ?? ''}`;
   const range = context.timeRange;
   const duration = range ? range.to.getTime() - range.from.getTime() : 0;
   if ((requested === 'auto' || !parseInterval(requested)) && !range) {
@@ -197,17 +211,146 @@ export function dateInterval(agg: AggConfig, context: AggContext): Interval & { 
     targetBuckets: context.barTarget ?? 50,
     maxBuckets: context.maxBars ?? 100,
   });
+  if (written && parseInterval(requested) && !resolved.scaled) return { ...resolved, description: written.description, asked: written.expression };
   // An interval the time range chose, auto or widened, is a length of time, which the original
   // writes (convertDurationToNormalizedOpenSearchInterval) in the largest of weeks, days, hours,
   // minutes and seconds it is a whole number of: its month is "30d" and its year "365d", fixed
-  if (requested !== 'auto' && parseInterval(requested) && !resolved.scaled) return resolved;
   const unit = (['w', 'd', 'h', 'm', 's'] as const).find((name) => resolved.ms % UNIT_MS[name] === 0 && resolved.ms >= UNIT_MS[name]);
   const length = unit ? parseInterval(`${resolved.ms / UNIT_MS[unit]}${unit}`) : parseInterval(`${resolved.ms}ms`);
   return length ? { ...length, scaled: resolved.scaled } : resolved;
 }
 
-function dateIntervalClause(interval: Interval): Dsl {
-  const match = /^(\d+(?:\.\d+)?)(ms|[smhdwMy])$/.exec(interval.expression);
+const INTERVAL_UNITS = ['ms', 's', 'm', 'h', 'd', 'w', 'M', 'y'] as const;
+type IntervalUnit = (typeof INTERVAL_UNITS)[number];
+
+/**
+ * An interval someone wrote as the original reads and normalizes it (parseInterval, then
+ * convertDurationToNormalizedOpenSearchInterval): a duration as moment keeps one, in months, days
+ * and milliseconds, said in the largest unit it is a whole number of, years and months only when
+ * it is one of them. Nothing when it is not an interval.
+ */
+export function normalizedInterval(text: string): { expression: string; description: string; value: number; unit: IntervalUnit } | undefined {
+  const match = /^([0-9.]*)\s*(ms|s|m|h|d|w|M|y)$/.exec(String(text).trim());
+  if (!match) return undefined;
+  const amount = Number.parseFloat(match[1]) || 1;
+  const unit = match[2] as IntervalUnit;
+  // As moment's duration: years and months are months, weeks and days are days, the rest milliseconds
+  const months = unit === 'y' ? amount * 12 : unit === 'M' ? amount : 0;
+  const days = unit === 'w' ? amount * 7 : unit === 'd' ? amount : 0;
+  const ms = unit === 'h' ? amount * 3600000 : unit === 'm' ? amount * 60000 : unit === 's' ? amount * 1000 : unit === 'ms' ? amount : 0;
+  const wholeDays = days + Math.round((months * 146097) / 4800);
+  const as = (to: IntervalUnit): number => {
+    switch (to) {
+      case 'y':
+        return (months + ((days + ms / 864e5) * 4800) / 146097) / 12;
+      case 'M':
+        return months + ((days + ms / 864e5) * 4800) / 146097;
+      case 'w':
+        return wholeDays / 7 + ms / 6048e5;
+      case 'd':
+        return wholeDays + ms / 864e5;
+      case 'h':
+        return wholeDays * 24 + ms / 36e5;
+      case 'm':
+        return wholeDays * 1440 + ms / 6e4;
+      case 's':
+        return wholeDays * 86400 + ms / 1000;
+      default:
+        return Math.floor(wholeDays * 864e5) + ms;
+    }
+  };
+  const said = (value: number, to: IntervalUnit) => ({
+    expression: `${value}${to}`,
+    description: value === 1 ? INTERVAL_NAMES[to] : `${value} ${INTERVAL_NAMES[to]}s`,
+    value,
+    unit: to,
+  });
+  for (const to of [...INTERVAL_UNITS].reverse()) {
+    const value = as(to);
+    if (value < 1 || Math.floor(value) !== value) continue;
+    if ((to === 'y' || to === 'M') && value !== 1) continue;
+    return said(value, to);
+  }
+  return said(as('ms'), 'ms');
+}
+
+/**
+ * Why the original refuses to ask for a date histogram, in its words: an interval that is not one,
+ * or one that comes to several weeks, which OpenSearch counts one at a time only
+ */
+export function dateIntervalProblem(agg: AggConfig, context: AggContext): string | undefined {
+  const requested = requestedInterval(agg);
+  if (requested === 'auto') return undefined;
+  if (!normalizedInterval(requested)) return `"${requested}" is not a valid interval.`;
+  // Whatever it comes to, written or widened: OpenSearch counts weeks, months and years one at a time
+  const interval = dateInterval(agg, context);
+  const asked = interval.asked ?? interval.expression;
+  const match = /^(\d+)(w|M|y)$/.exec(asked);
+  return match && match[1] !== '1' ? `Invalid calendar interval: ${asked}, value must be 1` : undefined;
+}
+
+const FIELD_REQUIRED = new Set([
+  'avg',
+  'sum',
+  'min',
+  'max',
+  'median',
+  'std_dev',
+  'cardinality',
+  'percentiles',
+  'percentile_ranks',
+  'top_hits',
+  'date_histogram',
+  'histogram',
+  'range',
+  'date_range',
+  'ip_range',
+  'terms',
+  'significant_terms',
+  'geohash_grid',
+  'geotile_grid',
+]);
+
+/**
+ * Why the original does not send the request of a chart's aggregations, in the words of the error
+ * it shows instead: an aggregation without its field, a date histogram whose interval it refuses,
+ * in the aggregations and in those inside them. Nothing when it sends it.
+ */
+export function requestProblem(aggs: AggConfig[], context: AggContext): string | undefined {
+  const inner = (value: unknown): AggConfig[] => (value !== null && typeof value === 'object' && typeof (value as AggConfig).type === 'string' ? [value as AggConfig] : []);
+  const problemOf = (agg: AggConfig): string | undefined => {
+    if (!agg.type) return undefined;
+    if (FIELD_REQUIRED.has(agg.type) && !fieldNameOf(agg)) return '"field" is a required parameter';
+    if (agg.type === 'date_histogram') {
+      const problem = dateIntervalProblem(agg, context);
+      if (problem) return problem;
+    }
+    const nested: AggConfig[] = [];
+    if (agg.type === 'terms') nested.push(...inner(agg.params?.orderAgg));
+    if (SIBLING_PIPELINES.has(agg.type)) {
+      // A bucket whose type `visualize:disableBucketAgg` took away: the original fails on it as it
+      // writes the request (`this.type.hasNoDsl` of an aggregation without a type), in these words
+      const bucket = agg.params?.customBucket as AggConfig | undefined;
+      if (agg.params?.customMetric && bucket && typeof bucket === 'object' && !bucket.type) return "Cannot read properties of undefined (reading 'hasNoDsl')";
+      nested.push(...inner(agg.params?.customBucket), ...inner(agg.params?.customMetric));
+    }
+    if (PARENT_PIPELINES.has(agg.type) && param<string>(agg, 'metricAgg', 'custom') === 'custom') nested.push(...inner(agg.params?.customMetric));
+    for (const child of nested) {
+      const problem = problemOf(child);
+      if (problem) return problem;
+    }
+    return undefined;
+  };
+  const active = enabled(aggs);
+  for (const agg of [...active.filter(isBucketAgg), ...active.filter(isMetricAgg)]) {
+    const problem = problemOf(agg);
+    if (problem) return problem;
+  }
+  return undefined;
+}
+
+function dateIntervalClause(interval: Interval & { asked?: string }): Dsl {
+  const match = /^(\d+(?:\.\d+)?)(ms|[smhdwMy])$/.exec(interval.asked ?? interval.expression);
   const amount = match ? Number(match[1]) : 1;
   const unit = match ? match[2] : 'd';
   if (amount === 1 && unit !== 'ms' && unit !== 's') return { calendar_interval: `1${unit}` };
@@ -374,6 +517,9 @@ export function aggTypeLabel(agg: AggConfig, context: AggContext): string {
     case 'geohash_grid':
       // makeLabel of the geohash_grid
       return 'Geohash';
+    case 'geotile_grid':
+      // It has no makeLabel of its own: the original then says the type's name
+      return 'geotile_grid';
     default:
       return field || agg.type;
   }
@@ -566,7 +712,8 @@ function bucketClause(agg: AggConfig, context: AggContext): Dsl {
       // a filter made from one would not match
       const scripted = fieldOf(agg, context);
       if (field.script && scripted) clause.value_type = scripted.type === 'number' ? 'float' : scripted.type;
-      if (agg.params?.missingBucket) clause.missing = MISSING_KEY;
+      // Missing values are a bucket of a text field only, as the original's switch and its request
+      if (agg.params?.missingBucket && scripted?.type === 'string') clause.missing = MISSING_KEY;
       includeExclude(agg, context, clause);
       return { terms: clause };
     }
@@ -589,6 +736,11 @@ function bucketClause(agg: AggConfig, context: AggContext): Dsl {
       return {
         geohash_grid: { ...field, precision: Math.min(12, Math.max(1, param(agg, 'precision', 2))) },
       };
+    case 'geotile_grid': {
+      // As the original's default writer: a precision of 0, its default, is not asked
+      const precision = agg.params?.precision;
+      return { geotile_grid: { ...field, ...(precision ? { precision } : {}) } };
+    }
     default:
       return { [agg.type]: field };
   }
@@ -721,9 +873,12 @@ export function buildAggsDsl(aggs: AggConfig[], context: AggContext, options: Bu
     }
     return out;
   };
+  // As the original, the centroid a grid asks for is one more metric: under the last bucket only
+  const centroids: Dsl = {};
+  for (const grid of buckets.filter(asksCentroid)) centroids[geoCentroidId(aggs)] = { geo_centroid: { field: fieldNameOf(grid) } };
 
   const nest = (level: number, insideHistogram: boolean): Dsl => {
-    if (level === buckets.length) return metricsDsl(insideHistogram);
+    if (level === buckets.length) return { ...metricsDsl(insideHistogram), ...centroids };
     const agg = buckets[level];
     const isHistogram = agg.type === 'date_histogram' || agg.type === 'histogram';
     const deeper = nest(level + 1, isHistogram);
@@ -732,9 +887,6 @@ export function buildAggsDsl(aggs: AggConfig[], context: AggContext, options: Bu
     const clause = withJson(agg, bucketClause(agg, context));
 
     if (agg.type === 'terms') orderTerms(agg, clause.terms as Dsl, own, context, metrics);
-    if (agg.type === 'geohash_grid' && agg.params?.useGeocentroid !== false) {
-      own[geoCentroidId(aggs)] = { geo_centroid: { field: fieldNameOf(agg) } };
-    }
     const dsl = { [agg.id]: { ...clause, ...(Object.keys(own).length ? { aggs: own } : {}) } };
     return agg.type === 'geohash_grid' ? withGeoCollar(agg, dsl) : dsl;
   };
@@ -742,7 +894,10 @@ export function buildAggsDsl(aggs: AggConfig[], context: AggContext, options: Bu
   return nest(0, false);
 }
 
-/** The id the original gives the geo_centroid it asks for beside a geohash_grid: the next free one */
+/** Whether a geohash_grid or a geotile_grid asks for the centroid of each of its buckets */
+const asksCentroid = (agg: AggConfig) => (agg.type === 'geohash_grid' || agg.type === 'geotile_grid') && agg.params?.useGeocentroid !== false;
+
+/** The id the original gives the geo_centroid it asks for beside a geohash_grid or geotile_grid: the next free one */
 export const geoCentroidId = (aggs: AggConfig[]) => String(aggs.reduce((max, agg) => Math.max(max, Number(agg.id) || 0), 0) + 1);
 
 /** What a geohash_grid that is filtered by the collar asks before the map's size is known */
@@ -764,21 +919,59 @@ function withGeoCollar(agg: AggConfig, dsl: Dsl): Dsl {
 function orderTerms(agg: AggConfig, terms: Dsl, own: Dsl, context: AggContext, metrics: AggConfig[]): void {
   const direction = param<string>(agg, 'order', 'desc');
   const orderBy = param<string>(agg, 'orderBy', '_count');
-  if (orderBy === '_key' || orderBy === '_term') terms.order = { _key: direction };
-  else if (orderBy === 'custom') {
-    const orderAgg = agg.params?.orderAgg as AggConfig | undefined;
-    if (orderAgg && orderAgg.type !== 'count') {
-      const id = orderAgg.id ?? `${agg.id}-orderAgg`;
-      Object.assign(own, metricWithJson({ ...orderAgg, id }, context, metrics));
-      terms.order = { [orderPath(orderAgg, id)]: direction };
+  // As the original's `params.orderAgg || the metric named`: a custom metric the aggregation carries
+  // orders it whatever "Order by" says, under the id the original gives it
+  const orderAgg = agg.params?.orderAgg as AggConfig | null | undefined;
+  if (orderAgg && typeof orderAgg === 'object' && orderAgg.type) {
+    if (orderAgg.type === 'count') {
+      terms.order = { _count: direction };
+      return;
     }
-  } else {
+    const id = `${agg.id}-orderAgg`;
+    Object.assign(own, metricWithJson({ ...orderAgg, id }, context, metrics));
+    terms.order = { [orderPath(orderAgg, id)]: direction };
+    return;
+  }
+  if (orderBy === '_key' || orderBy === '_term') terms.order = { _key: direction };
+  else if (orderBy !== 'custom') {
     const metric = metrics.find((candidate) => candidate.id === orderBy);
     if (metric && metric.type !== 'count' && !SIBLING_PIPELINES.has(metric.type) && !PARENT_PIPELINES.has(metric.type)) {
       Object.assign(own, metricWithJson(metric, context, metrics));
       terms.order = { [orderPath(metric, metric.id)]: direction };
+      return;
+    }
+    // One value of a metric with several: a percentile rank, or the percentile a saved object names
+    for (const candidate of metrics) {
+      const key = valueKeysOf(candidate).find((value) => responseAggId(candidate.id, value) === orderBy);
+      if (key === undefined) continue;
+      Object.assign(own, metricWithJson(candidate, context, metrics));
+      // The original writes the id as it is; OpenSearch reads a value with a point in it between brackets only
+      terms.order = { [String(key).includes('.') ? `${candidate.id}[${key}]` : orderBy]: direction };
+      return;
     }
   }
+}
+
+/** The values a percentiles or percentile ranks aggregation answers with */
+const valueKeysOf = (agg: AggConfig): number[] =>
+  agg.type === 'percentiles' ? param<number[]>(agg, 'percents', [1, 5, 25, 50, 75, 95, 99]) : agg.type === 'percentile_ranks' ? param<number[]>(agg, 'values', [0]) : [];
+
+/** The id the original gives one value of a metric with several: `2.5000`, or `2['1.5']` when the value has a point */
+export function responseAggId(parentId: string, key: string | number): string {
+  const subId = String(key);
+  return subId.includes('.') ? `${parentId}['${subId.replace(/'/g, "\\'")}']` : `${parentId}.${subId}`;
+}
+
+/**
+ * The values a metric answers with, as the original's response aggregations: what "Order by" and
+ * a parent pipeline's "Metric" list, each with its id and its label
+ */
+export function responseAggs(agg: AggConfig, context: AggContext): Array<{ id: string; label: string; agg: AggConfig }> {
+  return metricColumns(agg, context, '').map((column) => ({
+    id: column.valueKey !== undefined && agg.type !== 'std_dev' ? responseAggId(agg.id, column.valueKey) : column.id,
+    label: column.name,
+    agg,
+  }));
 }
 
 function orderPath(metric: AggConfig, id: string): string {
@@ -1114,9 +1307,10 @@ export function tabify(
         index += made.length;
         return made;
       });
-      if (agg.type === 'geohash_grid' && agg.params?.useGeocentroid !== false) {
-        const centroid: AggConfig = { id: geoCentroidId(aggs), type: 'geo_centroid', schema: 'geo_centroid', params: { field: fieldNameOf(agg) } };
-        own.push({ id: `col-${index}-${centroid.id}`, name: 'Geo Centroid', kind: 'metric', agg: centroid, schema: 'geo_centroid', fieldName: fieldNameOf(agg), format: (value) => JSON.stringify(value) });
+      // The centroid of a grid is read as the metric it is asked as: after the others, wherever they are
+      for (const grid of buckets.filter(asksCentroid)) {
+        const centroid: AggConfig = { id: geoCentroidId(aggs), type: 'geo_centroid', schema: 'geo_centroid', params: { field: fieldNameOf(grid) } };
+        own.push({ id: `col-${index}-${centroid.id}`, name: 'Geo Centroid', kind: 'metric', agg: centroid, schema: 'geo_centroid', fieldName: fieldNameOf(grid), format: (value) => JSON.stringify(value) });
         index += 1;
       }
       metricsByLevel[level] = own;
