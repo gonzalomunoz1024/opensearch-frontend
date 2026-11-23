@@ -8,7 +8,8 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { formatDate } from '../../web/lib/dates';
+import { formatDate, setDefaultTimeZone, setDefaultWeekStart } from '../../web/lib/dates';
+import { createServices, type BootData } from '../../web/services';
 
 type Row = [zone: string, iso: string, expected: string[]];
 
@@ -50,3 +51,107 @@ writesAsMoment(
     ['America/New_York', '2026-12-31T23:59:59.999Z', ['2026th', '2026', '27', '26', '1st', '53rd', 'Anno Domini', '9', '99', '999000000', '+002026', 'Thursday, December 31, 2026 6:59 PM!']],
   ]
 );
+
+// moment.tz(iso, zone).format('z') of the original's moment-timezone 0.5.37 (tz database 2022c)
+describe("the short name of a zone, as moment-timezone's data names it where a browser writes GMT+1", () => {
+  const rows: Array<[zone: string, iso: string, expected: string]> = [
+    ['Europe/Paris', '2024-01-14T17:00:00.000Z', 'CET'],
+    ['Europe/Paris', '2024-07-15T20:00:00.000Z', 'CEST'],
+    ['Asia/Kolkata', '2024-01-14T17:00:00.000Z', 'IST'],
+    ['America/Sao_Paulo', '2024-01-14T17:00:00.000Z', '-03'],
+    ['America/Sao_Paulo', '1990-02-10T06:00:00.000Z', '-02'],
+    ['Europe/London', '2024-07-15T20:00:00.000Z', 'BST'],
+    // British Standard Time, an hour ahead all year: the same name for another offset in another era
+    ['Europe/London', '1970-01-21T06:00:00.000Z', 'BST'],
+    ['Australia/Sydney', '2024-01-14T17:00:00.000Z', 'AEDT'],
+    // Three hours ahead as now, when it was the summer's name, and four hours ahead all year
+    ['Europe/Moscow', '2012-07-03T20:00:00.000Z', 'MSK'],
+    ['Europe/Moscow', '2024-07-15T20:00:00.000Z', 'MSK'],
+    ['Europe/Moscow', '1985-08-07T03:00:00.000Z', 'MSD'],
+    ['UTC', '2024-01-14T17:00:00.000Z', 'UTC'],
+    ['Etc/GMT+5', '2024-01-14T17:00:00.000Z', '-05'],
+    ['Asia/Tokyo', '2024-01-14T17:00:00.000Z', 'JST'],
+    ['Africa/Lagos', '2024-01-14T17:00:00.000Z', 'WAT'],
+    ['America/New_York', '2024-07-15T20:00:00.000Z', 'EDT'],
+    ['Pacific/Chatham', '2024-01-14T17:00:00.000Z', '+1345'],
+    ['Asia/Kathmandu', '2024-01-14T17:00:00.000Z', '+0545'],
+  ];
+
+  it('is the name of the offset in the era of the moment', () => {
+    assert.deepEqual(
+      rows.map(([zone, iso]) => formatDate(new Date(iso), 'z', zone)),
+      rows.map(([, , expected]) => expected)
+    );
+    assert.equal(formatDate(new Date('2024-01-14T17:00:00.000Z'), 'HH:mm z zz', 'Europe/Paris'), '18:00 CET CET');
+  });
+
+  it('is none for the zone of the browser, as moment gives none', () => {
+    assert.equal(formatDate(new Date('2024-01-14T17:00:00.000Z'), '[<]z[>]'), '<>');
+  });
+});
+
+// moment.utc(iso).format(...) after moment.updateLocale('en', { week: { dow } }), as the original sets
+// the first day of the week from the setting dateFormat:dow
+describe('the weeks of a written date, from the day the setting dateFormat:dow names', () => {
+  const pattern = 'w ww wo e gg gggg d E W GGGG';
+  const rows: Array<[dow: number, iso: string, expected: string]> = [
+    [0, '2021-01-02T12:00:00.000Z', '1 01 1st 6 21 2021 6 6 53 2020'],
+    [0, '2024-12-29T12:00:00.000Z', '1 01 1st 0 25 2025 0 7 52 2024'],
+    [0, '2026-01-01T12:00:00.000Z', '1 01 1st 4 26 2026 4 4 1 2026'],
+    [0, '2027-01-03T12:00:00.000Z', '2 02 2nd 0 27 2027 0 7 53 2026'],
+    [0, '2026-11-23T12:00:00.000Z', '48 48 48th 1 26 2026 1 1 48 2026'],
+    [1, '2021-01-02T12:00:00.000Z', '1 01 1st 5 21 2021 6 6 53 2020'],
+    [1, '2024-12-29T12:00:00.000Z', '52 52 52nd 6 24 2024 0 7 52 2024'],
+    [1, '2026-01-01T12:00:00.000Z', '1 01 1st 3 26 2026 4 4 1 2026'],
+    [1, '2027-01-03T12:00:00.000Z', '1 01 1st 6 27 2027 0 7 53 2026'],
+    [1, '2026-11-23T12:00:00.000Z', '48 48 48th 0 26 2026 1 1 48 2026'],
+    [6, '2021-01-02T12:00:00.000Z', '1 01 1st 0 21 2021 6 6 53 2020'],
+    [6, '2024-12-29T12:00:00.000Z', '52 52 52nd 1 24 2024 0 7 52 2024'],
+    [6, '2026-01-01T12:00:00.000Z', '52 52 52nd 5 25 2025 4 4 1 2026'],
+    [6, '2027-01-03T12:00:00.000Z', '1 01 1st 1 27 2027 0 7 53 2026'],
+    [6, '2026-11-23T12:00:00.000Z', '47 47 47th 2 26 2026 1 1 48 2026'],
+  ];
+
+  it('counts the week of the year, its year and the day of the week from that day; ISO weeks stay', () => {
+    try {
+      assert.deepEqual(
+        rows.map(([dow, iso]) => {
+          setDefaultWeekStart(dow);
+          return formatDate(new Date(iso), pattern, 'UTC');
+        }),
+        rows.map(([, , expected]) => expected)
+      );
+    } finally {
+      setDefaultWeekStart(0);
+    }
+  });
+
+  it('follows the setting from the start and when it changes', async () => {
+    // The server of the settings: it keeps what is posted and answers with all it keeps
+    const stored: Record<string, unknown> = { 'dateFormat:dow': 'Monday' };
+    const original = globalThis.fetch;
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      const { changes } = JSON.parse(String(init?.body)) as { changes: Record<string, unknown> };
+      for (const [key, value] of Object.entries(changes)) {
+        if (value === null) delete stored[key];
+        else stored[key] = value;
+      }
+      const settings = Object.fromEntries(Object.entries(stored).map(([key, userValue]) => [key, { userValue }]));
+      return new Response(JSON.stringify({ settings }), { headers: { 'content-type': 'application/json' } });
+    }) as typeof fetch;
+    const week = () => formatDate(new Date('2024-12-29T12:00:00.000Z'), 'w e gggg', 'UTC');
+    try {
+      const boot = { basePath: '', version: '3.9.0', name: 'test', settings: { ...stored }, settingsDefaults: {}, settingsOverrides: {} };
+      const { uiSettings } = createServices(boot as unknown as BootData);
+      assert.equal(week(), '52 6 2024');
+      await uiSettings.set('dateFormat:dow', 'Saturday');
+      assert.equal(week(), '52 1 2024');
+      await uiSettings.remove('dateFormat:dow');
+      assert.equal(week(), '1 0 2025');
+    } finally {
+      globalThis.fetch = original;
+      setDefaultWeekStart(0);
+      setDefaultTimeZone(undefined);
+    }
+  });
+});
