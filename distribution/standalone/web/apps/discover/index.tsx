@@ -6,10 +6,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, EmptyPrompt, Loading, Tabs } from '../../components/basic';
 import { Select } from '../../components/form';
 import { Icon } from '../../components/icon';
-import { CopyableCode, downloadFile, Tooltip } from '../../components/overlay';
+import { CopyableCode, Tooltip } from '../../components/overlay';
 import { dateInterval, tabify } from '../../lib/aggs';
 import { formatDate, parseInterval, timeZoneOffset } from '../../lib/dates';
-import { flattenHit, toCsv, type RawHit } from '../../lib/docs';
+import { flattenHit, type RawHit } from '../../lib/docs';
 import { existsFilter, mergeFilters } from '../../lib/query';
 import { parseSearchSource, serializeSearchSource } from '../../lib/search_source';
 import type { Field, Filter, IndexPattern, Query } from '../../lib/types';
@@ -31,6 +31,7 @@ import { showSearchError } from '../../shell/search_error';
 import { addRecentlyAccessed, currentGlobalParam, useAutoRefresh, useBreadcrumbs, useGlobalState } from '../../shell/state';
 import { DocDetails } from './doc_viewer';
 import { DocTable, filterColumns, toggledColumns, type SortPair } from './doc_table';
+import { DownloadCsv } from './download_csv';
 import { DocPage, ContextPage } from './doc_pages';
 import { filtersOf, valueFilter } from './filters';
 import { Histogram } from './histogram';
@@ -181,11 +182,15 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
     [saved]
   );
 
-  const columns = useMemo(() => {
-    const fromUrl = urlApp.discover?.columns ?? urlApp.columns;
-    const chosen = fromUrl ?? saved?.attributes.columns ?? services.uiSettings.get<string[]>('defaultColumns', ['_source']);
-    return chosen.length ? chosen : ['_source'];
+  // The columns as the original's state holds them: the address's, the saved search's or the
+  // setting's, as they are; what is not a list of names is none
+  const stateColumns = useMemo(() => {
+    const fromUrl: unknown = urlApp.discover?.columns ?? urlApp.columns;
+    const chosen: unknown = fromUrl ?? saved?.attributes.columns ?? services.uiSettings.get<string[]>('defaultColumns', ['_source']);
+    return Array.isArray(chosen) ? chosen.filter((name): name is string => typeof name === 'string') : [];
   }, [urlApp, saved]);
+  // What the page works with: none chosen is the whole source
+  const columns = useMemo(() => (stateColumns.length ? stateColumns : ['_source']), [stateColumns]);
   const sort = useMemo(
     () => normalizeSort(urlApp.discover?.sort ?? urlApp.sort ?? saved?.attributes.sort),
     [urlApp, saved]
@@ -510,23 +515,25 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
   // The pane that scrolls: the table's "Back to top." goes back to its start
   const canvasRef = useRef<HTMLDivElement>(null);
 
-  const downloadCsv = () => {
-    if (!result || !indexPattern) return;
-    const names =
-      columns.length === 1 && columns[0] === '_source'
-        ? [...new Set(result.rows.flatMap((row) => Object.keys(flattenHit(row, indexPattern))))].sort()
-        : [...(indexPattern.timeFieldName && !columns.includes(indexPattern.timeFieldName) ? [indexPattern.timeFieldName] : []), ...columns];
-    const csv = toCsv(
-      names,
-      result.rows.map((row) => {
-        const flat = flattenHit(row, indexPattern);
-        return names.map((name) => flat[name]);
-      }),
-      services.uiSettings.get('csv:separator', ','),
-      services.uiSettings.get('csv:quoteValues', true)
-    );
-    downloadFile(`${saved?.attributes.title ?? 'discover'}.csv`, csv, 'text/csv');
-  };
+  // "Max available": the page's search again, for as many documents as asked and no histogram,
+  // in the time range as it reads now, as the original's fetchForMaxCsvOption
+  const fetchCsvRows = useCallback(
+    async (size: number, signal: AbortSignal): Promise<RawHit[]> => {
+      if (!indexPattern) throw new Error('Dataset not found');
+      const range = searchTimeRange(indexPattern, global.time, services.weekStart());
+      if (range === null) {
+        services.toasts.danger(
+          'Invalid time range',
+          `The provided time range is invalid. (from: '${global.time.from}', to: '${global.time.to}')`
+        );
+        throw new Error('Invalid time range');
+      }
+      const body = buildDiscoverRequest({ indexPattern, query, filters, range, sort, size, interval, documentsOnly: true });
+      const response = await services.search.search(indexPattern.title, body, { signal });
+      return response.hits.hits as RawHit[];
+    },
+    [indexPattern, global.time, query, filters, sort, interval]
+  );
 
   const save = async ({ title, asNew }: { title: string; asNew: boolean }) => {
     if (!indexPattern) return;
@@ -770,10 +777,7 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
                   )}
                 </div>
                 {rows.length > 0 && (
-                  <button type="button" className="dscResults__button" data-test-subj="dscDownloadCsvButton" onClick={downloadCsv}>
-                    <Icon name="download" />
-                    Download as CSV
-                  </button>
+                  <DownloadCsv rows={rows} hits={total} indexPattern={indexPattern} columns={columns} fetchRows={fetchCsvRows} />
                 )}
               </div>
             </div>

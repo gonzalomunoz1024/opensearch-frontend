@@ -765,7 +765,8 @@
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--color-accent);
+  /* the text of the original's empty buttons, as the kit's empty button writes it */
+  color: var(--color-accent-button-text);
   font-family: inherit;
   font-size: var(--font-size-s);
   font-weight: var(--font-weight-medium);
@@ -777,6 +778,13 @@
 
 .dscResults__button:hover {
   background: var(--color-accent-tint);
+}
+
+/* "Download as CSV" while "Max available" is searching, as the kit's empty button is disabled */
+.dscResults__button:disabled {
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: not-allowed;
 }
 
 .dscResults__button:focus-visible {
@@ -1514,4 +1522,49 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+}
+
+/* --- "Download as CSV": the original's popover content, its title, choices and call-out ------ */
+
+.dscDownloadCsvPopoverContent {
+  min-width: 260px;
+}
+
+.dscDownloadCsvPopoverContent__titleWrapper {
+  padding: var(--space-3) var(--space-2);
+  border-bottom: 1px solid var(--color-border-light);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+  text-transform: uppercase;
+}
+
+.dscDownloadCsvPopoverContent__titleWrapper strong {
+  font-weight: var(--font-weight-semibold);
+}
+
+.dscDownloadCsvPopoverContent__form {
+  padding: var(--space-2);
+}
+
+/* The compressed radio group: a 24 pixel line to each choice, none between them */
+.dscDownloadCsvPopoverContent__options .atlRadio {
+  display: flex;
+  min-height: 24px;
+}
+
+.dscDownloadCsvPopoverContent__options label {
+  cursor: pointer;
+}
+
+/* The call-out's margins and the button's meet, as the original's blocks do */
+.dscDownloadCsvCallout {
+  margin: var(--space-2) 0;
+}
+
+.dscDownloadCsvCallout .atlCallOut__body {
+  color: var(--color-warning-callout-text);
+}
+
+.dscDownloadCsvPopoverContent__submit {
+  margin-top: var(--space-2);
 }
