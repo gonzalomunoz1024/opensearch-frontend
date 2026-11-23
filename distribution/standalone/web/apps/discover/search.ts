@@ -26,6 +26,15 @@ export interface DiscoverRequest {
   documentsOnly?: boolean;
 }
 
+/**
+ * The interval the state holds as the original's TimeBuckets reads it: a text, or the `val` of a
+ * choice (an object); anything else is none, and the histogram is auto
+ */
+export function stateInterval(value: unknown): string | undefined {
+  const chosen: unknown = typeof value === 'object' && value !== null && 'val' in value ? value.val : value;
+  return typeof chosen === 'string' && chosen !== '' ? chosen : undefined;
+}
+
 export function histogramAgg(indexPattern: IndexPattern, interval: string | undefined): AggConfig | undefined {
   if (!indexPattern.timeFieldName) return undefined;
   return {

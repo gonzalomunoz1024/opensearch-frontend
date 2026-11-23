@@ -30,14 +30,24 @@ import { SearchBar } from '../../shell/search_bar';
 import { showSearchError } from '../../shell/search_error';
 import { addRecentlyAccessed, currentGlobalParam, useAutoRefresh, useBreadcrumbs, useGlobalState, writeStored } from '../../shell/state';
 import { DocDetails } from './doc_viewer';
-import { appStateParam, columnToggled, openingAppState, writeDiscoverState } from './app_state';
+import {
+  RESTORE_ERROR_TITLE,
+  appStateParam,
+  columnToggled,
+  isAppState,
+  openingAppState,
+  stateColumnNames,
+  stateReadError,
+  writeDiscoverState,
+} from './app_state';
 import { DocTable, filterColumns, type SortPair } from './doc_table';
 import { DownloadCsv } from './download_csv';
 import { DocPage, ContextPage } from './doc_pages';
 import { filtersOf, valueFilter } from './filters';
 import { Histogram } from './histogram';
 import { bucketSpan, parseBucketInterval, shortestBucket } from './histogram_scale';
-import { aggContext, buildDiscoverRequest, histogramAgg, searchTimeRange } from './search';
+import { aggContext, buildDiscoverRequest, histogramAgg, searchTimeRange, stateInterval } from './search';
+import { SelectData } from './select_data';
 import { Sidebar } from './sidebar';
 import { openingQueryState } from './open_state';
 import { indexPatternStore, keepPopularity, popularizeField } from './popularity';
@@ -55,12 +65,12 @@ interface SavedSearchAttributes {
 }
 
 interface UrlAppState {
-  discover?: { columns?: string[]; sort?: unknown; interval?: string; isDirty?: boolean; savedQuery?: string; savedSearch?: string };
+  discover?: { columns?: string[]; sort?: unknown; interval?: unknown; isDirty?: boolean; savedQuery?: string; savedSearch?: string };
   metadata?: { indexPattern?: string; view?: string };
   // The shape of older addresses
   columns?: string[];
   sort?: unknown;
-  interval?: string;
+  interval?: unknown;
   index?: string;
   query?: Query;
   filters?: Filter[];
@@ -71,6 +81,9 @@ interface UrlQueryState {
   query?: Query;
   filters?: Filter[];
 }
+
+/** The original's id of its message for a state of the address it cannot read */
+const RESTORE_ERROR_ID = 'opensearch_dashboards_utils.state_management.url.restoreUrlError';
 
 const INTERVALS = [
   { value: 'auto', label: 'Auto' },
@@ -169,6 +182,8 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
   const [savedError, setSavedError] = useState<string>();
   const [indexPattern, setIndexPattern] = useState<IndexPattern>();
   const [patternError, setPatternError] = useState<string>();
+  // The index patterns could not be listed: Discover cannot start
+  const [listError, setListError] = useState<string>();
   const [result, setResult] = useState<Result>();
   // The search failed: no results, and a "Search Error" message says why, as in the original
   const [failed, setFailed] = useState(false);
@@ -187,19 +202,23 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
 
   // The columns as the original's state holds them: the address's, the saved search's or the
   // setting's, as they are; what is not a list of names is none
-  const stateColumns = useMemo(() => {
+  const chosenColumns = useMemo((): unknown => {
     const fromUrl: unknown = urlApp.discover?.columns ?? urlApp.columns;
-    const chosen: unknown = fromUrl ?? saved?.attributes.columns ?? services.uiSettings.get<string[]>('defaultColumns', ['_source']);
-    return Array.isArray(chosen) ? chosen.filter((name): name is string => typeof name === 'string') : [];
+    return fromUrl ?? saved?.attributes.columns ?? services.uiSettings.get<string[]>('defaultColumns', ['_source']);
   }, [urlApp, saved]);
+  // What the sidebar lists as selected: none for an empty list, nothing at all for no list
+  const sidebarColumns = useMemo(() => stateColumnNames(chosenColumns), [chosenColumns]);
+  const stateColumns = useMemo(() => sidebarColumns ?? [], [sidebarColumns]);
   // What the page works with: none chosen is the whole source
   const columns = useMemo(() => (stateColumns.length ? stateColumns : ['_source']), [stateColumns]);
   const sort = useMemo(
     () => normalizeSort(urlApp.discover?.sort ?? urlApp.sort ?? saved?.attributes.sort),
     [urlApp, saved]
   );
-  // None until one is picked: the histogram is then "auto", and its header still says "per"
-  const interval = urlApp.discover?.interval ?? urlApp.interval;
+  // None until one is picked: the histogram is then "auto", and its header still says "per". The
+  // state keeps what the address holds; what is no interval is searched as auto
+  const chosenInterval: unknown = urlApp.discover?.interval ?? urlApp.interval;
+  const interval = stateInterval(chosenInterval);
   const indexPatternId = urlApp.metadata?.indexPattern ?? urlApp.index ?? savedSource?.indexId ?? defaultId;
   const query: Query = useMemo(
     () => urlQuery.query ?? urlApp.query ?? savedSource?.query ?? { query: '', language: defaultQueryLanguage() },
@@ -230,14 +249,14 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
     }) =>
       appStateParam({
         columns: changes.columns ?? stateColumns,
-        interval: changes.interval ?? interval,
+        interval: changes.interval ?? chosenInterval,
         isDirty: changes.isDirty ?? isDirty,
         savedQuery: 'savedQuery' in changes ? changes.savedQuery : savedQueryId,
         savedSearch: changes.savedSearch ?? savedSearchId,
         sort: changes.sort ?? sort,
         indexPattern: changes.indexPattern ?? indexPatternId,
       }),
-    [stateColumns, interval, isDirty, savedQueryId, savedSearchId, sort, indexPatternId]
+    [stateColumns, chosenInterval, isDirty, savedQueryId, savedSearchId, sort, indexPatternId]
   );
   const writeApp = useCallback(
     (changes: { columns?: string[]; sort?: SortPair[]; interval?: string; indexPattern?: string; isDirty?: boolean }) => {
@@ -284,7 +303,7 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
         setPatterns(list);
         setDefaultId(chosen);
       })
-      .catch((failure) => live && setPatternError((failure as Error).message));
+      .catch((failure) => live && setListError((failure as Error).message));
     return () => {
       live = false;
     };
@@ -331,11 +350,19 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
     // The saved search this opening is for: none for Discover itself, whatever was shown before
     const opening = savedId === undefined ? undefined : saved;
     const params = getLocation().hashParams;
+    // An `_a` that cannot be read, or is no state, is as none: the default one is written
+    const appReadable = isAppState(params._a);
     // The default index pattern is still being read
-    if (params._a === undefined && !opening && patterns === undefined) return;
+    if (!appReadable && !opening && patterns === undefined) return;
+    // As the original's: a state of the address that cannot be read is said, once
+    const appError = stateReadError(params._a);
+    const queryError = stateReadError(params._q);
+    for (const error of [appError, queryError]) {
+      if (error) services.toasts.addError(error, { title: RESTORE_ERROR_TITLE, id: RESTORE_ERROR_ID });
+    }
     const app = decodeState<UrlAppState>(params._a);
     const fromQ = decodeState<UrlQueryState>(params._q);
-    const hasQueryState = params._q !== undefined || app.query !== undefined || app.filters !== undefined;
+    const hasQueryState = (params._q !== undefined && !queryError) || app.query !== undefined || app.filters !== undefined;
     const source = opening ? parseSearchSource(opening.attributes.kibanaSavedObjectMeta?.searchSourceJSON, opening.references) : undefined;
     const { query: chosen, filters: chosenFilters } = openingQueryState(
       { query: fromQ.query ?? app.query, filters: fromQ.filters ?? app.filters, hasQueryState },
@@ -343,7 +370,7 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
       defaultQueryLanguage()
     );
     const changes: { _a?: string; _q?: string } = {};
-    if (params._a === undefined) {
+    if (!appReadable) {
       const state = openingAppState(
         opening && { id: opening.id, columns: opening.attributes.columns, sort: opening.attributes.sort, indexId: source?.indexId },
         services.uiSettings.get<string[]>('defaultColumns', ['_source']),
@@ -651,12 +678,115 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
   };
 
   // --- What is drawn ---
-  if (patternError && !indexPattern) {
+  const topNav = (
+    <TopNav
+      items={[
+        {
+          id: 'new',
+          label: 'New',
+          // As the original's: a new search keeps the query and drops the page's filters
+          onClick: () => {
+            navigate(appUrl(basePath, '/', { _g: currentGlobalParam(), _q: { filters: [], query } }));
+            setOpenings((count) => count + 1);
+          },
+          testId: 'discoverNewButton',
+        },
+        { id: 'save', label: 'Save', onClick: () => setDialog('save'), testId: 'discoverSaveButton' },
+        { id: 'open', label: 'Open', onClick: () => setDialog('open'), testId: 'discoverOpenButton' },
+        { id: 'share', label: 'Share', onClick: () => setDialog('share'), testId: 'shareTopNavButton' },
+        { id: 'inspect', label: 'Inspect', onClick: () => setDialog('inspect'), testId: 'openInspectorButton' },
+      ]}
+    />
+  );
+  const dialogs = (
+    <>
+      {dialog === 'save' && (
+        <SaveModal
+          objectType="search"
+          intro="Save your Discover search so you can use it in visualizations and dashboards"
+          title={saved?.attributes.title ?? ''}
+          existing={Boolean(saved)}
+          onSave={save}
+          onClose={() => setDialog(undefined)}
+        />
+      )}
+      {dialog === 'open' && (
+        <OpenFlyout
+          title="Open search"
+          types={[{ type: 'search', name: 'Saved search', icon: 'discover' }]}
+          manageLink="/app/management/opensearch-dashboards/objects"
+          onClose={() => setDialog(undefined)}
+          onChoose={(object) => {
+            setDialog(undefined);
+            navigate(appUrl(basePath, `/view/${encodeURIComponent(object.id)}`, { _g: currentGlobalParam() }));
+            setOpenings((count) => count + 1);
+          }}
+        />
+      )}
+      {dialog === 'share' && (
+        <ShareModal
+          objectType="search"
+          savedUrl={saved ? `${window.location.origin}${href(appUrl(basePath, `/view/${encodeURIComponent(saved.id)}`))}` : undefined}
+          onClose={() => setDialog(undefined)}
+        />
+      )}
+      {dialog === 'inspect' && (
+        <Inspector title={saved?.attributes.title} requests={records} onClose={() => setDialog(undefined)} />
+      )}
+    </>
+  );
+  if (listError) {
     return (
       <div className="shlPage">
         <EmptyPrompt icon="warning" title="Discover could not start">
-          {patternError}
+          {listError}
         </EmptyPrompt>
+      </div>
+    );
+  }
+  if (patternError && !indexPattern) {
+    // As the original's: an index pattern that cannot be read leaves Discover as it is, with no
+    // pattern chosen and nothing searched, and asks for one
+    return (
+      <div className="dscPage" data-test-subj="discoverApp">
+        {topNav}
+        <Sidebar
+          indexPattern={undefined}
+          indexPatterns={patterns ?? []}
+          onIndexPatternChange={(id) => writeApp({ indexPattern: id })}
+          onRefreshFields={() => {
+            services.indexPatterns.clear();
+            services.indexPatterns
+              .list()
+              .then(setPatterns)
+              .catch((failure) => services.toasts.error(failure, 'The index patterns could not be read'));
+          }}
+          columns={undefined}
+          rows={[]}
+          onToggleColumn={toggleColumn}
+          onFilter={addFilter}
+          onFilterExists={addExists}
+        />
+        <div className="dscCanvas" data-test-subj="dscCanvas">
+          <SearchBar
+            indexPatterns={[]}
+            query={query}
+            onQuerySubmit={(next) => writeQuery({ query: next })}
+            filters={filters}
+            onFiltersChange={setFilters}
+            time={global.time}
+            refreshInterval={global.refreshInterval}
+            onTimeChange={(time) => setGlobal({ time })}
+            onRefreshChange={(refreshInterval) => setGlobal({ refreshInterval })}
+            onRefresh={refresh}
+            loading={false}
+            showTime={false}
+            savedQueryId={savedQueryId}
+            onSavedQueryChange={onSavedQueryChange}
+          />
+          <SelectData />
+        </div>
+        {dialogs}
       </div>
     );
   }
@@ -702,24 +832,7 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
 
   return (
     <div className="dscPage" data-test-subj="discoverApp">
-      <TopNav
-        items={[
-          {
-            id: 'new',
-            label: 'New',
-            // As the original's: a new search keeps the query and drops the page's filters
-            onClick: () => {
-              navigate(appUrl(basePath, '/', { _g: currentGlobalParam(), _q: { filters: [], query } }));
-              setOpenings((count) => count + 1);
-            },
-            testId: 'discoverNewButton',
-          },
-          { id: 'save', label: 'Save', onClick: () => setDialog('save'), testId: 'discoverSaveButton' },
-          { id: 'open', label: 'Open', onClick: () => setDialog('open'), testId: 'discoverOpenButton' },
-          { id: 'share', label: 'Share', onClick: () => setDialog('share'), testId: 'shareTopNavButton' },
-          { id: 'inspect', label: 'Inspect', onClick: () => setDialog('inspect'), testId: 'openInspectorButton' },
-        ]}
-      />
+      {topNav}
       <Sidebar
         indexPattern={indexPattern}
         indexPatterns={patterns}
@@ -747,7 +860,7 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
             })
             .catch((failure) => services.toasts.error(failure, 'The fields could not be read'));
         }}
-        columns={columns}
+        columns={sidebarColumns}
         rows={rows}
         onToggleColumn={(name) => {
           popularize(name);
@@ -912,39 +1025,7 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
           </div>
         )}
       </div>
-      {dialog === 'save' && (
-        <SaveModal
-          objectType="search"
-          intro="Save your Discover search so you can use it in visualizations and dashboards"
-          title={saved?.attributes.title ?? ''}
-          existing={Boolean(saved)}
-          onSave={save}
-          onClose={() => setDialog(undefined)}
-        />
-      )}
-      {dialog === 'open' && (
-        <OpenFlyout
-          title="Open search"
-          types={[{ type: 'search', name: 'Saved search', icon: 'discover' }]}
-          manageLink="/app/management/opensearch-dashboards/objects"
-          onClose={() => setDialog(undefined)}
-          onChoose={(object) => {
-            setDialog(undefined);
-            navigate(appUrl(basePath, `/view/${encodeURIComponent(object.id)}`, { _g: currentGlobalParam() }));
-            setOpenings((count) => count + 1);
-          }}
-        />
-      )}
-      {dialog === 'share' && (
-        <ShareModal
-          objectType="search"
-          savedUrl={saved ? `${window.location.origin}${href(appUrl(basePath, `/view/${encodeURIComponent(saved.id)}`))}` : undefined}
-          onClose={() => setDialog(undefined)}
-        />
-      )}
-      {dialog === 'inspect' && (
-        <Inspector title={saved?.attributes.title} requests={records} onClose={() => setDialog(undefined)} />
-      )}
+      {dialogs}
     </div>
   );
 }

@@ -6,6 +6,7 @@
  * the shell's.
  */
 
+import { decode } from '../../lib/rison';
 import { encodeState } from '../../lib/url';
 import { setHashParams } from '../../router';
 import { toggledColumns, type SortPair } from './doc_table';
@@ -14,13 +15,50 @@ import { toggledColumns, type SortPair } from './doc_table';
 export interface DiscoverAppState {
   columns: unknown;
   sort: unknown;
-  interval?: string;
+  interval?: unknown;
   /** A column was taken out or the columns reordered since the saved search was opened or saved */
   isDirty: boolean;
   savedQuery?: string;
   /** The saved search the state started from */
   savedSearch?: string;
   indexPattern?: string;
+}
+
+/** The title of the original's message for a state of the address it cannot read */
+export const RESTORE_ERROR_TITLE = 'Error restoring state from URL';
+
+/**
+ * Why a state of the address (`_a`, `_q`) cannot be read, in the words of the original's rison
+ * decoder; none when it reads or is not there
+ */
+export function stateReadError(raw: string | undefined): Error | undefined {
+  if (raw === undefined || raw === '') return undefined;
+  try {
+    decode(raw);
+    return undefined;
+  } catch (error) {
+    return error instanceof Error ? error : new Error(String(error));
+  }
+}
+
+/** Whether an address's `_a` holds a state the original reads: an object */
+export function isAppState(raw: string | undefined): boolean {
+  if (raw === undefined || raw === '') return false;
+  try {
+    const value = decode(raw);
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The columns of the state as the original's sidebar is given them: the names a list holds, none
+ * chosen when the list is empty (the table alone shows the whole source then), and none at all
+ * when they are no list
+ */
+export function stateColumnNames(columns: unknown): string[] | undefined {
+  return Array.isArray(columns) ? columns.filter((name): name is string => typeof name === 'string') : undefined;
 }
 
 /** The `_a` of a state, as the original writes it */
