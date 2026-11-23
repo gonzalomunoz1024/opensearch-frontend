@@ -2,27 +2,29 @@
 
 /* One panel of a dashboard: its title, its menu, and the visualization or saved search in it. */
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { ChartMessage } from '../../charts/core';
-import { Badge, IconButton, cx } from '../../components/basic';
-import { MenuButton, Tooltip, type MenuItem } from '../../components/overlay';
+import { Badge, cx } from '../../components/basic';
+import { Icon } from '../../components/icon';
+import { Tooltip, type ContextMenuItem } from '../../components/overlay';
 import type { Table } from '../../lib/aggs';
 import { resolveTimeRange, type TimeRange } from '../../lib/dates';
 import type { RawHit } from '../../lib/docs';
-import { phraseFilter } from '../../lib/query';
+import { existsFilter } from '../../lib/query';
 import { parseSearchSource } from '../../lib/search_source';
 import type { Filter, IndexPattern, Query } from '../../lib/types';
-import { visFromSavedObject, type UiState, type Vis, type VisualizationAttributes } from '../../lib/vis';
+import { visFromSavedObject, visType, type UiState, type Vis, type VisualizationAttributes } from '../../lib/vis';
 import { services } from '../../services';
 import { errorMessage } from '../../services/http';
 import type { SavedObject } from '../../services/saved_objects';
 import { searchFailure, totalOf, type RequestRecord } from '../../services/search';
+import { isPinned } from '../../shell/filter_bar';
 import type { VisInput } from '../../vis/request';
 import type { VisFailure } from '../../vis/types';
 import type { Turn } from '../../vis/turns';
 import type { VegaDebugValues } from '../../vis/vega/debug_view';
 import { Visualization, takesTurn } from '../../vis/visualization';
-import { DocTable, type SortPair } from '../discover/doc_table';
+import { DocTable, toggledColumns, type SortPair } from '../discover/doc_table';
 import {
   VIS_BUILDER_TYPE,
   schemaProblem,
@@ -32,9 +34,11 @@ import {
   type VisBuilderAttributes,
 } from '../vis_builder/model';
 import { DocDetails } from '../discover/doc_viewer';
+import { valueFilter } from '../discover/filters';
 import { buildDiscoverRequest } from '../discover/search';
 import { normalizeSort } from '../discover/sort';
-import type { PanelState } from './model';
+import { editorStateFor, existingFilter, offersInspector, takenAgain, type ContainerInfo, type PanelState } from './model';
+import { EDIT_NAMES, PanelMenu, type PanelAction } from './panel_menu';
 
 export interface LoadedObject {
   object?: SavedObject<Record<string, unknown>>;
@@ -76,6 +80,7 @@ function SearchPanel({
   /** What was changed on the panel: its own columns and sort, over the saved search's */
   config: Record<string, unknown>;
   onConfig?: (config: Record<string, unknown>) => void;
+  /** Takes the filters its buttons make, which go into the dashboard's own filters */
   onFilter?: (filters: Filter[]) => void;
   onData?: (data: PanelData) => void;
   /** Takes a failed search, and nothing once one succeeds: the panel's "Error" badge */
@@ -103,7 +108,13 @@ function SearchPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [JSON.stringify(config.sort), object.attributes.sort]
   );
-  const write = (changes: { columns?: string[]; sort?: SortPair[] }) => onConfig?.({ ...config, ...changes });
+  // Into the panel's own config, the keys in the order the original's embeddable writes them
+  const write = (changes: { sort?: SortPair[]; columns?: string[] }) => onConfig?.({ ...config, ...changes });
+  // As the original's: what is left, or the whole document when nothing is, and no sort on it
+  const removeColumn = (name: string) => {
+    const kept = columns.filter((column) => column !== name);
+    write({ sort: sort.filter(([field]) => field !== name), columns: kept.length > 0 ? kept : ['_source'] });
+  };
 
   useEffect(() => {
     let live = true;
@@ -175,6 +186,28 @@ function SearchPanel({
   // Nothing is drawn until the first search has finished
   if (!indexPattern || !found) return null;
   if (found.hits === 0) return <ChartMessage>No results found</ChartMessage>;
+  // The field as the index pattern has it, as the original's generateFilters takes it
+  const fieldOf = (name: string) => indexPattern.fields.find((candidate) => candidate.name === name) ?? { name };
+  const ownFilters = input.filters.filter((filter) => !isPinned(filter));
+  // As the original's search embeddable: a filter for each value of a list, in the dashboard's
+  // own filters; one the dashboard has for that value is taken again, turned on, as asked
+  const filterFor = onFilter
+    ? (name: string, value: unknown, negate: boolean) => {
+        const values = Array.isArray(value) ? value : [value];
+        onFilter(
+          values.map((item) => {
+            const existing = existingFilter(ownFilters, name, item, false);
+            return existing ? takenAgain(existing, negate) : valueFilter(fieldOf(name), item, negate, indexPattern.id, false);
+          })
+        );
+      }
+    : undefined;
+  const filterExists = onFilter
+    ? (name: string) => {
+        const existing = existingFilter(ownFilters, name, name, true);
+        onFilter([existing ? takenAgain(existing, false) : existsFilter(fieldOf(name), indexPattern.id)]);
+      }
+    : undefined;
   return (
     <div className="dshSearch" data-test-subj="embeddedSavedSearchDocTable">
       <DocTable
@@ -186,9 +219,7 @@ function SearchPanel({
         paged
         hits={found.hits}
         onSort={(next) => write({ sort: next })}
-        onRemoveColumn={(name) =>
-          write({ columns: columns.filter((column) => column !== name), sort: sort.filter(([field]) => field !== name) })
-        }
+        onRemoveColumn={removeColumn}
         onMoveColumn={(name, by) => {
           const from = columns.indexOf(name);
           const to = from + by;
@@ -198,18 +229,23 @@ function SearchPanel({
           next.splice(to, 0, name);
           write({ columns: next });
         }}
-        onFilter={
-          onFilter
-            ? (name, value, negate) => {
-                // The field as the index pattern has it, as the original's generateFilters takes it
-                const field = indexPattern.fields.find((candidate) => candidate.name === name) ?? { name };
-                const filter = phraseFilter(field, value, indexPattern.id);
-                filter.meta.negate = negate;
-                onFilter([filter]);
-              }
-            : undefined
-        }
-        details={(hit) => <DocDetails hit={hit} indexPattern={indexPattern} basePath="/app/discover" />}
+        onFilter={filterFor}
+        details={(hit, drawn) => (
+          <DocDetails
+            hit={hit}
+            indexPattern={indexPattern}
+            basePath="/app/discover"
+            appFilters={ownFilters}
+            actions={{
+              columns: drawn,
+              // As the original's: a column drawn is taken out (the time column the table adds of
+              // itself stays, and its sort goes), another is added
+              onToggleColumn: (name) => (drawn.includes(name) ? removeColumn(name) : write({ columns: toggledColumns(columns, name) })),
+              onFilter: filterFor,
+              onFilterExists: filterExists,
+            }}
+          />
+        )}
       />
     </div>
   );
@@ -223,12 +259,15 @@ export interface DashboardPanelProps {
   editing: boolean;
   hideTitle: boolean;
   expanded: boolean;
+  /** The dashboard, as "Edit visualization" names it to the editor, which comes back to it */
+  container: ContainerInfo;
   dragging?: boolean;
   onDragStart?: (event: ReactPointerEvent, panelIndex: string) => void;
   onResizeStart?: (event: ReactPointerEvent, panelIndex: string) => void;
-  onAction: (action: 'expand' | 'inspect' | 'remove' | 'replace' | 'rename', panelIndex: string) => void;
+  onAction: (action: PanelAction, panelIndex: string) => void;
   onConfig: (panelIndex: string, config: Record<string, unknown>) => void;
-  onFilter: (filters: Filter[]) => void;
+  /** `asGiven` for a saved search's filters, which stay in the dashboard's own filters */
+  onFilter: (filters: Filter[], asGiven?: boolean) => void;
   onFiltersChange: (filters: Filter[]) => void;
   onTimeChange: (range: TimeRange) => void;
   onData: (panelIndex: string, data: PanelData) => void;
@@ -241,6 +280,31 @@ const TYPE_NAMES: Record<string, string> = {
   'observability-visualization': 'Observability visualizations',
 };
 
+const ADVANCED_SETTINGS_DOCS = 'https://opensearch.org/docs/latest/dashboards/management/advanced-settings/';
+
+/** Whether visualizations of the kinds still being tried out are drawn: the original's setting */
+const labsEnabled = () => services.uiSettings.get<boolean>('visualize:enableLabs', true) !== false;
+
+/**
+ * What the original draws in place of a visualization of a kind still being tried out (input
+ * controls) while those are turned off. Its title is left as plain text, as the original leaves it.
+ */
+function DisabledLabVisualization({ title }: { title: string }) {
+  return (
+    <div className="dshLabDisabled">
+      <div className="dshLabDisabled__prompt" data-test-subj="visDisabledLabVisualization">
+        <Icon name="beaker" className="dshLabDisabled__icon" />
+        <span className="dshLabDisabled__title">
+          <em className="visDisabledLabVisualizationtitle">{title}</em> is an experimental visualization.
+        </span>
+        <p className="dshLabDisabled__body">
+          Enable experimental visualizations within <a href={ADVANCED_SETTINGS_DOCS}>Advanced Settings</a>.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export const DashboardPanel = memo(function DashboardPanel({
   panel,
   loaded,
@@ -249,6 +313,7 @@ export const DashboardPanel = memo(function DashboardPanel({
   editing,
   hideTitle,
   expanded,
+  container,
   dragging,
   onDragStart,
   onResizeStart,
@@ -284,8 +349,13 @@ export const DashboardPanel = memo(function DashboardPanel({
     return { ...vis.uiState, ...config, vis: { ...vis.uiState.vis, ...config.vis } };
   }, [vis, visBuilder, panel.embeddableConfig]);
 
+  // A visualization of a kind still being tried out, while those are turned off, is not drawn.
+  // The original then puts in a panel of its own, cut off from the dashboard: it keeps the title
+  // its object has and stays as when viewed, with nothing in its menu.
+  const labDisabled = Boolean(vis && panel.type === 'visualization' && visType(vis.type)?.stage === 'experimental' && !labsEnabled());
+
   // A panel that takes no colours from the page's memory lets the next one go at once
-  const waits = Boolean(vis && takesTurn(vis.type));
+  const waits = Boolean(vis && !labDisabled && takesTurn(vis.type));
   useEffect(() => {
     if (loaded && !waits) turn?.done();
   }, [loaded, waits, turn]);
@@ -302,8 +372,29 @@ export const DashboardPanel = memo(function DashboardPanel({
   const failure = failed && failed.object === object ? failed.failure : undefined;
 
   const objectTitle = (object?.attributes as { title?: string } | undefined)?.title ?? '';
-  const title = panel.title ?? objectTitle;
-  const titleHidden = hideTitle || panel.embeddableConfig.hidePanelTitles === true || title === '';
+  const title = labDisabled && vis ? vis.title : (panel.title ?? objectTitle);
+  // A visualization's description is told by an icon beside the title, as in the original
+  const description = vis && !labDisabled ? vis.description : '';
+  // As the original: no title when the dashboard or the panel hides them; while editing, an
+  // untitled panel says so
+  // The panel's own setting, when it has one, over the dashboard's, as in the original
+  const own = panel.embeddableConfig.hidePanelTitles;
+  const titleHidden = typeof own === 'boolean' ? own : hideTitle;
+  const showTitle = !titleHidden && ((editing && !labDisabled) || title !== '');
+  const showPanelBar = (editing && !labDisabled) || showTitle || description !== '';
+  const labelId = useId();
+
+  // The inspector is offered for what asked for data, as the original offers it, but not for the
+  // kinds of visualization the original gives it nothing for
+  const [inspectable, setInspectable] = useState(false);
+  const inspectorOffered = inspectable && (!vis || offersInspector(vis.type));
+  const reportData = useCallback(
+    (data: PanelData) => {
+      if (data.requests.length > 0 || data.table) setInspectable(true);
+      onData(id, data);
+    },
+    [id, onData]
+  );
 
   let body: ReactNode;
   if (!loaded) body = null;
@@ -314,6 +405,8 @@ export const DashboardPanel = memo(function DashboardPanel({
         <span>{loaded.error ?? visError ?? 'Its saved object was not found'}</span>
       </div>
     );
+  } else if (vis && labDisabled) {
+    body = vis.title ? <DisabledLabVisualization title={vis.title} /> : null;
   } else if (vis) {
     body = (
       <Visualization
@@ -325,7 +418,7 @@ export const DashboardPanel = memo(function DashboardPanel({
         onFilter={onFilter}
         onFiltersChange={onFiltersChange}
         onTimeChange={onTimeChange}
-        onData={(data) => onData(id, data)}
+        onData={reportData}
         turn={turn}
         onError={setFailure}
       />
@@ -338,8 +431,8 @@ export const DashboardPanel = memo(function DashboardPanel({
         tick={tick}
         config={panel.embeddableConfig}
         onConfig={(next) => onConfig(id, next)}
-        onFilter={onFilter}
-        onData={(data) => onData(id, data)}
+        onFilter={(filters) => onFilter(filters, true)}
+        onData={reportData}
         onError={setFailure}
       />
     );
@@ -347,70 +440,90 @@ export const DashboardPanel = memo(function DashboardPanel({
     body = <ChartMessage>{TYPE_NAMES[panel.type] ?? `Panels of the type ${panel.type}`} are not drawn by this build.</ChartMessage>;
   }
 
-  const items: MenuItem[] = [
-    ...(editing && vis && vis.id
-      ? [
-          {
-            id: 'edit',
-            label: 'Edit visualization',
-            icon: 'pencil' as const,
-            to: visBuilder ? visBuilderEditUrl(vis.id) : `/app/visualize#/edit/${encodeURIComponent(vis.id)}`,
-            testId: 'embeddablePanelAction-editPanel',
-          },
-        ]
-      : []),
-    ...(editing ? [{ id: 'rename', label: 'Edit panel title', icon: 'text' as const, onClick: () => onAction('rename', id) }] : []),
-    { id: 'inspect', label: 'Inspect', icon: 'inspect', onClick: () => onAction('inspect', id), testId: 'embeddablePanelAction-openInspector' },
-    {
-      id: 'expand',
-      label: expanded ? 'Minimize' : 'Maximize panel',
-      icon: expanded ? 'collapse' : 'expand',
-      onClick: () => onAction('expand', id),
-      testId: 'embeddablePanelAction-togglePanel',
-    },
-    ...(editing
-      ? [
-          { id: 'replace', label: 'Replace panel', icon: 'refresh' as const, onClick: () => onAction('replace', id) },
-          {
-            id: 'remove',
-            label: 'Delete from dashboard',
-            icon: 'trash' as const,
-            danger: true,
-            separated: true,
-            onClick: () => onAction('remove', id),
-            testId: 'embeddablePanelAction-deletePanel',
-          },
-        ]
-      : []),
-  ];
+  const editTo =
+    panel.type === 'search' && object
+      ? `/app/discover#/view/${encodeURIComponent(object.id)}`
+      : vis?.id
+        ? visBuilder
+          ? visBuilderEditUrl(vis.id)
+          : `/app/visualize#/edit/${encodeURIComponent(vis.id)}`
+        : undefined;
+  const usable = Boolean(object) && !loaded?.error && !visError;
+  const items: ContextMenuItem[] = labDisabled
+    ? []
+    : [
+        ...(editing && usable && editTo
+          ? [
+              {
+                id: 'edit',
+                label: `Edit ${EDIT_NAMES[panel.type] ?? panel.type}`,
+                icon: 'pencil' as const,
+                to: editTo,
+                // What the original's edit action hands the editor, to come back with the panel
+                state: editorStateFor(id, container),
+                testId: 'embeddablePanelAction-editPanel',
+              },
+            ]
+          : []),
+        ...(editing && usable
+          ? [{ id: 'clone', label: 'Clone panel', icon: 'copy' as const, onClick: () => onAction('clone', id), testId: 'embeddablePanelAction-clonePanel' }]
+          : []),
+        ...(editing
+          ? [
+              {
+                id: 'rename',
+                label: 'Edit panel title',
+                icon: 'pencil' as const,
+                onClick: () => onAction('rename', id),
+                testId: 'embeddablePanelAction-ACTION_CUSTOMIZE_PANEL',
+              },
+            ]
+          : []),
+        ...(inspectorOffered
+          ? [{ id: 'inspect', label: 'Inspect', icon: 'inspect' as const, onClick: () => onAction('inspect', id), testId: 'embeddablePanelAction-openInspector' }]
+          : []),
+        {
+          id: 'expand',
+          label: expanded ? 'Minimize' : 'Maximize panel',
+          // The original draws both with the same icon, OUI having none for the way back
+          icon: 'expand',
+          onClick: () => onAction('expand', id),
+          testId: 'embeddablePanelAction-togglePanel',
+        },
+        ...(editing
+          ? [
+              { id: 'replace', label: 'Replace panel', icon: 'kqlOperand' as const, onClick: () => onAction('replace', id), testId: 'embeddablePanelAction-replacePanel' },
+              { id: 'remove', label: 'Delete from dashboard', icon: 'trash' as const, onClick: () => onAction('remove', id), testId: 'embeddablePanelAction-deletePanel' },
+            ]
+          : []),
+      ];
 
   return (
     <section
       className={cx('dshPanel', 'atlPanel', 'atlPanel--flush', editing && 'dshPanel--editing', dragging && 'dshPanel--dragging')}
       data-test-subj="embeddablePanel"
-      aria-label={title || 'Panel'}
+      aria-labelledby={labelId}
     >
       <header
-        className={cx('dshPanel__header', titleHidden && !editing && 'dshPanel__header--floating')}
+        className={cx('dshPanel__header', !showPanelBar && 'dshPanel__header--floating')}
         onPointerDown={editing && onDragStart ? (event) => onDragStart(event, id) : undefined}
       >
-        <h2 className="dshPanel__title atlTruncate" title={title} data-test-subj="dashboardPanelTitle">
-          {titleHidden ? '' : title}
-        </h2>
-        <MenuButton
-          align="right"
-          items={items}
-          button={(toggle) => (
-            <IconButton
-              icon={editing ? 'gear' : 'dots'}
-              size="s"
-              label="Panel options"
-              className="dshPanel__menu"
-              onClick={toggle}
-              testId="embeddablePanelToggleMenuIcon"
-            />
+        <h2 className="dshPanel__title atlTruncate" title={showTitle ? title : undefined} data-test-subj="dashboardPanelTitle">
+          <span id={labelId} className="atlScreenReaderOnly">
+            {showPanelBar && title ? `Dashboard panel: ${title}` : 'Dashboard panel'}
+          </span>
+          {description ? (
+            <Tooltip content={description}>
+              <span className="dshPanel__titleInner">
+                {showTitle && <span className="dshPanel__titleText">{title || <span className="dshPanel__noTitle">[No Title]</span>}</span>}{' '}
+                <Icon name="info" className="dshPanel__info" />
+              </span>
+            </Tooltip>
+          ) : (
+            showTitle && (title || <span className="dshPanel__noTitle">[No Title]</span>)
           )}
-        />
+        </h2>
+        <PanelMenu editing={editing && !labDisabled} items={items} />
       </header>
       {failure && (
         <div className="dshPanel__label">
@@ -421,7 +534,10 @@ export const DashboardPanel = memo(function DashboardPanel({
           </Tooltip>
         </div>
       )}
-      <div className={cx('dshPanel__body', panel.type === 'search' && 'dshPanel__body--flush')} data-error={failure ? true : undefined}>
+      <div
+        className={cx('dshPanel__body', (labDisabled || panel.type === 'search') && 'dshPanel__body--flush')}
+        data-error={failure ? true : undefined}
+      >
         {body}
       </div>
       {editing && onResizeStart && (
