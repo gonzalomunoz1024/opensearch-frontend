@@ -21,7 +21,7 @@ import {
   type ReactNode,
 } from 'react';
 import { Spinner, cx } from '../../components/basic';
-import { SearchField } from '../../components/form';
+import { SearchField, Switch } from '../../components/form';
 import { Icon } from '../../components/icon';
 import { Popover, Tooltip } from '../../components/overlay';
 import { resolveTimeRange, type TimeRange } from '../../lib/dates';
@@ -29,7 +29,7 @@ import type { RawHit } from '../../lib/docs';
 import { buildQuery, mergeFilters, sameFilter, timeRangeFilter } from '../../lib/query';
 import type { Filter, IndexPattern, Query } from '../../lib/types';
 import { appUrl, buildHash, encodeState } from '../../lib/url';
-import { getLocation, href, locationState, navigate, setHashParams, useLocation, useUrlState } from '../../router';
+import { getLocation, href, lastAddressOf, navigate, setHashParams, useLocation, useUrlState } from '../../router';
 import { services } from '../../services';
 import { HttpFetchError, errorMessage } from '../../services/http';
 import { patternName } from '../../services/index_patterns';
@@ -42,15 +42,14 @@ import { SearchBar } from '../../shell/search_bar';
 import { addRecentlyAccessed, currentGlobalParam, useAutoRefresh, useBreadcrumbs, useGlobalState } from '../../shell/state';
 import { visContext, type VisInput } from '../../vis/request';
 import { documentFields, sortClause } from '../discover/search';
+import { incomingEditorState, originatingAppUrl, type EmbeddableEditorState } from '../visualize/state_transfer';
+import { returnSwitch } from '../visualize/top_nav';
 import { DataTab } from './data_tab';
 import {
   afterChange,
-  handedBack,
-  incomingEditorState,
   lastAddressIn,
   newAppState,
   openedState,
-  originAddress,
   originatingAppOf,
   readAppState,
   saveDisabledReason,
@@ -58,7 +57,6 @@ import {
   withIndexPattern,
   withStatus,
   type AppState,
-  type IncomingEditorState,
 } from './editor_state';
 import {
   VIS_BUILDER_APP,
@@ -69,7 +67,6 @@ import {
   type SavedVisBuilder,
   type VisBuilderAttributes,
 } from './model';
-import { OriginSaveModal } from './save_modal';
 import { StylePanel } from './style_panel';
 import { Workspace } from './workspace';
 
@@ -99,9 +96,6 @@ function writeApp(state: AppState) {
 
 const readApp = () => readAppState(getLocation().hashParams._a);
 
-/** What the application that sent someone here left in the entry of the history */
-const incoming = () => incomingEditorState(locationState<unknown>());
-
 /** The history of the tab, where the browser lists it (its Navigation API) */
 interface TabHistory {
   entries?: () => Array<{ url?: string | null }>;
@@ -109,7 +103,7 @@ interface TabHistory {
 }
 
 /** The address an application was last at in this tab, where the browser tells */
-function lastAddressOf(app: string): string | undefined {
+function lastAddressInTab(app: string): string | undefined {
   const history = (window as { navigation?: TabHistory }).navigation;
   const entries = history?.entries?.();
   const at = history?.currentEntry?.index;
@@ -139,11 +133,12 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
   // What the application that sent someone here handed over. The entry of the history the page
   // was opened in carries it, those the page adds as its query or its time changes do not: it is
   // kept from when it was last seen.
-  const sentFrom = useRef<IncomingEditorState>({});
+  const sentFrom = useRef<EmbeddableEditorState | undefined>(undefined);
   useEffect(() => {
-    const now = incoming();
-    if (now.originatingApp) sentFrom.current = now;
+    sentFrom.current = incomingEditorState() ?? sentFrom.current;
   }, [location]);
+  // Whether the save dialog goes back to the application that opened the page
+  const [returnToOrigin, setReturnToOrigin] = useState(false);
 
   const app = useMemo(() => readAppState(location.hashParams._a), [location.hashParams._a]);
 
@@ -162,7 +157,7 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
       if (!savedId) {
         // A page just arrived at keeps the application it was sent from, as there; a state in the
         // address says so itself
-        const state = readApp() ?? newAppState(await services.indexPatterns.defaultId().catch(() => undefined), incoming().originatingApp);
+        const state = readApp() ?? newAppState(await services.indexPatterns.defaultId().catch(() => undefined), incomingEditorState()?.originatingApp);
         if (!live) return;
         setSaved(undefined);
         writeApp(withStatus(state, 'clean'));
@@ -173,7 +168,7 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
         const loaded = visBuilderFromSavedObject(await services.savedObjects.get<VisBuilderAttributes>(VIS_BUILDER_TYPE, savedId));
         if (!live) return;
         setSaved(loaded);
-        writeApp(openedState(readApp(), loaded, incoming().originatingApp));
+        writeApp(openedState(readApp(), loaded, incomingEditorState()?.originatingApp));
         // What it was saved with becomes the page's query and filters, but for those pinned already
         const pinned = pinnedFilters.current;
         setQueryState(
@@ -310,7 +305,7 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
   // The application a panel was sent from: a dashboard, to go back to once it is saved
   const originatingApp = app ? originatingAppOf(app) : undefined;
 
-  const save = async ({ title: newTitle, description, asNew, returnToOrigin }: SaveResult & { returnToOrigin?: boolean }) => {
+  const save = async ({ title: newTitle, description, asNew, returnToOrigin: returning }: SaveResult & { returnToOrigin?: boolean }) => {
     const current = readApp();
     if (!current) return;
     const { attributes, references } = visBuilderToSavedObject(
@@ -324,14 +319,17 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
         references,
       });
       services.toasts.success(`Saved '${newTitle}'`);
-      if (originatingApp && returnToOrigin) {
-        // Back where it came from, as there: what is new there is handed over to become a panel
-        const from = sentFrom.current;
-        const newlyCreated = !savedId || asNew;
-        navigate(originAddress(originatingApp, from, lastAddressOf(originatingApp)), {
-          force: true,
-          state: handedBack(VIS_BUILDER_TYPE, stored.id, newlyCreated, from),
+      if (originatingApp && returning) {
+        // Back where it came from, as the original's `navigateToApp(originatingApp)`: where the
+        // dashboards were last, with the time range of now. What is new, or a copy, is handed over
+        // to become a panel there; what was saved over itself is drawn again by the panel it has.
+        const back = originatingAppUrl(originatingApp, {
+          lastAddress: lastAddressOf(originatingApp) ?? lastAddressInTab(originatingApp),
+          containerInfo: sentFrom.current?.containerInfo,
+          globalParam: currentGlobalParam(),
         });
+        const newlyCreated = !savedId || asNew;
+        navigate(back, { force: true, state: newlyCreated ? { type: VIS_BUILDER_TYPE, input: { savedObjectId: stored.id } } : undefined });
         return;
       }
       setSaving(false);
@@ -382,6 +380,7 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
   // As the original's: once saved and opened from another application, saving is "Save as" and
   // beside it "Save and return" saves over it and goes back; both say why they cannot be pressed
   const fromOrigin = Boolean(savedId && originatingApp);
+  const returns = Boolean(originatingApp) && returnToOrigin;
   const withReason = (button: ReactNode) => (reason ? <Tooltip content={reason} position="bottom">{button}</Tooltip> : button);
   const navItems: TopNavItem[] = [
     {
@@ -390,7 +389,11 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
       icon: fromOrigin ? undefined : 'save',
       emphasize: !savedId,
       disabled: Boolean(reason),
-      onClick: () => setSaving(true),
+      onClick: () => {
+        // Going back is what the dialog offers first, as the original's
+        setReturnToOrigin(Boolean(originatingApp));
+        setSaving(true);
+      },
       testId: 'visBuilderSaveButton',
       wrap: withReason,
     },
@@ -463,29 +466,28 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
           </div>
         </div>
       </div>
-      {saving &&
-        (originatingApp ? (
-          <OriginSaveModal
-            savedObjectType={VIS_BUILDER_TYPE}
-            savedId={savedId}
-            title={title}
-            description={saved?.description}
-            originatingApp={originatingApp}
-            onSave={save}
-            onClose={() => setSaving(false)}
-          />
-        ) : (
-          <SaveModal
-            objectType="visualization"
-            savedObjectType={VIS_BUILDER_TYPE}
-            title={title}
-            description={saved?.description}
-            showDescription
-            existing={Boolean(savedId)}
-            onSave={save}
-            onClose={() => setSaving(false)}
-          />
-        ))}
+      {saving && (
+        <SaveModal
+          objectType="visualization"
+          savedObjectType={VIS_BUILDER_TYPE}
+          title={title}
+          description={saved?.description}
+          showDescription
+          existing={Boolean(savedId)}
+          id={savedId}
+          // Opened from a dashboard, a saved visualization is saved as a new one unless told otherwise
+          initialAsNew={Boolean(savedId) && Boolean(originatingApp)}
+          confirmLabel={returns ? 'Save and return' : undefined}
+          options={({ asNew }) => {
+            const offer = returnSwitch(originatingApp, savedId, asNew);
+            return offer.shown ? (
+              <Switch compressed checked={returnToOrigin} onChange={setReturnToOrigin} label={offer.label} testId="returnToOriginModeSwitch" />
+            ) : null;
+          }}
+          onSave={(result) => save({ ...result, returnToOrigin: returns && returnSwitch(originatingApp, savedId, Boolean(savedId) && result.asNew).shown })}
+          onClose={() => setSaving(false)}
+        />
+      )}
     </div>
   );
 }

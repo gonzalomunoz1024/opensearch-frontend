@@ -8,21 +8,15 @@ import {
   aggregationsProblem,
   droppedAggs,
   fieldDetails,
-  handedBack,
-  incomingEditorState,
   lastAddressIn,
   newAppState,
   newDraft,
   openedState,
-  originAddress,
-  originName,
   originatingAppOf,
   persistedAggs,
   readAppState,
-  returnSwitchLabel,
   saveDisabledReason,
   schemaAggTypes,
-  titleTaken,
   urlAppState,
   validAggTypes,
   withAggs,
@@ -171,14 +165,6 @@ describe('the VisBuilder page state', () => {
 });
 
 describe('a VisBuilder page opened from a dashboard', () => {
-  const VIS = 'visualization-visbuilder';
-  // What the dashboard's "Edit visBuilder" leaves in the entry of the history
-  const SENT = {
-    originatingApp: 'dashboards',
-    valueInput: undefined,
-    embeddableId: 'panel-1',
-    containerInfo: { containerName: 'zz-agent-vb dashboard', containerId: 'dash-1' },
-  };
   const saved = { state: { style: kind('line').style(), ui: {}, visualization: { searchField: '', activeVisualization: { name: 'line', aggConfigParams: [COUNT] }, indexPattern: 'a' } } };
 
   it('keeps where it came from in the address, as OpenSearch Dashboards writes it', () => {
@@ -208,32 +194,7 @@ describe('a VisBuilder page opened from a dashboard', () => {
     assert.equal(originatingAppOf({ ...opened, metadata: { ...opened.metadata, originatingApp: '' } }), undefined);
   });
 
-  it('reads what the entry of the history carries, whatever that is', () => {
-    assert.deepEqual(incomingEditorState(SENT), {
-      originatingApp: 'dashboards',
-      embeddableId: 'panel-1',
-      containerInfo: { containerName: 'zz-agent-vb dashboard', containerId: 'dash-1' },
-    });
-    // "Create new" hands over the application alone
-    assert.deepEqual(incomingEditorState({ originatingApp: 'dashboards' }), { originatingApp: 'dashboards' });
-    assert.deepEqual(incomingEditorState(undefined), {});
-    assert.deepEqual(incomingEditorState(null), {});
-    assert.deepEqual(incomingEditorState('dashboards'), {});
-    assert.deepEqual(incomingEditorState({ originatingApp: 7, embeddableId: {}, containerInfo: 'x' }), {});
-    // a panel handed to a dashboard is not what an editor is sent
-    assert.deepEqual(incomingEditorState({ type: VIS, input: { savedObjectId: 'a' } }), {});
-  });
-
-  it('hands a new visualization or a copy over as a new panel, and one saved over itself as its own panel', () => {
-    const from = incomingEditorState(SENT);
-    assert.deepEqual(handedBack(VIS, 'new-1', true, from), { type: VIS, input: { savedObjectId: 'new-1' } });
-    assert.deepEqual(handedBack(VIS, 'vis-1', false, from), { type: VIS, input: { savedObjectId: 'vis-1' }, embeddableId: 'panel-1' });
-    // with no word of the panel, nothing is handed over: the dashboard has it already
-    assert.equal(handedBack(VIS, 'vis-1', false, {}), undefined);
-    assert.deepEqual(handedBack(VIS, 'new-1', true, {}), { type: VIS, input: { savedObjectId: 'new-1' } });
-  });
-
-  it('goes back to the address the dashboards were last at in the tab', () => {
+  it('finds the address the dashboards were last at among the entries of the tab', () => {
     const origin = 'http://localhost:5655';
     const entries = [
       `${origin}/app/home`,
@@ -251,55 +212,12 @@ describe('a VisBuilder page opened from a dashboard', () => {
     assert.equal(lastAddressIn(entries, 1, 'dashboards', origin, ''), undefined);
     assert.equal(lastAddressIn(entries, 9, 'dashboards', origin, ''), '/app/dashboards#/view/later');
     assert.equal(lastAddressIn(entries, 4, 'visualize', origin, ''), undefined);
-    // the older path of the dashboards, a base path a proxy put in front, another site, an entry with no address
-    assert.equal(lastAddressIn([`${origin}/app/dashboard?embed=true#/create`, null, 'not an address'], 3, 'dashboards', origin, ''), '/app/dashboard?embed=true#/create');
+    // an entry with no address, a base path a proxy put in front, another site, another application
+    assert.equal(lastAddressIn([`${origin}/app/dashboards?embed=true#/create`, null, 'not an address'], 3, 'dashboards', origin, ''), '/app/dashboards?embed=true#/create');
     assert.equal(lastAddressIn([`${origin}/base/app/dashboards#/create`], 1, 'dashboards', origin, '/base'), '/app/dashboards#/create');
     assert.equal(lastAddressIn([`${origin}/app/dashboards#/create`], 1, 'dashboards', origin, '/base'), undefined);
     assert.equal(lastAddressIn(['http://elsewhere.example/app/dashboards#/create'], 1, 'dashboards', origin, ''), undefined);
     assert.equal(lastAddressIn([`${origin}/app/dashboards-other#/create`], 1, 'dashboards', origin, ''), undefined);
-  });
-
-  it('goes back to the dashboard the panel is in when the browser does not tell', () => {
-    const from = incomingEditorState(SENT);
-    assert.equal(originAddress('dashboards', from, '/app/dashboards#/view/dash-1?_a=(viewMode:edit)'), '/app/dashboards#/view/dash-1?_a=(viewMode:edit)');
-    assert.equal(originAddress('dashboards', from, undefined), '/app/dashboards#/view/dash-1');
-    assert.equal(
-      originAddress('dashboards', { containerInfo: { containerName: 'a', containerId: 'a b/c' } }, undefined),
-      '/app/dashboards#/view/a%20b%2Fc'
-    );
-    // a dashboard never saved has no id: a new one, which takes the panel
-    assert.equal(originAddress('dashboards', { containerInfo: { containerName: '', containerId: '' } }, undefined), '/app/dashboards#/create');
-    // nothing known of the place: the application as it opens, as OpenSearch Dashboards
-    assert.equal(originAddress('dashboards', {}, undefined), '/app/dashboards');
-    assert.equal(originAddress('visualize', from, undefined), '/app/visualize');
-  });
-
-  it('offers to go back as the save dialog of OpenSearch Dashboards says it', () => {
-    assert.equal(originName('dashboards'), 'Dashboards');
-    assert.equal(originName('somewhere'), 'somewhere');
-    // never saved: added; saved as a copy: added; saved over itself: returned to
-    assert.equal(returnSwitchLabel('dashboards', false, false), 'Add to Dashboards after saving');
-    assert.equal(returnSwitchLabel('dashboards', true, true), 'Add to Dashboards after saving');
-    assert.equal(returnSwitchLabel('dashboards', true, false), 'Return to Dashboards after saving');
-    // only a dashboard takes a copy as a new panel
-    assert.equal(returnSwitchLabel('somewhere', true, true), undefined);
-    assert.equal(returnSwitchLabel('somewhere', true, false), 'Return to somewhere after saving');
-  });
-
-  it('asks before a title is used twice, but not for the object saved over itself', () => {
-    const found = [
-      { id: 'a', title: 'Bytes over time' },
-      { id: 'b', title: 'bytes over time' },
-      { id: 'c', title: 'Bytes over time, by host' },
-    ];
-    assert.equal(titleTaken(found, 'Bytes over time', undefined), true);
-    assert.equal(titleTaken(found, 'BYTES OVER TIME', undefined), true);
-    // the first found with the title decides, as there
-    assert.equal(titleTaken(found, 'bytes over time', 'a'), false);
-    assert.equal(titleTaken(found, 'bytes over time', 'b'), true);
-    assert.equal(titleTaken(found, 'Bytes', undefined), false);
-    assert.equal(titleTaken([], 'Bytes over time', undefined), false);
-    assert.equal(titleTaken([{ id: 'd' }], 'Bytes over time', undefined), false);
   });
 });
 

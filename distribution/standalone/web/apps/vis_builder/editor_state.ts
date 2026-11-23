@@ -143,65 +143,10 @@ export const originatingAppOf = (state: AppState): string | undefined =>
   typeof state.metadata.originatingApp === 'string' && state.metadata.originatingApp !== '' ? state.metadata.originatingApp : undefined;
 
 /**
- * What the entry of the history carries when another application sent someone here to edit a
- * panel or to make one (the original's EmbeddableEditorState): the application, the panel and
- * the dashboard it is in
- */
-export interface IncomingEditorState {
-  originatingApp?: string;
-  embeddableId?: string;
-  containerInfo?: { containerName?: string; containerId?: string };
-}
-
-/** The state of the history read as that, whatever it holds */
-export function incomingEditorState(state: unknown): IncomingEditorState {
-  if (!isObject(state)) return {};
-  const container = isObject(state.containerInfo) ? state.containerInfo : undefined;
-  return {
-    ...(typeof state.originatingApp === 'string' && state.originatingApp !== '' ? { originatingApp: state.originatingApp } : {}),
-    ...(typeof state.embeddableId === 'string' ? { embeddableId: state.embeddableId } : {}),
-    ...(container
-      ? {
-          containerInfo: {
-            ...(typeof container.containerName === 'string' ? { containerName: container.containerName } : {}),
-            ...(typeof container.containerId === 'string' ? { containerId: container.containerId } : {}),
-          },
-        }
-      : {}),
-  };
-}
-
-/** What is handed back to the application a panel came from (the original's EmbeddablePackageState) */
-export interface HandedBack {
-  type: string;
-  input: { savedObjectId: string };
-  embeddableId?: string;
-}
-
-/**
- * What a save that goes back hands the application it goes back to, as the original: a
- * visualization that is new, or saved as a copy, is handed over to become a new panel, with no
- * word of the panel it was opened from. One saved over itself is handed over by nothing there, its
- * panel being in the dashboard still; here it names that panel when it knows it, which changes
- * nothing in a dashboard that has the panel and puts it back in one opened afresh that has not.
- */
-export function handedBack(
-  type: string,
-  savedObjectId: string,
-  newlyCreated: boolean,
-  incoming: IncomingEditorState
-): HandedBack | undefined {
-  if (newlyCreated) return { type, input: { savedObjectId } };
-  return incoming.embeddableId === undefined ? undefined : { type, input: { savedObjectId }, embeddableId: incoming.embeddableId };
-}
-
-/** The paths an application is served at: the dashboards have an older one too */
-const appPaths = (app: string) => (app === 'dashboards' ? ['/app/dashboards', '/app/dashboard'] : [`/app/${app}`]);
-
-/**
  * The address an application was last at before the entry of the history the page is in, among
- * the addresses of the entries of this tab: the original keeps the address each of its
- * applications was left at, and goes back to that
+ * the addresses of the entries of this tab, as the browser lists them. The original keeps the
+ * address each of its applications was left at in the session's storage; the router here keeps it
+ * since the page loaded, and this finds it again once the page was loaded anew in the editor.
  */
 export function lastAddressIn(
   entries: ReadonlyArray<string | null | undefined>,
@@ -210,7 +155,6 @@ export function lastAddressIn(
   origin: string,
   basePath: string
 ): string | undefined {
-  const paths = appPaths(app);
   for (let index = Math.min(at, entries.length) - 1; index >= 0; index--) {
     const raw = entries[index];
     if (!raw) continue;
@@ -222,45 +166,9 @@ export function lastAddressIn(
     }
     if (url.origin !== origin || !url.pathname.startsWith(basePath)) continue;
     const path = url.pathname.slice(basePath.length);
-    if (paths.includes(path)) return `${path}${url.search}${url.hash}`;
+    if (path === `/app/${app}`) return `${path}${url.search}${url.hash}`;
   }
   return undefined;
-}
-
-/**
- * Where a save goes back to: the address the application was last at in this tab, when the
- * browser tells it; else the dashboard the panel is in, a new one when that was never saved, and
- * the application as it opens when nothing says where the panel is.
- */
-export function originAddress(originatingApp: string, incoming: IncomingEditorState, lastAddress: string | undefined): string {
-  if (lastAddress) return lastAddress;
-  const container = originatingApp === 'dashboards' ? incoming.containerInfo : undefined;
-  if (!container) return `/app/${originatingApp}`;
-  return container.containerId ? `/app/dashboards#/view/${encodeURIComponent(container.containerId)}` : '/app/dashboards#/create';
-}
-
-/** The applications a panel is sent from, by the name the original's navigation gives them */
-const APP_NAMES: Record<string, string> = { dashboards: 'Dashboards' };
-
-export const originName = (app: string) => APP_NAMES[app] ?? app;
-
-/**
- * What the switch under the save dialog's form says, or nothing when there is none: a copy can
- * only be added to a dashboard, and what was never saved, or is saved as a copy, is added rather
- * than returned to
- */
-export function returnSwitchLabel(originatingApp: string, existing: boolean, copy: boolean): string | undefined {
-  if (copy && originatingApp !== 'dashboards') return undefined;
-  return `${!existing || copy ? 'Add' : 'Return'} to ${originName(originatingApp)} after saving`;
-}
-
-/**
- * Whether a title is taken, as the original asks: by the first object found to have it, whatever
- * the case of its letters, unless that is the object being saved over itself
- */
-export function titleTaken(found: ReadonlyArray<{ id: string; title?: string }>, title: string, savedOver: string | undefined): boolean {
-  const first = found.find((object) => object.title?.toLowerCase() === title.toLowerCase());
-  return first !== undefined && first.id !== savedOver;
 }
 
 /** Whether a part of the page holds something invalid: the panel that edits an aggregation */
