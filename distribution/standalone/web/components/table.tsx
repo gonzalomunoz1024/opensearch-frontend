@@ -303,6 +303,9 @@ export function Pagination({
   pageSizes,
   onPageSize,
   total,
+  className,
+  controls,
+  arrowNames = 'numbered',
 }: {
   page: number;
   pages: number;
@@ -311,10 +314,28 @@ export function Pagination({
   pageSizes?: number[];
   onPageSize?: (size: number) => void;
   total?: number;
+  /** A class of the page's own beside the kit's, for where it stands */
+  className?: string;
+  /**
+   * The id of what the pages belong to. Given it, that takes the focus before the page changes, as
+   * the original's table does under its pages: the view comes back to the table.
+   */
+  controls?: string;
+  /**
+   * What the arrows are called: 'numbered' with the page each leads to ("Next page, 3"), as the
+   * original's component library says, or 'plain' ("Next page"), as the original's own translations
+   * say where they reach: the pages of Dashboards, Visualize and Discover.
+   */
+  arrowNames?: 'numbered' | 'plain';
 }) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
   const buttons = pageButtons(pages, page);
+  const go = (target: number) => {
+    if (controls) document.getElementById(controls)?.focus();
+    onPage(target);
+  };
+  const numbered = arrowNames === 'numbered';
   // What a screen reader hears of "…": the pages it skips, as the original's
   const skipped = (index: number) => {
     const before = buttons[index - 1];
@@ -322,7 +343,7 @@ export function Pagination({
     return typeof before === 'number' && typeof after === 'number' ? `Skipping pages ${before + 2} to ${after}` : undefined;
   };
   return (
-    <div className="atlPagination">
+    <div className={cx('atlPagination', className)}>
       <div className="atlRow">
         {pageSize !== undefined && pageSizes && onPageSize && (
           // Over its button and lined up with its right edge, as the original's ("upRight")
@@ -366,8 +387,9 @@ export function Pagination({
           type="button"
           className="atlPagination__arrow"
           disabled={page === 0}
-          onClick={() => onPage(page - 1)}
-          aria-label="Previous page"
+          onClick={() => go(page - 1)}
+          aria-label={numbered && page > 0 ? `Previous page, ${page}` : 'Previous page'}
+          aria-controls={page === 0 ? undefined : controls}
           data-test-subj="pagination-button-previous"
         >
           <Icon name="chevronLeft" />
@@ -386,7 +408,8 @@ export function Pagination({
                   disabled={number === page}
                   aria-current={number === page ? true : undefined}
                   aria-label={`Page ${number + 1} of ${pages}`}
-                  onClick={() => onPage(number)}
+                  aria-controls={controls}
+                  onClick={() => go(number)}
                   data-test-subj={`pagination-button-${number}`}
                 >
                   {number + 1}
@@ -399,8 +422,9 @@ export function Pagination({
           type="button"
           className="atlPagination__arrow"
           disabled={page >= pages - 1}
-          onClick={() => onPage(page + 1)}
-          aria-label="Next page"
+          onClick={() => go(page + 1)}
+          aria-label={numbered && page < pages - 1 ? `Next page, ${page + 2}` : 'Next page'}
+          aria-controls={page >= pages - 1 ? undefined : controls}
           data-test-subj="pagination-button-next"
         >
           <Icon name="chevronRight" />

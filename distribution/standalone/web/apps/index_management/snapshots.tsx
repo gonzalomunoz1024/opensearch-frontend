@@ -498,7 +498,6 @@ function RestoreSnapshotFlyout({
                 selected={form.selected}
                 onChange={(selected) => change({ selected })}
                 allowCustom
-                compact
                 invalid={errors.noIndicesSelected}
                 placeholder="Select indices or input index patterns."
               />
