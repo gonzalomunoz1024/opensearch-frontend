@@ -195,10 +195,10 @@
   margin: 12px;
 }
 
-/* The component library's small empty button: its border's pixel, and 8px before its arrow */
+/* The component library's small empty button: 8px inside its border's pixel, and 8px before its arrow */
 .visTable__rowsButton.atlButton {
   gap: var(--space-2);
-  padding: 0 9px;
+  padding: 0 var(--space-2);
 }
 
 /* The kit's pages keep the room they have under one of its tables; the original's have none here */

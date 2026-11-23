@@ -7,6 +7,7 @@ import { describe, it } from 'node:test';
 import {
   VIS_BUILDER_TYPES,
   defaultsDeep,
+  orderedAgg,
   schemaProblem,
   validateState,
   visBuilderEditUrl,
@@ -173,6 +174,101 @@ describe('a saved VisBuilder visualization', () => {
       written.attributes.kibanaSavedObjectMeta?.searchSourceJSON,
       '{"query":{"query":"currency : EUR","language":"kuery"},"filter":[],"indexRefName":"kibanaSavedObjectMeta.searchSourceJSON.index"}'
     );
+  });
+
+  it('is written with the parameters of each aggregation in the order of its type, as OpenSearch Dashboards serializes one', () => {
+    // As the address holds the sample's line chart: every key sorted
+    const sorted = {
+      style: { addLegend: true, addTooltip: false, legendPosition: 'right', type: 'line' },
+      ui: {},
+      visualization: {
+        activeVisualization: {
+          aggConfigParams: [
+            {
+              enabled: true,
+              id: '1',
+              params: {
+                drop_partials: false,
+                extended_bounds: {},
+                field: '@timestamp',
+                interval: 'auto',
+                min_doc_count: 1,
+                scaleMetricValues: false,
+                useNormalizedOpenSearchInterval: true,
+              },
+              schema: 'segment',
+              type: 'date_histogram',
+            },
+            { enabled: true, id: '2', params: { field: 'bytes' }, schema: 'metric', type: 'avg' },
+          ],
+          name: 'line',
+        },
+        indexPattern: INDEX,
+        searchField: '',
+        savedQuery: 'zz-agent-query',
+      },
+    };
+    const written = visBuilderToSavedObject({ title: 'zz-agent-vb-rt-vis', description: '', state: sorted }, { query: { query: '', language: 'kuery' }, filters: [] });
+    // what OpenSearch Dashboards sent for "Save and return" on the same chart; the saved query of the page is not part of it
+    assert.equal(
+      JSON.stringify({ attributes: written.attributes, references: written.references }),
+      '{"attributes":{"title":"zz-agent-vb-rt-vis","description":"","visualizationState":"{\\"searchField\\":\\"\\",\\"activeVisualization\\":{\\"name\\":\\"line\\",' +
+        '\\"aggConfigParams\\":[{\\"id\\":\\"1\\",\\"enabled\\":true,\\"type\\":\\"date_histogram\\",\\"params\\":{\\"field\\":\\"@timestamp\\",' +
+        '\\"useNormalizedOpenSearchInterval\\":true,\\"scaleMetricValues\\":false,\\"interval\\":\\"auto\\",\\"drop_partials\\":false,\\"min_doc_count\\":1,' +
+        '\\"extended_bounds\\":{}},\\"schema\\":\\"segment\\"},{\\"id\\":\\"2\\",\\"enabled\\":true,\\"type\\":\\"avg\\",\\"params\\":{\\"field\\":\\"bytes\\"},' +
+        '\\"schema\\":\\"metric\\"}]}}","styleState":"{\\"addTooltip\\":false,\\"addLegend\\":true,\\"legendPosition\\":\\"right\\",\\"type\\":\\"line\\"}",' +
+        '"uiState":"{}","version":3,"kibanaSavedObjectMeta":{"searchSourceJSON":"{\\"query\\":{\\"query\\":\\"\\",\\"language\\":\\"kuery\\"},\\"filter\\":[],' +
+        '\\"indexRefName\\":\\"kibanaSavedObjectMeta.searchSourceJSON.index\\"}"}},"references":[{"name":"kibanaSavedObjectMeta.searchSourceJSON.index",' +
+        '"type":"index-pattern","id":"90943e30-9a47-11e8-b64d-95841ca0b247"}]}'
+    );
+    // and it opens again as it was, but for the saved query, which is the page's
+    const { savedQuery: _savedQuery, ...visualization } = sorted.visualization;
+    assert.deepEqual(visBuilderFromSavedObject({ id: 'vb-3', ...written }).state, { ...sorted, visualization });
+  });
+
+  it('orders what is inside a parameter as OpenSearch Dashboards writes it', () => {
+    // a histogram's bounds, a filter's query, the metric a pipeline is made of
+    assert.equal(
+      JSON.stringify(
+        orderedAgg({
+          enabled: true,
+          id: '2',
+          params: { extended_bounds: { max: 10, min: 0 }, field: 'bytes', has_extended_bounds: true, interval: 5, min_doc_count: false },
+          schema: 'segment',
+          type: 'histogram',
+        })
+      ),
+      '{"id":"2","enabled":true,"type":"histogram","params":{"field":"bytes","interval":5,"min_doc_count":false,"has_extended_bounds":true,' +
+        '"extended_bounds":{"min":0,"max":10}},"schema":"segment"}'
+    );
+    assert.equal(
+      JSON.stringify(
+        orderedAgg({
+          enabled: true,
+          id: '3',
+          params: { filters: [{ input: { language: 'kuery', query: 'bytes > 0' }, label: 'some' }] },
+          schema: 'group',
+          type: 'filters',
+        })
+      ),
+      '{"id":"3","enabled":true,"type":"filters","params":{"filters":[{"input":{"query":"bytes > 0","language":"kuery"},"label":"some"}]},"schema":"group"}'
+    );
+    assert.equal(
+      JSON.stringify(
+        orderedAgg({
+          enabled: true,
+          id: '4',
+          params: { customMetric: { enabled: true, id: '4-metric', params: { field: 'bytes' }, schema: 'metric', type: 'sum' }, metricAgg: 'custom' },
+          schema: 'metric',
+          type: 'cumulative_sum',
+        })
+      ),
+      '{"id":"4","enabled":true,"type":"cumulative_sum","params":{"metricAgg":"custom","customMetric":{"id":"4-metric","enabled":true,"type":"sum",' +
+        '"params":{"field":"bytes"},"schema":"metric"}},"schema":"metric"}'
+    );
+    // a type this build does not know keeps its parameters as they come, and one with none has none
+    assert.equal(JSON.stringify(orderedAgg({ id: '5', type: 'zz_unknown', params: { b: 1, a: 2 } })), '{"id":"5","type":"zz_unknown","params":{"b":1,"a":2}}');
+    assert.equal(JSON.stringify(orderedAgg({ id: '6', enabled: true, type: 'count', schema: 'metric' })), '{"id":"6","enabled":true,"type":"count","schema":"metric"}');
   });
 
   it('opens in VisBuilder', () => {

@@ -24,6 +24,7 @@ import {
   loadMoreCount,
   surroundingRequest,
   tieBreakerField,
+  typedCount,
   type ContextSide,
 } from './context';
 import { DocDetails, DocViewer } from './doc_viewer';
@@ -244,7 +245,7 @@ function ContextActionBar({
           disabled={disabled}
           testId={`${side}CountPicker`}
           aria-label={older ? 'Number of older documents' : 'Number of newer documents'}
-          onChange={setDraft}
+          onChange={(typed) => setDraft(typedCount(typed, count))}
           onBlur={take}
         />
         <span className="dscContextBar__text">{older ? 'older documents' : 'newer documents'}</span>

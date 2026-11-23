@@ -3,41 +3,26 @@
 /*
  * Where a query is typed, in DQL or Lucene, as OpenSearch Dashboards' query string input: a text
  * box that grows with its text while it has the focus, closes the pairs of quotes and brackets
- * that are opened in it, and lists under it the searches made before on the page (and, for DQL,
- * fields, values and conjunctions) for the arrow keys and the pointer to choose from.
+ * that are opened in it, and lists under it the searches made before on the page for the arrow
+ * keys and the pointer to choose from. Only those: the original's input asks its DQL suggestions
+ * without the services they need (`query_string_input.tsx`), so they come back empty
+ * (`antlr/dql/code_completion.ts`), and it offers no fields, values or conjunctions.
  */
 
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type ReactNode,
-} from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { cx } from '../components/basic';
 import { Switch } from '../components/form';
 import { Icon, type IconName } from '../components/icon';
 import { Popover, Portal } from '../components/overlay';
 import {
-  conjunctionSuggestions,
-  fieldSuggestions,
-  suggestContext,
-  valueSuggestions,
-  valuesRequest,
-  type Suggestion,
-} from '../lib/kuery_suggest';
-import {
   addToLog,
+  barSuggestions,
   matchPairs,
-  matchingSearches,
   normalizeQueryText,
   queryAppName,
   stepIndex,
 } from '../lib/query_input';
-import type { Field, IndexPattern } from '../lib/types';
+import type { IndexPattern } from '../lib/types';
 import { getLocation } from '../router';
 import { services } from '../services';
 import { readStored, writeStored } from './state';
@@ -50,25 +35,12 @@ export function defaultQueryLanguage(): string {
   return setting === 'lucene' ? 'lucene' : 'kuery';
 }
 
-/** The values of a field that start with what was typed, for the query bar and the filter editor */
-export async function fetchFieldValues(
-  indexPattern: Pick<IndexPattern, 'title'>,
-  field: Field,
-  prefix: string,
-  signal?: AbortSignal
-): Promise<Array<string | number | boolean>> {
-  if (field.type === 'boolean') return [true, false];
-  if (!services.uiSettings.get('filterEditor:suggestValues', true)) return [];
-  const body = valuesRequest(field, prefix);
-  if (!body) return [];
-  try {
-    const answer = await services.search.request<{
-      aggregations?: { suggestions?: { buckets?: Array<{ key: string | number }> } };
-    }>('POST', `${encodeURIComponent(indexPattern.title)}/_search?ignore_unavailable=true`, body, { signal });
-    return (answer.aggregations?.suggestions?.buckets ?? []).map((bucket) => bucket.key);
-  } catch {
-    return [];
-  }
+/**
+ * Makes a language the one new queries are written in, as the original's setUserQueryLanguage:
+ * its language switch does so, and its Discover with the language of the query it opens with.
+ */
+export function rememberQueryLanguage(language: string) {
+  writeStored('queryLanguage', language);
 }
 
 /** The documentation of DQL that the original's links lead to */
@@ -94,12 +66,14 @@ export function addRecentSearch(language: string, query: unknown, appName = curr
 
 // --- The list under the bar ----------------------------------------------------------------------
 
-type TypeaheadType = Suggestion['kind'] | 'recentSearch';
+/** The kinds of the original's suggestions that its query bar shows: the searches made before */
+type TypeaheadType = 'recentSearch';
 
 interface TypeaheadItem {
   type: TypeaheadType;
   /** What the list shows */
   text: string;
+  /** None for a search made before; the original keeps its room in a wide list all the same */
   description?: string;
   /** What replaces the part of the text from start to end */
   insert: string;
@@ -109,10 +83,6 @@ interface TypeaheadItem {
 
 /** The original's icon for each kind of suggestion */
 const TYPE_ICONS: Record<TypeaheadType, IconName> = {
-  field: 'kqlField',
-  value: 'kqlValue',
-  operator: 'kqlOperand',
-  conjunction: 'kqlSelector',
   recentSearch: 'search',
 };
 
@@ -274,6 +244,10 @@ export interface QueryBarProps {
   onChange: (value: string) => void;
   onLanguageChange: (language: string) => void;
   onSubmit: (value: string) => void;
+  /**
+   * The index patterns searched. The original asks its suggestions for the first of them, and
+   * they come back empty; nothing is offered from them here either.
+   */
   indexPatterns: IndexPattern[];
   placeholder?: string;
   invalid?: boolean;
@@ -286,6 +260,11 @@ export interface QueryBarProps {
   onFocusChange?: (focused: boolean) => void;
   /** A short list, as under a filter of a visualization's buckets */
   size?: 's' | 'l';
+  /**
+   * The page the bar is named for, in its labels and in the key of its recent searches, as the
+   * original's `appName`: TSVB's field is the "VisEditor". The page of the address when not given.
+   */
+  appName?: string;
 }
 
 export function QueryBar({
@@ -294,7 +273,6 @@ export function QueryBar({
   onChange,
   onLanguageChange,
   onSubmit,
-  indexPatterns,
   placeholder,
   invalid,
   prepend,
@@ -302,6 +280,7 @@ export function QueryBar({
   testId = 'queryInput',
   onFocusChange,
   size,
+  appName: givenAppName,
 }: QueryBarProps) {
   const area = useRef<HTMLTextAreaElement>(null);
   const wrap = useRef<HTMLDivElement>(null);
@@ -311,21 +290,8 @@ export function QueryBar({
   const [items, setItems] = useState<TypeaheadItem[]>([]);
   const [limit, setLimit] = useState(PAGE);
   const [rect, setRect] = useState<DOMRect>();
-  // The cursor where it was last put, read again when the suggestions are made
-  const [cursor, setCursor] = useState(0);
   const pendingSelection = useRef<[number, number] | undefined>(undefined);
-  const appName = currentAppName();
-
-  const fields = useMemo(() => {
-    const byName = new Map<string, { field: Field; pattern: IndexPattern }>();
-    for (const pattern of indexPatterns) {
-      for (const field of pattern.fields) {
-        if (!byName.has(field.name)) byName.set(field.name, { field, pattern });
-      }
-    }
-    return byName;
-  }, [indexPatterns]);
-  const fieldList = useMemo(() => [...fields.values()].map((entry) => entry.field), [fields]);
+  const appName = givenAppName ?? currentAppName();
 
   const updateRect = useCallback(() => {
     if (wrap.current) setRect(wrap.current.getBoundingClientRect());
@@ -341,51 +307,16 @@ export function QueryBar({
   }, [updateRect]);
   const removeHeight = () => area.current?.style.removeProperty('height');
 
-  // The suggestions for the text and the cursor: DQL's after a short pause, then the searches made before
+  // The searches made before on this page in this language that hold the text, after the
+  // original's short pause
   useEffect(() => {
-    const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      const recent: TypeaheadItem[] = matchingSearches(readLog(appName, language), value).map((text) => ({
-        type: 'recentSearch',
-        text,
-        insert: text,
-        start: 0,
-        end: value.length,
-      }));
-      const context = language === 'kuery' && fieldList.length ? suggestContext(value, cursor) : undefined;
-      const toItems = (found: Suggestion[]): TypeaheadItem[] =>
-        context
-          ? found.map((suggestion) => ({
-              type: suggestion.kind,
-              text: suggestion.label,
-              description: suggestion.detail,
-              insert: suggestion.insert,
-              start: context.start,
-              end: context.end,
-            }))
-          : [];
-      if (!context) {
-        setItems(recent);
-      } else if (context.kind === 'field') {
-        setItems([...toItems(fieldSuggestions(fieldList, context.prefix)), ...recent]);
-      } else if (context.kind === 'conjunction') {
-        setItems([...toItems(conjunctionSuggestions(context.prefix)), ...recent]);
-      } else {
-        const entry = context.fieldName ? fields.get(context.fieldName) : undefined;
-        if (!entry) {
-          setItems(recent);
-          return;
-        }
-        void fetchFieldValues(entry.pattern, entry.field, context.prefix, controller.signal).then((values) => {
-          if (!controller.signal.aborted) setItems([...toItems(valueSuggestions(values)), ...recent]);
-        });
-      }
+      setItems(barSuggestions(readLog(appName, language), value).map((item) => ({ ...item, insert: item.text })));
     }, 100);
     return () => {
       window.clearTimeout(timer);
-      controller.abort();
     };
-  }, [value, cursor, language, appName, fields, fieldList]);
+  }, [value, language, appName]);
 
   // A selection asked for by an edit, once the text is there
   useLayoutEffect(() => {
@@ -393,7 +324,6 @@ export function QueryBar({
     if (!selection || !area.current) return;
     pendingSelection.current = undefined;
     area.current.setSelectionRange(selection[0], selection[1]);
-    setCursor(selection[1]);
     if (document.activeElement === area.current) autoHeight();
     else removeHeight();
   });
@@ -541,20 +471,13 @@ export function QueryBar({
             aria-invalid={invalid || undefined}
             data-test-subj={testId}
             onChange={(event) => {
-              setCursor(event.target.selectionStart);
               change(event.target.value);
               if (event.target.value === '') removeHeight();
               else autoHeight();
             }}
-            onClick={(event) => {
-              setCursor(event.currentTarget.selectionStart);
-              change(event.currentTarget.value);
-            }}
+            onClick={(event) => change(event.currentTarget.value)}
             onKeyUp={(event) => {
-              if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
-                setCursor(event.currentTarget.selectionStart);
-                change(event.currentTarget.value);
-              }
+              if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) change(event.currentTarget.value);
             }}
             onFocus={() => {
               onFocusChange?.(true);
@@ -586,7 +509,7 @@ export function QueryBar({
       <LanguageSwitch
         language={language}
         onChange={(next) => {
-          writeStored('queryLanguage', next);
+          rememberQueryLanguage(next);
           onLanguageChange(next);
         }}
       />

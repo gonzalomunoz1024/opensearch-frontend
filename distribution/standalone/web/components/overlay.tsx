@@ -162,7 +162,7 @@ export function Popover({
       const size = { width: width ?? panelBox.width, height: panelBox.height };
       const at = placeLikeOriginal(anchorBox, size, position, { width: window.innerWidth, height: window.innerHeight });
       setStyle({ left: at.left, top: at.top, width });
-      setPlacement(at.top < anchorBox.top ? 'top' : 'bottom');
+      setPlacement(at.side);
       return;
     }
     const margin = buffer;

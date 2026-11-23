@@ -19,6 +19,7 @@ import { compactJson } from '../../web/lib/compact_json';
 import { parseHjson, stringifyHjson } from '../../web/lib/hjson';
 import { tokenizeHjson, tokenizeHjsonLine, type HjsonLineState } from '../../web/lib/hjson_tokens';
 import type { BoolQuery } from '../../web/lib/query';
+import type { Filter, Query } from '../../web/lib/types';
 import {
   BYPASS_TOKEN,
   EmsFileParser,
@@ -26,15 +27,29 @@ import {
   PPLQueryParser,
   TimeCache,
   UrlParser,
+  contextQuery,
   pplTime,
   queryParams,
   roundInterval,
+  shimHitsTotal,
   type MapsServiceSettings,
   type SpecObject,
   type VegaSearchApi,
   type VegaSearchRequest,
 } from '../../web/vis/vega/data_parsers';
-import { serializeColumns, vegaDataSets, vegaSignals } from '../../web/vis/vega/debug_view';
+import { serializeColumns, specLines, vegaDataSets, vegaSignals } from '../../web/vis/vega/debug_view';
+import {
+  columnWidths,
+  columnsButtonText,
+  jsonTokens,
+  movedColumn,
+  sortButtonText,
+  sortedBy,
+  sortedRows,
+  type GridColumn,
+  type GridRow,
+  type GridSort,
+} from '../../web/vis/vega/inspector_grid';
 import { extractIndexPatternTitles } from '../../web/vis/vega/index_patterns';
 import { createExpressionInterpreter } from '../../web/vis/vega/interpreter';
 import type { VegaLibraries, VegaView } from '../../web/vis/vega/library';
@@ -45,6 +60,7 @@ import { validateVegaExpression } from '../../web/vis/vega/validation';
 import {
   calculatePopoverPosition,
   checkForFunctionProperty,
+  exposeDebugObject,
   formatTooltipValue,
   handleInvalidDate,
   handleInvalidQuery,
@@ -826,6 +842,35 @@ describe('the keywords of a search\'s query, as the original works them in', () 
   });
 });
 
+describe('the page\'s query and filters, as the original\'s request handler builds them', () => {
+  it('makes one match_all of an empty query, however many places hold it', () => {
+    const empty: Query = { language: 'kuery', query: '' };
+    assert.deepEqual(contextQuery([empty, { ...empty }, undefined], [], {}), {
+      bool: { must: [], filter: [{ match_all: {} }], should: [], must_not: [] },
+    });
+  });
+
+  it('leaves out the filters that are turned off', () => {
+    const on: Filter = { meta: { disabled: false }, query: { match_phrase: { a: 1 } } };
+    const off: Filter = { meta: { disabled: true }, query: { match_phrase: { b: 2 } } };
+    assert.deepEqual(contextQuery([], [on, off], {}).bool.filter, [{ match_phrase: { a: 1 } }]);
+    // a filter of the page that the visualization carries too asks once
+    assert.deepEqual(contextQuery([], [on, { ...on, $state: { store: 'globalState' } }], {}).bool.filter, [{ match_phrase: { a: 1 } }]);
+  });
+});
+
+describe('a search\'s answer, as the original\'s search route hands it to the spec', () => {
+  it('makes the total of hits a number', () => {
+    const answer = { took: 3, hits: { total: { value: 8919, relation: 'eq' }, max_score: null, hits: [] } };
+    assert.deepEqual(shimHitsTotal(answer), { took: 3, hits: { total: 8919, max_score: null, hits: [] } });
+    assert.deepEqual(answer.hits.total, { value: 8919, relation: 'eq' });
+    assert.deepEqual(shimHitsTotal({ hits: { total: 5, hits: [] } }), { hits: { total: 5, hits: [] } });
+    // as the original's, an answer without hits gets them, with no total
+    const withoutHits: { took: number; hits?: unknown } = { took: 1 };
+    assert.deepEqual(shimHitsTotal(withoutHits), { took: 1, hits: { total: undefined } });
+  });
+});
+
 describe('a search\'s url, as the original makes a request of it', () => {
   const request = (url: SpecObject, context: unknown) => {
     const { parser, warnings } = queryParser(RANGE_START, RANGE_END, context);
@@ -1198,6 +1243,35 @@ describe('a spec on a map, as leaflet-vega 0.9.0 prepares it', () => {
 
 // --- Inspect --------------------------------------------------------------------------------------
 
+describe('VEGA_DEBUG, as the original puts it on the window', () => {
+  const values = (name: string) => ({
+    VEGA_VERSION: '6.2.0',
+    VEGA_LITE_VERSION: '6.4.2',
+    view: { name } as unknown as VegaView,
+    vega_spec: { name },
+    vegalite_spec: undefined,
+  });
+
+  it('holds the latest view, and welcomes only the first time', () => {
+    const scope: Parameters<typeof exposeDebugObject>[0] = {};
+    const said: unknown[][] = [];
+    const log = (...args: unknown[]) => said.push(args);
+    const hideFirst = exposeDebugObject(scope, values('first'), log);
+    assert.equal(said.length, 2);
+    assert.match(String(said[1]?.[0]), /^You can access the Vega view with VEGA_DEBUG\. /);
+    assert.deepEqual(scope.VEGA_DEBUG, values('first'));
+    const hideSecond = exposeDebugObject(scope, values('second'), log);
+    assert.equal(said.length, 2);
+    // the first view going leaves the second's
+    hideFirst();
+    assert.deepEqual(scope.VEGA_DEBUG?.vega_spec, { name: 'second' });
+    hideSecond();
+    assert.equal(scope.VEGA_DEBUG, null);
+    exposeDebugObject(scope, values('third'), log);
+    assert.equal(said.length, 2);
+  });
+});
+
 describe('the data sets and signals Inspect shows, as the original lists them', () => {
   it('writes each cell as text, objects as JSON', () => {
     const throwing = {
@@ -1235,5 +1309,87 @@ describe('the data sets and signals Inspect shows, as the original lists them', 
       signals.data.filter((row) => row.Signal === 'size' || row.Signal === 'pick'),
       [{ Signal: 'size', Value: '3' }, { Signal: 'pick', Value: '{"a":1}' }]
     );
+  });
+
+  it('draws the spec plain, with a guide for each two spaces of an indent', () => {
+    assert.deepEqual(specLines('{\n  "a": {\n     "b": 1\n  }\n}\n    '), [
+      [{ text: '{' }],
+      [{ text: '  ', kind: 'SpecGuide' }, { text: '"a": {' }],
+      [{ text: '  ', kind: 'SpecGuide' }, { text: '  ', kind: 'SpecGuide' }, { text: ' "b": 1' }],
+      [{ text: '  ', kind: 'SpecGuide' }, { text: '}' }],
+      [{ text: '}' }],
+      [{ text: '  ', kind: 'SpecGuide' }, { text: '  ', kind: 'SpecGuide' }],
+    ]);
+  });
+});
+
+describe('the grid Inspect shows them in, as the original\'s data grid', () => {
+  const columns: GridColumn[] = [{ id: 'Signal', initialWidth: 150 }, { id: 'Value' }];
+
+  it('shares out the width the set columns leave, 100 pixels a column at least', () => {
+    assert.deepEqual(columnWidths(columns, {}, 651), { Signal: 150, Value: 501 });
+    assert.deepEqual(columnWidths(columns, { Value: 80 }, 651), { Signal: 150, Value: 80 });
+    assert.deepEqual(columnWidths([{ id: 'a' }, { id: 'b' }, { id: 'c' }], {}, 250), { a: 100, b: 100, c: 100 });
+    assert.deepEqual(columnWidths([{ id: 'a', initialWidth: 70 }], {}, 651), { a: 70 });
+  });
+
+  it('sorts the rows field by field, comparing their text', () => {
+    const rows: GridRow[] = [
+      { a: '2', b: 'x' },
+      { a: '10', b: 'y' },
+      { a: '2', b: 'a' },
+      { a: undefined, b: 'z' },
+    ];
+    // '10' comes before '2' as text; a missing value is neither before nor after another, so the
+    // next field decides
+    assert.deepEqual(
+      sortedRows(rows, [{ id: 'a', direction: 'asc' }, { id: 'b', direction: 'desc' }]).map((row) => row.b),
+      ['z', 'y', 'x', 'a']
+    );
+    assert.deepEqual(sortedRows(rows, []), rows);
+    assert.notEqual(sortedRows(rows, []), rows);
+  });
+
+  it('moves a column a place, and no further than the ends', () => {
+    assert.deepEqual(movedColumn(['a', 'b', 'c'], 'b', -1), ['b', 'a', 'c']);
+    assert.deepEqual(movedColumn(['a', 'b', 'c'], 'b', 1), ['a', 'c', 'b']);
+    assert.deepEqual(movedColumn(['a', 'b', 'c'], 'a', -1), ['a', 'b', 'c']);
+    assert.deepEqual(movedColumn(['a', 'b', 'c'], 'd', 1), ['a', 'b', 'c']);
+  });
+
+  it('sorts a column in its place when it is sorted already, else last', () => {
+    const sorting: GridSort[] = [{ id: 'a', direction: 'asc' }, { id: 'b', direction: 'asc' }];
+    assert.deepEqual(sortedBy(sorting, 'a', 'desc'), [{ id: 'a', direction: 'desc' }, { id: 'b', direction: 'asc' }]);
+    assert.deepEqual(sortedBy(sorting, 'c', 'asc'), [...sorting, { id: 'c', direction: 'asc' }]);
+  });
+
+  it('says how many columns are hidden and how many fields sort it', () => {
+    assert.deepEqual([0, 1, 2].map(columnsButtonText), ['Columns', '1 column hidden', '2 columns hidden']);
+    assert.deepEqual([0, 1, 2].map(sortButtonText), ['Sort fields', '1 field sorted', '2 fields sorted']);
+  });
+
+  it('colours a value as the library\'s code block colours JSON', () => {
+    assert.deepEqual(jsonTokens('{"user":"default","n":-4.5e2,"item":null}'), [
+      { text: '{', kind: 'punctuation' },
+      { text: '"user":' },
+      { text: '"default"', kind: 'string' },
+      { text: ',', kind: 'punctuation' },
+      { text: '"n":' },
+      { text: '-4.5e2', kind: 'number' },
+      { text: ',', kind: 'punctuation' },
+      { text: '"item":' },
+      { text: 'null', kind: 'keyword' },
+      { text: '}', kind: 'punctuation' },
+    ]);
+    assert.deepEqual(jsonTokens('#ddd'), [{ text: '#ddd' }]);
+    assert.deepEqual(jsonTokens('(..)'), [{ text: '(..)' }]);
+    assert.deepEqual(jsonTokens('[true, 0]'), [
+      { text: '[', kind: 'punctuation' },
+      { text: 'true', kind: 'keyword' },
+      { text: ',', kind: 'punctuation' },
+      { text: ' ' },
+      { text: '0', kind: 'number' },
+      { text: ']', kind: 'punctuation' },
+    ]);
   });
 });

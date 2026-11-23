@@ -6,12 +6,13 @@
  * cannot be drawn says why in a warning, as OpenSearch Dashboards does.
  */
 
-import { useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { TimeRange } from '../../lib/dates';
 import type { Filter, IndexPattern } from '../../lib/types';
 import type { UiState } from '../../lib/vis';
 import { services } from '../../services';
 import type { VisInput } from '../../vis/request';
+import type { VisFailure } from '../../vis/types';
 import { Visualization } from '../../vis/visualization';
 import { EmptyCanvas } from './empty_canvas';
 import { aggregationsProblem, type AppState } from './editor_state';
@@ -56,13 +57,24 @@ export function Workspace({ state, indexPattern, input, tick, onUiState, onFilte
     [drawnKey]
   );
 
+  // Data that could not be had leaves the canvas empty and is told in a message, as the
+  // original's expression renderer tells it; the chart is back with the next data
+  const [failed, setFailed] = useState(false);
+  const onError = useCallback((failure: VisFailure | undefined) => {
+    setFailed(failure !== undefined);
+    if (failure) services.toasts.addError(failure.original, { title: 'Error in visualisation', toastMessage: failure.message, id: failure.message });
+  }, []);
+  useEffect(() => {
+    if (!drawnKey) setFailed(false);
+  }, [drawnKey]);
+
   return (
     <section className="vbdWorkspace">
       <div className="vbdCanvas">
         {vis ? (
           // The original's renderer draws in a box 8 px in from the canvas
-          <div className="vbdCanvas__vis">
-            <Visualization vis={vis} input={input} tick={tick} uiState={ui} onUiState={onUiState} onFilter={onFilter} onTimeChange={onTimeChange} />
+          <div className="vbdCanvas__vis" hidden={failed}>
+            <Visualization vis={vis} input={input} tick={tick} uiState={ui} onUiState={onUiState} onFilter={onFilter} onTimeChange={onTimeChange} onError={onError} />
           </div>
         ) : (
           <EmptyCanvas />

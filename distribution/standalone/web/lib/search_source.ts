@@ -18,14 +18,26 @@ export interface SearchSource {
 interface StoredSource {
   index?: string;
   indexRefName?: string;
-  query?: Query;
-  filter?: Filter[];
+  query?: unknown;
+  filter?: unknown[];
   highlightAll?: boolean;
   version?: boolean;
   [other: string]: unknown;
 }
 
 const INDEX_REF = 'kibanaSavedObjectMeta.searchSourceJSON.index';
+
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/**
+ * A query saved before queries had a language, as the original's migrateLegacyQuery reads it: a
+ * text or a query of OpenSearch's own, both Lucene's
+ */
+export function migrateLegacyQuery(query: unknown): Query {
+  if (isObject(query) && 'language' in query) return query as unknown as Query;
+  return { query: typeof query === 'string' || isObject(query) ? query : '', language: 'lucene' };
+}
 
 export function parseSearchSource(json: string | undefined, references: SavedObjectReference[] = []): SearchSource {
   let stored: StoredSource = {};
@@ -37,7 +49,9 @@ export function parseSearchSource(json: string | undefined, references: SavedObj
     }
   }
   const idOf = (name: string | undefined) => references.find((reference) => reference.name === name)?.id;
-  const filters = (Array.isArray(stored.filter) ? stored.filter : []).map((filter) => {
+  // What is no filter (a null) is left out, as the address's filters are
+  const filters = (Array.isArray(stored.filter) ? stored.filter : []).filter(isObject).map((entry): Filter => {
+    const filter = entry as unknown as Filter;
     const meta = { ...(filter.meta ?? {}) };
     if (meta.indexRefName) {
       meta.index = idOf(meta.indexRefName) ?? meta.index;
@@ -47,7 +61,7 @@ export function parseSearchSource(json: string | undefined, references: SavedObj
   });
   return {
     indexId: stored.indexRefName ? idOf(stored.indexRefName) : stored.index,
-    query: stored.query,
+    query: stored.query === undefined ? undefined : migrateLegacyQuery(stored.query),
     filters,
   };
 }

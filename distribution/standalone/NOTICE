@@ -150,4 +150,10 @@ The pictures the URL format of an index pattern shows in its samples
 (web/static/plugins/indexPatternManagement/assets/icons) are those OpenSearch Dashboards ships for
 it, under the MIT License, Copyright (c) 2014 Steven Skelton (licenses/url-format-icons.txt).
 
+The calendar of the date picker (web/shell/calendar.tsx and web/styles/date_picker.css) is
+written after react-datepicker 2.0.0 as the OpenSearch UI framework carries it, so that it looks
+and behaves as it does there: its month, its lists of months, years and times, and its keys. It is
+derived from that code under the MIT License, Copyright (c) 2018 HackerOne Inc and individual
+contributors (licenses/react-datepicker.txt).
+
 "OpenSearch" is a trademark of its owner. InfraDashboard is not an OpenSearch project.

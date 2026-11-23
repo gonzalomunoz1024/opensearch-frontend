@@ -9,6 +9,7 @@
  */
 
 import {
+  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -43,6 +44,7 @@ import {
   newDraft,
   schemaAggTypes,
   withAggs,
+  draftForEditing,
   withDraft,
   withEditorError,
   withSavedDraft,
@@ -69,8 +71,21 @@ const FILTERABLE_TYPES = ['string', 'number', 'date', 'ip', 'boolean', 'histogra
 const filterable = (field: Field) =>
   field.name === '_id' || Boolean(field.scripted) || (field.searchable && FILTERABLE_TYPES.includes(field.type));
 
-/** A name that may break after each dot: a long field name wraps where it reads well */
-const wrapOnDot = (name: string) => name.replace(/\./g, '.​');
+/**
+ * A name that may break after each dot, as the original writes one: a long field name wraps where
+ * it reads well, and is copied as it is
+ */
+const wrapOnDot = (name: string): ReactNode =>
+  name.split('.').map((part, index) => (
+    <Fragment key={index}>
+      {index > 0 && (
+        <>
+          .<wbr />
+        </>
+      )}
+      {part}
+    </Fragment>
+  ));
 
 const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
@@ -188,6 +203,7 @@ function FieldSelector({
   onAddFilters,
 }: Pick<DataTabProps, 'state' | 'update' | 'indexPattern' | 'hits' | 'onAddFilters'> & { dnd: DragAndDrop }) {
   const search = state.visualization.searchField;
+  const setSearch = (searchField: string) => update((current) => ({ ...current, visualization: { ...current.visualization, searchField } }));
   const metaFields = services.uiSettings.get<string[]>('metaFields', META_FIELDS);
   const groups = useMemo(() => {
     const result: Record<FieldCategory, Field[]> = { categorical: [], numerical: [], meta: [] };
@@ -207,8 +223,24 @@ function FieldSelector({
           value={search}
           placeholder="Search field names"
           aria-label="Search field names"
-          onChange={(searchField) => update((current) => ({ ...current, visualization: { ...current.visualization, searchField } }))}
+          onChange={setSearch}
           testId="fieldFilterSearchInput"
+          append={
+            // The original's button that clears the search, which gives the focus back to it
+            search ? (
+              <button
+                type="button"
+                className="vbdFields__clear"
+                aria-label="Clear input"
+                onClick={(event) => {
+                  setSearch('');
+                  event.currentTarget.parentElement?.querySelector('input')?.focus();
+                }}
+              >
+                <Icon name="cross" />
+              </button>
+            ) : undefined
+          }
         />
       </form>
       <div className="vbdFields__groups">
@@ -341,9 +373,10 @@ function FieldWithDetails({
 const TABBABLE = 'button:not(:disabled), [href], input:not(:disabled), [tabindex]:not([tabindex="-1"])';
 
 /**
- * A popover at the right of a field, as the original opens one "rightUp": its top 4 px above the
- * field's, kept on screen. As one that owns the focus, it takes the focus when it opens (its first
- * stop is the title), keeps Tab inside it, and gives the focus back to the field on Escape.
+ * A popover at the right of a field, as the original opens one "rightUp": its top 4.5 px above a
+ * field 35 px tall, kept 16 px from the window's edges. As one that owns the focus, it takes the
+ * focus once placed (its first stop is the title), keeps Tab inside it, and gives the focus back
+ * to the field on Escape.
  */
 function SidePopover({
   anchor,
@@ -363,7 +396,12 @@ function SidePopover({
       const height = panel.current?.offsetHeight ?? 0;
       if (!box) return;
       const margin = 8;
-      const top = Math.max(margin, Math.min(box.top - 4, window.innerHeight - height - margin));
+      // As the component library places it: its top no lower than where its arrow (24 px wide, 10 px
+      // from the panel's corner) would point at the field's middle, and 16 px from the window's edges
+      const arrowReach = 10 + 24 / 2;
+      const windowBuffer = 16;
+      const wanted = Math.min(box.top, box.top + box.height / 2 - arrowReach);
+      const top = Math.max(windowBuffer, Math.min(wanted, window.innerHeight - height - windowBuffer));
       setStyle({ left: box.right + margin, top });
     };
     place();
@@ -378,9 +416,11 @@ function SidePopover({
     };
   }, [anchor]);
 
+  // once placed: hidden, nothing in it can take the focus
+  const placed = style.visibility !== 'hidden';
   useEffect(() => {
-    panel.current?.querySelector<HTMLElement>(TABBABLE)?.focus();
-  }, []);
+    if (placed) panel.current?.querySelector<HTMLElement>(TABBABLE)?.focus();
+  }, [placed]);
 
   useEffect(() => {
     const onDown = (event: MouseEvent) => {
@@ -567,7 +607,7 @@ function ConfigPanel({
               context={context}
               dnd={dnd}
               onAdd={() => update((current) => withDraft(current, newDraft(current.visualization.activeVisualization?.aggConfigParams ?? [], schema)))}
-              onEdit={(agg) => update((current) => withDraft(current, agg))}
+              onEdit={(agg) => update((current) => withDraft(current, draftForEditing(current.visualization.activeVisualization?.aggConfigParams ?? [], agg)))}
               onDelete={(id) =>
                 update((current) =>
                   withAggs(

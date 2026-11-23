@@ -6,11 +6,14 @@ import {
   afterChange,
   aggTypeFor,
   aggregationsProblem,
+  draftForEditing,
   droppedAggs,
   fieldDetails,
+  lastAddressIn,
   newAppState,
   newDraft,
   openedState,
+  originatingAppOf,
   persistedAggs,
   readAppState,
   saveDisabledReason,
@@ -159,6 +162,84 @@ describe('the VisBuilder page state', () => {
     assert.deepEqual(added.visualization.activeVisualization?.draftAgg, average);
     const sum = { ...COUNT, type: 'sum', params: { field: 'taxful_total_price' } };
     assert.deepEqual(withSavedDraft(withDraft(state, sum)).visualization.activeVisualization?.aggConfigParams, [sum, ORDER_DATE]);
+  });
+});
+
+describe('an aggregation opened in the panel that edits it', () => {
+  const count: AggConfig = { id: '4', enabled: true, type: 'count', schema: 'metric', params: {} };
+  const median: AggConfig = { id: '2', enabled: true, type: 'median', schema: 'metric', params: { field: 'bytes' } };
+  const terms: AggConfig = { id: '6', enabled: true, type: 'terms', schema: 'group', params: { field: 'response.keyword', order: 'desc', size: 5 } };
+
+  it('gives terms ordered by nothing the first metric they can be ordered by', () => {
+    assert.deepEqual(draftForEditing([median, count, terms], terms).params, { field: 'response.keyword', order: 'desc', size: 5, orderBy: '4' });
+  });
+
+  it('orders them by the alphabet when no metric can order them', () => {
+    assert.equal(draftForEditing([median, terms], terms).params?.orderBy, '_key');
+    assert.equal(draftForEditing([{ ...count, enabled: false }, terms], terms).params?.orderBy, '_key');
+  });
+
+  it('leaves an order that is set, and every other aggregation, as they are', () => {
+    const custom = { ...terms, params: { ...terms.params, orderBy: 'custom' } };
+    assert.equal(draftForEditing([count, custom], custom), custom);
+    assert.equal(draftForEditing([count, terms], count), count);
+  });
+});
+
+describe('a VisBuilder page opened from a dashboard', () => {
+  const saved = { state: { style: kind('line').style(), ui: {}, visualization: { searchField: '', activeVisualization: { name: 'line', aggConfigParams: [COUNT] }, indexPattern: 'a' } } };
+
+  it('keeps where it came from in the address, as OpenSearch Dashboards writes it', () => {
+    // The address OpenSearch Dashboards is at once a panel's "Edit visBuilder" has opened the editor
+    const raw =
+      '(metadata:(editor:(errors:(),state:clean),isMigrated:!f,originatingApp:dashboards),style:(addLegend:!t,addTooltip:!t,legendPosition:right,type:line),' +
+      "ui:(),visualization:(activeVisualization:(aggConfigParams:!((enabled:!t,id:'1',params:(drop_partials:!f,extended_bounds:(),field:'@timestamp'," +
+      'interval:auto,min_doc_count:1,scaleMetricValues:!f,useNormalizedOpenSearchInterval:!t),schema:segment,type:date_histogram),' +
+      "(enabled:!t,id:'2',params:(field:bytes),schema:metric,type:avg)),name:line),indexPattern:'90943e30-9a47-11e8-b64d-95841ca0b247',searchField:''))";
+    const state = defined(readAppState(raw), 'the state');
+    assert.equal(originatingAppOf(state), 'dashboards');
+    assert.equal(encodeState(urlAppState(state)), raw);
+    // a change keeps it, and the page still knows where to go back to
+    const dirty = afterChange(state, withAggsOf(state, [COUNT]));
+    assert.equal(dirty.metadata.editor.state, 'dirty');
+    assert.equal(originatingAppOf(dirty), 'dashboards');
+  });
+
+  it('takes it from what the dashboard handed over only when the address says nothing yet', () => {
+    assert.deepEqual(newAppState(PATTERN.id, 'dashboards').metadata, { editor: { errors: {}, state: 'clean' }, isMigrated: false, originatingApp: 'dashboards' });
+    assert.equal(originatingAppOf(newAppState(PATTERN.id)), undefined);
+    const opened = openedState(undefined, saved, 'dashboards');
+    assert.deepEqual(opened.metadata, { editor: { errors: {}, state: 'clean' }, isMigrated: false, originatingApp: 'dashboards' });
+    // an address that already holds a state says it itself: one opened in another tab came from nowhere
+    assert.equal(originatingAppOf(openedState(newAppState(PATTERN.id), saved, 'dashboards')), undefined);
+    assert.equal(originatingAppOf(openedState(newAppState(PATTERN.id, 'dashboards'), saved)), 'dashboards');
+    assert.equal(originatingAppOf({ ...opened, metadata: { ...opened.metadata, originatingApp: '' } }), undefined);
+  });
+
+  it('finds the address the dashboards were last at among the entries of the tab', () => {
+    const origin = 'http://localhost:5655';
+    const entries = [
+      `${origin}/app/home`,
+      `${origin}/app/dashboards#/list`,
+      `${origin}/app/dashboards#/view/dash-1?_g=(time:(from:now-7d,to:now))&_a=(viewMode:edit)`,
+      `${origin}/app/vis-builder/edit/vis-1#/?_a=(a:1)`,
+      `${origin}/app/vis-builder/edit/vis-1#/?_a=(a:2)`,
+      `${origin}/app/dashboards#/view/later`,
+    ];
+    const last = '/app/dashboards#/view/dash-1?_g=(time:(from:now-7d,to:now))&_a=(viewMode:edit)';
+    assert.equal(lastAddressIn(entries, 4, 'dashboards', origin, ''), last);
+    assert.equal(lastAddressIn(entries, 3, 'dashboards', origin, ''), last);
+    // what is before the page counts, not what the browser could go forward to
+    assert.equal(lastAddressIn(entries, 2, 'dashboards', origin, ''), '/app/dashboards#/list');
+    assert.equal(lastAddressIn(entries, 1, 'dashboards', origin, ''), undefined);
+    assert.equal(lastAddressIn(entries, 9, 'dashboards', origin, ''), '/app/dashboards#/view/later');
+    assert.equal(lastAddressIn(entries, 4, 'visualize', origin, ''), undefined);
+    // an entry with no address, a base path a proxy put in front, another site, another application
+    assert.equal(lastAddressIn([`${origin}/app/dashboards?embed=true#/create`, null, 'not an address'], 3, 'dashboards', origin, ''), '/app/dashboards?embed=true#/create');
+    assert.equal(lastAddressIn([`${origin}/base/app/dashboards#/create`], 1, 'dashboards', origin, '/base'), '/app/dashboards#/create');
+    assert.equal(lastAddressIn([`${origin}/app/dashboards#/create`], 1, 'dashboards', origin, '/base'), undefined);
+    assert.equal(lastAddressIn(['http://elsewhere.example/app/dashboards#/create'], 1, 'dashboards', origin, ''), undefined);
+    assert.equal(lastAddressIn([`${origin}/app/dashboards-other#/create`], 1, 'dashboards', origin, ''), undefined);
   });
 });
 

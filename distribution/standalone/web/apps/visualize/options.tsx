@@ -81,9 +81,9 @@ function Spacer({ size }: { size: 'xs' | 's' | 'm' }) {
 }
 
 /** The original's panel with the small padding, its extra small title and what is beside it */
-function Panel({ title, action, children, testId }: { title?: ReactNode; action?: ReactNode; children: ReactNode; testId?: string }) {
+function Panel({ title, action, children, testId, fill }: { title?: ReactNode; action?: ReactNode; children: ReactNode; testId?: string; fill?: boolean }) {
   return (
-    <section className="vzePanel vzeOptPanel" data-test-subj={testId}>
+    <section className={cx('vzePanel vzeOptPanel', fill && 'vzePanel--fill')} data-test-subj={testId}>
       {title !== undefined && (
         <div className={cx('vzeOptPanel__head', action !== undefined && 'vzeOptPanel__head--action')}>
           <h3 className="vzePanel__title">{title}</h3>
@@ -1143,15 +1143,15 @@ function MarkdownData({ params, setParams }: OptionsProps) {
 }
 
 /**
- * The original's panel of settings has no title; its font size is a RangeOption with the value
- * beside the handle and a field to write it in
+ * The original's panel of settings has no title and is as tall as the side bar; its font size is
+ * a RangeOption with the value beside the handle and a field to write it in
  */
 function MarkdownOptions(props: OptionsProps) {
   const { params, setParams } = props;
   const fields = useFields(props);
   const [fontSizeValid, setFontSizeValid] = useState(true);
   return (
-    <Panel>
+    <Panel fill>
       <ParamRow label="Base font size in points" invalid={!fontSizeValid} error={fontSizeValid ? undefined : 'Values must be on or between 8 and 36'}>
         <RangeControl
           min={8}

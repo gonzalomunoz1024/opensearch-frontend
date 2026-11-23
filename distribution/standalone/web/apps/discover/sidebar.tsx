@@ -64,15 +64,17 @@ export interface FieldGroups {
 
 /**
  * The fields under their three headings, as the original sorts them: by name, the selected ones
- * in the order of the columns, and the most picked of the others as popular
+ * in the order of the columns, and the most picked of the others as popular. Columns that are no
+ * list (none: the state's are not) put no field under any heading, as the original's.
  */
 export function groupFields(
   fields: Field[],
-  columns: string[],
+  columns: readonly string[] | undefined,
   popularLimit: number,
   filter: FieldFilter,
   present: ReadonlySet<string>
 ): FieldGroups {
+  if (!columns) return { selected: [], popular: [], unpopular: [] };
   const sorted = [...fields].sort((a, b) => a.name.localeCompare(b.name));
   const popular = new Set(
     sorted
@@ -140,11 +142,11 @@ export function fieldSummary(rows: RawHit[], indexPattern: IndexPattern, field: 
 }
 
 /**
- * The text of one of a field's top values: an empty string stays empty, as the original's text
- * format keeps it (its details then say "Empty string"), where a missing value is a dash
+ * The text of one of a field's top values: the value as the field's format writes it, an empty
+ * string too, as the original's field calculator does; its details say "Empty string" only when
+ * that text is empty
  */
-export const bucketText = (value: unknown, format: (value: unknown) => { text: string }) =>
-  value === '' ? '' : format(value).text;
+export const bucketText = (value: unknown, format: (value: unknown) => { text: string }) => format(value).text;
 
 /** Whether the original offers to visualize a field from its summary */
 export function isVisualizable(field: Field): boolean {
@@ -401,29 +403,60 @@ function ChoiceRow({ label, value, onChange, testId }: { label: string; value: C
   );
 }
 
-export function Sidebar({
-  indexPattern,
-  indexPatterns,
-  onIndexPatternChange,
-  onRefreshFields,
-  columns,
-  rows,
-  onToggleColumn,
-  onFilter,
-  onFilterExists,
-  onVisualize,
-}: {
+interface SidebarFieldsProps {
   indexPattern: IndexPattern;
-  indexPatterns: IndexPatternSummary[];
-  onIndexPatternChange: (id: string) => void;
-  onRefreshFields: () => void;
-  columns: string[];
+  /** The columns the state names, as the original's sidebar is given them: none when they are no list */
+  columns: string[] | undefined;
   rows: RawHit[];
   onToggleColumn: (fieldName: string) => void;
   onFilter: (fieldName: string, value: unknown, negate: boolean) => void;
   onFilterExists: (fieldName: string) => void;
   onVisualize?: (field: Field) => void;
+}
+
+/**
+ * The index pattern's picker over its fields. With no pattern (the address names one that cannot
+ * be read) the picker shows none chosen and no field is listed, as the original's.
+ */
+export function Sidebar({
+  indexPattern,
+  indexPatterns,
+  onIndexPatternChange,
+  onRefreshFields,
+  ...fields
+}: Omit<SidebarFieldsProps, 'indexPattern'> & {
+  indexPattern: IndexPattern | undefined;
+  indexPatterns: IndexPatternSummary[];
+  onIndexPatternChange: (id: string) => void;
+  onRefreshFields: () => void;
 }) {
+  // With no pattern there are no fields: the button reads the patterns again, as the original's
+  const refreshLabel = indexPattern ? 'Refresh the field list' : 'Refresh data selector';
+  return (
+    <aside className="dscSidebar atlPanel atlPanel--flush" data-test-subj="sidebarPanel" aria-label="Index and fields">
+      <div className="dscSidebar__source">
+        <div className="dscSidebar__sourceGroup">
+          <ComboBox
+            single
+            clearable={false}
+            options={indexPatterns.map((pattern) => ({ value: pattern.id, label: pattern.displayName || pattern.title }))}
+            selected={indexPattern ? [indexPattern.id] : []}
+            placeholder="Select a data source"
+            onChange={([id]) => id && onIndexPatternChange(id)}
+            testId="indexPattern-switch-link"
+          />
+          <button type="button" className="dscSidebar__refresh" aria-label={refreshLabel} title={refreshLabel} onClick={onRefreshFields} data-test-subj="sourceRefreshButton">
+            <Icon name="refresh" />
+          </button>
+        </div>
+      </div>
+      {indexPattern && <SidebarFields indexPattern={indexPattern} {...fields} />}
+    </aside>
+  );
+}
+
+/** The search of the field names, its filter by type, and the fields under their headings */
+function SidebarFields({ indexPattern, columns, rows, onToggleColumn, onFilter, onFilterExists, onVisualize }: SidebarFieldsProps) {
   const [filter, setFilter] = useState<FieldFilter>(NO_FILTER);
   const [filterOpen, setFilterOpen] = useState(false);
   const closeFilter = useCallback(() => setFilterOpen(false), []);
@@ -462,22 +495,7 @@ export function Sidebar({
   );
 
   return (
-    <aside className="dscSidebar atlPanel atlPanel--flush" data-test-subj="sidebarPanel" aria-label="Index and fields">
-      <div className="dscSidebar__source">
-        <div className="dscSidebar__sourceGroup">
-          <ComboBox
-            single
-            clearable={false}
-            options={indexPatterns.map((pattern) => ({ value: pattern.id, label: pattern.displayName || pattern.title }))}
-            selected={[indexPattern.id]}
-            onChange={([id]) => id && onIndexPatternChange(id)}
-            testId="indexPattern-switch-link"
-          />
-          <button type="button" className="dscSidebar__refresh" aria-label="Refresh the field list" title="Refresh the field list" onClick={onRefreshFields} data-test-subj="sourceRefreshButton">
-            <Icon name="refresh" />
-          </button>
-        </div>
-      </div>
+    <>
       <div className="dscSidebar__search">
         <SearchField
           compact
@@ -554,6 +572,6 @@ export function Sidebar({
           </FieldGroup>
         </div>
       )}
-    </aside>
+    </>
   );
 }

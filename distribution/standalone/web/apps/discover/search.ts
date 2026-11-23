@@ -26,6 +26,15 @@ export interface DiscoverRequest {
   documentsOnly?: boolean;
 }
 
+/**
+ * The interval the state holds as the original's TimeBuckets reads it: a text, or the `val` of a
+ * choice (an object); anything else is none, and the histogram is auto
+ */
+export function stateInterval(value: unknown): string | undefined {
+  const chosen: unknown = typeof value === 'object' && value !== null && 'val' in value ? value.val : value;
+  return typeof chosen === 'string' && chosen !== '' ? chosen : undefined;
+}
+
 export function histogramAgg(indexPattern: IndexPattern, interval: string | undefined): AggConfig | undefined {
   if (!indexPattern.timeFieldName) return undefined;
   return {
@@ -39,7 +48,9 @@ export function histogramAgg(indexPattern: IndexPattern, interval: string | unde
 export function aggContext(indexPattern: IndexPattern, range: AbsoluteRange | undefined) {
   return {
     indexPattern,
-    timeRange: range,
+    // As the original's TimeBuckets: the interval suits the time between the two ends, whichever
+    // comes first (the search keeps them as they are)
+    timeRange: range && range.from.getTime() > range.to.getTime() ? { from: range.to, to: range.from } : range,
     timeZone: services.timeZone(),
     barTarget: services.uiSettings.get<number>('histogram:barTarget', 50),
     maxBars: services.uiSettings.get<number>('histogram:maxBars', 100),
@@ -78,10 +89,30 @@ export function allFields(include = services.uiSettings.get<boolean>('search:inc
 }
 
 /**
+ * The type OpenSearch sorts a scripted field's values as, as the original's castSortType gives
+ * it: a number as a number, a string or a boolean as a string; it sorts no other, and the original
+ * fails the search before it is sent
+ */
+export function scriptSortType(type: string): 'number' | 'string' {
+  if (type === 'number') return 'number';
+  if (type === 'string' || type === 'boolean') return 'string';
+  throw new Error(`Unsupported script sort type: ${type}`);
+}
+
+/** Whether the pattern's time field holds nanoseconds (date_nanos), as the original's isTimeNanosBased */
+export function isTimeNanosBased(indexPattern: IndexPattern): boolean {
+  const { timeFieldName } = indexPattern;
+  if (!timeFieldName) return false;
+  const field = indexPattern.fields.find((candidate) => candidate.name === timeFieldName);
+  return Boolean(field?.esTypes?.includes('date_nanos'));
+}
+
+/**
  * The sort of a search, as the original's getSortForSearchSource and normalizeSortRequest make
  * it: the chosen fields that can be sorted on (any other is left out), or else the time field or
- * the score in the order of discover:sort:defaultOrder; a scripted field by its script; and the
- * options of sort:options, without the unmapped_type on the score, which OpenSearch refuses there
+ * the score in the order of discover:sort:defaultOrder; a scripted field by its script, as a
+ * number or a string (any other type throws, as the original's); and the options of
+ * sort:options, without the unmapped_type on the score, which OpenSearch refuses there
  */
 export function sortClause(
   indexPattern: IndexPattern,
@@ -103,13 +134,36 @@ export function sortClause(
         return {
           _script: {
             script: { source: field.script, lang: field.lang ?? 'painless' },
-            type: field.type === 'number' ? 'number' : 'string',
+            type: scriptSortType(field.type),
             order: direction,
           },
         };
       }
       return { [name]: { order: direction, ...(name === '_score' ? scoreOptions : options) } };
     });
+}
+
+/**
+ * The sort Discover and a saved search's panel send, as the original's getSortForSearchSource
+ * hands it to the search source: on a pattern whose time field holds nanoseconds, the time field
+ * is sorted with numeric_type date_nanos, so that indices holding it as a date and as nanoseconds
+ * sort alike. Other searches (VisBuilder's sample) sort as sortClause alone does, as there
+ */
+export function discoverSort(
+  indexPattern: IndexPattern,
+  sort: SortPair[],
+  options?: Record<string, unknown>,
+  defaultOrder?: string
+): Array<Record<string, unknown>> {
+  const clauses = sortClause(indexPattern, sort, options, defaultOrder);
+  const timeField = indexPattern.timeFieldName;
+  if (!timeField || !isTimeNanosBased(indexPattern)) return clauses;
+  return clauses.map((clause) => {
+    const value = clause[timeField];
+    if (typeof value !== 'object' || value === null) return clause;
+    const { order, ...rest } = value as Record<string, unknown>;
+    return { [timeField]: { order, numeric_type: 'date_nanos', ...rest } };
+  });
 }
 
 /**
@@ -131,7 +185,7 @@ export function buildDiscoverRequest(request: DiscoverRequest): Record<string, u
     ...documentFields(indexPattern),
     ...allFields(),
     size: request.size,
-    sort: sortClause(indexPattern, request.sort),
+    sort: discoverSort(indexPattern, request.sort),
     query,
     highlight: services.uiSettings.get('doc_table:highlight', true)
       ? {

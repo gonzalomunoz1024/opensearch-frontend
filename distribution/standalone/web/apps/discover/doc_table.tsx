@@ -70,6 +70,15 @@ export function isFilterable(field: Field | undefined, name: string): boolean {
 }
 
 /**
+ * Whether a cell of the table offers its filter buttons, as the original's row asks: unless its
+ * field cannot be filtered on. A missing value has them too (they filter on whether the field
+ * exists), and so has a column that is no field of the pattern
+ */
+export function cellFilterable(field: Field | undefined, name: string): boolean {
+  return field === undefined || isFilterable(field, name);
+}
+
+/**
  * The columns the table draws, as the original's table adjusts them: the whole source only when
  * no field is chosen, beside the time field when it is the only one chosen
  */
@@ -183,10 +192,13 @@ export function sourceEntries(hit: RawHit, indexPattern: IndexPattern, metaField
   return [...flat];
 }
 
-/** A value as the original's formats write it in a cell: " - " when there is none, nothing for an empty string */
+/**
+ * A value as the original's formats write it in a cell: " - " when there is none; anything else,
+ * an empty string too, as the field's format writes it (nothing for text, 0.00 for a duration in
+ * minutes, the link of a URL template)
+ */
 export function CellValue({ indexPattern, name, value, hit }: { indexPattern: IndexPattern; name: string; value: unknown; hit: RawHit }) {
   if (value === undefined || value === null) return <>{' - '}</>;
-  if (value === '') return null;
   return <FieldValue indexPattern={indexPattern} fieldName={name} value={value} hit={hit} />;
 }
 
@@ -353,13 +365,12 @@ const Row = memo(function Row({
     }
     const value = flat[name];
     const isTime = name === indexPattern.timeFieldName;
-    const missing = value === undefined || value === null;
     const content = (
       <>
         <span className="dscTable__value" data-test-subj="osdDocTableCellDataField">
           <CellValue indexPattern={indexPattern} name={name} value={value} hit={hit} />
         </span>
-        {onFilter && !missing && isFilterable(field, name) && (
+        {onFilter && cellFilterable(field, name) && (
           <span className="dscTable__filter" data-test-subj="osdDocTableCellFilter">
             <TableButton
               icon="zoomIn"

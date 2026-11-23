@@ -40,6 +40,14 @@ export function isValidCount(value: number): boolean {
   return value >= MIN_CONTEXT_SIZE && value <= MAX_CONTEXT_SIZE;
 }
 
+/**
+ * What a side's count field holds once a count is typed in: a 0 puts the count back at once, as
+ * the original's action bar does, unless the count is 0 already
+ */
+export function typedCount(typed: number | undefined, count: number): number | undefined {
+  return typed === 0 && count !== 0 ? count : typed;
+}
+
 /** The count a side asks for once its "Load" button is pressed, or none past the limit */
 export function loadMoreCount(count: number, step: number): number | undefined {
   const next = count + step;

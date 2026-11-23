@@ -18,21 +18,22 @@ import {
   useState,
   type KeyboardEvent,
   type PointerEvent,
+  type ReactNode,
 } from 'react';
 import { Spinner, cx } from '../../components/basic';
-import { SearchField } from '../../components/form';
+import { SearchField, Switch } from '../../components/form';
 import { Icon } from '../../components/icon';
-import { Popover } from '../../components/overlay';
+import { Popover, Tooltip } from '../../components/overlay';
 import { resolveTimeRange, type TimeRange } from '../../lib/dates';
 import type { RawHit } from '../../lib/docs';
 import { buildQuery, mergeFilters, sameFilter, timeRangeFilter } from '../../lib/query';
 import type { Filter, IndexPattern, Query } from '../../lib/types';
 import { appUrl, buildHash, encodeState } from '../../lib/url';
-import { getLocation, navigate, setHashParams, useLocation, useUrlState } from '../../router';
+import { getLocation, lastAddressOf, navigate, setHashParams, useLocation, useUrlState } from '../../router';
 import { services } from '../../services';
 import { HttpFetchError, errorMessage } from '../../services/http';
 import { patternName } from '../../services/index_patterns';
-import { TopNav } from '../../shell/chrome';
+import { TopNav, type TopNavItem } from '../../shell/chrome';
 import { splitFilters } from '../../shell/filter_bar';
 import { defaultQueryLanguage } from '../../shell/query_bar';
 import { pageFiltersOf, savedQueryGlobalParam, type SavedQueryChange } from '../../shell/saved_query';
@@ -41,11 +42,14 @@ import { SearchBar } from '../../shell/search_bar';
 import { addRecentlyAccessed, currentGlobalParam, useAutoRefresh, useBreadcrumbs, useGlobalState } from '../../shell/state';
 import { visContext, type VisInput } from '../../vis/request';
 import { documentFields, sortClause } from '../discover/search';
+import { incomingEditorState } from '../visualize/state_transfer';
+import { returnSwitch } from '../visualize/top_nav';
 import { DataTab } from './data_tab';
 import {
   afterChange,
   newAppState,
   openedState,
+  originatingAppOf,
   readAppState,
   saveDisabledReason,
   urlAppState,
@@ -104,6 +108,8 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
   const [opened, setOpened] = useState<string | null | undefined>(null);
   const [saving, setSaving] = useState(false);
   const [tick, setTick] = useState(0);
+  // Whether the save dialog goes back to the application that opened the page
+  const [returnToOrigin, setReturnToOrigin] = useState(false);
 
   const app = useMemo(() => readAppState(location.hashParams._a), [location.hashParams._a]);
 
@@ -120,7 +126,9 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
       // The query and the filters are in the address from the start
       if (getLocation().hashParams._q === undefined) setQueryState({}, { replace: true });
       if (!savedId) {
-        const state = readApp() ?? newAppState(await services.indexPatterns.defaultId().catch(() => undefined));
+        // A page just arrived at keeps the application it was sent from, as there; a state in the
+        // address says so itself
+        const state = readApp() ?? newAppState(await services.indexPatterns.defaultId().catch(() => undefined), incomingEditorState()?.originatingApp);
         if (!live) return;
         setSaved(undefined);
         writeApp(withStatus(state, 'clean'));
@@ -131,7 +139,7 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
         const loaded = visBuilderFromSavedObject(await services.savedObjects.get<VisBuilderAttributes>(VIS_BUILDER_TYPE, savedId));
         if (!live) return;
         setSaved(loaded);
-        writeApp(openedState(readApp(), loaded));
+        writeApp(openedState(readApp(), loaded, incomingEditorState()?.originatingApp));
         // What it was saved with becomes the page's query and filters, but for those pinned already
         const pinned = pinnedFilters.current;
         setQueryState(
@@ -265,8 +273,10 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
   }, [savedId, title]);
 
   const reason = app ? saveDisabledReason(app) : 'The canvas is empty. Add some aggregations before saving.';
+  // The application a panel was sent from: a dashboard, to go back to once it is saved
+  const originatingApp = app ? originatingAppOf(app) : undefined;
 
-  const save = async ({ title: newTitle, description, asNew }: SaveResult) => {
+  const save = async ({ title: newTitle, description, asNew, returnToOrigin: returning }: SaveResult & { returnToOrigin?: boolean }) => {
     const current = readApp();
     if (!current) return;
     const { attributes, references } = visBuilderToSavedObject(
@@ -280,6 +290,15 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
         references,
       });
       services.toasts.success(`Saved '${newTitle}'`);
+      if (originatingApp && returning) {
+        // Back where it came from, as the original's `navigateToApp(originatingApp)`: where the
+        // dashboards were last, with the time range of now. What is new, or a copy, is handed over
+        // to become a panel there; what was saved over itself is drawn again by the panel it has.
+        const back = lastAddressOf(originatingApp);
+        const newlyCreated = !savedId || asNew;
+        navigate(back, { force: true, state: newlyCreated ? { type: VIS_BUILDER_TYPE, input: { savedObjectId: stored.id } } : undefined });
+        return;
+      }
       setSaving(false);
       setSaved(visBuilderFromSavedObject(stored));
       writeApp({ ...current, metadata: { editor: { state: 'clean' }, isMigrated: false } });
@@ -325,22 +344,43 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
     );
   }
 
+  // As the original's: once saved and opened from another application, saving is "Save as" and
+  // beside it "Save and return" saves over it and goes back; both say why they cannot be pressed
+  const fromOrigin = Boolean(savedId && originatingApp);
+  const returns = Boolean(originatingApp) && returnToOrigin;
+  const withReason = (button: ReactNode) => (reason ? <Tooltip content={reason} position="bottom">{button}</Tooltip> : button);
+  const navItems: TopNavItem[] = [
+    {
+      id: 'save',
+      label: fromOrigin ? 'Save as' : 'Save',
+      icon: fromOrigin ? undefined : 'save',
+      emphasize: !savedId,
+      disabled: Boolean(reason),
+      onClick: () => {
+        // Going back is what the dialog offers first, as the original's
+        setReturnToOrigin(Boolean(originatingApp));
+        setSaving(true);
+      },
+      testId: 'visBuilderSaveButton',
+      wrap: withReason,
+    },
+  ];
+  if (fromOrigin) {
+    navItems.push({
+      id: 'saveAndReturn',
+      label: 'Save and return',
+      icon: 'checkInCircleFilled',
+      emphasize: true,
+      disabled: Boolean(reason),
+      onClick: () => void save({ title, description: saved?.description ?? '', asNew: false, returnToOrigin: true }),
+      testId: 'visBuilderSaveAndReturnButton',
+      wrap: withReason,
+    });
+  }
+
   return (
     <div className="vbdPage" data-test-subj="visBuilderPage">
-      <TopNav
-        items={[
-          {
-            id: 'save',
-            label: 'Save',
-            icon: 'save',
-            emphasize: !savedId,
-            disabled: Boolean(reason),
-            title: reason,
-            onClick: () => setSaving(true),
-            testId: 'visBuilderSaveButton',
-          },
-        ]}
-      />
+      <TopNav items={navItems} />
       <div className="vbdTop">
         <SearchBar
           indexPatterns={indexPattern ? [indexPattern] : []}
@@ -401,7 +441,17 @@ function VisBuilderPage({ savedId }: { savedId?: string }) {
           description={saved?.description}
           showDescription
           existing={Boolean(savedId)}
-          onSave={save}
+          id={savedId}
+          // Opened from a dashboard, a saved visualization is saved as a new one unless told otherwise
+          initialAsNew={Boolean(savedId) && Boolean(originatingApp)}
+          confirmLabel={returns ? 'Save and return' : undefined}
+          options={({ asNew }) => {
+            const offer = returnSwitch(originatingApp, savedId, asNew);
+            return offer.shown ? (
+              <Switch compressed checked={returnToOrigin} onChange={setReturnToOrigin} label={offer.label} testId="returnToOriginModeSwitch" />
+            ) : null;
+          }}
+          onSave={(result) => save({ ...result, returnToOrigin: returns && returnSwitch(originatingApp, savedId, Boolean(savedId) && result.asNew).shown })}
           onClose={() => setSaving(false)}
         />
       )}
@@ -417,7 +467,14 @@ function useSampleHits(indexPattern: IndexPattern | undefined, query: Query, fil
     if (!indexPattern) return undefined;
     const controller = new AbortController();
     const { version: _version, ...fields } = documentFields(indexPattern);
-    const bool = buildQuery(indexPattern, query, filters, services.queryConfig());
+    // A query that cannot be read finds nothing to count: the chart says what is wrong with it
+    let bool: ReturnType<typeof buildQuery>;
+    try {
+      bool = buildQuery(indexPattern, query, filters, services.queryConfig());
+    } catch {
+      setHits([]);
+      return undefined;
+    }
     const range = indexPattern.timeFieldName ? resolveTimeRange(time, { weekStart: services.weekStart() }) : undefined;
     const timeFilter = timeRangeFilter(indexPattern, range);
     if (timeFilter) bool.bool.filter.push(timeFilter);
@@ -463,6 +520,13 @@ async function findIndexPatterns(): Promise<PatternOption[]> {
  * one option is active at a time, the chosen one when the search is focused; the arrows move it,
  * Enter takes it, and it carries the badge of the Return key.
  */
+/** Under the middle of the control, 8 px below, on a whole pixel as the original puts its panel */
+const UNDER_SOURCE = (anchor: DOMRect, panel: { width: number }) => ({
+  top: anchor.bottom + 8,
+  left: Math.round(anchor.left + (anchor.width - panel.width) / 2),
+  side: 'bottom' as const,
+});
+
 function DataSourceSelect({ selectedId, onChange }: { selectedId?: string; onChange: (id: string) => void }) {
   const [open, setOpen] = useState(false);
   const [patterns, setPatterns] = useState<PatternOption[]>();
@@ -516,8 +580,7 @@ function DataSourceSelect({ selectedId, onChange }: { selectedId?: string; onCha
     <Popover
       open={open}
       onClose={close}
-      align="center"
-      offset={8}
+      placeAt={UNDER_SOURCE}
       anchorStyle={{ display: 'flex', width: '100%' }}
       className="vbdSourceList"
       button={
@@ -577,10 +640,33 @@ function DataSourceSelect({ selectedId, onChange }: { selectedId?: string; onCha
                 if (!event.currentTarget.closest('.vbdSourceList')?.contains(event.relatedTarget as Node | null)) setActive(undefined);
               }}
               onKeyDown={onKeyDown}
+              append={
+                // The original's button that clears the search, which gives the focus back to it
+                search ? (
+                  <button
+                    type="button"
+                    className="vbdSourceList__clear"
+                    aria-label="Clear input"
+                    onClick={(event) => {
+                      setSearch('');
+                      setActive(firstActive(patterns ?? []));
+                      event.currentTarget.parentElement?.querySelector('input')?.focus();
+                    }}
+                  >
+                    <Icon name="cross" />
+                  </button>
+                ) : undefined
+              }
             />
           </div>
           {shown.length ? (
-            <ul className="vbdSourceList__options" id={`${listId}_listbox`} role="listbox" aria-label="Selectable options" data-test-subj="searchableDropdownList">
+            <ul
+              className={cx('vbdSourceList__options', shown.length > 7 && 'vbdSourceList__options--more')}
+              id={`${listId}_listbox`}
+              role="listbox"
+              aria-label="Selectable options"
+              data-test-subj="searchableDropdownList"
+            >
               {shown.map((pattern, index) => (
                 <li
                   key={pattern.id}

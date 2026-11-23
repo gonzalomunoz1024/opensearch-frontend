@@ -7,6 +7,7 @@
  * and the filters it makes, are in controls.ts.
  */
 
+import '../styles/input_controls.css';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button, cx } from '../components/basic';
 import { ComboBox } from '../components/combo_box';
@@ -26,6 +27,7 @@ import {
   NOT_INITIALIZED,
   PARTIAL_RESULTS,
   ancestorsOf,
+  asksAsTyped,
   ceilWithPrecision,
   controlLabel,
   controlSearchBody,
@@ -214,8 +216,8 @@ function ListControl({
 }) {
   const id = useId();
   const [loading, setLoading] = useState(false);
-  const dynamic = Boolean(control.options?.dynamicOptions);
   const indexPattern = state?.indexPattern;
+  const dynamic = asksAsTyped(control, fieldNamed(indexPattern, control.fieldName));
   const format = useMemo(
     () => (indexPattern && control.fieldName ? fieldFormatter(indexPattern, control.fieldName, services.formatSettings()) : undefined),
     [indexPattern, control.fieldName]
@@ -409,6 +411,7 @@ function DualRange({
                 type="button"
                 className="visControls__tick"
                 style={{ left: `calc((100% - 16px) * ${trackShare(tick, min, max)} + 8px)` }}
+                title={String(tick)}
                 value={tick}
                 tabIndex={-1}
                 disabled={off}
