@@ -89,10 +89,6 @@
   margin: 0 0 var(--space-2);
 }
 
-.qwbEditor .atlCodeEditor {
-  border-radius: 0;
-}
-
 .qwbActions {
   display: flex;
   gap: var(--space-4);
@@ -332,4 +328,332 @@
 
 .qwbResults .atlPagination {
   padding: var(--space-2) var(--space-3);
+}
+
+/*
+ * The editors, as the original's code editor draws Ace with the theme's colours: lines of 18
+ * pixels with 4 pixels before the text, a gutter on the page's surface with a line at its left,
+ * as wide as its numbers need, the line of the cursor on a band that crosses the gutter, the
+ * selection under the text, the guides of the indents, and a cursor two pixels wide.
+ */
+.qwbCode,
+.qwbComplete {
+  --qwb-code-gutter-line: #e9e9eb;
+  --qwb-code-keyword: #037098;
+  --qwb-code-language: #5256e1;
+  --qwb-code-function: #3c4c72;
+  --qwb-code-operator: #66666b;
+  --qwb-code-string: #087824;
+  --qwb-code-comment: #41705a;
+  --qwb-code-selection: #b3d7ff;
+  --qwb-code-cursor: #000;
+  --qwb-code-match: #0b736d;
+  --qwb-code-band: color-mix(in srgb, var(--color-border) 70%, transparent);
+}
+
+.themeDark .qwbCode,
+.themeDark .qwbComplete {
+  --qwb-code-gutter-line: #38383a;
+  --qwb-code-keyword: hsl(196deg 47.83% 57.37%);
+  --qwb-code-language: rgb(149.7 152.3 249.3);
+  --qwb-code-function: rgb(154.9 163.1 182.6);
+  --qwb-code-operator: rgb(162 162 166.6);
+  --qwb-code-string: rgb(76.9 183.8 103.5);
+  --qwb-code-comment: hsl(151deg 20.13% 59.2%);
+  --qwb-code-selection: rgb(23.3 59.9 98.2);
+  --qwb-code-cursor: #fff;
+  --qwb-code-match: rgb(36.4 178.7 169.3);
+}
+
+.qwbCode {
+  position: relative;
+  width: 100%;
+  height: 140px;
+}
+
+.qwbCode__editor.atlCodeEditor {
+  /* The gutter: a pixel of line, then the numbers with 19 pixels before and 13 after them */
+  --qwb-gutter: calc(34px + var(--qwb-digits, 1) * 1ch);
+  --code-gutter: calc(var(--qwb-gutter) + 4px);
+  border: 0;
+  border-radius: 0;
+  background: linear-gradient(
+    to right,
+    var(--qwb-code-gutter-line) 0,
+    var(--qwb-code-gutter-line) 1px,
+    var(--color-surface) 1px,
+    var(--color-surface) var(--qwb-gutter),
+    var(--color-surface-secondary) var(--qwb-gutter)
+  );
+  scrollbar-color: color-mix(in srgb, var(--color-text-secondary) 50%, transparent) transparent;
+}
+
+/* Ace gives the gutter whole pixels */
+@supports (width: round(up, 1.5px, 1px)) {
+  .qwbCode__editor.atlCodeEditor {
+    --qwb-gutter: calc(1px + round(up, 33px + var(--qwb-digits, 1) * 1ch, 1px));
+  }
+}
+
+.qwbCode--text .qwbCode__editor.atlCodeEditor {
+  --qwb-gutter: 0px;
+  --code-gutter: 4px;
+  background: var(--color-surface-secondary);
+}
+
+.qwbCode__editor.atlCodeEditor:focus-within {
+  border: 0;
+  box-shadow: none;
+}
+
+/* What is drawn under the text is under it, and over the editor's own ground */
+.qwbCode__editor .atlCodeEditor__body {
+  isolation: isolate;
+}
+
+.qwbCode__editor .atlCodeEditor__paint {
+  padding: 0;
+  tab-size: 4;
+}
+
+.qwbCode__editor .atlCodeEditor__line,
+.qwbCode__editor .atlCodeEditor__line--marked {
+  padding: 0 4px 0 var(--code-gutter);
+  background: transparent;
+}
+
+.qwbCode__editor .atlCodeEditor__line::before {
+  z-index: 2;
+  width: var(--qwb-gutter);
+  margin: 0 4px 0 calc(-1 * var(--code-gutter));
+  padding: 0 13px 0 19px;
+  border-left: 1px solid var(--qwb-code-gutter-line);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+}
+
+.qwbCode__editor .atlCodeEditor__line--marked::before {
+  background: linear-gradient(var(--qwb-code-band), var(--qwb-code-band)), var(--color-surface);
+}
+
+/* The cursor and the selection are drawn by the page, as Ace draws its own */
+.qwbCode__editor .atlCodeEditor__input {
+  padding: 0 4px 0 var(--code-gutter);
+  caret-color: transparent;
+  tab-size: 4;
+}
+
+.qwbCode__editor .atlCodeEditor__input::selection {
+  background: transparent;
+}
+
+.qwbCode__marks {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.qwbCode__activeLine {
+  position: absolute;
+  right: 0;
+  left: var(--qwb-gutter);
+  height: 18px;
+  background: var(--qwb-code-band);
+}
+
+.qwbCode__selection {
+  position: absolute;
+  height: 18px;
+  border-radius: 3px;
+  background: var(--qwb-code-selection);
+}
+
+.qwbCode__selection--first {
+  right: 0;
+  border-radius: 3px 0 0;
+}
+
+.qwbCode__selection--last {
+  border-radius: 0 0 3px 3px;
+}
+
+.qwbCode__selection--between {
+  right: 0;
+  border-radius: 0;
+}
+
+.qwbCode__selection--afterShort {
+  border-top-left-radius: 3px;
+}
+
+.qwbCode__selection--beforeNone {
+  border-bottom-left-radius: 3px;
+}
+
+.qwbCode__bracket {
+  position: absolute;
+  width: 1ch;
+  height: 18px;
+  margin: -1px 0 0 -1px;
+  border: 1px solid var(--color-border-light);
+}
+
+.qwbCode__cursor {
+  position: absolute;
+  z-index: 1;
+  height: 18px;
+  border-left: 2px solid var(--qwb-code-cursor);
+  pointer-events: none;
+  animation: qwbCursor 1s steps(1) infinite;
+}
+
+/* Shown for six tenths of each second, as Ace blinks its cursor */
+@keyframes qwbCursor {
+  0% {
+    opacity: 1;
+  }
+
+  60% {
+    opacity: 0;
+  }
+}
+
+.qwbCode__probe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-family: var(--font-family-code);
+  font-size: 14px;
+  white-space: pre;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.qwbCode .tokSqlKeyword,
+.qwbCode .tokSqlType,
+.qwbCode .tokSqlNumber {
+  color: var(--qwb-code-keyword);
+}
+
+.qwbCode .tokSqlLanguage {
+  color: var(--qwb-code-language);
+}
+
+.qwbCode .tokSqlFunction {
+  color: var(--qwb-code-function);
+}
+
+.qwbCode .tokSqlOperator {
+  color: var(--qwb-code-operator);
+}
+
+.qwbCode .tokSqlString {
+  color: var(--qwb-code-string);
+}
+
+.qwbCode .tokSqlComment {
+  color: var(--qwb-code-comment);
+}
+
+/* An indent guide: a line at the right of each step of an indent, the whole height of the line */
+.qwbCode .tokQwbGuide {
+  display: inline-block;
+  height: 1lh;
+  vertical-align: top;
+  background: linear-gradient(
+    to left,
+    var(--color-text-tertiary) 0,
+    var(--color-text-tertiary) 1px,
+    transparent 1px,
+    transparent 100%
+  );
+}
+
+/*
+ * The hint the Tab key stops on: under the text, unseen, until it has the focus; then over it.
+ * The original draws it white in the dark theme too, under the theme's light text; here it is
+ * the page's surface.
+ */
+.qwbCode__hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: color-mix(in srgb, var(--color-surface) 70%, transparent);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.qwbCode__hint:focus {
+  z-index: 3;
+  border: 2px solid var(--color-accent);
+  opacity: 1;
+}
+
+.qwbCode__hint--inactive {
+  display: none;
+}
+
+/*
+ * The list of completions, as Ace's: 280 pixels wide, at most eight rows of 1.4 lines, the row
+ * chosen on a band, the letters typed marked in each value, and its kind at the right.
+ */
+.qwbComplete {
+  position: fixed;
+  z-index: 4500;
+  width: 280px;
+  border: 1px solid lightgray;
+  background: var(--color-surface-secondary);
+  box-shadow: 2px 3px 5px rgb(0 0 0 / 20%);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-code);
+  font-size: 14px;
+  line-height: 1.4;
+  white-space: pre;
+  overflow: hidden;
+  cursor: default;
+  user-select: none;
+}
+
+.qwbComplete__row {
+  position: relative;
+  z-index: 0;
+  height: 19.59375px;
+  padding: 0 4px;
+}
+
+.qwbComplete__row--active {
+  background: var(--qwb-code-band);
+}
+
+/* The row under the pointer: a box one pixel higher than the row, under its text */
+.qwbComplete__row--hover::before {
+  content: '';
+  position: absolute;
+  inset: -1px 0 1px;
+  z-index: -1;
+  border: 1px solid rgb(171 191 254);
+  background: rgb(233 233 253 / 40%);
+}
+
+.qwbComplete__match {
+  color: var(--qwb-code-match);
+  text-shadow: 0 0 0.01em;
+}
+
+.qwbComplete__meta {
+  position: absolute;
+  right: 4px;
+  z-index: -1;
+  color: var(--qwb-code-keyword);
 }

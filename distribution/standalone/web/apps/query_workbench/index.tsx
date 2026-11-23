@@ -6,15 +6,15 @@
  * does, and says the same things in the same places.
  */
 
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import '../../styles/query_workbench.css';
 import { Button, Spinner, cx } from '../../components/basic';
-import { CodeEditor, SuggestList, type CodeEditorHandle } from '../../components/code_editor';
 import { Icon } from '../../components/icon';
 import { Modal, copyText, downloadFile } from '../../components/overlay';
 import { HttpFetchError } from '../../services/http';
 import { services } from '../../services';
 import { useBreadcrumbs } from '../../shell/state';
+import { QueryEditor } from './editors';
 import {
   DOCS,
   INDICES_QUERY,
@@ -25,12 +25,9 @@ import {
   indexNames,
   readAnswer,
   reasonOf,
-  suggestSql,
   tableOf,
-  tokenizeSql,
   type Language,
   type QueryAnswer,
-  type SqlSuggestions,
   type TableResult,
 } from './model';
 import { DownloadError, Results, type DownloadKind, type ResultTab } from './results';
@@ -99,118 +96,6 @@ function IndexTree() {
         </li>
       ))}
     </ul>
-  );
-}
-
-// --- The editors --------------------------------------------------------------------------------
-
-function SqlEditor({ value, onChange, onRun }: { value: string; onChange: (text: string) => void; onRun: () => void }) {
-  const editor = useRef<CodeEditorHandle>(null);
-  const [line, setLine] = useState(0);
-  const [menu, setMenu] = useState<(SqlSuggestions & { active: number }) | undefined>();
-  const [menuAt, setMenuAt] = useState<{ left: number; top: number }>();
-
-  useLayoutEffect(() => {
-    if (!menu) {
-      setMenuAt(undefined);
-      return;
-    }
-    const start = value.lastIndexOf('\n', menu.from - 1) + 1;
-    const place = editor.current?.coordinates(value.slice(0, menu.from).split('\n').length - 1, menu.from - start);
-    setMenuAt(place ? { left: place.left, top: place.bottom + 2 } : undefined);
-  }, [menu, value]);
-
-  const open = (text: string, offset: number) => {
-    const found = suggestSql(text, offset);
-    setMenu(found ? { ...found, active: 0 } : undefined);
-  };
-
-  const accept = (index: number) => {
-    const item = menu?.items[index];
-    if (!menu || !item) return;
-    const next = `${value.slice(0, menu.from)}${item.label}${value.slice(menu.to)}`;
-    setMenu(undefined);
-    onChange(next);
-    editor.current?.select(menu.from + item.label.length);
-    editor.current?.focus();
-  };
-
-  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (menu) {
-      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-        event.preventDefault();
-        const count = menu.items.length;
-        setMenu({ ...menu, active: (menu.active + (event.key === 'ArrowDown' ? 1 : count - 1)) % count });
-        return;
-      }
-      if ((event.key === 'Enter' && !event.ctrlKey && !event.metaKey) || event.key === 'Tab') {
-        event.preventDefault();
-        accept(menu.active);
-        return;
-      }
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        setMenu(undefined);
-        return;
-      }
-    }
-    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-      event.preventDefault();
-      onRun();
-    } else if (event.ctrlKey && event.key === ' ') {
-      event.preventDefault();
-      open(value, event.currentTarget.selectionStart);
-    }
-  };
-
-  return (
-    <>
-      <CodeEditor
-        handle={editor}
-        value={value}
-        onChange={(next) => {
-          onChange(next);
-          const [start, end] = editor.current?.selection() ?? [0, 0];
-          // Suggestions follow what is typed, and go when text is taken away
-          if (start === end && next.length > value.length) open(next, start);
-          else setMenu(undefined);
-        }}
-        onCursor={(start, end) => {
-          setLine(value.slice(0, end).split('\n').length - 1);
-          if (menu && (start !== end || start < menu.from)) setMenu(undefined);
-        }}
-        onKeyDown={onKeyDown}
-        tokenize={tokenizeSql}
-        markedLines={[line, line]}
-        fontSize={14}
-        height="10rem"
-        ariaLabel="Code Editor"
-        testId="sqlCodeEditor"
-      />
-      {menu && menuAt && (
-        <SuggestList items={menu.items} active={menu.active} at={menuAt} onPick={accept} testId="sqlAutocomplete" />
-      )}
-    </>
-  );
-}
-
-function PplEditor({ value, onChange, onRun }: { value: string; onChange: (text: string) => void; onRun: () => void }) {
-  return (
-    <CodeEditor
-      value={value}
-      onChange={onChange}
-      onKeyDown={(event) => {
-        if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-          event.preventDefault();
-          onRun();
-        }
-      }}
-      gutter={false}
-      fontSize={14}
-      height="10rem"
-      ariaLabel="Code Editor"
-      testId="pplCodeEditor"
-    />
   );
 }
 
@@ -390,11 +275,7 @@ export function QueryWorkbench() {
 
             <section className="qwbEditor">
               {language === 'PPL' && <h3 className="atlTitleS qwbEditor__title">Query editor</h3>}
-              {language === 'SQL' ? (
-                <SqlEditor value={sql} onChange={setSql} onRun={() => void run()} />
-              ) : (
-                <PplEditor value={ppl} onChange={setPpl} onRun={() => void run()} />
-              )}
+              <QueryEditor key={language} language={language} value={text} onChange={setText} />
               <div className="qwbActions">
                 <Button variant="primary" size="s" onClick={() => void run()} testId={language === 'SQL' ? 'sqlRunButton' : 'pplRunButton'}>
                   Run

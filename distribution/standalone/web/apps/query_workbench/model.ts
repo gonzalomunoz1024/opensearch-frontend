@@ -459,6 +459,37 @@ export function tokenizeSql(text: string): CodeToken[][] {
   });
 }
 
+// Where the indent of a line ends, as Ace looks for it in the line's first token
+const INDENT_END = /\s\S| \t|\t |\s$/;
+
+/**
+ * The lines of an editor with the guides of their indents: each four spaces, or each tab, that a
+ * line begins with becomes a run of its own that is drawn with a line at its right, all but the
+ * last step before the text, as Ace draws them.
+ */
+export function indentGuides(lines: CodeToken[][]): CodeToken[][] {
+  return lines.map((tokens) => {
+    const first = tokens[0];
+    if (!first || first.kind !== undefined) return tokens;
+    const value = first.text;
+    let columns = value.search(INDENT_END);
+    let step = 1;
+    if (value[0] === ' ') {
+      columns -= columns % 4;
+      step = 4;
+    } else if (value[0] !== '\t') {
+      return tokens;
+    }
+    if (columns <= 0) return tokens;
+    const guides: CodeToken[] = [];
+    for (let at = 0; at < columns; at += step) {
+      guides.push({ text: value.slice(at, at + step), kind: 'QwbGuide' });
+    }
+    const rest = value.slice(columns);
+    return [...guides, ...(rest ? [{ text: rest }] : []), ...tokens.slice(1)];
+  });
+}
+
 // --- The SQL editor: Ace's completion -----------------------------------------------------------
 
 /** One completion as Ace's language tools keep it; its score changes as the list is filtered */
@@ -588,6 +619,16 @@ export function openCompletions(text: string, offset: number): CompletionList {
 export const completionsDone = (list: CompletionList) =>
   list.filtered.length === 0 ||
   (list.filtered.length === 1 && list.filtered[0].value === list.filterText);
+
+/**
+ * A completion's kind as the list writes it at the right of a row: cut short, or to nothing but
+ * its ellipsis, when the row has not the columns for the value and the kind with two between.
+ */
+export function completionMeta(item: Completion, columns: number): string {
+  if (item.meta.length + item.value.length <= columns - 2) return item.meta;
+  const kept = Math.max(0, Math.trunc(columns - item.value.length - 3));
+  return `${item.meta.slice(0, kept)}…`;
+}
 
 /** A completion's value in runs, those that match the letters typed marked */
 export function completionRuns(item: Completion): Array<{ text: string; match: boolean }> {
