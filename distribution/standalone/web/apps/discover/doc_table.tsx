@@ -103,7 +103,7 @@ function sortLabel(sort: SortPair[], name: string): string {
 }
 
 /** "geoip.city_name" as "g.city_name", when the setting shortens dotted names */
-function shortDots(name: string): string {
+export function shortDots(name: string): string {
   return name.replace(/(.).+?\./g, '$1.');
 }
 

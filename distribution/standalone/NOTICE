@@ -11,7 +11,9 @@ keeps working, and parts of it are derived from it under the Apache License, Ver
     order in which the colours of the palette are given out,
   - the reading of a Vega spec (web/vis/vega): its settings, the requests it makes to OpenSearch,
     its warnings and its error texts,
-  - the palette of chart colours, which is that of the OpenSearch UI framework.
+  - the palette of chart colours, which is that of the OpenSearch UI framework,
+  - the tokens that mark the kind of a field (web/components/field_token.tsx): the glyphs and
+    colours of the OpenSearch UI framework's tokens.
 
 OpenSearch Dashboards
 Copyright OpenSearch Contributors

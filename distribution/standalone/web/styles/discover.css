@@ -20,117 +20,499 @@
   min-height: 0;
 }
 
-.dscSidebar__top {
+/* The index pattern, and at its end the button that reads its fields again, in one field */
+.dscSidebar__source {
+  padding: var(--space-2) var(--space-2) 0;
+}
+
+.dscSidebar__sourceGroup {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
+  height: var(--control-height);
+  padding: 1px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  box-shadow: inset 0 0 0 1px var(--color-border-light);
+  overflow: hidden;
+}
+
+.dscSidebar__sourceGroup:focus-within {
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+
+.dscSidebar__sourceGroup > :first-child {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.dscSidebar__sourceGroup .atlCombo {
+  flex-wrap: nowrap;
+  height: 100%;
+  min-height: 0;
+  padding: 0 10px 0 calc(var(--space-2) - 1px);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* The value as the original's: on a 22 px line, ending where the original leaves room for typing */
+.dscSidebar__sourceGroup .atlCombo > input {
+  align-self: flex-start;
+  min-width: 0;
+  height: 22px;
+  margin: 3px 25px 0 0;
+  padding: 0;
+  line-height: 22px;
+  text-overflow: ellipsis;
+}
+
+.dscSidebar__sourceGroup .atlCombo__caret {
+  width: 12px;
+  height: 12px;
+  color: var(--color-text-primary);
+}
+
+.dscSidebar__refresh {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-height);
+  padding: 0;
+  border: 0;
+  background: var(--color-border-light);
+  color: var(--color-accent);
+  cursor: pointer;
+}
+
+/* The search of the field names and the filter by kind, over a line */
+.dscSidebar__search {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
   padding: var(--space-2);
   border-bottom: 1px solid var(--color-border-light);
 }
 
-.dscSidebar__top .atlButton {
-  flex: none;
-}
-
-.dscSidebar__search {
-  display: flex;
-  gap: var(--space-1);
-  align-items: center;
-  min-width: 0;
-}
-
-.dscSidebar__search > :first-child {
+/* As the original's: a 12 px magnifier 8 px in, the text 32 px in */
+.dscSidebar__search .dscSidebar__searchInput {
+  position: relative;
   flex: 1 1 0;
   min-width: 0;
+  padding: 0 var(--space-2) 0 var(--space-8);
 }
 
-.dscSidebar__search .atlButton {
+.dscSidebar__searchInput > .atlIcon {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--space-2) - 1px);
+  width: 12px;
+  height: 12px;
+  color: var(--color-text-primary);
+  transform: translateY(-50%);
+}
+
+.dscSidebar__searchInput > input {
+  padding: 0;
+}
+
+/* The original's button that clears the search, not the browser's: a 12 px disc with a cross,
+   8 px from the outer edge (over the border), which leaves the text 32 px short of the end */
+.dscSidebar__searchInput > input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.dscSidebar__searchInput .dscSidebar__searchClear {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  margin: 0 -1px 0 calc(var(--space-2) + 1px);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-text-tertiary);
+  color: var(--color-surface);
+  cursor: pointer;
+}
+
+:root.themeDark .dscSidebar__searchInput .dscSidebar__searchClear {
+  background: var(--color-text-secondary);
+}
+
+.dscSidebar__searchClear > .atlIcon {
+  width: 6px;
+  height: 6px;
+  stroke-width: 4;
+}
+
+.dscSidebar__filterGroup {
+  display: flex;
+  flex: none;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  overflow: hidden;
+}
+
+.dscSidebar__filterButton {
+  display: inline-flex;
+  align-items: center;
+  height: var(--control-height);
   padding: 0 var(--space-2);
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 21px;
   white-space: nowrap;
+  cursor: pointer;
 }
 
-.dscSidebar__lists {
-  flex: 1 1 auto;
-  min-height: 0;
-  padding: var(--space-1) var(--space-3) var(--space-3);
-  overflow-y: auto;
+.dscSidebar__filterButton[aria-pressed="true"] {
+  background: var(--color-border-light);
 }
 
-.dscSidebar__lists .atlAccordion__button {
-  font-size: var(--font-size-xs);
+/* As wide as the words in semibold, as the original keeps room for them */
+.dscSidebar__filterText::after {
+  content: attr(data-text);
+  display: block;
+  height: 0;
+  overflow: hidden;
+  font-weight: var(--font-weight-semibold);
+  visibility: hidden;
 }
 
-.dscSidebar__label {
-  padding: var(--space-2) 0 var(--space-1);
+.dscSidebar__filterCount {
+  min-width: 24px;
+  height: 20px;
+  margin-left: var(--space-2);
+  padding: 0 var(--space-1);
+  border-radius: 10px;
+  background: var(--color-surface-secondary);
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+  text-align: center;
 }
 
-.dscSidebar__empty {
-  display: block;
-  padding: var(--space-1) 0;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
+.dscSidebar__filterCount--active {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
 }
 
-.dscField {
+/* The three lists of fields, each under a heading that folds it */
+.dscSidebar__lists {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-top: var(--space-2);
+  overflow-y: auto;
+}
+
+.dscSidebar__group {
   display: flex;
-  align-items: center;
-  width: 100%;
-  min-height: 32px;
-  border-radius: var(--radius-sm);
-}
-
-.dscField:hover,
-.dscField--open {
-  background: var(--color-hover);
-}
-
-.dscField__name {
-  display: flex;
-  flex: 1 1 0;
   align-items: center;
   gap: var(--space-2);
-  min-width: 0;
-  height: 32px;
-  padding: 0 var(--space-1);
-  border: 0;
+  width: 100%;
+  height: 24px;
+  padding: 0 var(--space-2) 0 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
   background: none;
+  color: var(--color-text-primary);
   font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: 18px;
   text-align: left;
   cursor: pointer;
 }
 
-.dscField__action {
-  flex: none;
-  opacity: 0;
+.dscSidebar__group:hover,
+.dscSidebar__group:focus {
+  background: color-mix(in srgb, var(--color-text-secondary) var(--tint-opacity), transparent);
 }
 
-.dscField:hover .dscField__action,
-.dscField__action:focus-visible {
+.dscSidebar__group .atlIcon {
+  width: 12px;
+  height: 12px;
+}
+
+.dscSidebar__list {
+  padding: var(--space-2);
+}
+
+/* A field: its kind, its name, and the buttons that show its values and add it to the table */
+.dscSidebar__item {
+  margin: 0 var(--space-1);
+  border-radius: var(--radius-lg);
+}
+
+.dscSidebar__item:hover {
+  margin-left: 0;
+  padding-left: var(--space-1);
+  background: var(--color-surface-secondary);
+}
+
+/* 32 px with its buttons, as tall as its name without them (the source) or when the name wraps */
+.dscSidebarField {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+}
+
+.dscSidebarField__label {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+.dscSidebarField__name {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.dscSidebarField .dscSidebarField__action {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--color-accent);
+  opacity: 0;
+  transition: opacity var(--duration-fast);
+}
+
+.dscSidebarField .dscSidebarField__action:hover,
+.dscSidebarField .dscSidebarField__action:focus {
+  background: var(--color-accent-tint);
+}
+
+.dscSidebarField .dscSidebarField__action--remove {
+  color: var(--color-critical-text);
+}
+
+.dscSidebarField .dscSidebarField__action--remove:hover,
+.dscSidebarField .dscSidebarField__action--remove:focus {
+  background: var(--color-critical-tint);
+}
+
+.dscSidebarField:hover .dscSidebarField__action,
+.dscSidebarField .dscSidebarField__action:focus {
   opacity: 1;
 }
 
+@media (max-width: 991px) {
+  .dscSidebarField .dscSidebarField__action {
+    opacity: 1;
+  }
+}
+
+/* The panels the sidebar opens: a title over a line, and a footer under one */
+.dscFieldPopover__title {
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--color-border-light);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+/* A field's values in the documents on screen, beside the button that shows them */
+.dscFieldPopover.atlPopover {
+  min-width: 260px;
+  max-width: 300px;
+  padding: var(--space-2);
+}
+
+.dscFieldPopover .dscFieldPopover__title {
+  margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) var(--space-2);
+  padding: var(--space-3) var(--space-2);
+}
+
 .dscFieldDetails {
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+.dscFieldDetails__buckets {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  width: 280px;
+  padding-bottom: var(--space-2);
 }
 
-.dscFieldDetails__bar {
+.dscFieldBucket {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.dscFieldBucket__bar {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.dscFieldBucket__text {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-1);
+}
+
+.dscFieldBucket__value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dscFieldBucket__percent {
+  flex: none;
+  color: var(--color-success-text);
+}
+
+.dscFieldBucket__progress {
   height: 4px;
   border-radius: 2px;
   background: var(--color-surface-secondary);
   overflow: hidden;
 }
 
-.dscFieldDetails__bar span {
+.dscFieldBucket__progress > span {
   display: block;
   height: 100%;
   border-radius: 2px;
-  background: var(--color-accent);
+  background: var(--color-healthy);
+}
+
+.dscFieldBucket__actions {
+  display: flex;
+  flex: none;
+  padding-top: 1px;
+}
+
+.dscFieldBucket .dscFieldBucket__action {
+  width: 16px;
+  height: 12px;
+  padding: 0 2px;
+  border-radius: 50%;
+  color: var(--color-accent);
+}
+
+.dscFieldBucket .dscFieldBucket__action .atlIcon {
+  width: 12px;
+  height: 12px;
+}
+
+.dscFieldDetails__visualize {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding-top: var(--space-1);
+}
+
+.dscFieldDetails__visualize .atlButton {
+  min-width: 112px;
+}
+
+.dscFieldDetails__warning {
+  color: var(--color-warning-text);
+}
+
+.dscFieldPopover .dscFieldPopover__footer {
+  margin: var(--space-2) calc(-1 * var(--space-2)) calc(-1 * var(--space-2));
+  padding: var(--space-3) var(--space-2);
+  border-top: 1px solid var(--color-border-light);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+  text-align: center;
+}
+
+/* Which fields are listed: by whether they aggregate or search, their kind, and whether the
+   documents on screen have them */
+.dscFieldFilter.atlPopover {
+  padding: 0;
+}
+
+.dscFieldFilter__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+}
+
+.dscFieldFilter__row {
+  display: grid;
+  grid-template-columns: calc(33% - var(--space-2)) 1fr;
+  gap: var(--space-2);
+  align-items: center;
+  min-height: var(--control-height);
+}
+
+.dscFieldFilter__label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 18px;
+}
+
+.dscFieldFilter__choices {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.dscFieldFilter__choices .atlSegments {
+  display: flex;
+  width: 100%;
+  height: var(--control-height);
+  border-radius: var(--radius-md);
+}
+
+.dscFieldFilter__choices .atlSegment {
+  flex: 1 1 0;
+  height: 28px;
+  border-radius: calc(var(--radius-md) - 2px);
+  font-size: var(--font-size-s);
+}
+
+.dscFieldFilter__choices .atlSegment[aria-pressed="true"] {
+  font-weight: var(--font-weight-semibold);
+}
+
+.dscFieldFilter__row select.atlField {
+  padding: 0 31px 0 7px;
+}
+
+.dscFieldFilter__footer {
+  display: flex;
+  align-items: center;
+  min-height: 46px;
+  padding: var(--space-3);
+  border-top: 1px solid var(--color-border-light);
+}
+
+.dscFieldFilter__footer .atlSwitch {
+  font-size: var(--font-size-s);
+  line-height: 16px;
+}
+
+.dscFieldFilter__footer .atlSwitch__track {
+  width: 28px;
+  height: 16px;
+}
+
+.dscFieldFilter__footer .atlSwitch__track::after {
+  width: 12px;
+  height: 12px;
+}
+
+.dscFieldFilter__footer .atlSwitch__track[aria-checked="true"]::after {
+  transform: translateX(12px);
 }
 
 /*

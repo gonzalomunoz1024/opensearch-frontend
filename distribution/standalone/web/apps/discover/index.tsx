@@ -596,6 +596,7 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
         rows={rows}
         onToggleColumn={toggleColumn}
         onFilter={addFilter}
+        onFilterExists={addExists}
         onVisualize={visualize}
       />
       <div ref={canvasRef} className="dscCanvas" data-test-subj="dscCanvas">

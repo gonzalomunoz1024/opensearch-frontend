@@ -244,6 +244,10 @@ select.atlField {
   outline: none;
 }
 
+.atlFieldGroup > input::placeholder {
+  color: var(--color-text-tertiary);
+}
+
 .atlFieldGroup > .atlIcon {
   color: var(--color-text-tertiary);
 }
@@ -1441,42 +1445,115 @@ select.atlField {
 
 /* --- Field kind tokens ---------------------------------------------------------------------- */
 
+/* The component library's token as the original's theme draws it: 16 pixels, the colour of the
+   kind as a light fill inside a ring of it, the glyph in a darker shade of it */
 .atlToken {
+  --token: var(--token-gray);
+  --token-fill: var(--token-gray-fill);
+  --token-ring: var(--token-gray-ring);
+  --token-solid: var(--token-gray-solid);
+  --token-on: var(--token-on-gray-solid);
   display: inline-flex;
   flex: none;
   align-items: center;
   justify-content: center;
   width: 16px;
   height: 16px;
-  border-radius: 4px;
-  background: var(--color-surface-secondary);
-  color: var(--color-text-secondary);
-  font-family: var(--font-family-code);
-  font-size: 10px;
-  font-weight: var(--font-weight-semibold);
-  line-height: 1;
+  border-radius: calc(var(--radius-sm) - 1px);
+  background: var(--token-fill);
+  box-shadow: inset 0 0 0 1px var(--token-ring);
+  color: var(--token);
+}
+
+.atlToken--circle {
+  border-radius: 50%;
+}
+
+.atlToken--rectangle {
+  box-sizing: content-box;
+  padding: 0 var(--space-1);
+  border-radius: 0;
+}
+
+.atlToken--solid {
+  background: var(--token-solid);
+  box-shadow: none;
+  color: var(--token-on);
+}
+
+.atlToken__glyph {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  fill: currentcolor;
+}
+
+.atlToken__glyph--small {
+  width: 12px;
+  height: 12px;
 }
 
 .atlToken--number {
-  background: var(--color-healthy-tint);
-  color: var(--color-healthy-text);
+  --token: var(--token-number);
+  --token-fill: var(--token-number-fill);
+  --token-ring: var(--token-number-ring);
+  --token-solid: var(--token-number-solid);
+  --token-on: var(--token-on-solid);
+}
+
+.atlToken--string {
+  --token: var(--token-string);
+  --token-fill: var(--token-string-fill);
+  --token-ring: var(--token-string-ring);
+  --token-solid: var(--token-string-solid);
+  --token-on: var(--token-on-solid);
+}
+
+.atlToken--nested {
+  --token: var(--token-nested);
+  --token-fill: var(--token-nested-fill);
+  --token-ring: var(--token-nested-ring);
+  --token-solid: var(--token-nested-solid);
+  --token-on: var(--token-on-solid);
+}
+
+.atlToken--geo {
+  --token: var(--token-geo);
+  --token-fill: var(--token-geo-fill);
+  --token-ring: var(--token-geo-ring);
+  --token-solid: var(--token-geo-solid);
+  --token-on: var(--token-on-solid);
 }
 
 .atlToken--date {
-  background: var(--color-accent-tint);
-  color: var(--color-accent);
+  --token: var(--token-date);
+  --token-fill: var(--token-date-fill);
+  --token-ring: var(--token-date-ring);
+  --token-solid: var(--token-date-solid);
+  --token-on: var(--token-on-solid);
 }
 
-.atlToken--geo_point,
-.atlToken--geo_shape,
+.atlToken--boolean {
+  --token: var(--token-boolean);
+  --token-fill: var(--token-boolean-fill);
+  --token-ring: var(--token-boolean-ring);
+  --token-solid: var(--token-boolean-solid);
+  --token-on: var(--token-on-solid);
+}
+
 .atlToken--ip {
-  background: var(--color-warning-tint);
-  color: var(--color-warning-text);
+  --token: var(--token-ip);
+  --token-fill: var(--token-ip-fill);
+  --token-ring: var(--token-ip-ring);
+  --token-solid: var(--token-ip-solid);
+  --token-on: var(--token-on-solid);
 }
 
-.atlToken--conflict {
-  background: var(--color-critical-tint);
-  color: var(--color-critical-text);
+/* A conflict: the original names a colour the library does not know, so its token has no fill */
+.atlToken--none {
+  --token: var(--color-text-primary);
+  --token-fill: transparent;
+  --token-ring: transparent;
 }
 
 .atlDescriptionList {
