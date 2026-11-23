@@ -797,7 +797,14 @@ function DashboardPage({ savedId }: { savedId?: string }) {
           onClose={() => setDialog(undefined)}
         />
       )}
-      {dialog?.kind === 'create' && <NewVisModal onClose={() => setDialog(undefined)} />}
+      {dialog?.kind === 'create' && (
+        // As the original's "Create new": the editor is told the application and the dashboard to come back to
+        <NewVisModal
+          originatingApp="dashboards"
+          containerInfo={{ containerId: container.containerId, containerName: container.containerName }}
+          onClose={() => setDialog(undefined)}
+        />
+      )}
       {dialog?.kind === 'discard' && (
         <ConfirmModal
           title="Discard changes to dashboard?"
