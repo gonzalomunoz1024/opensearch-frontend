@@ -1144,7 +1144,7 @@ export function bucketFilter(column: TableColumn, key: unknown, context: AggCont
   const { agg } = column;
   const indexId = context.indexPattern?.id;
   const field = filterFieldOf(column, context);
-  // The field's format: it writes the ends into a scripted field's range, and the names above
+  // The field's format: it writes the names above
   const format = formatterFor(agg, context);
   switch (agg.type) {
     case 'terms':
@@ -1157,7 +1157,7 @@ export function bucketFilter(column: TableColumn, key: unknown, context: AggCont
       }
       if (key === OTHER_KEY) {
         if (!cell || agg.type !== 'terms' || !agg.params?.otherBucket) return undefined;
-        const filter = phrasesFilter(field, otherBucketTerms(column, cell), indexId, format);
+        const filter = phrasesFilter(field, otherBucketTerms(column, cell), indexId);
         filter.meta.negate = true;
         return filter;
       }
@@ -1174,20 +1174,19 @@ export function bucketFilter(column: TableColumn, key: unknown, context: AggCont
           lt: new Date(end).toISOString(),
           format: 'strict_date_optional_time',
         },
-        indexId,
-        format
+        indexId
       );
     }
     case 'histogram':
       if (!field || typeof key !== 'number') return undefined;
-      return rangeFilter(field, { gte: key, lt: key + (column.interval ?? 1) }, indexId, format, format(key));
+      return rangeFilter(field, { gte: key, lt: key + (column.interval ?? 1) }, indexId, format(key));
     case 'range': {
       if (!field) return undefined;
       const range = key as RangeKey;
       // An end the range leaves open is infinite, as the original's RangeKey has it
       const gte = range.gte ?? -Infinity;
       const lt = range.lt ?? Infinity;
-      return rangeFilter(field, { gte, lt }, indexId, format, `≥ ${format(gte)} and < ${format(lt)}`);
+      return rangeFilter(field, { gte, lt }, indexId, `≥ ${format(gte)} and < ${format(lt)}`);
     }
     case 'ip_range': {
       if (!field) return undefined;
@@ -1195,9 +1194,9 @@ export function bucketFilter(column: TableColumn, key: unknown, context: AggCont
       // A mask is all its addresses, the last one included; the ends of a range as they are
       if (param<string>(agg, 'ipRangeType', 'fromTo') === 'mask') {
         const mask = cidrRange(String(range.label ?? ''));
-        return mask ? rangeFilter(field, { gte: mask.from, lte: mask.to }, indexId, format) : undefined;
+        return mask ? rangeFilter(field, { gte: mask.from, lte: mask.to }, indexId) : undefined;
       }
-      return rangeFilter(field, { gte: range.gte || -Infinity, lte: range.lt || Infinity }, indexId, format);
+      return rangeFilter(field, { gte: range.gte || -Infinity, lte: range.lt || Infinity }, indexId);
     }
     case 'date_range': {
       if (!field) return undefined;
@@ -1206,7 +1205,7 @@ export function bucketFilter(column: TableColumn, key: unknown, context: AggCont
       if (range.gte) params.gte = new Date(range.gte).toISOString();
       if (range.lt) params.lt = new Date(range.lt).toISOString();
       if (range.gte && range.lt) params.format = 'strict_date_optional_time';
-      return rangeFilter(field, params, indexId, format);
+      return rangeFilter(field, params, indexId);
     }
     case 'filters': {
       const query = column.filterQueries?.[String(key)];
@@ -1232,7 +1231,7 @@ export function brushFilter(column: TableColumn, from: number, to: number, conte
   const range: RangeParams = isDate
     ? { gte: new Date(from).toISOString(), lt: new Date(to).toISOString(), format: 'strict_date_optional_time' }
     : { gte: from, lt: to };
-  return rangeFilter(field, range, context.indexPattern?.id, formatterFor(column.agg, context));
+  return rangeFilter(field, range, context.indexPattern?.id);
 }
 
 // --- The bucket of everything else ----------------------------------------------------------------
