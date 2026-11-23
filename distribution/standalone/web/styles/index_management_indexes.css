@@ -659,3 +659,112 @@ button.ismTreeView__inner {
 .ismAccordion__body {
   padding-top: var(--space-2);
 }
+
+/* --- The plugin's dialogs (plugin_modal.tsx): as wide as what they say, 400 to 768 px ------------- */
+
+.atlModal.ismModal {
+  width: auto;
+  min-width: 400px;
+  max-width: 768px;
+}
+
+.ismModal__body {
+  line-height: 1.5;
+}
+
+.ismModal__body p {
+  margin: 0;
+}
+
+.ismModal__subdued {
+  color: var(--color-text-secondary);
+}
+
+/* As the plugin's: black whatever the theme */
+.ismModal__word {
+  color: #000000;
+  font-weight: var(--font-weight-semibold);
+}
+
+.ismModalNames {
+  margin: 0 0 0 21px;
+  padding: 0;
+  list-style: disc inside;
+  overflow-wrap: break-word;
+}
+
+.ismModal__body .atlField {
+  width: 100%;
+}
+
+/* The text of a dialog that does not grow: the theme's EuiText `grow={false}`, 36 em at most */
+.ismModal__narrow {
+  max-width: 36em;
+}
+
+/* The h4 of the plugin's `EuiText size="s"`, as a label or a heading */
+.ismModal__h4 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 15px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+/* A warning as narrow as the plugin makes it */
+.ismModal__callout350 {
+  width: 350px;
+}
+
+/* --- JSON in the theme's code block (json_block.tsx): small, 24 px in, a line every 18 px -------- */
+
+.ismCodeBlock {
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-code);
+  font-size: 12px;
+}
+
+.ismCodeBlock__pre {
+  max-height: inherit;
+  margin: 0;
+  padding: var(--space-6);
+  overflow: auto;
+  line-height: 18px;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.ismCodeBlock__code {
+  display: block;
+  font-family: inherit;
+}
+
+.ismCodeBlock__line {
+  display: block;
+}
+
+.ismTok--string {
+  color: var(--code-block-string);
+}
+
+.ismTok--number {
+  color: var(--code-block-number);
+}
+
+.ismTok--keyword {
+  color: var(--code-block-keyword);
+}
+
+.ismTok--comment {
+  color: var(--color-text-tertiary);
+  font-style: italic;
+}
+
+.ismTok--punctuation {
+  opacity: 0.7;
+}

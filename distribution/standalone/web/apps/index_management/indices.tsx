@@ -6,21 +6,18 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, CallOut, CodeBlock, IconButton } from '../../components/basic';
+import { Button, CallOut, IconButton } from '../../components/basic';
 import { ComboBox } from '../../components/combo_box';
-import { FormRow, Switch, TextField } from '../../components/form';
+import { Switch, TextField } from '../../components/form';
 import { Modal, copyText, type MenuItem } from '../../components/overlay';
 import { useBreadcrumbs } from '../../shell/state';
 import {
-  ActionModal,
   ActionsMenu,
   ExternalLink,
   FilterButton,
   IndexHealth,
-  Names,
   SearchRow,
   Table,
-  TypeToConfirmModal,
   go,
   ism,
   toasts,
@@ -28,6 +25,9 @@ import {
   type TableColumn,
 } from './common';
 import { ContentPanel, ContentPanelActions } from './content_panel';
+import { FormRow } from './form_row';
+import { JsonBlock } from './json_block';
+import { ModalButtons, ModalNames, PluginModal, TypeTheWord } from './plugin_modal';
 import { SYSTEM_INDEX, matchesAny, orDash, searchClauses, withDataStreams } from './model';
 import { addJob, clusterInfo, startedToast } from './job_handlers';
 import { onJobDone, type JobEvent } from './jobs';
@@ -216,19 +216,29 @@ export function ApplyPolicyModal({ indices, onClose }: { indices: string[]; onCl
   };
 
   return (
-    <ActionModal
+    <PluginModal
       title="Apply policy"
-      label="Apply"
       onClose={onClose}
-      onConfirm={submit}
-      cancelTestId="applyPolicyModalCloseButton"
-      confirmTestId="applyPolicyModalEditButton"
+      footer={
+        <ModalButtons
+          label="Apply"
+          onCancel={onClose}
+          onConfirm={() => void submit()}
+          cancelTestId="applyPolicyModalCloseButton"
+          confirmTestId="applyPolicyModalEditButton"
+        />
+      }
     >
-      <p>
+      <p className="ismModal__narrow">
         Choose the policy you want to use for the selected indices. A copy of the policy will be created and
         applied to the indices.
       </p>
-      <FormRow label="Policy ID" error={submitted ? policyError : undefined} full>
+      <div className="ismSpacer ismSpacer--m" />
+      <FormRow
+        label={<h4 className="ismModal__h4">Policy ID</h4>}
+        error={submitted ? policyError || undefined : undefined}
+        fullWidth
+      >
         <ComboBox
           single
           placeholder="Search policies"
@@ -242,25 +252,29 @@ export function ApplyPolicyModal({ indices, onClose }: { indices: string[]; onCl
       </FormRow>
       {selected && (
         <>
-          <h4 className="atlTitleXs">Preview</h4>
-          <CodeBlock style={{ height: 200, overflow: 'auto' }}>
-            {JSON.stringify({ policy: selected.policy }, null, 4)}
-          </CodeBlock>
+          <div className="ismSpacer" />
+          <h4 className="ismModal__h4 ismModal__narrow">Preview</h4>
+          <div className="ismSpacer ismSpacer--s" />
+          <JsonBlock text={JSON.stringify({ policy: selected.policy }, null, 4)} height={200} />
+          <div className="ismSpacer ismSpacer--m" />
         </>
       )}
       {hasRollover &&
         (single ? (
           <FormRow
             label="Rollover alias"
-            error={submitted ? aliasError : undefined}
+            error={submitted ? aliasError || undefined : undefined}
             help={
-              <>
-                This policy includes a rollover action. Specify a rollover alias. <ExternalLink href={ROLLOVER_DOCS} />
-              </>
+              <p>
+                This policy includes a rollover action. Specify a rollover alias.{' '}
+                <ExternalLink href={ROLLOVER_DOCS} />
+              </p>
             }
-            full
+            helpAt="bottom"
+            fullWidth
           >
             <TextField
+              compact
               value={rolloverAlias}
               onChange={setRolloverAlias}
               placeholder="Rollover alias"
@@ -268,14 +282,16 @@ export function ApplyPolicyModal({ indices, onClose }: { indices: string[]; onCl
             />
           </FormRow>
         ) : (
-          <CallOut
-            tone="warning"
-            size="s"
-            icon="warning"
-            title="You are applying a policy with rollover to multiple indices. You will need to add a unique rollover_alias setting to each index."
-          />
+          <div className="ismModal__callout350">
+            <CallOut
+              tone="warning"
+              size="s"
+              icon="warning"
+              title="You are applying a policy with rollover to multiple indices. You will need to add a unique rollover_alias setting to each index."
+            />
+          </div>
         ))}
-    </ActionModal>
+    </PluginModal>
   );
 }
 
@@ -295,6 +311,104 @@ export async function openIndices(indices: string[], firstRunTimeout?: number): 
     firstRunTimeout,
   });
   return true;
+}
+
+interface ConfirmProps {
+  names: string[];
+  onClose: () => void;
+  onConfirm: () => Promise<void>;
+}
+
+/** The plugin's DeleteIndexModal: "delete" typed before the indexes go */
+function DeleteIndexesModal({ names, onClose, onConfirm }: ConfirmProps) {
+  const [value, setValue] = useState('');
+  return (
+    <PluginModal
+      title="Delete indexes"
+      onClose={onClose}
+      footer={
+        <ModalButtons
+          label="Delete"
+          danger
+          disabled={value !== 'delete'}
+          onCancel={onClose}
+          onConfirm={() => void onConfirm()}
+          confirmTestId="Delete Confirm button"
+        />
+      }
+    >
+      {names.some((name) => matchesAny(name, SYSTEM_INDEX)) && (
+        <>
+          <CallOut tone="warning" size="s">
+            These indexes may contain critical system data. Deleting system indexes may break OpenSearch.
+          </CallOut>
+          <div className="ismSpacer" />
+        </>
+      )}
+      <p>The following index will be permanently deleted. This action cannot be undone.</p>
+      <ModalNames names={names} />
+      <div className="ismSpacer" />
+      <TypeTheWord word="delete" value={value} onChange={setValue} />
+    </PluginModal>
+  );
+}
+
+/** The plugin's CloseIndexModal: "close" typed first; its warning on system indexes ends in a spacer */
+function CloseIndexesModal({ names, onClose, onConfirm }: ConfirmProps) {
+  const [value, setValue] = useState('');
+  return (
+    <PluginModal
+      title="Close indexes"
+      onClose={onClose}
+      footer={
+        <ModalButtons
+          label="Close"
+          disabled={value !== 'close'}
+          onCancel={onClose}
+          onConfirm={() => void onConfirm()}
+          cancelTestId="Close Cancel button"
+          confirmTestId="Close Confirm button"
+        />
+      }
+    >
+      {names.some((name) => matchesAny(name, SYSTEM_INDEX)) && (
+        <CallOut tone="warning" size="s">
+          This index may contain critical system data. Closing system indexes may break OpenSearch.
+          <div className="ismSpacer" />
+        </CallOut>
+      )}
+      <p>
+        The following index will be closed. It is not possible to index documents or to search for documents in a
+        closed index.
+      </p>
+      <ModalNames names={names} />
+      <div className="ismSpacer" />
+      <TypeTheWord word="close" value={value} onChange={setValue} />
+    </PluginModal>
+  );
+}
+
+/** The plugin's OpenIndexModal */
+function OpenIndexesModal({ names, onClose, onConfirm }: ConfirmProps) {
+  return (
+    <PluginModal
+      title="Open indexes"
+      onClose={onClose}
+      footer={
+        <ModalButtons
+          label="Open"
+          onCancel={onClose}
+          onConfirm={() => void onConfirm()}
+          cancelTestId="Open Cancel button"
+          confirmTestId="Open Confirm button"
+        />
+      }
+    >
+      <p>The following index will be opened.</p>
+      <ModalNames names={names} />
+      <div className="ismSpacer" />
+    </PluginModal>
+  );
 }
 
 type Dialog = 'apply' | 'close' | 'open' | 'delete' | 'clearCache' | 'flush' | 'refresh';
@@ -376,61 +490,16 @@ export function IndicesActions({
     <>
       <ActionsMenu items={items} size="m" />
       {dialog === 'apply' && <ApplyPolicyModal indices={names} onClose={close} />}
-      {dialog === 'delete' && (
-        <TypeToConfirmModal
-          title="Delete indexes"
-          label="Delete"
-          word="delete"
-          danger
-          onClose={close}
-          onConfirm={deleteIndices}
-          confirmTestId="Delete Confirm button"
-        >
-          {names.some((name) => matchesAny(name, SYSTEM_INDEX)) && (
-            <CallOut tone="warning" size="s">
-              These indexes may contain critical system data. Deleting system indexes may break OpenSearch.
-            </CallOut>
-          )}
-          <p>The following index will be permanently deleted. This action cannot be undone.</p>
-          <Names names={names} />
-        </TypeToConfirmModal>
-      )}
-      {dialog === 'close' && (
-        <TypeToConfirmModal
-          title="Close indexes"
-          label="Close"
-          word="close"
-          onClose={close}
-          onConfirm={closeIndices}
-          cancelTestId="Close Cancel button"
-          confirmTestId="Close Confirm button"
-        >
-          {names.some((name) => matchesAny(name, SYSTEM_INDEX)) && (
-            <CallOut tone="warning" size="s">
-              This index may contain critical system data. Closing system indexes may break OpenSearch.
-            </CallOut>
-          )}
-          <p>
-            The following index will be closed. It is not possible to index documents or to search for documents in
-            a closed index.
-          </p>
-          <Names names={names} />
-        </TypeToConfirmModal>
-      )}
+      {dialog === 'delete' && <DeleteIndexesModal names={names} onClose={close} onConfirm={deleteIndices} />}
+      {dialog === 'close' && <CloseIndexesModal names={names} onClose={close} onConfirm={closeIndices} />}
       {dialog === 'open' && (
-        <ActionModal
-          title="Open indexes"
-          label="Open"
+        <OpenIndexesModal
+          names={names}
           onClose={close}
           onConfirm={async () => {
             if (await openIndices(names)) close();
           }}
-          cancelTestId="Open Cancel button"
-          confirmTestId="Open Confirm button"
-        >
-          <p>The following index will be opened.</p>
-          <Names names={names} />
-        </ActionModal>
+        />
       )}
       {dialog === 'clearCache' && <ClearCacheModal items={operands} target="indexes" onClose={close} />}
       {dialog === 'flush' && <FlushModal items={operands} target="indexes" onClose={close} />}
