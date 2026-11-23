@@ -4,15 +4,24 @@
 process.env.TZ = 'UTC';
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { AggEditor } from '../../web/apps/visualize/agg_editor';
+import { RangeControl } from '../../web/apps/visualize/editor_controls';
 import {
   addAgg,
   allowedAggs,
   axisName,
   changeAggType,
+  fallbackMetric,
   newVis,
   nextAggId,
   nextAxisId,
+  orderByParams,
+  orderableMetric,
+  parentPipelineMetric,
   syncParams,
   visProblems,
 } from '../../web/apps/visualize/defaults';
@@ -20,6 +29,7 @@ import { classicTimeTicks } from '../../web/charts/core';
 import { OTHER_KEY, buildAggsDsl, otherBucketAggs, planOtherBucket, tabify, type AggConfig, type AggContext } from '../../web/lib/aggs';
 import type { Field, IndexPattern } from '../../web/lib/types';
 import { visType } from '../../web/lib/vis';
+import { createServices, type BootData } from '../../web/services';
 
 const field = (name: string, type: string, more: Partial<Field> = {}): Field => ({
   name,
@@ -62,6 +72,27 @@ describe('a new visualization', () => {
 
   it('has no aggregations when its kind asks for none', () => {
     assert.deepEqual(newVis('markdown', {}).aggs, []);
+  });
+
+  it('names the value axis of a horizontal bar chart LeftAxis-1, at the bottom, as the original', () => {
+    const [axis] = newVis('horizontal_bar', {}).params.valueAxes as Array<{ name: string; position: string }>;
+    assert.equal(axis.name, 'LeftAxis-1');
+    assert.equal(axis.position, 'bottom');
+  });
+});
+
+describe('the Options tab of a Markdown visualization', () => {
+  it("writes the font size as the original's RangeOption: the value beside the handle and in a field", () => {
+    // The tab's module loads the stylesheets of the maps, which a test cannot: its source is read
+    const source = readFileSync('web/apps/visualize/options.tsx', 'utf8');
+    const markdown = source.slice(source.indexOf('function MarkdownOptions('), source.indexOf('function JsonOptions('));
+    assert.match(markdown, /<RangeControl\s+min=\{8\}\s+max=\{36\}[^>]*\sshowInput\s/);
+    assert.match(markdown, /'Values must be on or between 8 and 36'/);
+    // The value beside the handle is the control's own, as RangeOption's showValue
+    assert.equal(/showValue=\{false\}/.test(markdown), false);
+    const out = renderToStaticMarkup(createElement(RangeControl, { min: 8, max: 36, value: 14, showInput: true, onChange: () => undefined }));
+    assert.match(out, /<output class="vzeRange__value"[^>]*>14(<!-- -->)?<\/output>/);
+    assert.match(out, /<input type="number"[^>]* min="8" max="36"[^>]* value="14"/);
   });
 });
 
@@ -119,6 +150,61 @@ describe('adding and changing aggregations', () => {
     assert.equal(histogram.params?.field, undefined, 'the field editor, not the type, picks the only field there is');
     const dates = changeAggType(terms, 'date_histogram', logs, [count, terms]);
     assert.equal(dates.params?.field, 'timestamp');
+  });
+});
+
+describe('what a terms bucket is ordered by, and what a parent pipeline works on', () => {
+  const average: AggConfig = { id: '2', enabled: true, type: 'avg', schema: 'metric', params: { field: 'bytes' } };
+  const median: AggConfig = { id: '3', enabled: true, type: 'median', schema: 'metric', params: { field: 'bytes' } };
+  const ranks: AggConfig = { id: '4', enabled: true, type: 'percentile_ranks', schema: 'metric', params: { field: 'bytes', values: [5000] } };
+  const metrics = [count, average, median, ranks];
+
+  it('gives way to the alphabet when the metric is gone or cannot order the terms, as the original', () => {
+    assert.equal(fallbackMetric('1', metrics, orderableMetric, '_key'), undefined);
+    assert.equal(fallbackMetric('2', metrics, orderableMetric, '_key'), undefined);
+    assert.equal(fallbackMetric('7', metrics, orderableMetric, '_key'), '_key');
+    assert.equal(fallbackMetric('3', metrics, orderableMetric, '_key'), '_key');
+    // OpenSearch orders by one rank, not by all of them: the original offers each rank on its own
+    assert.equal(fallbackMetric('4', metrics, orderableMetric, '_key'), '_key');
+    for (const kept of ['_key', 'custom', '']) assert.equal(fallbackMetric(kept, metrics, orderableMetric, '_key'), undefined, kept);
+  });
+
+  it("gives way to a custom metric when a parent pipeline's metric is gone or is one it cannot work on", () => {
+    assert.equal(fallbackMetric('2', metrics, parentPipelineMetric, 'custom'), undefined);
+    assert.equal(fallbackMetric('7', metrics, parentPipelineMetric, 'custom'), 'custom');
+    assert.equal(fallbackMetric('3', metrics, parentPipelineMetric, 'custom'), 'custom');
+    assert.equal(fallbackMetric('4', metrics, parentPipelineMetric, 'custom'), 'custom');
+    assert.equal(parentPipelineMetric({ ...average, type: 'top_hits' }), false);
+    assert.equal(parentPipelineMetric({ ...average, type: 'cumulative_sum' }), true);
+  });
+
+  it('keeps a custom metric only while the terms are ordered by one', () => {
+    const sum: AggConfig = { id: '2-orderAgg', enabled: true, type: 'sum', schema: 'orderAgg', params: { field: 'bytes' } };
+    assert.deepEqual(orderByParams('2', '_key', sum), { orderBy: '_key', orderAgg: undefined });
+    assert.deepEqual(orderByParams('2', '1', sum), { orderBy: '1', orderAgg: undefined });
+    assert.deepEqual(orderByParams('2', 'custom', sum), { orderBy: 'custom', orderAgg: sum });
+    assert.deepEqual(orderByParams('2', 'custom', undefined), { orderBy: 'custom', orderAgg: { id: '2-orderAgg', enabled: true, type: 'count', params: {}, schema: 'orderAgg' } });
+  });
+
+  it('lists the metrics as the original: "Metric: ..." each, with those that cannot be used switched off', () => {
+    const boot = { basePath: '', version: '3.9.0', name: 'test', settings: {}, settingsDefaults: {}, settingsOverrides: {} };
+    createServices(boot as unknown as BootData);
+    const derivative: AggConfig = { id: '5', enabled: true, type: 'derivative', schema: 'metric', params: { metricAgg: '2' } };
+    const terms: AggConfig = { id: '6', enabled: true, type: 'terms', schema: 'segment', params: { field: 'geo.dest', size: 5, order: 'desc', orderBy: '1' } };
+    const aggs = [...metrics, derivative, terms];
+    const draw = (agg: AggConfig) => renderToStaticMarkup(createElement(AggEditor, { agg, types: [agg.type], indexPattern: logs, aggs, context, onChange: () => undefined }));
+    const option = (value: string, label: string, disabled: boolean) => new RegExp(`<option value="${value}"(?: selected="")?${disabled ? ' disabled=""' : ''}>${label}</option>`);
+    const pipeline = draw(derivative);
+    assert.match(pipeline, option('1', 'Metric: Count', false));
+    assert.match(pipeline, option('2', 'Metric: Average bytes', false));
+    assert.match(pipeline, option('3', 'Metric: Median bytes', true));
+    assert.match(pipeline, option('4', 'Metric: Percentile ranks of bytes', true));
+    assert.match(pipeline, option('custom', 'Custom metric', false));
+    const order = draw(terms);
+    assert.match(order, option('2', 'Metric: Average bytes', false));
+    assert.match(order, option('3', 'Metric: Median bytes', true));
+    assert.match(order, option('4', 'Metric: Percentile ranks of bytes', true));
+    assert.match(order, option('_key', 'Alphabetical', false));
   });
 });
 
@@ -187,6 +273,20 @@ describe('the settings that follow the aggregations', () => {
     const named = { ...vis.params, valueAxes: (vis.params.valueAxes as Array<Record<string, unknown>>).map((axis) => ({ ...axis, title: { text: 'Traffic' } })) };
     const kept = syncParams({ ...vis, params: named, aggs: [average] }, context);
     assert.equal((kept.valueAxes as Array<{ title: { text: string } }>)[0].title.text, 'Traffic');
+  });
+
+  it('labels a pipeline after the metric it is on, as the original names its series', () => {
+    const vis = line();
+    const average: AggConfig = { id: '1', enabled: true, type: 'avg', schema: 'metric', params: { field: 'bytes', customLabel: 'Mean size' } };
+    const sum: AggConfig = { id: '3', enabled: true, type: 'cumulative_sum', schema: 'metric', params: { metricAgg: '1' } };
+    for (const given of [context, {}]) {
+      const params = syncParams({ ...vis, aggs: [average, sum] }, given);
+      const series = params.seriesParams as Array<{ data: { id: string; label: string } }>;
+      assert.deepEqual(
+        series.map((item) => item.data.label),
+        ['Mean size', 'Cumulative Sum of Mean size']
+      );
+    }
   });
 
   it('changes nothing when nothing changed', () => {

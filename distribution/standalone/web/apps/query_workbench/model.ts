@@ -18,8 +18,14 @@ export const INDICES_QUERY = "SHOW tables LIKE '%'";
 export const OUTPUT_TAB = 'Output';
 export const PAGE_SIZES = [10, 20, 50, 100];
 export const DOCS: Record<Language, { title: string; link: string }> = {
-  SQL: { title: 'SQL documentation', link: 'https://opensearch.org/docs/latest/search-plugins/sql/sql/index/' },
-  PPL: { title: 'PPL documentation', link: 'https://opensearch.org/docs/latest/search-plugins/sql/ppl/index/' },
+  SQL: {
+    title: 'SQL documentation',
+    link: 'https://opensearch.org/docs/latest/search-plugins/sql/sql/index/',
+  },
+  PPL: {
+    title: 'PPL documentation',
+    link: 'https://opensearch.org/docs/latest/search-plugins/sql/ppl/index/',
+  },
 };
 
 // --- Queries ------------------------------------------------------------------------------------
@@ -92,7 +98,10 @@ export function readAnswer(response: unknown, reason = ''): QueryAnswer {
     }
     return { fulfilled: false, errorMessage: message, data: '', reason: reasonOf(data.body) };
   }
-  return { fulfilled: true, data: typeof data.resp === 'string' ? data.resp : JSON.stringify(data.resp) };
+  return {
+    fulfilled: true,
+    data: typeof data.resp === 'string' ? data.resp : JSON.stringify(data.resp),
+  };
 }
 
 export interface Row {
@@ -159,7 +168,8 @@ export function tableOf(answer: QueryAnswer): TableResult {
         const data: Record<string, unknown> = {};
         fields.forEach((field, index) => {
           const value = row?.[index];
-          data[field] = value === null || value === undefined ? '-' : value;
+          // A null is a dash; a value the row does not have stays empty
+          data[field] = value === null ? '-' : value;
         });
         return { rowId, data };
       }),
@@ -177,6 +187,60 @@ export function indexNames(answer: QueryAnswer): string[] {
   }
 }
 
+// --- The index tree -----------------------------------------------------------------------------
+
+/** What the tree says when the answer lists no index */
+export const TREE_EMPTY = 'Failed to load OpenSearch indices';
+/** What the tree says when the answer cannot be read, or the request failed */
+export const TREE_FAILED = 'Failed to load OpenSearch indices, please check user permissions';
+
+/** The names the tree lists, or why it lists none */
+export type IndexTree = { names: string[] } | { message: string };
+
+/**
+ * The tree of an answer of `/api/sql_console/sqlquery` to `indicesQuery`, read as the plugin
+ * reads it: the text of `data.resp` parsed, its `datarows`, the third column of each. What the
+ * plugin's reading throws on (no answer, an error's text, no rows) is `TREE_FAILED`; rows that
+ * are there but empty are `TREE_EMPTY`.
+ */
+export function indexTreeOf(response: unknown): IndexTree {
+  try {
+    const resp = (response as { data: { resp?: unknown } }).data.resp;
+    const parsed = JSON.parse(String(resp)) as unknown;
+    const rows = parsed === null || parsed === undefined ? undefined : (parsed as Jdbc).datarows;
+    if (rows === undefined || rows === null) return { message: TREE_FAILED };
+    const length = (rows as { length?: unknown }).length;
+    if (!(typeof length === 'number' && length > 0)) return { message: TREE_EMPTY };
+    if (!Array.isArray(rows)) return { message: TREE_FAILED };
+    return {
+      names: rows.map((row: unknown) => {
+        const name = (row as unknown[])[2];
+        return name === null || name === undefined ? '' : String(name);
+      }),
+    };
+  } catch {
+    return { message: TREE_FAILED };
+  }
+}
+
+/** A name cut to 50 characters with "..." at its end, as lodash's `truncate` cuts it */
+export const truncateName = (name: string, length = 50): string =>
+  name.length > length ? `${name.slice(0, length - 3)}...` : name;
+
+/**
+ * The data source an address of the page names: `#/name` and `#/accelerate/name`, as the
+ * plugin's routes read them; empty for any other address.
+ */
+export function dataSourceOf(hashPath: string): string {
+  const match = /^\/(?:accelerate\/)?([^/]+)\/?$/.exec(hashPath);
+  if (!match) return '';
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
+}
+
 // --- The "Output" tab ---------------------------------------------------------------------------
 
 export const capitalize = (name: string): string =>
@@ -185,7 +249,9 @@ export const capitalize = (name: string): string =>
 /** One paragraph per query: what it was run on and how it went */
 export function messageText(messages: string[], names: string[]): string {
   if (messages.length === 0 || names.length === 0) return '';
-  return messages.map((message, index) => `${capitalize(names[index] ?? '')}: ${message}\n\n`).join('');
+  return messages
+    .map((message, index) => `${capitalize(names[index] ?? '')}: ${message}\n\n`)
+    .join('');
 }
 
 /** Which tab opens after a run: the first query's when it worked */
@@ -193,6 +259,60 @@ export function firstTab(results: TableResult[], queries: string[]) {
   return results.length > 0 && results[0].fulfilled
     ? { id: '0', name: queryIndex(queries[0] ?? '') }
     : { id: OUTPUT_TAB, name: OUTPUT_TAB };
+}
+
+// --- Explain ------------------------------------------------------------------------------------
+
+export const NOT_EXPLAINABLE = 'This query is not explainable.';
+
+/** What Explain shows: each translation as JSON, or that the first could not be had */
+export const explainText = (translations: Array<{ fulfilled: boolean; data?: unknown }>) =>
+  translations.length > 0 && translations[0].fulfilled
+    ? translations.map((translation) => JSON.stringify(translation.data, null, 2)).join('\n')
+    : NOT_EXPLAINABLE;
+
+export type ExplainKind =
+  | 'property'
+  | 'string'
+  | 'number'
+  | 'boolean'
+  | 'null'
+  | 'punctuation'
+  | 'operator';
+
+/** A run of the Explain text, of the kind the code block's highlighter gives it */
+export interface ExplainToken {
+  text: string;
+  kind?: ExplainKind;
+}
+
+// The highlighter's JSON: a string, a number, true or false, null, a bracket or comma, a colon
+const EXPLAIN_TOKEN =
+  /"(?:\\.|[^\\"\r\n])*"|-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b|\b(?:false|true)\b|\bnull\b|[{}[\],]|:/g;
+
+/**
+ * The Explain text in the runs the component library's code block colours, by its highlighter's
+ * JSON: a string before a colon is a property's name, any other a string.
+ */
+export function explainTokens(text: string): ExplainToken[] {
+  const tokens: ExplainToken[] = [];
+  let at = 0;
+  for (const match of text.matchAll(EXPLAIN_TOKEN)) {
+    const found = match[0];
+    const start = match.index ?? 0;
+    if (start > at) tokens.push({ text: text.slice(at, start) });
+    at = start + found.length;
+    let kind: ExplainKind;
+    if (found.startsWith('"')) kind = /^\s*:/.test(text.slice(at)) ? 'property' : 'string';
+    else if (found === 'true' || found === 'false') kind = 'boolean';
+    else if (found === 'null') kind = 'null';
+    else if (found === ':') kind = 'operator';
+    else if (/^[{}[\],]$/.test(found)) kind = 'punctuation';
+    else kind = 'number';
+    tokens.push({ text: found, kind });
+  }
+  if (at < text.length) tokens.push({ text: text.slice(at) });
+  return tokens;
 }
 
 // --- Cells and rows that open -------------------------------------------------------------------
@@ -210,7 +330,10 @@ export function cellText(value: unknown, field: string): CellText {
   if (typeof value !== 'object') return { text: String(value) };
   if (Array.isArray(value)) {
     const plain = typeof value[0] !== 'object';
-    return { text: '', link: plain ? `${field}: [${value.length}]` : `${field}: {${value.length}}` };
+    return {
+      text: '',
+      link: plain ? `${field}: [${value.length}]` : `${field}: {${value.length}}`,
+    };
   }
   return { text: '', link: `${field}: {1}` };
 }
@@ -233,7 +356,8 @@ export function nestedTable(value: unknown): { columns: string[]; rows: unknown[
       rows: value,
     };
   }
-  if (value !== null && typeof value === 'object') return { columns: Object.keys(value), rows: [value] };
+  if (value !== null && typeof value === 'object')
+    return { columns: Object.keys(value), rows: [value] };
   return { columns: [], rows: [] };
 }
 
@@ -248,133 +372,381 @@ export function searchRows(rows: Row[], text: string): Row[] {
   return rows.filter((row) => clauses.every((clause) => holds(row.data, clause)));
 }
 
-// --- The SQL editor -----------------------------------------------------------------------------
+// --- What OpenSearch can do ---------------------------------------------------------------------
 
-const words = (list: string) => new Set(list.split('|'));
+/** What the page offers, by the version `/api/sql_console/cluster_info` tells, as the plugin's */
+export interface Capabilities {
+  /** "Download JSON": OpenSearch answers `format=json` before 3.0 */
+  hasDslJsonFormat: boolean;
+  /** PPL, which Elasticsearch has from 7.9 */
+  hasPpl: boolean;
+  /** The SQL of OpenDistro on Elasticsearch, whose LIKE takes its pattern without quotes */
+  legacy: boolean;
+  /** The data sources of the SQL plugin, from OpenSearch 2.11 */
+  hasDataSources: boolean;
+}
 
-// The words the editor of the plugin colours, which are those of its SQL mode
-export const SQL_KEYWORDS = words(
-  'select|insert|update|delete|from|where|and|or|group|by|order|limit|offset|having|as|case|' +
-    'when|else|end|type|left|right|join|on|outer|desc|asc|union|create|table|primary|key|if|' +
-    'foreign|not|references|default|null|inner|cross|natural|database|drop|grant'
-);
-export const SQL_CONSTANTS = words('true|false');
-export const SQL_FUNCTIONS = words(
-  'avg|count|first|last|max|min|sum|ucase|lcase|mid|len|round|rank|now|format|coalesce|ifnull|isnull|nvl'
-);
-export const SQL_TYPES = words(
-  'int|numeric|decimal|date|varchar|char|bigint|float|double|bit|binary|text|set|timestamp|money|' +
-    'real|number|integer'
-);
+/** What the page offers before it knows, and when the version cannot be read */
+export const DEFAULT_CAPABILITIES: Capabilities = {
+  hasDslJsonFormat: false,
+  hasPpl: true,
+  legacy: false,
+  hasDataSources: true,
+};
 
-/** SQL as lines of coloured runs */
+/** The first version in a text, as semver's `coerce` reads it */
+export function coerceVersion(text: string): [number, number, number] | undefined {
+  const match = /(?:^|[^\d])(\d{1,16})(?:\.(\d{1,16}))?(?:\.(\d{1,16}))?(?:$|[^\d])/.exec(text);
+  if (!match) return undefined;
+  return [Number(match[1]), Number(match[2] ?? 0), Number(match[3] ?? 0)];
+}
+
+const atLeast = (version: [number, number, number], least: [number, number, number]) => {
+  for (let index = 0; index < 3; index += 1) {
+    if (version[index] !== least[index]) return version[index] > least[index];
+  }
+  return true;
+};
+
+export function capabilitiesOf(version: string | undefined, isOpenSearch?: boolean): Capabilities {
+  const coerced = version ? coerceVersion(version) : undefined;
+  if (!coerced) return DEFAULT_CAPABILITIES;
+  const openSearch = isOpenSearch ?? (coerced[0] !== 6 && coerced[0] !== 7);
+  return {
+    hasDslJsonFormat: !atLeast(coerced, [3, 0, 0]),
+    hasPpl: openSearch || atLeast(coerced, [7, 9, 0]),
+    legacy: !openSearch,
+    hasDataSources: openSearch && atLeast(coerced, [2, 11, 0]),
+  };
+}
+
+/** The query whose answer lists the indices at the left */
+export const indicesQuery = (capabilities: Capabilities) =>
+  capabilities.legacy ? 'SHOW tables LIKE %' : INDICES_QUERY;
+
+/** What the SQL editor holds when the page opens */
+export const startQuery = (capabilities: Capabilities) =>
+  capabilities.legacy ? 'SHOW tables LIKE %;' : SQL_START;
+
+// --- Downloads ----------------------------------------------------------------------------------
+
+export type DownloadKind = 'json' | 'jdbc' | 'csv' | 'text';
+
+export interface DownloadFile {
+  /** The route asked for every query, or none for the answers the run already has */
+  route?: string;
+  extension: string;
+  /** The type the original writes in its `data:` link */
+  type: string;
+  /** The menu's words */
+  label: string;
+}
+
+export const DOWNLOADS: Record<DownloadKind, DownloadFile> = {
+  json: { route: 'json', extension: 'json', type: 'text/json', label: 'Download JSON' },
+  jdbc: { extension: 'json', type: 'text/json', label: 'Download JDBC' },
+  csv: { route: 'csv', extension: 'csv', type: 'text/csv', label: 'Download CSV' },
+  text: { route: 'text', extension: 'txt', type: 'text/plain', label: 'Download Text' },
+};
+
+/** The kinds the Download menu lists, in its order */
+export const downloadKinds = (capabilities: Capabilities): DownloadKind[] =>
+  capabilities.hasDslJsonFormat ? ['json', 'jdbc', 'csv', 'text'] : ['jdbc', 'csv', 'text'];
+
+/** The route of a format for a language: `sqlcsv`, `ppltext` */
+export const downloadRoute = (language: Language, kind: DownloadKind) =>
+  `${language === 'SQL' ? 'sql' : 'ppl'}${DOWNLOADS[kind].route ?? 'query'}`;
+
+/**
+ * What a file holds: JSON laid out with four spaces as the plugin writes JDBC and JSON, CSV and
+ * text as they came. Undefined when an answer cannot be read as JSON.
+ */
+export function fileContent(kind: DownloadKind, data: string): string | undefined {
+  if (kind === 'csv' || kind === 'text') return data;
+  try {
+    return JSON.stringify(JSON.parse(data), undefined, 4);
+  } catch {
+    return undefined;
+  }
+}
+
+// --- The SQL editor: Ace's SQL mode -------------------------------------------------------------
+
+// The words of the mode, by kind, as its highlight rules list them
+const SQL_WORD_LISTS: Array<[string, string]> = [
+  [
+    'SqlFunction',
+    'avg|count|first|last|max|min|sum|ucase|lcase|mid|len|round|rank|now|format|coalesce|ifnull|isnull|nvl',
+  ],
+  [
+    'SqlKeyword',
+    'select|insert|update|delete|from|where|and|or|group|by|order|limit|offset|having|as|case|' +
+      'when|else|end|type|left|right|join|on|outer|desc|asc|union|create|table|primary|key|if|' +
+      'foreign|not|references|default|null|inner|cross|natural|database|drop|grant',
+  ],
+  ['SqlLanguage', 'true|false'],
+  [
+    'SqlType',
+    'int|numeric|decimal|date|varchar|char|bigint|float|double|bit|binary|text|set|timestamp|' +
+      'money|real|number|integer',
+  ],
+];
+
+/**
+ * Each word and its kind, in the order Ace's keyword mapper keeps them: list by list, each read
+ * from its end. The completions are offered in this order.
+ */
+export const SQL_WORDS: ReadonlyMap<string, string> = (() => {
+  const map = new Map<string, string>();
+  for (const [kind, list] of SQL_WORD_LISTS) {
+    const names = list.split('|');
+    for (let index = names.length - 1; index >= 0; index -= 1) map.set(names[index], kind);
+  }
+  return map;
+})();
+
+// The rules of the mode's start state, tried in order where the text is; what none of them takes
+// is plain text. A word takes its kind from `SQL_WORDS`.
+const SQL_RULES: Array<{ pattern: RegExp; kind?: string; word?: boolean; comment?: boolean }> = [
+  { pattern: /--.*$/y, kind: 'SqlComment' },
+  { pattern: /\/\*/y, kind: 'SqlComment', comment: true },
+  { pattern: /".*?"/y, kind: 'SqlString' },
+  { pattern: /'.*?'/y, kind: 'SqlString' },
+  { pattern: /`.*?`/y, kind: 'SqlString' },
+  { pattern: /[+-]?\d+(?:(?:\.\d*)?(?:[eE][+-]?\d+)?)?\b/y, kind: 'SqlNumber' },
+  { pattern: /[a-zA-Z_$][a-zA-Z0-9_$]*\b/y, word: true },
+  { pattern: /\+|-|\/|\/\/|%|<@>|@>|<@|&|\^|~|<|>|<=|=>|==|!=|<>|=/y, kind: 'SqlOperator' },
+  { pattern: /[()]/y },
+  { pattern: /\s+/y },
+];
+
+/** SQL as lines of coloured runs, as Ace's SQL mode colours it */
 export function tokenizeSql(text: string): CodeToken[][] {
   let inComment = false;
   return text.split('\n').map((line) => {
     const tokens: CodeToken[] = [];
-    let plain = '';
-    const flush = () => {
-      if (plain) tokens.push({ text: plain });
-      plain = '';
-    };
-    const push = (value: string, kind: string) => {
-      flush();
-      tokens.push({ text: value, kind });
+    const push = (value: string, kind?: string) => {
+      const last = tokens[tokens.length - 1];
+      if (last && last.kind === kind) last.text += value;
+      else tokens.push(kind ? { text: value, kind } : { text: value });
     };
     let at = 0;
     while (at < line.length) {
       if (inComment) {
         const end = line.indexOf('*/', at);
-        if (end === -1) {
-          push(line.slice(at), 'Comment');
-          at = line.length;
-        } else {
-          push(line.slice(at, end + 2), 'Comment');
-          at = end + 2;
-          inComment = false;
-        }
+        const stop = end === -1 ? line.length : end + 2;
+        push(line.slice(at, stop), 'SqlComment');
+        inComment = end === -1;
+        at = stop;
         continue;
       }
-      const char = line[at];
-      if (line.startsWith('--', at)) {
-        push(line.slice(at), 'Comment');
-        at = line.length;
-      } else if (line.startsWith('/*', at)) {
-        const end = line.indexOf('*/', at + 2);
-        if (end === -1) {
-          push(line.slice(at), 'Comment');
-          at = line.length;
+      let taken = false;
+      for (const rule of SQL_RULES) {
+        rule.pattern.lastIndex = at;
+        const match = rule.pattern.exec(line);
+        if (!match || match[0] === '') continue;
+        const value = match[0];
+        if (rule.comment) {
+          push(value, 'SqlComment');
           inComment = true;
+        } else if (rule.word) {
+          push(value, SQL_WORDS.get(value.toLowerCase()));
         } else {
-          push(line.slice(at, end + 2), 'Comment');
-          at = end + 2;
+          push(value, rule.kind);
         }
-      } else if (char === "'" || char === '"' || char === '`') {
-        let end = line.indexOf(char, at + 1);
-        if (end === -1) end = line.length - 1;
-        push(line.slice(at, end + 1), 'String');
-        at = end + 1;
-      } else if (/[0-9]/.test(char) && !/[\w$]/.test(line[at - 1] ?? '')) {
-        const match = /^\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/.exec(line.slice(at));
-        const number = match ? match[0] : char;
-        push(number, 'Number');
-        at += number.length;
-      } else if (/[A-Za-z_$]/.test(char)) {
-        const match = /^[A-Za-z_$][\w$]*/.exec(line.slice(at));
-        const name = match ? match[0] : char;
-        const lower = name.toLowerCase();
-        if (SQL_KEYWORDS.has(lower) || SQL_TYPES.has(lower) || SQL_CONSTANTS.has(lower)) push(name, 'Keyword');
-        else if (SQL_FUNCTIONS.has(lower)) push(name, 'Key');
-        else plain += name;
-        at += name.length;
-      } else {
-        plain += char;
+        at += value.length;
+        taken = true;
+        break;
+      }
+      if (!taken) {
+        push(line[at]);
         at += 1;
       }
     }
-    flush();
     return tokens.length ? tokens : [{ text: '' }];
   });
 }
 
-export interface SqlSuggestion {
-  label: string;
-  meta: string;
+// Where the indent of a line ends, as Ace looks for it in the line's first token
+const INDENT_END = /\s\S| \t|\t |\s$/;
+
+/**
+ * The lines of an editor with the guides of their indents: each four spaces, or each tab, that a
+ * line begins with becomes a run of its own that is drawn with a line at its right, all but the
+ * last step before the text, as Ace draws them.
+ */
+export function indentGuides(lines: CodeToken[][]): CodeToken[][] {
+  return lines.map((tokens) => {
+    const first = tokens[0];
+    if (!first || first.kind !== undefined) return tokens;
+    const value = first.text;
+    let columns = value.search(INDENT_END);
+    let step = 1;
+    if (value[0] === ' ') {
+      columns -= columns % 4;
+      step = 4;
+    } else if (value[0] !== '\t') {
+      return tokens;
+    }
+    if (columns <= 0) return tokens;
+    const guides: CodeToken[] = [];
+    for (let at = 0; at < columns; at += step) {
+      guides.push({ text: value.slice(at, at + step), kind: 'QwbGuide' });
+    }
+    const rest = value.slice(columns);
+    return [...guides, ...(rest ? [{ text: rest }] : []), ...tokens.slice(1)];
+  });
 }
 
-export interface SqlSuggestions {
-  from: number;
-  to: number;
-  items: SqlSuggestion[];
+// --- The SQL editor: Ace's completion -----------------------------------------------------------
+
+/** One completion as Ace's language tools keep it; its score changes as the list is filtered */
+export interface Completion {
+  value: string;
+  meta: 'local' | 'keyword';
+  score: number;
+  /** 1 when the letters typed begin it */
+  exactMatch: number;
+  /** The letters of the value that match those typed, as bits */
+  matchMask: number;
+}
+
+// What a word to complete is made of, and what parts words in the document
+const IDENTIFIER = /[a-zA-Z_0-9$\-\u00A2-\uFFFF]/;
+const WORD_SPLIT = /[^a-zA-Z_0-9$\-\u00C0-\u1FFF\u2C00-\uD7FF\w]+/;
+
+/** The part of a word before the cursor that completion works on */
+export function completionPrefix(text: string, offset: number): string {
+  let start = offset;
+  while (start > 0 && text[start - 1] !== '\n' && IDENTIFIER.test(text[start - 1])) start -= 1;
+  return text.slice(start, offset);
+}
+
+/** The words of the document, scored by how near they are to the cursor, the word there left out */
+function localCompletions(text: string, offset: number): Completion[] {
+  const at = text.slice(0, offset).split(WORD_SPLIT).length - 1;
+  const words = text.split(WORD_SPLIT);
+  const current = words[at];
+  const scores = new Map<string, number>();
+  words.forEach((word, index) => {
+    if (!word || word === current) return;
+    const score = words.length - Math.abs(at - index);
+    scores.set(word, Math.max(score, scores.get(word) ?? score));
+  });
+  // In the order of Ace's object of words: the words that are array indices first, by value
+  const index = (word: string) =>
+    /^(?:0|[1-9]\d*)$/.test(word) && Number(word) < 2 ** 32 - 1 ? Number(word) : -1;
+  const ordered = [...scores].sort(([a], [b]) => {
+    const [first, second] = [index(a), index(b)];
+    if (first >= 0 && second >= 0) return first - second;
+    return first >= 0 ? -1 : second >= 0 ? 1 : 0;
+  });
+  return ordered.map(([value, score]) => ({
+    value,
+    meta: 'local',
+    score,
+    exactMatch: 0,
+    matchMask: 0,
+  }));
 }
 
 /**
- * What could finish the word before the cursor: the words already in the editor first, then
- * what SQL itself has. A word typed in capitals is finished in capitals.
+ * The completions Ace keeps while its list is open. Each filter takes the penalty of the letters
+ * typed from the score of every completion it keeps, so a list filtered again and again orders
+ * them as Ace does: the same completions, one after another, for each letter typed or taken away.
  */
-export function suggestSql(text: string, offset: number): SqlSuggestions | undefined {
-  const before = /[\w$]+$/.exec(text.slice(0, offset))?.[0] ?? '';
-  if (before === '' || /^\d/.test(before)) return undefined;
-  const from = offset - before.length;
-  const after = /^[\w$]*/.exec(text.slice(offset))?.[0] ?? '';
-  const prefix = before.toLowerCase();
-  const upper = before === before.toUpperCase() && before !== before.toLowerCase();
-  const seen = new Set<string>();
-  const items: SqlSuggestion[] = [];
-  const add = (label: string, meta: string) => {
-    const key = label.toLowerCase();
-    if (!key.startsWith(prefix) || key === prefix || seen.has(key)) return;
-    seen.add(key);
-    items.push({ label, meta });
-  };
-  const local = `${text.slice(0, from)} ${text.slice(offset + after.length)}`.match(/[A-Za-z_$][\w$]*/g) ?? [];
-  const known = (name: string) =>
-    SQL_KEYWORDS.has(name) || SQL_FUNCTIONS.has(name) || SQL_TYPES.has(name) || SQL_CONSTANTS.has(name);
-  for (const name of [...new Set(local)].sort()) if (!known(name.toLowerCase())) add(name, 'local');
-  const cased = (name: string) => (upper ? name.toUpperCase() : name);
-  for (const name of [...SQL_KEYWORDS].sort()) add(cased(name), 'keyword');
-  for (const name of [...SQL_FUNCTIONS].sort()) add(cased(name), 'function');
-  for (const name of [...SQL_TYPES].sort()) add(cased(name), 'type');
-  for (const name of [...SQL_CONSTANTS].sort()) add(cased(name), 'constant');
-  return items.length ? { from, to: offset, items } : undefined;
+export class CompletionList {
+  readonly all: Completion[];
+  filtered: Completion[];
+  filterText = '';
+
+  constructor(all: Completion[]) {
+    this.all = all;
+    this.filtered = all;
+  }
+
+  setFilter(text: string) {
+    this.filterText = text;
+    const lower = text.toLowerCase();
+    const upper = text.toUpperCase();
+    const kept: Completion[] = [];
+    for (const item of this.all) {
+      let last = -1;
+      let mask = 0;
+      let penalty = 0;
+      let missing = false;
+      for (let index = 0; index < text.length; index += 1) {
+        const low = item.value.indexOf(lower[index], last + 1);
+        const up = item.value.indexOf(upper[index], last + 1);
+        const found = low >= 0 ? (up < 0 || low < up ? low : up) : up;
+        if (found < 0) {
+          missing = true;
+          break;
+        }
+        const distance = found - last - 1;
+        if (distance > 0) penalty += (last === -1 ? 10 : 0) + distance;
+        mask |= 1 << found;
+        last = found;
+      }
+      if (missing) continue;
+      item.matchMask = mask;
+      item.exactMatch = penalty ? 0 : 1;
+      item.score -= penalty;
+      kept.push(item);
+    }
+    kept.sort((a, b) => b.exactMatch - a.exactMatch || b.score - a.score);
+    // A value offered twice in a row is offered once
+    this.filtered = kept.filter(
+      (item, index) => index === 0 || kept[index - 1].value !== item.value
+    );
+  }
+}
+
+/**
+ * The list Ace opens for the word before the cursor: the document's words, then the mode's. The
+ * document's words are filtered once more than the mode's, as Ace filters what each source has
+ * given as soon as it has given it.
+ */
+export function openCompletions(text: string, offset: number): CompletionList {
+  const prefix = completionPrefix(text, offset);
+  const local = localCompletions(text, offset);
+  new CompletionList(local).setFilter(prefix);
+  const keywords: Completion[] = [...SQL_WORDS.keys()].map((value) => ({
+    value,
+    meta: 'keyword',
+    score: 0,
+    exactMatch: 0,
+    matchMask: 0,
+  }));
+  const list = new CompletionList([...local, ...keywords]);
+  list.setFilter(prefix);
+  return list;
+}
+
+/** Whether a list has nothing worth showing: nothing left, or only the word already typed */
+export const completionsDone = (list: CompletionList) =>
+  list.filtered.length === 0 ||
+  (list.filtered.length === 1 && list.filtered[0].value === list.filterText);
+
+/**
+ * A completion's kind as the list writes it at the right of a row: cut short, or to nothing but
+ * its ellipsis, when the row has not the columns for the value and the kind with two between.
+ */
+export function completionMeta(item: Completion, columns: number): string {
+  if (item.meta.length + item.value.length <= columns - 2) return item.meta;
+  const kept = Math.max(0, Math.trunc(columns - item.value.length - 3));
+  return `${item.meta.slice(0, kept)}…`;
+}
+
+/** A completion's value in runs, those that match the letters typed marked */
+export function completionRuns(item: Completion): Array<{ text: string; match: boolean }> {
+  const runs: Array<{ text: string; match: boolean }> = [];
+  for (let index = 0; index < item.value.length; index += 1) {
+    // As Ace reads the bits: the 33rd letter takes the first's
+    const match = (item.matchMask & (1 << index)) !== 0;
+    const last = runs[runs.length - 1];
+    if (last && last.match === match) last.text += item.value[index];
+    else runs.push({ text: item.value[index], match });
+  }
+  return runs;
 }

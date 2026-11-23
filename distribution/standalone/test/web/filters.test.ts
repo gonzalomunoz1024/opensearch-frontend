@@ -141,7 +141,7 @@ describe('the filters made on a field', () => {
   it('reads the ends of a number field as numbers and leaves infinite ends out', () => {
     const filter = rangeFilter(field('bytes', 'number'), { gte: '10', lt: Infinity }, 'logs');
     assert.deepEqual(filter.range, { bytes: { gte: 10 } });
-    const all = rangeFilter(field('bytes', 'number'), { gte: -Infinity, lt: Infinity }, 'logs', undefined, '≥ -∞ and < +∞');
+    const all = rangeFilter(field('bytes', 'number'), { gte: -Infinity, lt: Infinity }, 'logs', '≥ -∞ and < +∞');
     assert.deepEqual(all.match_all, {});
     assert.equal(all.range, undefined);
     assert.equal(all.meta.field, 'bytes');
@@ -149,12 +149,12 @@ describe('the filters made on a field', () => {
     assert.throws(() => rangeFilter({ name: 'bytes' }, { gte: 1, gt: 2 }), /gte and gt are mutually exclusive/);
   });
 
-  it('writes the ends of a scripted range into its script, as the field writes them', () => {
-    const filter = rangeFilter(hour, { gte: 9, lt: 17 }, 'logs', (value) => `${String(value)}h`);
-    assert.deepEqual((filter.script as { script: { params: unknown } }).script.params, { gte: 9, lt: 17, value: '>=9h <17h' });
+  it('writes the ends of a scripted range into its script as they are', () => {
+    const filter = rangeFilter(hour, { gte: 9, lt: 17 }, 'logs');
+    assert.deepEqual((filter.script as { script: { params: unknown } }).script.params, { gte: 9, lt: 17, value: '>=9 <17' });
     assert.equal(filter.meta.field, 'hour');
     const mapped = mapFilter(filter);
-    assert.deepEqual([mapped.type, mapped.key, mapped.params], ['range', 'hour', { gte: 9, lt: 17, value: '>=9h <17h' }]);
+    assert.deepEqual([mapped.type, mapped.key, mapped.params], ['range', 'hour', { gte: 9, lt: 17, value: '>=9 <17' }]);
     assert.equal(typeof mapped.value === 'function' ? mapped.value() : mapped.value, '9 to 17');
   });
 
@@ -286,6 +286,27 @@ describe('the filter a click on a bucket adds', () => {
     const filter = brushFilter(column, 2, 5, context);
     assert.deepEqual((filter?.script as { script: { params: unknown } }).script.params, { gte: 2, lt: 5, value: '>=2 <5' });
     assert.equal(brushFilter(column, 2, 2, context), undefined);
+  });
+
+  it('writes the terms beside "Other" and the ends of a scripted range as they are, whatever the format', () => {
+    // buildPhrasesFilter and buildRangeFilter of 3.9.0 write a value with the format the field
+    // carries, and the fields of an index pattern carry none: only a bucket's name is formatted
+    const formatted: AggContext = {
+      indexPattern: {
+        ...logs,
+        fieldFormatMap: { 'geo.dest': { id: 'string', params: { transform: 'upper' } }, hour: { id: 'number', params: { pattern: '0.00' } } },
+      },
+    };
+    const terms: AggConfig = { id: '2', enabled: true, type: 'terms', schema: 'segment', params: { field: 'geo.dest', size: 2, otherBucket: true } };
+    const buckets = [{ key: 'us', doc_count: 3 }, { key: 'cn', doc_count: 2 }, { key: '__other__', doc_count: 4 }];
+    const table = tabify([count, terms], { aggregations: { '2': { buckets } } }, formatted);
+    const other = bucketFilter(table.columns[0], '__other__', formatted, { table, row: table.rows[2] });
+    assert.deepEqual([other?.meta.value, other?.meta.params], ['us, cn', ['us', 'cn']]);
+    const histogram: AggConfig = { id: '2', enabled: true, type: 'histogram', schema: 'segment', params: { field: 'hour', interval: 1 } };
+    const hours = tabify([count, histogram], { aggregations: { '2': { buckets: [{ key: 5, doc_count: 1 }] } } }, formatted);
+    const bar = bucketFilter(hours.columns[0], 5, formatted);
+    assert.equal((bar?.script as { script: { params: Record<string, unknown> } }).script.params.value, '>=5 <6');
+    assert.equal(bar?.meta.formattedValue, '5.00');
   });
 
   it('leaves the rest of a scripted field\'s terms to its script too', () => {

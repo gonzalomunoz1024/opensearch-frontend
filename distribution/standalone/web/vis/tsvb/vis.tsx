@@ -2,10 +2,11 @@
 
 /* TSVB: series over time as a chart, or their latest values as a number, bars, a gauge, text or a table. */
 
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { ChartMessage, SERIES_COLORS, assignColors, type LegendPosition } from '../../charts/core';
 import { XYChart, type XYAxis, type XYSeries } from '../../charts/xy';
 import { Icon } from '../../components/icon';
+import { Tooltip } from '../../components/overlay';
 import { formatDate, utcOffset, type TimeRange } from '../../lib/dates';
 import { Markdown } from '../../lib/markdown';
 import type { UiState, Vis } from '../../lib/vis';
@@ -18,8 +19,9 @@ import {
   fetchTsvb,
   fetchTsvbTable,
   TooMuchDataError,
-  metricLabel,
   isSortable,
+  metricBackground,
+  metricRule,
   ruleFor,
   seriesFormatter,
   splitParts,
@@ -27,7 +29,6 @@ import {
   topNRows,
   type TsvbData,
   type TsvbParams,
-  type TsvbPoint,
   type TsvbSeries,
   type TsvbSeriesData,
   type TsvbTableData,
@@ -38,6 +39,7 @@ import { axisColor, isColor, isInverted, legendColor, placeBox, placedStyle, typ
 import { annotationIcon } from './icons';
 import { convertSeriesToVars } from './markdown_vars';
 import { annotationTexts, replaceVars, type TemplateFault } from './replace_vars';
+import { DEFAULT_SORT, PIVOT_COLUMN, columnLabel, nextSort, pivotLabel, rowDisplay, sortIcon, trendIcon } from './table_model';
 
 const number = (value: unknown, fallback: number): number => {
   const parsed = typeof value === 'string' && value.trim() !== '' ? Number(value) : value;
@@ -81,23 +83,6 @@ function lastText(item: TsvbSeriesData, all: TsvbSeriesData[]): string {
 function lowerText(item: TsvbSeriesData): string {
   const value = item.data[item.data.length - 1]?.[2];
   return value === null || value === undefined ? '' : item.format(value);
-}
-
-/** Whether the values of a series rise or fall over its time: the slope of the line that fits them best */
-function slopeOf(data: TsvbPoint[]): number {
-  const points = data.filter((point): point is [number, number] => point[1] !== null && Number.isFinite(point[1]));
-  if (points.length < 2) return 0;
-  const meanX = points.reduce((sum, [x]) => sum + x, 0) / points.length;
-  const meanY = points.reduce((sum, [, y]) => sum + y, 0) / points.length;
-  let above = 0;
-  let below = 0;
-  for (const [x, y] of points) {
-    above += (x - meanX) * (y - meanY);
-    below += (x - meanX) ** 2;
-  }
-  // Rounded to two decimals, as the product's regression gives it: over time in milliseconds,
-  // nearly every slope rounds to 0, which the product draws as falling
-  return below === 0 ? 0 : Math.round((above / below) * 100) / 100;
 }
 
 // The grid lines of a TSVB chart, as the product draws them
@@ -311,13 +296,6 @@ function useClientSize<T extends HTMLElement>(): [(element: T | null) => void, B
 /** The style of a box laid over a panel, hidden until both are measured */
 const placed = (placement: Placement | null): CSSProperties => (placement ? placedStyle(placement) : { visibility: 'hidden' });
 
-/** The colour rule of a metric's panel: the last one its first series' last value meets, 0 without one */
-const metricRule = (params: TsvbParams, data: TsvbData) => ruleFor(params.background_color_rules, data.series[0]?.last ?? 0);
-
-/** The background of a metric's panel: that of its colour rule, or the panel's own */
-const metricBackground = (params: TsvbParams, data: TsvbData): string | undefined =>
-  metricRule(params, data)?.background_color || params.background_color || undefined;
-
 /**
  * A metric as the product draws it: its label at half the size of its value, a second series at
  * a third and the name of its part at a quarter, in a box the size of its text, scaled to the
@@ -454,13 +432,15 @@ function TopN({ params, data }: { params: TsvbParams; data: TsvbData }) {
   );
 }
 
-// The ring of a gauge as the product draws it: its circle, the drawing, the box the drawing sits
-// in (as tall as its line, a little taller than the drawing) and the size the product reads it at
+// The ring of a gauge as the product draws it: its circle, the size of the drawing and the share
+// of the circle it sweeps. The drawing stands in a line of text, so the box around it is as tall
+// as that line makes it (a little taller than the drawing, by how much depends on the line-height
+// it inherits), and the ring is scaled from the size that box measures, as the product's is.
 const GAUGE_CIRCUMFERENCE = 2 * Math.PI * 50;
 const GAUGE_TRACK = 'rgba(105,112,125,0.2)';
 const GAUGE_RING = {
-  half: { svg: [120.72, 78.72], box: [120.72, 81.72], read: { width: 121, height: 82 }, sweep: 0.6 },
-  circle: { svg: [120.72, 120.72], box: [120.72, 123.72], read: { width: 121, height: 124 }, sweep: 1 },
+  half: { svg: [120.72, 78.72], sweep: 0.6 },
+  circle: { svg: [120.72, 120.72], sweep: 1 },
 } as const;
 
 /**
@@ -470,6 +450,7 @@ const GAUGE_RING = {
  */
 function Gauge({ params, data, extra }: { params: TsvbParams; data: TsvbData; extra?: string }) {
   const [panelRef, panel] = useClientSize<HTMLDivElement>();
+  const [ringRef, ringBox] = useClientSize<HTMLDivElement>();
   const series = data.series[0];
   const half = params.gauge_style !== 'circle';
   const ring = GAUGE_RING[half ? 'half' : 'circle'];
@@ -496,7 +477,7 @@ function Gauge({ params, data, extra }: { params: TsvbParams; data: TsvbData; ex
         {extra && <div className="visTsvbGauge__additional">{extra}</div>}
       </div>
       <div className="visTsvbGauge__rings">
-        <div className="visTsvbGauge__ring" style={{ width: ring.box[0], height: ring.box[1], ...placed(placeBox(panel, ring.read)) }}>
+        <div ref={ringRef} className="visTsvbGauge__ring" style={placed(placeBox(panel, ringBox))}>
           <svg width={ring.svg[0]} height={ring.svg[1]} aria-hidden="true">
             <circle
               r={50}
@@ -544,6 +525,9 @@ function MarkdownPanel({ params, data }: { params: TsvbParams; data: TsvbData })
   const { text, error } = fillMarkdown(params.markdown, variables);
   const css = params.markdown_css ? params.markdown_css.split(`markdown-${params.id}`).join(elementId) : '';
   const align = params.markdown_vertical_align;
+  // The text is written in the product's markdown body, in the other theme's colours over a
+  // background that reads as the other theme
+  const reversed = isInverted(background, darkTheme());
   return (
     <div className="visTsvbFrame" style={{ background }}>
       <div className="visTsvbMarkdown" data-test-subj="tsvbMarkdown">
@@ -554,11 +538,14 @@ function MarkdownPanel({ params, data }: { params: TsvbParams; data: TsvbData })
             'visTsvbMarkdown__content',
             align === 'middle' || align === 'bottom' ? `visTsvbMarkdown__content--${align}` : '',
             params.markdown_scrollbars ? 'visTsvbMarkdown__content--scroll' : '',
+            reversed ? 'visTsvbMarkdown__content--reversed' : '',
           ]
             .filter(Boolean)
             .join(' ')}
         >
-          <div id={elementId}>{text !== undefined && <Markdown text={text} openLinksInNewTab={Boolean(params.markdown_openLinksInNewTab)} />}</div>
+          <div id={elementId}>
+            {text !== undefined && <Markdown className="visMarkdownBody" text={text} openLinksInNewTab={Boolean(params.markdown_openLinksInNewTab)} />}
+          </div>
         </div>
       </div>
     </div>
@@ -572,19 +559,15 @@ function tableSortOf(uiState: Vis['uiState'] | undefined): TsvbTableSort | undef
   return sort && typeof sort === 'object' ? (sort as TsvbTableSort) : undefined;
 }
 
-/** A column's title, as the product writes it: the series' label or its metric's, with the percentile it shows */
-function columnLabel(series: TsvbSeries): string {
-  const metric = series.metrics?.[series.metrics.length - 1];
-  const label = series.label || metricLabel(series);
-  if (metric?.type === 'percentile') return `${label} (${metric.percentiles?.[metric.percentiles.length - 1]?.value || 0})`;
-  if (metric?.type === 'percentile_rank') return `${label} (${metric.values?.[metric.values.length - 1] || 0})`;
-  return label;
-}
-
-function PivotTable({
+/**
+ * A table as the product's TSVB draws it, which is its own table and not the data table: a row
+ * for each value of the field it groups by, the latest value of each series in a column, an arrow
+ * for its trend beside it when the series asks for one. A click on a column's title sorts by it.
+ */
+function TsvbTable({
   params,
   data,
-  sort = { column: '_default_', order: 'asc' },
+  sort = DEFAULT_SORT,
   onSort,
 }: {
   params: TsvbParams;
@@ -592,67 +575,110 @@ function PivotTable({
   sort?: TsvbTableSort;
   onSort?: (sort: TsvbTableSort) => void;
 }) {
-  if (data.rows.length === 0) return <ChartMessage>No results found</ChartMessage>;
   const columns = (params.series ?? []).filter((series) => !series.hidden);
-  // The column the rows are sorted by shows an arrow, and the others that could sort them room for
-  // one; a click on one sorts by it, or the other way round when it already does, as the product's
-  const header = (column: string, label: string, sortable: boolean) => {
-    const arrow =
-      sort.column === column ? (
-        <Icon name={sort.order === 'desc' ? 'sortDown' : 'sortUp'} className="visTsvbTable__sort" />
-      ) : sortable ? (
-        <span className="visTsvbTable__noSort" />
-      ) : null;
-    if (!sortable || !onSort) {
-      return (
-        <>
-          {label} {arrow}
-        </>
-      );
-    }
-    const order = sort.column === column && sort.order === 'asc' ? 'desc' : 'asc';
-    return (
-      <button type="button" className="atlTable__sort" onClick={() => onSort({ column, order })}>
-        {label} {arrow}
-      </button>
-    );
+  const dateFormat = services.uiSettings.get<string>('dateFormat', 'MMM D, YYYY @ HH:mm:ss.SSS');
+  const zone = services.timeZone();
+  const formatTime = (time: number) => formatDate(new Date(time), dateFormat, zone);
+  // What a title needs to sort by its column at a click, and from the keyboard, which the
+  // product's titles cannot be reached with
+  const sorting = (column: string) => {
+    if (!onSort) return {};
+    const act = () => onSort(nextSort(sort, column));
+    return {
+      'aria-sort': sort.column === column ? (sort.order === 'asc' ? ('ascending' as const) : ('descending' as const)) : undefined,
+      tabIndex: 0,
+      onClick: act,
+      onKeyDown: (event: KeyboardEvent<HTMLTableCellElement>) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        act();
+      },
+    };
   };
+  const pivotIcon = sortIcon(sort, PIVOT_COLUMN, true);
   return (
-    <div className="visTable" data-test-subj="tsvbTable">
-      <div className="visTable__scroll">
-        <table className="atlTable atlTable--compact">
+    <div className="visTsvbTable">
+      <div className="visTsvbTable__frame" data-test-subj="tableView">
+        <table className="visTsvbTable__table" data-test-subj="tsvbTable">
           <thead>
             <tr>
-              <th>{header('_default_', params.pivot_label || params.pivot_id || '', true)}</th>
-              {columns.map((series) => (
-                <th key={series.id} className="atlTable__numeric">
-                  {header(series.id, columnLabel(series), isSortable(series.metrics?.[series.metrics.length - 1]))}
-                </th>
-              ))}
+              <th className="visTsvbTable__pivot" scope="col" {...sorting(PIVOT_COLUMN)}>
+                {pivotLabel(params)} {pivotIcon && <Icon name={pivotIcon} />}
+              </th>
+              {columns.map((series) => {
+                const sortable = isSortable(series.metrics?.[series.metrics.length - 1]);
+                const icon = sortIcon(sort, series.id, sortable);
+                const title = (
+                  <span>
+                    {columnLabel(series)} {icon && <Icon name={icon} />}
+                  </span>
+                );
+                return (
+                  <th key={series.id} scope="col" {...(sortable ? sorting(series.id) : {})}>
+                    {sortable ? (
+                      title
+                    ) : (
+                      <Tooltip content="This column is not sortable" delay="regular">
+                        {title}
+                      </Tooltip>
+                    )}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
-            {data.rows.map((row) => (
-              <tr key={row.key}>
-                <td>{row.key}</td>
-                {columns.map((series) => {
-                  const found = row.series.find((item) => item.seriesId === series.id);
-                  const color = ruleFor(series.color_rules, found?.last ?? null)?.text;
-                  return (
-                    <td key={series.id} className="atlTable__numeric" style={{ color }}>
-                      {found ? found.format(found.last) : '-'}
-                      {found && Number(series.trend_arrows) === 1 && (
-                        // The product's arrow: its sort icons, after a space
-                        <span className="visTsvbTable__trend">
-                          {'  '}
-                          <Icon name={slopeOf(found.data) > 0 ? 'sortUp' : 'sortDown'} title={slopeOf(found.data) > 0 ? 'Rising' : 'Falling'} />
-                        </span>
+            {data.rows.length === 0 ? (
+              <tr>
+                <td colSpan={columns.length + 1}>
+                  {params.pivot_id ? 'No results available.' : 'No results available. You must choose a group by field for this visualization.'}
+                </td>
+              </tr>
+            ) : (
+              data.rows.map((row) => {
+                const name = rowDisplay(row.key, params.pivot_type, formatTime);
+                const drill = params.drilldown_url;
+                const address = drill ? replaceVars(drill, {}, { key: row.key }) : undefined;
+                return (
+                  <tr key={row.key}>
+                    <td>
+                      {drill ? (
+                        <a
+                          href={address && 'text' in address ? address.text : undefined}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            drillDown(drill, row.key);
+                          }}
+                        >
+                          {name}
+                        </a>
+                      ) : (
+                        name
                       )}
                     </td>
-                  );
-                })}
-              </tr>
-            ))}
+                    {row.series.map((item) => {
+                      const column = columns.find((series) => series.id === item.seriesId);
+                      if (!column) return null;
+                      return (
+                        <td
+                          key={item.seriesId}
+                          className="visTsvbTable__value"
+                          data-test-subj="tvbTableVis__value"
+                          style={{ color: ruleFor(column.color_rules, item.last ?? null)?.text }}
+                        >
+                          <span>{item.format(item.last)}</span>
+                          {Boolean(column.trend_arrows) && (
+                            <span>
+                              {'\u00a0'} <Icon name={trendIcon(item.data)} className="visTsvbTable__trend" />
+                            </span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
       </div>
@@ -663,7 +689,10 @@ function PivotTable({
 function NoData() {
   return (
     <div className="visError visTsvbNoData" data-test-subj="noTSVBDataMessage">
-      <Icon name="visualize" />
+      {/* The icon stands in a line of the text, a little taller than itself, as the product's does */}
+      <div>
+        <Icon name="visualize" />
+      </div>
       <p>No data to display for the selected metrics</p>
     </div>
   );
@@ -774,7 +803,7 @@ export function TsvbVis({
   } else if (data && data.kind === kind) {
     // A panel none of whose series drew anything says so, whatever its kind
     if (kind === 'table' ? !data.table?.rows.length : !data.series?.series.length) body = <NoData />;
-    else if (kind === 'table' && data.table) body = <PivotTable params={params} data={data.table} sort={sort} onSort={onSort} />;
+    else if (kind === 'table' && data.table) body = <TsvbTable params={params} data={data.table} sort={sort} onSort={onSort} />;
     else if (data.series && PANELS[kind]) body = PANELS[kind]({ params, data: data.series, onTimeChange });
     else body = <ChartMessage>This kind of TSVB panel is not drawn by this build.</ChartMessage>;
   }

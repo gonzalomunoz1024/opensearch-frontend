@@ -15,7 +15,6 @@ import { ComboBox } from '../components/combo_box';
 import { FormRow, Switch, TextField } from '../components/form';
 import { Tooltip } from '../components/overlay';
 import { formatDate, parseDateMath } from '../lib/dates';
-import { fieldFormatter } from '../lib/field_formats';
 import { tokenizeJson } from '../lib/json_text';
 import {
   cidrRange,
@@ -26,7 +25,6 @@ import {
   phrasesFilter,
   rangeFilter,
   withMappedMeta,
-  type ValueText,
 } from '../lib/query';
 import type { Field, Filter, IndexPattern } from '../lib/types';
 import { services } from '../services';
@@ -115,8 +113,7 @@ export function buildEditedFilter(
   field: Field,
   operator: Operator,
   params: unknown,
-  meta: { disabled: boolean; alias: string | null; pinned: boolean },
-  format?: ValueText
+  meta: { disabled: boolean; alias: string | null; pinned: boolean }
 ): Filter {
   let filter: Filter;
   switch (operator.type) {
@@ -124,11 +121,11 @@ export function buildEditedFilter(
       filter = phraseFilter(field, params, indexPattern.id);
       break;
     case 'phrases':
-      filter = phrasesFilter(field, Array.isArray(params) ? params : [], indexPattern.id, format);
+      filter = phrasesFilter(field, Array.isArray(params) ? params : [], indexPattern.id);
       break;
     case 'range': {
       const range = (params ?? {}) as { from?: unknown; to?: unknown };
-      filter = rangeFilter(field, { gte: range.from, lt: range.to }, indexPattern.id, format);
+      filter = rangeFilter(field, { gte: range.from, lt: range.to }, indexPattern.id);
       break;
     }
     default:
@@ -444,10 +441,6 @@ export function FilterEditor({ filter: given, indexPatterns, onSubmit, onCancel 
   }
   const valid = isCustomEditorOpen ? Boolean(dsl) : isFilterValid(indexPattern, field, operator, params);
 
-  const format: ValueText | undefined = indexPattern && field
-    ? (value) => fieldFormatter(indexPattern, field.name, services.formatSettings())(value).text
-    : undefined;
-
   const submit = () => {
     const pinned = filter.$state?.store === 'globalState';
     const alias = useCustomLabel ? customLabel : null;
@@ -457,7 +450,7 @@ export function FilterEditor({ filter: given, indexPatterns, onSubmit, onCancel 
       const index = filter.meta.index || indexPatterns[0]?.id;
       onSubmit(buildCustomFilter(index, dsl, { disabled, negate: Boolean(filter.meta.negate), alias, pinned }));
     } else if (indexPattern && field && operator) {
-      onSubmit(buildEditedFilter(indexPattern, field, operator, params ?? '', { disabled, alias, pinned }, format));
+      onSubmit(buildEditedFilter(indexPattern, field, operator, params ?? '', { disabled, alias, pinned }));
     }
   };
 

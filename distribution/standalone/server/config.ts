@@ -14,6 +14,7 @@
 import { readFileSync } from 'node:fs';
 import { flatten, parseYaml, type YamlValue } from './yaml';
 import { DEFAULT_MAP_CONFIG, type MapConfig } from '../common/map_config';
+import { DEFAULT_CSP, type CspSettings } from './static';
 
 export interface Config {
   server: {
@@ -42,8 +43,8 @@ export interface Config {
   logging: { quiet: boolean; verbose: boolean };
   /** The `map.*` settings of the maps_legacy, tile_map and region_map plugins */
   map: MapConfig;
-  /** The sources `csp.allowed*Sources` add to the page's policy, as in OpenSearch Dashboards */
-  csp: { allowedConnectSources: string[]; allowedFrameAncestorSources: string[]; allowedImgSources: string[] };
+  /** The csp.* settings the page's policy is built from, as in OpenSearch Dashboards */
+  csp: CspSettings;
   /** vis_type_vega.enableExternalUrls: whether a Vega spec may load data from other addresses */
   visTypeVega: { enableExternalUrls: boolean };
   /** home.disableWelcomeScreen: whether the first page leaves out the welcome screen */
@@ -144,9 +145,15 @@ const SETTINGS: Record<string, Reader> = {
   'uiSettings.defaults': map,
   'logging.quiet': boolean,
   'logging.verbose': boolean,
+  'csp.rules': list,
+  'csp.enable': boolean,
+  'csp.strict': boolean,
+  'csp.warnLegacyBrowsers': boolean,
+  'csp.nonceDirectives': list,
   'csp.allowedConnectSources': list,
   'csp.allowedFrameAncestorSources': list,
   'csp.allowedImgSources': list,
+  'csp.loosenCspDirectives': list,
   'vis_type_vega.enableExternalUrls': boolean,
   'home.disableWelcomeScreen': boolean,
   'map.includeOpenSearchMapsService': boolean,
@@ -293,9 +300,15 @@ export function loadConfig(
     logging: { quiet: read('logging.quiet', false), verbose: read('logging.verbose', false) },
     map: readMapConfig(read),
     csp: {
+      rules: read('csp.rules', [...DEFAULT_CSP.rules]),
+      enable: read('csp.enable', DEFAULT_CSP.enable),
+      strict: read('csp.strict', DEFAULT_CSP.strict),
+      warnLegacyBrowsers: read('csp.warnLegacyBrowsers', DEFAULT_CSP.warnLegacyBrowsers),
+      nonceDirectives: read('csp.nonceDirectives', [...DEFAULT_CSP.nonceDirectives]),
       allowedConnectSources: read('csp.allowedConnectSources', [] as string[]),
       allowedFrameAncestorSources: read('csp.allowedFrameAncestorSources', [] as string[]),
       allowedImgSources: read('csp.allowedImgSources', [] as string[]),
+      loosenCspDirectives: read('csp.loosenCspDirectives', [] as string[]),
     },
     visTypeVega: { enableExternalUrls: read('vis_type_vega.enableExternalUrls', false) },
     home: { disableWelcomeScreen: read('home.disableWelcomeScreen', false) },

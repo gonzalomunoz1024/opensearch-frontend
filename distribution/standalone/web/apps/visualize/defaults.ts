@@ -56,7 +56,8 @@ function xyDefaults(kind: 'area' | 'line' | 'histogram' | 'horizontal_bar'): Rec
     valueAxes: [
       {
         id: 'ValueAxis-1',
-        name: horizontal ? 'BottomAxis-1' : 'LeftAxis-1',
+        // As the original names it, at the bottom of a horizontal bar chart too
+        name: 'LeftAxis-1',
         type: 'value',
         position: horizontal ? 'bottom' : 'left',
         show: true,
@@ -429,6 +430,28 @@ export const orderableMetric = (agg: AggConfig) =>
   !['top_hits', 'percentiles', 'percentile_ranks', 'std_dev', 'median', ...SIBLING_PIPELINES, ...PARENT_PIPELINES].includes(agg.type);
 
 /**
+ * The parameters of a terms aggregation once someone chooses what it is ordered by: it has a custom
+ * metric only while it is ordered by one, as the original's `order_agg` editor takes it away
+ */
+export const orderByParams = (aggId: string, orderBy: string, orderAgg: unknown): Record<string, unknown> => ({
+  orderBy,
+  orderAgg: orderBy === 'custom' ? (orderAgg ?? nestedCount(`${aggId}-orderAgg`, 'orderAgg')) : undefined,
+});
+
+/** Whether a parent pipeline can work on a metric of the chart, as the original's `metric_agg` editor filters them */
+export const parentPipelineMetric = (agg: AggConfig) => !['top_hits', 'percentiles', 'percentile_ranks', 'median', 'std_dev'].includes(agg.type);
+
+/**
+ * What a terms aggregation is ordered by, or a parent pipeline works on, once the chart's metrics
+ * have changed, as the original's `useFallbackMetric`: a metric that is gone, or one that cannot be
+ * used, gives way to the fallback. Nothing when the choice stands.
+ */
+export function fallbackMetric(chosen: string, metrics: AggConfig[], usable: (agg: AggConfig) => boolean, fallback: string): string | undefined {
+  if (!chosen || chosen === 'custom' || chosen === fallback) return undefined;
+  return metrics.some((metric) => metric.id === chosen && usable(metric)) ? undefined : fallback;
+}
+
+/**
  * The aggregations with one more, for a part of the chart, as the original adds one: last of
  * them all, with no type until someone chooses one.
  */
@@ -734,9 +757,11 @@ export function syncParams(vis: Pick<Vis, 'type' | 'params' | 'aggs'>, context: 
   const axes = (Array.isArray(vis.params.valueAxes) ? vis.params.valueAxes : []) as ValueAxis[];
   const metrics = vis.aggs.filter((agg) => agg.schema === 'metric' && agg.type);
   const firstAxis = axes[0]?.id ?? 'ValueAxis-1';
+  // A pipeline is labelled after the metric it is on, as the original's `makeLabel`
+  const labels: AggContext = { ...context, aggs: vis.aggs };
 
   const series = metrics.map((agg) => {
-    const label = aggLabel(agg, context);
+    const label = aggLabel(agg, labels);
     const existing = before.find((item) => item.data?.id === agg.id);
     if (existing) return existing.data.label === label ? existing : { ...existing, data: { id: agg.id, label } };
     const last = before[before.length - 1];

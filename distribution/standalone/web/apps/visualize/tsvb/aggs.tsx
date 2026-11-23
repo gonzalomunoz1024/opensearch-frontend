@@ -417,6 +417,15 @@ const code = (text: string) => (
   </span>
 );
 
+/** A script, in the original's compressed text area: three lines, set on a line of text as there */
+function ScriptArea({ value, onChange, testId, id }: { value: string; onChange: (value: string) => void; testId?: string; id?: string }) {
+  return (
+    <div className="tvbScript">
+      <TextArea className="tvbScript__area" rows={3} value={value} onChange={onChange} testId={testId} id={id} />
+    </div>
+  );
+}
+
 function MathAgg(props: AggProps) {
   const { model, siblings } = props;
   const change = changer(props.onChange, model);
@@ -452,7 +461,7 @@ function MathAgg(props: AggProps) {
             </>
           }
         >
-          <TextArea value={str(model, 'script')} onChange={(script) => change({ script })} testId="mathExpression" id="mathExpressionInput" />
+          <ScriptArea value={str(model, 'script')} onChange={(script) => change({ script })} testId="mathExpression" id="mathExpressionInput" />
         </Field>
       </div>
     </AggRow>
@@ -696,7 +705,7 @@ function PositiveRateAgg(props: AggProps) {
         </Item>
         <Item>
           <Field label="Scale" full>
-            <Combo options={RATE_UNITS} value={model.unit} placeholder="Select scale..." onChange={(unit) => change({ unit })} />
+            <Combo options={RATE_UNITS} value={model.unit} placeholder="Select scale..." narrow onChange={(unit) => change({ unit })} />
           </Field>
         </Item>
       </Row>
@@ -923,7 +932,7 @@ function CalculationAgg(props: AggProps) {
             </>
           }
         >
-          <TextArea value={str(model, 'script')} onChange={(script) => change({ script })} />
+          <ScriptArea value={str(model, 'script')} onChange={(script) => change({ script })} />
         </Field>
       </div>
     </AggRow>

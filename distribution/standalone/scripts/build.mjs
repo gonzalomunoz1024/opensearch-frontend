@@ -124,11 +124,13 @@ for (const file of walk(join(root, 'web', 'static'))) {
 }
 
 // The licences of what is bundled into the browser scripts travel with the build: React's,
-// Leaflet's, and those of Vega, Vega-Lite and the packages their builds hold (not the ones of
-// their command line tools, which no browser build holds)
+// Leaflet's, markdown-it's with the packages it uses, and those of Vega, Vega-Lite and the
+// packages their builds hold (not the ones of their command line tools, which no browser build
+// holds)
 const COMMAND_LINE_ONLY = new Set([
   'ansi-regex',
   'ansi-styles',
+  'argparse',
   'cliui',
   'commander',
   'emoji-regex',
@@ -163,10 +165,11 @@ const follow = (name) => {
   bundled.add(name);
   Object.keys(found.entry.dependencies ?? {}).forEach(follow);
 };
-['vega', 'vega-lite', 'leaflet'].forEach(follow);
+['vega', 'vega-lite', 'leaflet', 'markdown-it'].forEach(follow);
 for (const name of [...bundled].sort()) {
   const directory = join(root, installed.get(name)?.path ?? join('node_modules', name));
-  const licence = ['LICENSE', 'LICENSE.md', 'LICENSE.txt', 'license']
+  // punycode.js calls its licence LICENSE-MIT.txt
+  const licence = ['LICENSE', 'LICENSE.md', 'LICENSE.txt', 'LICENSE-MIT.txt', 'license']
     .map((file) => join(directory, file))
     .find((file) => existsSync(file));
   if (licence) write(join(dist, 'licenses', `${name}.txt`), readFileSync(licence));
