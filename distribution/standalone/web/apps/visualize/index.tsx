@@ -20,6 +20,7 @@ import { currentGlobalParam, useBreadcrumbs } from '../../shell/state';
 import { canDraw } from '../../vis/visualization';
 import { VIS_BUILDER_APP, VIS_BUILDER_TITLE, VIS_BUILDER_TYPE, visBuilderEditUrl } from '../vis_builder/model';
 import { VISUALIZE, VisEditor } from './editor';
+import { editorStateFor, type ContainerInfo } from './state_transfer';
 import '../../styles/visualize.css';
 
 const SOURCE_TYPES = [
@@ -136,8 +137,21 @@ const VIS_TYPE_COLUMN: ListingColumn = {
   },
 };
 
-/** "New Visualization": every kind there is, then what an aggregation-based one is drawn from */
-export function NewVisModal({ onClose }: { onClose: () => void }) {
+/**
+ * "New Visualization": every kind there is, then what an aggregation-based one is drawn from. An
+ * application that opens it (a dashboard's "Create new") names itself and its container: the
+ * editor is opened with them, to come back to it.
+ */
+export function NewVisModal({
+  onClose,
+  originatingApp,
+  containerInfo,
+}: {
+  onClose: () => void;
+  originatingApp?: string;
+  containerInfo?: ContainerInfo;
+}) {
+  const state = editorStateFor(originatingApp, containerInfo);
   const [filter, setFilter] = useState('');
   const [hovered, setHovered] = useState<VisType>();
   const [chosen, setChosen] = useState<VisType>();
@@ -154,7 +168,7 @@ export function NewVisModal({ onClose }: { onClose: () => void }) {
 
   const create = (type: VisType, source: { indexPattern?: string; savedSearchId?: string } = {}) => {
     onClose();
-    navigate(appUrl(VISUALIZE, '/create', { type: type.name, ...source, _g: currentGlobalParam() }), { force: true });
+    navigate(appUrl(VISUALIZE, '/create', { type: type.name, ...source, _g: currentGlobalParam() }), { force: true, state });
   };
 
   if (chosen) {
@@ -198,7 +212,7 @@ export function NewVisModal({ onClose }: { onClose: () => void }) {
                     onClick={() => {
                       if (alias) {
                         onClose();
-                        navigate(alias.open(), { force: true });
+                        navigate(alias.open(), { force: true, state });
                         return;
                       }
                       if (!drawn) return;

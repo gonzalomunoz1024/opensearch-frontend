@@ -5,13 +5,14 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
-  type RefObject,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { navigate, href as toHref } from '../router';
@@ -19,6 +20,7 @@ import { services } from '../services';
 import type { Toast } from '../services/toasts';
 import { Button, CallOut, CodeBlock, IconButton, cx } from './basic';
 import { Icon, type IconName } from './icon';
+import { createLayerStack, isTextField, tabbablesIn, wrapTab } from './layers';
 import { placeLikeOriginal, type PopoverPosition } from './placement';
 import type { PopoverSide } from './popover_place';
 
@@ -27,6 +29,34 @@ export type { PopoverPosition };
 export function Portal({ children }: { children: ReactNode }) {
   return createPortal(children, document.body);
 }
+
+// The popovers, dialogs and flyouts shown, in the order they opened: Escape closes the last one only
+const layers = createLayerStack();
+let listening = false;
+
+/**
+ * Puts what floats over the page on the stack while it is shown, so that Escape closes it only when
+ * it is on top, as the original's focus traps do: a popover over a flyout or a dialog closes alone.
+ * Something that uses Escape itself (a list it closes) stops the key or prevents its default.
+ */
+export function useLayer(shown: boolean, onEscape: () => void) {
+  const latest = useRef(onEscape);
+  useLayoutEffect(() => {
+    latest.current = onEscape;
+  });
+  useLayoutEffect(() => {
+    if (!shown) return undefined;
+    if (!listening) {
+      listening = true;
+      document.addEventListener('keydown', layers.onKeyDown);
+    }
+    return layers.push({ escape: () => latest.current() });
+  }, [shown]);
+}
+
+// Where a panel is laid out before it is placed: on the screen, so that what it holds can take the
+// focus as it appears (a field's autoFocus); it is placed before anything is painted
+const UNPLACED: CSSProperties = { left: 0, top: 0 };
 
 export interface PopoverProps {
   /** What opens it; it is given the place the popover hangs from */
@@ -67,10 +97,21 @@ export interface PopoverProps {
   position?: PopoverPosition;
   /** Above its button when there is room, as the original's `up` positions */
   above?: boolean;
+  /**
+   * As the original's `ownFocus`, its default: the panel is a dialog that takes the focus once it is
+   * placed (what `initialFocus` names, else the first thing in it that takes the focus, else the
+   * panel itself, unless something in it has the focus already), keeps Tab in it, and gives the
+   * focus back to what had it when it closes from inside. A list under a field (`matchWidth`,
+   * `fitWidth`) leaves the focus in the field, as the original's input popover, and so does a
+   * popover opened from a field text is typed in, as its colour picker opened by a click; `true`
+   * takes the focus from the field all the same (its colour picker opened with the down key).
+   */
+  ownFocus?: boolean;
+  /** A selector of what has the focus when it opens; `false` leaves the focus where it is */
+  initialFocus?: string | false;
+  /** What a screen reader calls the dialog */
+  ariaLabel?: string;
 }
-
-/** Where the popovers open now hang from: a dialog under one of them leaves the Escape key to it */
-const openAnchors = new Set<HTMLElement>();
 
 export function Popover({
   button,
@@ -91,11 +132,17 @@ export function Popover({
   anchorClassName,
   position,
   above: preferAbove = false,
+  ownFocus,
+  initialFocus,
+  ariaLabel,
 }: PopoverProps) {
   const anchor = useRef<HTMLSpanElement>(null);
   const panel = useRef<HTMLDivElement>(null);
-  const [style, setStyle] = useState<CSSProperties>({ visibility: 'hidden' });
+  const [style, setStyle] = useState<CSSProperties>(UNPLACED);
   const [placement, setPlacement] = useState<PopoverSide>('bottom');
+  const own = ownFocus ?? !(matchWidth || fitWidth);
+  const announcement = useId();
+  const opener = useRef<HTMLElement | null>(null);
 
   const place = useCallback(() => {
     const anchorBox = anchor.current?.getBoundingClientRect();
@@ -154,7 +201,7 @@ export function Popover({
 
   useLayoutEffect(() => {
     if (!open) {
-      setStyle({ visibility: 'hidden' });
+      setStyle(UNPLACED);
       return undefined;
     }
     place();
@@ -174,8 +221,6 @@ export function Popover({
 
   useEffect(() => {
     if (!open) return undefined;
-    const opened = anchor.current;
-    if (opened) openAnchors.add(opened);
     const onDown = (event: MouseEvent) => {
       const target = event.target as Node;
       if (anchor.current?.contains(target) || panel.current?.contains(target)) return;
@@ -183,20 +228,60 @@ export function Popover({
       if ((target as Element).closest?.('.atlPopover') && isNested(panel.current, target)) return;
       onClose();
     };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.stopPropagation();
-        onClose();
-      }
-    };
     document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      if (opened) openAnchors.delete(opened);
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
+    return () => document.removeEventListener('mousedown', onDown);
   }, [open, onClose]);
+
+  useLayer(open, onClose);
+
+  // What had the focus when it opened: the button, unless a field in the panel took it already
+  useLayoutEffect(() => {
+    if (!open || !own) return;
+    const active = document.activeElement;
+    opener.current =
+      active instanceof HTMLElement && active !== document.body && !panel.current?.contains(active)
+        ? active
+        : (anchor.current && tabbablesIn(anchor.current)[0]) ?? null;
+  }, [open, own]);
+
+  // Once it is placed the panel takes the focus, as the original's: what it names, else the first
+  // thing in it that takes the focus, else itself. Opened from a field text is typed in, it leaves
+  // the focus there, unless `ownFocus` says to take it.
+  const fieldKeepsFocus = ownFocus === undefined;
+  useEffect(() => {
+    if (!open || !own || initialFocus === false) return undefined;
+    const frame = requestAnimationFrame(() => {
+      const element = panel.current;
+      if (!element || element.contains(document.activeElement)) return;
+      if (fieldKeepsFocus && isTextField(opener.current) && anchor.current?.contains(opener.current)) return;
+      const named = initialFocus ? element.querySelector<HTMLElement>(initialFocus) : null;
+      (named ?? tabbablesIn(element)[0] ?? element).focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [open, own, initialFocus, fieldKeepsFocus]);
+
+  // When it closes with the focus in it, the focus goes back to what had it before
+  useEffect(() => {
+    if (!open || !own) return undefined;
+    return () => {
+      const active = document.activeElement;
+      const back = opener.current;
+      if ((!active || active === document.body) && back?.isConnected) back.focus({ preventScroll: true });
+    };
+  }, [open, own]);
+
+  // Tab goes round the panel and what it holds, as the original's focus trap: from the last thing
+  // in it to the panel itself, and on to the first
+  const holdTab = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const element = panel.current;
+    if (event.key !== 'Tab' || event.defaultPrevented || !element) return;
+    // A popover opened from this one is drawn outside it and holds the focus itself
+    if (!element.contains(document.activeElement)) return;
+    const target = wrapTab([element, ...tabbablesIn(element)], document.activeElement as HTMLElement | null, event.shiftKey);
+    if (!target) return;
+    event.preventDefault();
+    target.focus();
+  };
 
   return (
     <>
@@ -215,7 +300,19 @@ export function Popover({
             style={style}
             data-placement={placement}
             data-popover-depth={depthOf(anchor.current) + 1}
+            role={own ? 'dialog' : undefined}
+            aria-modal={own ? true : undefined}
+            aria-label={ariaLabel}
+            aria-live={own ? 'off' : undefined}
+            aria-describedby={own ? announcement : undefined}
+            tabIndex={own ? 0 : undefined}
+            onKeyDown={own ? holdTab : undefined}
           >
+            {own && (
+              <p id={announcement} className="atlScreenReaderOnly">
+                You are in a dialog. To close this dialog, hit escape.
+              </p>
+            )}
             {children}
           </div>
         </Portal>
@@ -382,8 +479,40 @@ export function ContextMenu({
   const shown = panels.find((panel) => panel.id === shownId);
   if (!shown) return null;
   const withIcons = shown.items.some((item) => item.icon);
+  // As the original's menu: the arrows go down and up its items, round from the last to the first
+  // and back; left goes back to the panel this one came from, right opens the panel of the item
+  // that has the focus
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const element = menu.current;
+    if (!element || event.defaultPrevented) return;
+    if (event.key === 'ArrowLeft' && trail.length > 0) {
+      event.preventDefault();
+      setTrail(trail.slice(0, -1));
+      return;
+    }
+    const items = [...element.querySelectorAll<HTMLElement>('.atlContextMenu__item:not(:disabled)')];
+    const index = items.findIndex((item) => item === document.activeElement);
+    if (event.key === 'ArrowRight') {
+      const opens = index >= 0 ? shown.items.filter((item) => !item.disabled)[index]?.panel : undefined;
+      if (opens === undefined) return;
+      event.preventDefault();
+      setTrail([...trail, opens]);
+      return;
+    }
+    if ((event.key !== 'ArrowDown' && event.key !== 'ArrowUp') || items.length === 0) return;
+    event.preventDefault();
+    const step = event.key === 'ArrowDown' ? 1 : -1;
+    const next = index < 0 ? (step > 0 ? 0 : items.length - 1) : (index + step + items.length) % items.length;
+    items[next]?.focus();
+  };
   return (
-    <div ref={menu} className={cx('atlContextMenu', small && 'atlContextMenu--small')} role="menu" data-test-subj={testId}>
+    <div
+      ref={menu}
+      className={cx('atlContextMenu', small && 'atlContextMenu--small')}
+      role="menu"
+      data-test-subj={testId}
+      onKeyDown={onKeyDown}
+    >
       {shown.title !== undefined &&
         (trail.length > 0 ? (
           <button type="button" className="atlContextMenu__title atlContextMenu__back" onClick={() => setTrail(trail.slice(0, -1))}>
@@ -447,20 +576,6 @@ export function ContextMenu({
   );
 }
 
-/** Closes a dialog on Escape, unless a popover opened from inside it is open: that closes first */
-function useEscape(onClose: () => void, layer: RefObject<HTMLElement | null>) {
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      const inside = layer.current;
-      if (inside && [...openAnchors].some((element) => inside.contains(element))) return;
-      onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose, layer]);
-}
-
 export function Modal({
   title,
   children,
@@ -481,8 +596,8 @@ export function Modal({
   /** 'l': the larger title the original's save dialogs have */
   titleSize?: 'm' | 'l';
 }) {
+  useLayer(true, onClose);
   const box = useRef<HTMLDivElement>(null);
-  useEscape(onClose, box);
   useEffect(() => {
     const first = box.current?.querySelector<HTMLElement>(
       'input:not([type=hidden]), textarea, select, [data-autofocus]'
@@ -593,28 +708,52 @@ export function Flyout({
   mask?: boolean;
   className?: string;
 }) {
-  const box = useRef<HTMLElement>(null);
-  useEscape(onClose, box);
-  // One that dims the page owns the focus, as the original's do: it moves to its first control
+  useLayer(true, onClose);
+  const panel = useRef<HTMLElement>(null);
+  // As the original's flyout, which holds the focus: the first thing in it that takes the focus
+  // has it when it opens (its close button), unless something in it took it already (a field's
+  // autoFocus); Tab goes round what it holds; and when it closes, the focus goes back to what had
+  // it before
   useEffect(() => {
-    const flyout = box.current;
-    if (!mask || !flyout || flyout.contains(document.activeElement)) return;
-    flyout.querySelector<HTMLElement>('button:not(:disabled), [href], input:not(:disabled), select, textarea, [tabindex="0"]')?.focus();
-  }, [mask]);
+    const element = panel.current;
+    if (!element) return undefined;
+    const active = document.activeElement;
+    const opener = active instanceof HTMLElement && active !== document.body && !element.contains(active) ? active : null;
+    if (!element.contains(active)) (tabbablesIn(element)[0] ?? element).focus({ preventScroll: true });
+    return () => {
+      const now = document.activeElement;
+      if ((!now || now === document.body) && opener?.isConnected) opener.focus({ preventScroll: true });
+    };
+  }, []);
+  const holdTab = (event: ReactKeyboardEvent<HTMLElement>) => {
+    const element = panel.current;
+    if (event.key !== 'Tab' || event.defaultPrevented || !element) return;
+    // A popover opened from the flyout is drawn outside it and holds the focus itself
+    if (!element.contains(document.activeElement)) return;
+    const target = wrapTab(tabbablesIn(element), document.activeElement as HTMLElement | null, event.shiftKey);
+    if (!target) return;
+    event.preventDefault();
+    target.focus();
+  };
   return (
     <Portal>
       {mask && <div className="atlFlyoutMask" onMouseDown={onClose} />}
       <aside
-        ref={box}
+        ref={panel}
         className={cx('atlFlyout', wide && 'atlFlyout--wide', className)}
         role="dialog"
+        tabIndex={-1}
+        onKeyDown={holdTab}
         data-test-subj={testId}
       >
         <div className="atlFlyout__header">
           <h2 className="atlTitleM atlTruncate">{title}</h2>
-          {!hideClose && <IconButton icon="cross" label="Close" onClick={onClose} testId="flyoutCloseButton" />}
+          {!hideClose && <IconButton icon="cross" label="Close this dialog" onClick={onClose} testId="euiFlyoutCloseButton" />}
         </div>
-        <div className="atlFlyout__body">{children}</div>
+        {/* As the original's, the body takes the focus, for the keys to scroll it */}
+        <div className="atlFlyout__body" tabIndex={0}>
+          {children}
+        </div>
         {footer && <div className="atlFlyout__footer">{footer}</div>}
       </aside>
     </Portal>
@@ -622,12 +761,13 @@ export function Flyout({
 }
 
 // The original's icons: a check, an i in a ring, OUI's `help` (a ring buoy) for a warning, and a
-// triangle for what failed
-const TOAST_ICONS: Record<string, IconName> = {
+// triangle for what failed; a plain message has none
+const TOAST_ICONS: Record<Toast['kind'], IconName | undefined> = {
   healthy: 'check',
   info: 'info',
   warning: 'lifebuoy',
   critical: 'warning',
+  plain: undefined,
 };
 
 export function ToastList() {
@@ -640,23 +780,28 @@ export function ToastList() {
       {items.length > 0 && (
         <Portal>
           <div className="atlToasts" role="region" aria-live="polite" data-test-subj="globalToastList">
-            {items.map((toast) => (
-              <div key={toast.id} className={`atlToast atlMaterial atlToast--${toast.kind}`}>
-                <div className="atlToast__header">
-                  <Icon name={TOAST_ICONS[toast.kind]} />
-                  <div className="atlToast__title">{toast.title}</div>
+            {items.map((toast) => {
+              const icon = TOAST_ICONS[toast.kind];
+              return (
+                <div key={toast.id} className={`atlToast atlMaterial atlToast--${toast.kind}`}>
+                  {/* As the original's toast: what a screen reader says before it */}
+                  <p className="atlScreenReaderOnly">A new notification appears</p>
+                  <div className="atlToast__header" aria-label="Notification" data-test-subj="euiToastHeader">
+                    {icon && <Icon name={icon} />}
+                    <div className="atlToast__title">{toast.title}</div>
+                  </div>
+                  <ToastText toast={toast} onFullError={setFull} />
+                  <IconButton
+                    icon="cross"
+                    label="Dismiss toast"
+                    size="s"
+                    className="atlToast__close"
+                    onClick={() => toasts.dismiss(toast.id)}
+                    testId="toastCloseButton"
+                  />
                 </div>
-                <ToastText toast={toast} onFullError={setFull} />
-                <IconButton
-                  icon="cross"
-                  label="Dismiss toast"
-                  size="s"
-                  className="atlToast__close"
-                  onClick={() => toasts.dismiss(toast.id)}
-                  testId="toastCloseButton"
-                />
-              </div>
-            ))}
+              );
+            })}
           </div>
         </Portal>
       )}
