@@ -10,7 +10,7 @@ import {
   expandLiteralStrings,
   reindentJson,
 } from '../../lib/json_text';
-import { highlight, type Highlighted } from './console_highlight';
+import { highlight, rehighlight, type Highlighted } from './console_highlight';
 
 export const METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'HEAD', 'PATCH', 'OPTIONS'];
 const isComment = (line: string) => /^\s*(#|\/\/)/.test(line);
@@ -40,7 +40,15 @@ export interface ConsoleText {
   highlighted: Highlighted;
 }
 
-export const readConsole = (text: string): ConsoleText => ({ lines: text.split('\n'), highlighted: highlight(text, 'input') });
+/**
+ * The text of the console read. With the reading of the text before it, only the lines that
+ * changed are read again, and those after them as far as their state changed: what is typed
+ * into a long text costs what a few lines cost.
+ */
+export function readConsole(text: string, previous?: ConsoleText): ConsoleText {
+  const lines = text.split('\n');
+  return { lines, highlighted: previous ? rehighlight(previous.lines, previous.highlighted, lines, 'input') : highlight(text, 'input') };
+}
 
 /** What a line is to the request parser of OpenSearch Dashboards (its RowParser) */
 export const ROW = { REQUEST_START: 2, IN_REQUEST: 4, MULTI_DOC_CUR_DOC_END: 8, REQUEST_END: 16, BETWEEN_REQUESTS: 32 };
@@ -422,15 +430,15 @@ export function parseCurl(text: string): string {
           url = word;
         }
       }
-      // The address without its scheme and host, which the console does not write
-      const path =
-        url
-          .replace(/^[a-z]+:\/\/[^/]*\/?/i, '')
-          .replace(/^(?:localhost|[\w-]+(?:\.[\w-]+)+|[\w.-]+:\d+)(?::\d+)?(?:\/|$)/i, '')
-          .replace(/^\/+/, '') || '/';
+      // The address without its scheme and host, after a slash, as the original writes it
+      const path = url
+        .replace(/^[a-z]+:\/\/[^/]*\/?/i, '')
+        .replace(/^(?:localhost|[\w-]+(?:\.[\w-]+)+|[\w.-]+:\d+)(?::\d+)?(?:\/|$)/i, '')
+        .replace(/^\/+/, '');
       const body = bodies.join('\n').trim();
-      const verb = (method ?? (body ? 'POST' : 'GET')).toUpperCase();
-      return body ? `${verb} ${path}\n${body}` : `${verb} ${path}`;
+      // GET unless the command names a method, with a body too: the original reads only -X
+      const verb = (method ?? 'GET').toUpperCase();
+      return body ? `${verb} /${path}\n${body}` : `${verb} /${path}`;
     })
     .join('\n\n');
 }
@@ -920,14 +928,15 @@ export function typedOnLine(text: string, offset: number): boolean {
 
 /**
  * What could be typed at a place of the editor: a method at the start of a line, a path after
- * it, and in the body of a search the names OpenSearch knows there.
+ * it, and in the body of a search the names OpenSearch knows there. The text as already read is
+ * given by a caller that has it, which spares reading a long text again at every key.
  */
-export function suggest(text: string, offset: number, names: ClusterNames): Suggestions | undefined {
+export function suggest(text: string, offset: number, names: ClusterNames, doc: ConsoleText = readConsole(text)): Suggestions | undefined {
   const lineStart = text.lastIndexOf('\n', offset - 1) + 1;
   const before = text.slice(lineStart, offset);
   const row = lineOf(text, offset);
   // The request the cursor is in, its body closed or not yet
-  const request = requestAt(readConsole(text), row);
+  const request = requestAt(doc, row);
 
   if (!request || request.startLine === row) {
     if (isComment(before)) return undefined;
