@@ -1045,7 +1045,7 @@ async function fetchSeries(
   const aggregations = (response.aggregations ?? {}) as Record<string, unknown>;
   if (pivot) {
     const rows = ((aggregations.pivot as { buckets?: Array<Record<string, unknown> & { key: string | number; key_as_string?: string }> })?.buckets ?? []).map(
-      (bucket) => ({ key: bucket.key_as_string ?? String(bucket.key), made: build(bucket) })
+      (bucket) => ({ key: String(bucket.key), made: build(bucket) })
     );
     return { plan, groups: rows };
   }
