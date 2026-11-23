@@ -109,12 +109,21 @@ export function shownFields(indexPattern: IndexPattern): Field[] {
 }
 
 /**
+ * Whether a spreadsheet would run a cell of this text as a formula: it starts with =, +, -, @, a
+ * tab or a line end. A number below zero and the "-" of a missing value start with a sign too,
+ * and are the values they are.
+ */
+export function isFormula(text: string): boolean {
+  const signedNumber = /^[-+]\p{Sc}?([\d.,\s]*\d[\d.,\s]*[%\p{L}\p{Sc}°]*)?$/u.test(text);
+  return /^[=+\-@\t\r]/.test(text) && !signedNumber;
+}
+
+/**
  * A text of a CSV cell that a spreadsheet would run as a formula, made plain text. A number below
  * zero and the "-" of a missing value start with a sign too, and stay the values they are
  */
 export function formulaSafe(text: string): string {
-  const signedNumber = /^[-+]\p{Sc}?([\d.,\s]*\d[\d.,\s]*[%\p{L}\p{Sc}°]*)?$/u.test(text);
-  return /^[=+\-@\t\r]/.test(text) && !signedNumber ? `'${text}` : text;
+  return isFormula(text) ? `'${text}` : text;
 }
 
 /** A value as one cell of a CSV file */
@@ -123,10 +132,8 @@ export function csvCell(value: unknown, separator: string, quote: boolean): stri
   if (value === null || value === undefined) text = '';
   else if (typeof value === 'object') text = JSON.stringify(value);
   else text = String(value);
-  // A cell that a spreadsheet would run as a formula is made plain text. A number below zero and
-  // the "-" of a missing value start with a sign too, and stay the values they are
-  const signedNumber = /^[-+]\p{Sc}?([\d.,\s]*\d[\d.,\s]*[%\p{L}\p{Sc}°]*)?$/u.test(text);
-  if (/^[=+\-@\t\r]/.test(text) && !signedNumber && typeof value === 'string') text = `'${text}`;
+  // A cell that a spreadsheet would run as a formula is made plain text
+  if (typeof value === 'string') text = formulaSafe(text);
   const needsQuote = quote || text.includes(separator) || /["\n\r]/.test(text);
   return needsQuote ? `"${text.replace(/"/g, '""')}"` : text;
 }

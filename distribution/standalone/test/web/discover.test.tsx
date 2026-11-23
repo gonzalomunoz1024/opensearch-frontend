@@ -12,7 +12,7 @@ import {
   surroundingRequest,
   tieBreakerField,
 } from '../../web/apps/discover/context';
-import { Pager, filterColumns, isFilterable, sourceEntries, toggledColumns } from '../../web/apps/discover/doc_table';
+import { CellValue, Pager, cellFilterable, filterColumns, isFilterable, sourceEntries, toggledColumns } from '../../web/apps/discover/doc_table';
 import { contextLinkState, docFieldType, docFields } from '../../web/apps/discover/doc_viewer';
 import { filtersOf, valueFilter } from '../../web/apps/discover/filters';
 import { allFields, searchTimeRange, sortClause } from '../../web/apps/discover/search';
@@ -45,6 +45,7 @@ import { createFormatter } from '../../web/lib/field_formats';
 import type { RawHit } from '../../web/lib/docs';
 import type { Field, Filter, IndexPattern } from '../../web/lib/types';
 import { appUrl, encodeState } from '../../web/lib/url';
+import { createServices, type BootData } from '../../web/services';
 
 const HOUR = 3600 * 1000;
 const DAY = 24 * HOUR;
@@ -310,11 +311,14 @@ describe('the fields beside the documents', () => {
 });
 
 describe('the values of a field in the documents on screen', () => {
-  it('keeps an empty string empty, so that its details say "Empty string", and formats the rest', () => {
-    const format = (value: unknown) => ({ text: value === null || value === undefined || value === '' ? '-' : `<${String(value)}>` });
-    assert.equal(bucketText('', format), '');
-    assert.equal(bucketText('gz', format), '<gz>');
-    assert.equal(bucketText(null, format), '-');
+  it('writes every value with the field format, an empty string too, as the original field calculator', () => {
+    // Text writes "" as nothing, and the details then say "Empty string"
+    assert.equal(bucketText('', createFormatter({ id: 'string' })), '');
+    assert.equal(bucketText('gz', createFormatter({ id: 'string' })), 'gz');
+    // A format that writes something for "": the original shows that, where the details said "Empty string"
+    const lookup = createFormatter({ id: 'static_lookup', params: { lookupEntries: [{ key: 'gz', value: 'Gzip' }], unknownKeyValue: 'other' } });
+    assert.equal(bucketText('', lookup), 'other');
+    assert.equal(bucketText('gz', lookup), 'Gzip');
   });
 
   const pattern = patternOf([field('tag', 'string'), field('place', 'geo_point'), field('user', 'string')]);
@@ -467,6 +471,35 @@ describe("Discover's settings as the original reads them", () => {
     assert.equal(isFilterable(field('hour', 'number', { scripted: true, searchable: false }), 'hour'), true);
     assert.equal(isFilterable(field('point', 'geo_point'), 'point'), false);
     assert.equal(isFilterable(undefined, '_id'), true);
+  });
+
+  it("offers a cell's filters unless its field cannot be filtered on, as the original's row asks", () => {
+    // Whatever the value is: a missing one is filtered on whether the field exists
+    assert.equal(cellFilterable(field('agent', 'string'), 'agent'), true);
+    assert.equal(cellFilterable(field('point', 'geo_point'), 'point'), false);
+    assert.equal(cellFilterable(field('message', 'string', { searchable: false }), 'message'), false);
+    // A column that is no field of the pattern: the original's field is unknown, not unfilterable
+    assert.equal(cellFilterable(undefined, 'geo.src'), true);
+  });
+
+  it('writes an empty string in a cell with the field format, as the original formats it', () => {
+    const pattern: IndexPattern = {
+      ...patternOf([field('agent', 'string'), field('took', 'number'), field('home', 'string')]),
+      fieldFormatMap: {
+        took: { id: 'duration', params: { inputFormat: 'seconds', outputFormat: 'asMinutes', outputPrecision: 2 } },
+        home: { id: 'url', params: { urlTemplate: 'dash {{value}}' } },
+      },
+    };
+    const hit = hitOf({});
+    createServices({ basePath: '', version: '3.9.0', name: 'test', settings: {}, settingsDefaults: {}, settingsOverrides: {} } as unknown as BootData);
+    const cell = (name: string, value: unknown) => renderToStaticMarkup(<CellValue indexPattern={pattern} name={name} value={value} hit={hit} />);
+    assert.equal(cell('agent', ''), '');
+    // These were blank: the original writes what the format makes of ""
+    assert.equal(cell('took', ''), '0.00');
+    assert.match(cell('home', ''), /<a [^>]*>dash <\/a>/);
+    // No value at all is a dash whatever the format
+    assert.equal(cell('took', undefined), ' - ');
+    assert.equal(cell('home', null), ' - ');
   });
 
   it('adds fields: ["*"] to a search only with search:includeAllFields on', () => {
