@@ -103,6 +103,12 @@ export interface CreateOptions {
   migrationVersion?: Record<string, string>;
   originId?: string;
   version?: string;
+  /**
+   * Written into the document, as the original writes them although its workspaces and
+   * permissions are off: the index has no place for them, so OpenSearch refuses such a document
+   */
+  workspaces?: string[];
+  permissions?: unknown;
 }
 
 export interface BulkCreateObject {
@@ -113,7 +119,11 @@ export interface BulkCreateObject {
   migrationVersion?: Record<string, string>;
   originId?: string;
   version?: string;
-  initialNamespaces?: string[];
+  /** Refused when given at all, as no type spans namespaces; an import passes on what its file has */
+  initialNamespaces?: unknown;
+  /** Written for an object that overwrites another; a new one gets those of the request */
+  workspaces?: unknown;
+  permissions?: unknown;
 }
 
 export interface BulkUpdateObject {
@@ -275,6 +285,8 @@ export class SavedObjectsRepository {
       migrationVersion: options.migrationVersion,
       updated_at: new Date().toISOString(),
       references: options.references ?? [],
+      ...(Array.isArray(options.workspaces) ? { workspaces: options.workspaces } : {}),
+      ...(options.permissions ? { permissions: options.permissions } : {}),
     });
     const overwrite = Boolean(options.id && options.overwrite);
     const result = await this.call<RawDocument>({
@@ -453,7 +465,7 @@ export class SavedObjectsRepository {
     return errors;
   }
 
-  async bulkCreate(objects: BulkCreateObject[], options: { overwrite?: boolean } = {}): Promise<BulkResult[]> {
+  async bulkCreate(objects: BulkCreateObject[], options: { overwrite?: boolean; workspaces?: string[] } = {}): Promise<BulkResult[]> {
     if (objects.length === 0) return [];
     const time = new Date().toISOString();
     type Prepared =
@@ -471,6 +483,8 @@ export class SavedObjectsRepository {
       }
       const method = object.id && options.overwrite ? 'index' : 'create';
       const id = object.id ?? randomUUID();
+      // The request's workspaces go to an object made new, the object's own to one that overwrites
+      const workspaces = method === 'create' ? options.workspaces : object.workspaces;
       // As the original's bulk create hands it to its migrator
       const source = this.toSource({
         id,
@@ -480,6 +494,8 @@ export class SavedObjectsRepository {
         updated_at: time,
         references: object.references || [],
         originId: object.originId,
+        ...(workspaces ? { workspaces } : {}),
+        ...(object.permissions ? { permissions: object.permissions } : {}),
       });
       return { kind: 'write', object, method, id, source };
     });
@@ -598,7 +614,7 @@ export class SavedObjectsRepository {
     return `/${encodeURIComponent(this.index)}/_doc/${encodeURIComponent(`${type}:${id}`)}`;
   }
 
-  /** The document an object is written as, migrated as the original's migrator does */
+  /** The document an object is written as, migrated as the original's migrator does, its keys in the original serializer's order */
   private toSource(document: MigrationDocument): RawSource {
     const migrated = migrateDocument(document, this.log);
     return {
@@ -608,6 +624,8 @@ export class SavedObjectsRepository {
       ...(migrated.originId ? { originId: migrated.originId } : {}),
       ...(migrated.migrationVersion ? { migrationVersion: migrated.migrationVersion } : {}),
       ...(migrated.updated_at ? { updated_at: migrated.updated_at } : {}),
+      ...(migrated.workspaces ? { workspaces: migrated.workspaces } : {}),
+      ...(migrated.permissions ? { permissions: migrated.permissions } : {}),
     } as RawSource;
   }
 

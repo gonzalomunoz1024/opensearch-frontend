@@ -135,7 +135,7 @@ export function registerSavedObjects(
         body: {
           saved_objects: await repository.bulkCreate(
             objects.map((entry) => ({ ...entry, attributes: entry.attributes as Record<string, unknown> })),
-            { overwrite: query.overwrite }
+            { overwrite: query.overwrite, ...(query.workspaces ? { workspaces: asList(query.workspaces) } : {}) }
           ),
         },
       };
@@ -228,6 +228,7 @@ export function registerSavedObjects(
           createNewCopies: query.createNewCopies,
           limit,
           canImportConfig: true,
+          workspaces: asList(query.workspaces),
         }),
       };
     },
@@ -267,6 +268,7 @@ export function registerSavedObjects(
           createNewCopies: query.createNewCopies,
           limit,
           canImportConfig: true,
+          workspaces: asList(query.workspaces),
         }),
       };
     },
@@ -303,6 +305,8 @@ export function registerSavedObjects(
         overwrite,
         migrationVersion: request.migrationVersion,
         references: request.references,
+        // Passed on as the original passes them, for OpenSearch to refuse: the index has no place for them
+        ...(request.workspaces ? { workspaces: request.workspaces } : {}),
       }),
     };
   };
