@@ -121,11 +121,19 @@ function Cells({
 }
 
 /** The button that opens a row or picks a name: a plus in a circle, a minus once open */
-function Expander({ isOpen, onClick }: { isOpen: boolean; onClick: () => void }) {
+function Expander({
+  isOpen,
+  onClick,
+  className,
+}: {
+  isOpen: boolean;
+  onClick: () => void;
+  className?: string;
+}) {
   return (
     <button
       type="button"
-      className="qwbExpander"
+      className={cx('qwbExpander', className)}
       aria-label={isOpen ? 'Collapse' : 'Expand'}
       onClick={onClick}
     >
@@ -173,9 +181,8 @@ function Rows({
             <div className="qwbNavWrap">
               <nav className="qwbNav">
                 <div className="qwbNav__item qwbNav__item--root">
-                  <button type="button" className="qwbNav__button qwbNav__button--root">
-                    <span className="qwbNav__label" />
-                  </button>
+                  {/* The navigation's root, with no name: nothing to see, as the original's */}
+                  <div className="qwbNav__button qwbNav__button--root" />
                   <div className="qwbNav__items">
                     {names.map((name) => {
                       const inner = `${path}/${name}`;
@@ -183,20 +190,29 @@ function Rows({
                       return (
                         <div key={name} className="qwbNav__item qwbNav__item--trunk">
                           <div className={cx('qwbNav__button', shown && 'qwbNav__button--selected')}>
-                            <span className="qwbNav__icon">
-                              <Expander isOpen={shown} onClick={() => opening.toggle(inner)} />
+                            <span className="qwbNav__content">
+                              <Expander
+                                isOpen={shown}
+                                onClick={() => opening.toggle(inner)}
+                                className="qwbNav__icon"
+                              />
+                              <span className="qwbNav__label">{name}</span>
                             </span>
-                            <span className="qwbNav__label">{name}</span>
                           </div>
                           {shown && (
                             <div className="qwbNav__items">
+                              {/* The table is the picked item's name, cut where the name is */}
                               <div className="qwbNav__item qwbNav__item--branch">
-                                <div className="qwbNav__button">
-                                  <Nested
-                                    value={(data as Record<string, unknown>)[name]}
-                                    path={inner}
-                                    opening={opening}
-                                  />
+                                <div className="qwbNav__button qwbNav__button--selected">
+                                  <span className="qwbNav__content">
+                                    <span className="qwbNav__label">
+                                      <Nested
+                                        value={(data as Record<string, unknown>)[name]}
+                                        path={inner}
+                                        opening={opening}
+                                      />
+                                    </span>
+                                  </span>
                                 </div>
                               </div>
                             </div>
