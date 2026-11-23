@@ -3,6 +3,7 @@
 /* The files of the browser side, and the one page that loads them. */
 
 import type { MapConfig } from '../common/map_config';
+import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import type { IncomingMessage } from 'node:http';
 import { extname, join, normalize, sep } from 'node:path';
@@ -79,7 +80,23 @@ export interface PageOptions {
   dark: boolean;
   /** What the browser side needs before its first request; it is data, never run as script */
   bootData: unknown;
+  /**
+   * The nonce of this page's policy, from cspNonce(): its own <style> carries it, and so does every
+   * style element the browser side makes, which reads it from <meta name="csp-nonce">
+   */
+  nonce?: string;
 }
+
+/**
+ * A nonce for one page, as OpenSearch Dashboards makes one for each page it sends
+ * (src/core/server/http_resources/http_resources_service.ts): 16 random bytes in base64
+ */
+export function cspNonce(): string {
+  return randomBytes(16).toString('base64');
+}
+
+/** The directives a page's nonce is added to: the default of csp.nonceDirectives */
+const NONCE_DIRECTIVES = ['style-src-elem'];
 
 const BASE_POLICY = [
   "default-src 'self'",
@@ -125,9 +142,10 @@ export interface AllowedSources {
 
 /**
  * The page's policy: the browser may fetch from the server and from the map services of map.*,
- * and each csp.allowed*Sources setting adds its sources to its rule, as in OpenSearch Dashboards
+ * and each csp.allowed*Sources setting adds its sources to its rule, as in OpenSearch Dashboards.
+ * The page's nonce, when there is one, is added to the rules of the directives that take it.
  */
-export function contentSecurityPolicy(map?: MapConfig, allowed: AllowedSources = {}): string {
+export function contentSecurityPolicy(map?: MapConfig, allowed: AllowedSources = {}, nonce?: string): string {
   const connect = ["'self'", ...(map ? mapOrigins(map) : []), ...(allowed.allowedConnectSources ?? [])];
   const add = (rule: string, sources?: string[]) => (sources?.length ? `${rule} ${sources.join(' ')}` : rule);
   return BASE_POLICY.map((rule) => {
@@ -135,21 +153,26 @@ export function contentSecurityPolicy(map?: MapConfig, allowed: AllowedSources =
     if (rule.startsWith('frame-ancestors ')) return add(rule, allowed.allowedFrameAncestorSources);
     if (rule.startsWith('img-src ')) return add(rule, allowed.allowedImgSources);
     return rule;
-  }).join('; ');
+  })
+    .map((rule) => (nonce && NONCE_DIRECTIVES.includes(rule.split(' ')[0]) ? `${rule} 'nonce-${nonce}'` : rule))
+    .join('; ');
 }
 
 export const CONTENT_SECURITY_POLICY = contentSecurityPolicy();
 
-export function renderPage({ basePath, build, title, dark, bootData }: PageOptions): string {
+export function renderPage({ basePath, build, title, dark, bootData, nonce }: PageOptions): string {
   const data = JSON.stringify(bootData).replace(/</g, '\\u003c');
+  // Where the original writes them: the nonce after the viewport, and on its own <style> elements
+  const nonceMeta = nonce === undefined ? '' : `\n<meta name="csp-nonce" content="${escapeHtml(nonce)}">`;
+  const nonceAttribute = nonce === undefined ? '' : ` nonce="${escapeHtml(nonce)}"`;
   return `<!doctype html>
 <html lang="en" class="${dark ? 'themeDark' : 'themeLight'}">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1">${nonceMeta}
 <title>${escapeHtml(title)}</title>
 <link rel="icon" type="image/svg+xml" href="${basePath}/favicon.svg">
-<style>
+<style${nonceAttribute}>
 ${fontFaceRules(`${basePath}/ui`)}
 </style>
 <link rel="stylesheet" href="${basePath}/${build.assets.styles}">
