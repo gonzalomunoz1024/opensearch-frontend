@@ -168,7 +168,8 @@ const follow = (name) => {
 ['vega', 'vega-lite', 'leaflet', 'markdown-it'].forEach(follow);
 for (const name of [...bundled].sort()) {
   const directory = join(root, installed.get(name)?.path ?? join('node_modules', name));
-  const licence = ['LICENSE', 'LICENSE.md', 'LICENSE.txt', 'license']
+  // punycode.js calls its licence LICENSE-MIT.txt
+  const licence = ['LICENSE', 'LICENSE.md', 'LICENSE.txt', 'LICENSE-MIT.txt', 'license']
     .map((file) => join(directory, file))
     .find((file) => existsSync(file));
   if (licence) write(join(dist, 'licenses', `${name}.txt`), readFileSync(licence));
