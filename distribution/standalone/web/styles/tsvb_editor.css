@@ -473,7 +473,7 @@
   min-height: 25px;
 }
 
-/* Its cross stands in a line of the page's text, as the original's: in the middle of the letters,
+/* Its cross stands in a line of the original page's text, 14 px: in the middle of the letters,
    which is a pixel under the middle of the swatch */
 .tvbColorPicker__clear {
   display: block;
@@ -483,7 +483,7 @@
   background: none;
   color: var(--color-critical);
   font-size: var(--font-size-s);
-  line-height: 21px;
+  line-height: 1;
   cursor: pointer;
 }
 
