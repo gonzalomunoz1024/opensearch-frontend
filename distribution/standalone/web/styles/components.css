@@ -55,14 +55,18 @@ svg.atlIcon:not([role="img"]) {
 
 /* --- Buttons ------------------------------------------------------------------------------- */
 
+/* As the original's buttons: a border that shows no colour (so what they hold sits a pixel further
+   in), 8 px between the icon and the text, and under the pointer or with the focus the same fill:
+   the original's components draw `:focus` as they draw `:hover`, so a button that was clicked keeps
+   it until the focus moves on */
 .atlButton {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: var(--space-2);
   height: var(--control-height);
   padding: 0 var(--space-3);
-  border: 0;
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
   background: var(--color-surface-secondary);
   color: var(--color-text-primary);
@@ -72,19 +76,31 @@ svg.atlIcon:not([role="img"]) {
   cursor: pointer;
   transition:
     background var(--duration-fast) ease-out,
+    border-color var(--duration-fast) ease-out,
     color var(--duration-fast) ease-out,
     filter var(--duration-fast) ease-out,
     transform var(--duration-fast) ease-out;
   user-select: none;
 }
 
-.atlButton:hover {
-  background: color-mix(in srgb, var(--color-text-primary) 8%, var(--color-surface-secondary));
+/* The theme's button that is not filled: the secondary surface, the light border's colour under
+   the pointer */
+.atlButton:hover,
+.atlButton:focus {
+  background: var(--color-border-light);
   text-decoration: none;
 }
 
+/* A press scales it down a little: the original's buttons and icon buttons; its empty ones, below,
+   do not move */
 .atlButton:active {
   transform: scale(0.97);
+}
+
+/* The original's button is never narrower than 112 px; its empty and icon buttons are. The rule
+   weighs no more than `.atlButton`, so a page's own width for one of its buttons still wins */
+.atlButton:where(:not(.atlButton--empty, .atlButton--dangerEmpty, .atlButton--ghost, .atlButton--tint, .atlButton--icon)) {
+  min-width: 112px;
 }
 
 /* A filled button, as the theme's: its colour and the small shadow, brighter under the pointer */
@@ -95,19 +111,17 @@ svg.atlIcon:not([role="img"]) {
 }
 
 .atlButton--primary:hover,
-.atlButton--primary:focus-visible {
+.atlButton--primary:focus {
   background: var(--color-accent);
   filter: brightness(1.1);
 }
 
-/* The theme's icon button on a base of its colour */
-.atlButton--tint {
+/* The theme's icon button on a base of its colour, which stays as it is under the pointer */
+.atlButton--tint,
+.atlButton--tint:hover,
+.atlButton--tint:focus {
   background: var(--color-accent-tint);
   color: var(--color-accent-button-text);
-}
-
-.atlButton--tint:hover {
-  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
 }
 
 /* The theme's danger button, not filled: outlined in the critical colour, a soft fill on hover.
@@ -120,8 +134,11 @@ svg.atlIcon:not([role="img"]) {
 }
 
 .atlButton--danger:hover,
+.atlButton--danger:focus,
 .atlButton--dangerOutline:hover,
-.atlButton--dangerEmpty:hover {
+.atlButton--dangerOutline:focus,
+.atlButton--dangerEmpty:hover,
+.atlButton--dangerEmpty:focus {
   background: var(--color-critical-tint);
 }
 
@@ -142,7 +159,7 @@ svg.atlIcon:not([role="img"]) {
 }
 
 .atlButton--dangerFill:hover,
-.atlButton--dangerFill:focus-visible {
+.atlButton--dangerFill:focus {
   background: var(--color-critical);
   filter: brightness(1.1);
 }
@@ -154,28 +171,41 @@ svg.atlIcon:not([role="img"]) {
   color: var(--color-healthy-button-text);
 }
 
-.atlButton--healthyOutline:hover {
+.atlButton--healthyOutline:hover,
+.atlButton--healthyOutline:focus {
   background: var(--color-healthy-tint);
 }
 
+/* The original's empty button in its primary colour: no fill until hovered, a soft one then */
 .atlButton--empty {
   background: transparent;
   color: var(--color-accent-button-text);
   padding: 0 var(--space-2);
 }
 
-.atlButton--empty:hover {
+.atlButton--empty:hover,
+.atlButton--empty:focus {
   background: var(--color-accent-tint);
 }
 
+/* The original's empty button and icon button in the colour of the text: their soft fill is the
+   secondary text's */
 .atlButton--ghost {
   background: transparent;
   color: var(--color-text-primary);
   padding: 0 var(--space-2);
 }
 
-.atlButton--ghost:hover {
-  background: var(--color-hover);
+.atlButton--ghost:hover,
+.atlButton--ghost:focus {
+  background: color-mix(in srgb, var(--color-text-secondary) var(--tint-opacity), transparent);
+}
+
+/* An empty button does not move when pressed, as the original's; an icon button does */
+.atlButton--empty:not(.atlButton--round):active,
+.atlButton--dangerEmpty:not(.atlButton--round):active,
+.atlButton--ghost:not(.atlButton--round):active {
+  transform: none;
 }
 
 .atlButton--s {
@@ -185,6 +215,12 @@ svg.atlIcon:not([role="img"]) {
   font-size: var(--font-size-xs);
 }
 
+/* The original's smallest empty button and icon button: 24 px, the type as large as the others' */
+.atlButton--xs {
+  height: 24px;
+  padding: 0 var(--space-2);
+}
+
 .atlButton--icon {
   width: var(--control-height);
   padding: 0;
@@ -192,6 +228,15 @@ svg.atlIcon:not([role="img"]) {
 
 .atlButton--icon.atlButton--s {
   width: var(--control-height-s);
+}
+
+.atlButton--icon.atlButton--xs {
+  width: 24px;
+}
+
+/* The theme's icon button is round, whatever its size */
+.atlButton--round {
+  border-radius: 50%;
 }
 
 .atlButton--full {
@@ -226,11 +271,13 @@ svg.atlIcon:not([role="img"]) {
 
 /* --- Fields -------------------------------------------------------------------------------- */
 
+/* Its text 12 px from its edge, as the original's: the theme draws the edge inside the field, and
+   the border here takes its pixel from the padding */
 .atlField {
   display: block;
   width: 100%;
   height: var(--control-height);
-  padding: 0 var(--space-3);
+  padding: 0 calc(var(--space-3) - 1px);
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-md);
   background: var(--color-surface-secondary);
@@ -267,9 +314,11 @@ svg.atlIcon:not([role="img"]) {
   border-color: var(--color-critical);
 }
 
-/* The theme's compressed field: as tall as the kit's and in the same type, 8 px in from the sides */
+/* The theme's compressed field: as tall as the kit's and in the same type, its text 8 px in from
+   the sides as the original's, whose edge is a 1 px ring drawn inside the field where the kit's is
+   a border */
 .atlField--s {
-  padding: 0 var(--space-2);
+  padding: 0 calc(var(--space-2) - 1px);
 }
 
 textarea.atlField {
@@ -323,6 +372,17 @@ select.atlField {
   color: var(--color-text-primary);
 }
 
+/* As the original's compressed field with an icon: the icon 8 px in from the outer edge, the text
+   32 px in, and what ends it (a button, an icon) 8 px in from the other edge. The text's room is the
+   kit's least rule, so that a page that places its own icon keeps its own */
+.atlField--s.atlFieldGroup {
+  padding: 0 calc(var(--space-2) - 1px);
+}
+
+:where(.atlField--s.atlFieldGroup > .atlIcon:first-child) + input {
+  padding-left: var(--space-2);
+}
+
 .atlFormRow {
   display: flex;
   flex-direction: column;
@@ -370,13 +430,96 @@ select.atlField {
   user-select: none;
 }
 
+/* As the original's tick box and radio, drawn by the page and not by the browser: 16 px with a 1 px
+   edge, a square with corners of 5 px or a circle, filled with the accent when chosen, with the
+   original's own tick and dot (white, black in the dark theme: a picture cannot take a variable) */
 .atlCheckbox input,
 .atlRadio input {
+  flex: none;
   width: 16px;
   height: 16px;
   margin: 0;
-  accent-color: var(--color-accent);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  background: var(--color-surface) no-repeat center;
+  appearance: none;
+  transition:
+    background-color var(--duration-fast) ease-in,
+    border-color var(--duration-fast) ease-in;
   cursor: pointer;
+}
+
+.atlRadio input {
+  border-radius: 50%;
+}
+
+.atlCheckbox input:checked,
+.atlCheckbox input:indeterminate,
+.atlRadio input:checked {
+  border-color: var(--color-accent);
+}
+
+.atlCheckbox input:checked,
+.atlRadio input:checked {
+  background-color: var(--color-accent);
+}
+
+.atlCheckbox input:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='8' viewBox='0 0 10 8'%3E%3Cpath d='M.375 2.625L3.375 5.625M3.375 5.625L8.625.375' fill='none' fill-rule='evenodd' stroke='rgb%28255, 255, 255%29' stroke-linecap='round' stroke-width='1.5' transform='translate(.5 1)'/%3E%3C/svg%3E");
+}
+
+.atlRadio input:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='6' viewBox='0 0 6 6'%3E%3Ccircle cx='8' cy='11' r='3' fill='rgb%28255, 255, 255%29' fill-rule='evenodd' transform='translate(-5 -8)'/%3E%3C/svg%3E");
+}
+
+/* Some ticked of those it stands for: a square of 6 px in the accent */
+.atlCheckbox input:indeterminate:not(:checked) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='6' viewBox='0 0 6 6'%3E%3Crect width='6' height='6' rx='1' fill='%23007aff'/%3E%3C/svg%3E");
+}
+
+:root.themeDark .atlCheckbox input:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='8' viewBox='0 0 10 8'%3E%3Cpath d='M.375 2.625L3.375 5.625M3.375 5.625L8.625.375' fill='none' fill-rule='evenodd' stroke='rgb%280, 0, 0%29' stroke-linecap='round' stroke-width='1.5' transform='translate(.5 1)'/%3E%3C/svg%3E");
+}
+
+:root.themeDark .atlRadio input:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='6' viewBox='0 0 6 6'%3E%3Ccircle cx='8' cy='11' r='3' fill='rgb%280, 0, 0%29' fill-rule='evenodd' transform='translate(-5 -8)'/%3E%3C/svg%3E");
+}
+
+:root.themeDark .atlCheckbox input:indeterminate:not(:checked) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='6' viewBox='0 0 6 6'%3E%3Crect width='6' height='6' rx='1' fill='%230a84ff'/%3E%3C/svg%3E");
+}
+
+/* With the focus, from a key or a pointer: the edge in the accent and the original's 3 px ring */
+.atlCheckbox input:focus,
+.atlRadio input:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
+  outline: none;
+}
+
+/* Disabled: filled with the colour of the edge, a chosen one's mark greyed as the original's */
+.atlCheckbox input:disabled,
+.atlRadio input:disabled {
+  border-color: var(--color-border);
+  background-color: var(--color-border);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.atlCheckbox input:disabled:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='8' viewBox='0 0 10 8'%3E%3Cpath d='M.375 2.625L3.375 5.625M3.375 5.625L8.625.375' fill='none' fill-rule='evenodd' stroke='rgb%2894, 94, 98%29' stroke-linecap='round' stroke-width='1.5' transform='translate(.5 1)'/%3E%3C/svg%3E");
+}
+
+.atlRadio input:disabled:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='6' viewBox='0 0 6 6'%3E%3Ccircle cx='8' cy='11' r='3' fill='rgb%2894, 94, 98%29' fill-rule='evenodd' transform='translate(-5 -8)'/%3E%3C/svg%3E");
+}
+
+:root.themeDark .atlCheckbox input:disabled:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='8' viewBox='0 0 10 8'%3E%3Cpath d='M.375 2.625L3.375 5.625M3.375 5.625L8.625.375' fill='none' fill-rule='evenodd' stroke='rgb%28175, 175, 176%29' stroke-linecap='round' stroke-width='1.5' transform='translate(.5 1)'/%3E%3C/svg%3E");
+}
+
+:root.themeDark .atlRadio input:disabled:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='6' viewBox='0 0 6 6'%3E%3Ccircle cx='8' cy='11' r='3' fill='rgb%28175, 175, 176%29' fill-rule='evenodd' transform='translate(-5 -8)'/%3E%3C/svg%3E");
 }
 
 .atlSwitch {
@@ -661,11 +804,17 @@ select.atlField {
   animation: atlSpin 0.6s linear infinite;
 }
 
+/* The original's sizes: "l" 24 px, "xl" 32 px, with the thick border */
 .atlSpinner--l,
+.atlSpinner--xl {
+  width: 24px;
+  height: 24px;
+  border-width: 2px;
+}
+
 .atlSpinner--xl {
   width: 32px;
   height: 32px;
-  border-width: 2px;
 }
 
 @keyframes atlSpin {
@@ -714,42 +863,46 @@ select.atlField {
 
 /* --- Tabs ---------------------------------------------------------------------------------- */
 
+/* As the theme draws the original's tabs: pills 4 px apart and no line under them, the one shown
+   in the colour of the text on the secondary surface, the others in the secondary colour until the
+   pointer or the focus comes */
 .atlTabs {
   display: flex;
-  gap: var(--space-4);
-  border-bottom: 1px solid var(--color-border-light);
+  gap: var(--space-1);
   overflow-x: auto;
 }
 
 .atlTab {
   position: relative;
-  padding: var(--space-2) 0;
+  padding: 6px var(--space-3);
   border: 0;
-  background: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
   color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
   font-weight: var(--font-weight-medium);
+  line-height: 1.5;
   white-space: nowrap;
   cursor: pointer;
+  transition:
+    color var(--duration-fast) ease-out,
+    background-color var(--duration-fast) ease-out;
 }
 
-.atlTab:hover {
+.atlTabs--s .atlTab {
+  padding: var(--space-1) 10px;
+}
+
+.atlTab:hover,
+.atlTab:focus {
   color: var(--color-text-primary);
   text-decoration: none;
 }
 
 .atlTab[aria-selected="true"] {
-  color: var(--color-accent);
-}
-
-.atlTab[aria-selected="true"]::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1px;
-  height: 2px;
-  border-radius: 1px;
-  background: var(--color-accent);
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  cursor: default;
 }
 
 /* A segmented control: the kit's way to pick one of a few */
@@ -961,7 +1114,7 @@ select.atlField {
 
 .atlPagination__size:hover,
 .atlPagination__size:focus {
-  background: color-mix(in srgb, var(--color-text-primary) var(--tint-opacity), transparent);
+  background: color-mix(in srgb, var(--color-text-secondary) var(--tint-opacity), transparent);
 }
 
 .atlPagination__total {
@@ -973,15 +1126,21 @@ select.atlField {
   align-items: center;
 }
 
+/* As the original's list: its lines as high as its letters, and each page button at the middle of
+   its line, which is what puts "…" where the original has it beside them */
 .atlPagination__list {
   display: flex;
   align-items: baseline;
   margin: 0;
   padding: 0;
   list-style: none;
+  font-size: var(--font-size-s);
+  line-height: 1;
 }
 
-/* The arrows: round icon buttons in the colour of the text, at the first and the last page too */
+/* The arrows: round icon buttons in the colour of the text, in the font of the page buttons as the
+   original's. As the original's, one that leads nowhere (at the first and the last page) is drawn
+   and answers the pointer as the other */
 .atlPagination__arrow {
   display: inline-flex;
   align-items: center;
@@ -989,22 +1148,22 @@ select.atlField {
   width: 24px;
   height: 24px;
   padding: 0;
-  border: 1px solid transparent;
+  border: 0;
   border-radius: 50%;
   background: transparent;
   color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 21px;
   cursor: pointer;
 }
 
-.atlPagination__arrow:hover:not(:disabled),
-.atlPagination__arrow:focus:not(:disabled) {
-  background: color-mix(in srgb, var(--color-text-primary) var(--tint-opacity), transparent);
+.atlPagination__arrow:hover,
+.atlPagination__arrow:focus {
+  background: color-mix(in srgb, var(--color-text-secondary) var(--tint-opacity), transparent);
 }
 
-.atlPagination__arrow:disabled {
-  cursor: not-allowed;
-}
-
+/* A page: the original's empty button in the colour "text", with its soft fill under the pointer */
 .atlPagination__page {
   height: 32px;
   padding: 0 var(--space-2);
@@ -1014,30 +1173,42 @@ select.atlField {
   color: var(--color-text-secondary);
   font-size: var(--font-size-s);
   font-weight: var(--font-weight-medium);
+  line-height: 21px;
+  vertical-align: middle;
   cursor: pointer;
 }
 
 .atlPagination__page:hover,
 .atlPagination__page:focus {
+  background: color-mix(in srgb, var(--color-text-secondary) var(--tint-opacity), transparent);
   color: var(--color-text-primary);
 }
 
+/* The page shown is a button that cannot be pressed, and the pointer says so, as the original's */
 .atlPagination__page[aria-current="true"] {
   background: var(--color-surface-secondary);
   color: var(--color-text-primary);
-  cursor: default;
+  cursor: not-allowed;
+}
+
+/* As the original's: on a narrow window the arrows alone */
+@media (max-width: 767px) {
+  .atlPagination__list {
+    display: none;
+  }
 }
 
 .atlPagination__skip {
   height: 24px;
   padding: 6px var(--space-2) 0;
   color: var(--color-text-tertiary);
-  font-size: var(--font-size-s);
 }
 
 /* --- What floats: popovers, menus, dialogs, flyouts, toasts ---------------------------------- */
 
-/* A popover is opened from a field or a button, and those are in dialogs and flyouts too: it floats above both */
+/* A popover is opened from a field or a button, and those are in dialogs and flyouts too: it floats
+   above both. Its panel is the theme's, as the original's: corners of 16 px, opaque, with the
+   material's edge and shadow but not its glass */
 .atlPopover {
   position: fixed;
   z-index: 4500;
@@ -1045,7 +1216,9 @@ select.atlField {
   max-width: min(480px, calc(100vw - 16px));
   max-height: calc(100vh - 16px);
   overflow: auto;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  backdrop-filter: none;
   animation: atlPop var(--duration-fast) var(--ease-out-quint);
 }
 
@@ -1119,16 +1292,13 @@ select.atlField {
   background: var(--color-border-light);
 }
 
-/* A popover placed as the original's: its panel as the theme draws one, opaque, without padding,
-   and not cutting what is in it, as the original's: the ring of an item's focus is drawn outside
-   it, and its first item, when it has the focus, fills the corners */
+/* A popover placed as the original's: without padding, and not cutting what is in it, as the
+   original's: the ring of an item's focus is drawn outside it, and its first item, when it has the
+   focus, fills the corners */
 .atlPopover--placed {
-  min-width: 0;
+  min-width: 112px;
   max-height: none;
   overflow: visible;
-  border-radius: var(--radius-lg);
-  background-color: var(--color-surface);
-  backdrop-filter: none;
 }
 
 /* The original's context menu: rows from edge to edge, the surface under the pointer */
@@ -1158,7 +1328,8 @@ select.atlField {
   cursor: pointer;
 }
 
-.atlContextMenu__back:hover {
+.atlContextMenu__back:hover,
+.atlContextMenu__back:focus {
   background: var(--color-surface-secondary);
 }
 
@@ -1183,6 +1354,13 @@ select.atlField {
   line-height: 21px;
 }
 
+/* The original's menu of panels: its rows cut at the panel's round corners */
+.atlContextMenu--framed {
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+}
+
 .atlContextMenu__item:hover,
 .atlContextMenu__item:focus {
   background: var(--color-surface-secondary);
@@ -1196,7 +1374,17 @@ select.atlField {
   outline-offset: 2px;
 }
 
-.atlContextMenu__item:disabled {
+/* In the dark the panel is black and the theme fills the row under the pointer with the tertiary
+   surface, where in the light it takes the secondary one */
+:root.themeDark .atlContextMenu__back:hover,
+:root.themeDark .atlContextMenu__back:focus,
+:root.themeDark .atlContextMenu__item:hover,
+:root.themeDark .atlContextMenu__item:focus {
+  background: var(--color-surface-tertiary);
+}
+
+.atlContextMenu__item:disabled,
+:root.themeDark .atlContextMenu__item:disabled {
   color: var(--color-text-tertiary);
   cursor: not-allowed;
   background: none;
@@ -1272,7 +1460,8 @@ select.atlField {
   flex-direction: column;
   width: 100%;
   max-width: 480px;
-  max-height: 75vh;
+  /* As the original's, three quarters of the window inside its border */
+  max-height: calc(75vh + 2px);
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-xl);
   background: var(--color-surface);
@@ -1295,7 +1484,6 @@ select.atlField {
 }
 
 .atlModal--confirm .atlModal__footer > .atlButton:not(.atlButton--empty) {
-  border: 1px solid transparent;
   box-shadow: var(--shadow-sm);
 }
 
@@ -1352,7 +1540,6 @@ select.atlField {
   right: calc(var(--space-2) + 1px);
   width: var(--space-6);
   height: var(--space-6);
-  border-radius: 50%;
 }
 
 @keyframes atlRise {
@@ -1385,7 +1572,6 @@ select.atlField {
   right: var(--space-1);
   width: var(--space-6);
   height: var(--space-6);
-  border-radius: 50%;
 }
 
 .atlModal__body {
@@ -1401,15 +1587,6 @@ select.atlField {
   gap: var(--space-4);
   padding: var(--space-3) var(--space-6);
   border-top: 1px solid var(--color-border-light);
-}
-
-/* The original's buttons are never narrower than this; its empty ones are */
-.atlModal__footer > .atlButton:not(.atlButton--empty, .atlButton--ghost) {
-  min-width: 112px;
-}
-
-.atlModal__footer > .atlButton--empty {
-  border: 1px solid transparent;
 }
 
 .atlFlyout {
@@ -1582,7 +1759,8 @@ select.atlField {
 /* As the theme's tooltip: frosted, without the arrow */
 .atlTooltip {
   position: fixed;
-  z-index: 6000;
+  /* The original's layer for tooltips, over every other */
+  z-index: 9000;
   /* As wide as the original's tooltips (EuiToolTip's max-width), breaking a longer word */
   max-width: 256px;
   overflow-wrap: break-word;
@@ -1832,8 +2010,15 @@ select.atlField {
   box-shadow: 0 0 0 2px var(--color-focus-ring);
 }
 
-.atlCombo--clearable {
-  padding-right: 55px;
+/* Room for the clear button, as the original keeps it whenever the field can be cleared, chosen
+   or not, and for the spinner of a list on its way; for both */
+.atlCombo--clearable,
+.atlCombo--loading {
+  padding-right: 53px;
+}
+
+.atlCombo--clearable.atlCombo--loading {
+  padding-right: 75px;
 }
 
 .atlCombo--single {
@@ -1841,24 +2026,27 @@ select.atlField {
   padding-left: 7px;
 }
 
+/* The text typed: 24 px high, as the original's, its line in the middle of the field, and as wide
+   as what is typed (2 px while nothing is), as the original's field grows with its text: it takes
+   what is left of its line, but never holds the combo box wider than its text */
 .atlCombo > input {
-  flex: 1 1 24px;
-  min-width: 24px;
-  height: 22px;
+  flex: 1 1 auto;
+  min-width: 2px;
+  height: 24px;
   margin: 0 4px;
-  padding: 0;
+  padding: 0 1px 0 0;
   border: 0;
   background: transparent;
   color: inherit;
   outline: none;
+  field-sizing: content;
 }
 
 .atlCombo--single > input {
   flex-basis: 2px;
-  min-width: 2px;
 }
 
-/* The one value chosen, written as plain text */
+/* The one value chosen, written as plain text on the line of the original's compressed pills */
 .atlCombo__plain {
   flex: 0 1 auto;
   min-width: 0;
@@ -2247,20 +2435,14 @@ mark,
   accent-color: var(--color-accent);
 }
 
-.atlCombo--s {
-  min-height: var(--control-height-s);
-  padding-top: 2px;
-  padding-bottom: 2px;
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-xs);
-}
-
 .atlCombo--disabled {
   color: var(--color-text-tertiary);
   cursor: not-allowed;
 }
 
-/* The buttons at the right of the field: the caret 8 px from its edge, what clears it before */
+/* The buttons at the right of the field, as the original's compressed combo box draws them: the
+   arrow, 12 px in a button of 16, 8 px from the edge; the spinner and the clear button before it,
+   6 px apart */
 .atlCombo__clear,
 .atlCombo__caret {
   position: absolute;
@@ -2279,21 +2461,35 @@ mark,
   cursor: pointer;
 }
 
+.atlCombo__caret .atlIcon {
+  width: 12px;
+  height: 12px;
+}
+
+/* The small clear button: a 12 px disc of the medium shade (the dark shade in the dark theme), its
+   cross 6 px wide in the colour of the page, drawn thicker as the theme draws it */
 .atlCombo__clear {
-  right: 31px;
+  right: 29px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background: var(--color-text-tertiary);
   color: var(--color-surface);
 }
 
-.atlCombo__clear .atlIcon {
-  width: 10px;
-  height: 10px;
-  stroke-width: 2;
+:root.themeDark .atlCombo__clear {
+  background: var(--color-text-secondary);
 }
 
-.atlCombo__clear:hover {
-  background: var(--color-text-secondary);
+.atlCombo__clear .atlIcon {
+  width: 6px;
+  height: 6px;
+  stroke: currentcolor;
+  stroke-width: 4px;
+}
+
+.atlCombo--loading > .atlCombo__clear {
+  right: 51px;
 }
 
 .atlCombo__caret:disabled,
@@ -2305,12 +2501,8 @@ mark,
 .atlCombo > .atlSpinner {
   position: absolute;
   top: 50%;
-  right: 31px;
+  right: 29px;
   margin-top: -8px;
-}
-
-.atlCombo--clearable > .atlSpinner {
-  right: 55px;
 }
 
 /* Text written in Markdown */

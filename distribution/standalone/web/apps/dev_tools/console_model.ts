@@ -383,6 +383,10 @@ function shellWords(command: string): string[] {
         at = end + 1;
       } else if (command[at] === '\\' && command[at + 1] === '\n') {
         at += 2;
+      } else if (command[at] === '\\' && /['"\\]/.test(command[at + 1] ?? '')) {
+        // A quote or a backslash written between quoted parts: '\'' is a quote inside a body
+        word += command[at + 1];
+        at += 2;
       } else {
         word += command[at];
         at += 1;
@@ -410,7 +414,7 @@ export function parseCurl(text: string): string {
           method = word.slice(2);
         } else if (/^(-d|--data|--data-raw|--data-binary|--data-ascii)$/.test(word)) {
           bodies.push(words[(index += 1)] ?? '');
-        } else if (/^-d./.test(word)) {
+        } else if (/^-d[\s\S]/.test(word)) {
           bodies.push(word.slice(2));
         } else if (/^(-H|--header|-u|--user|-o|--output|--cacert|--cert|--key|-A|--user-agent)$/.test(word)) {
           index += 1;
@@ -491,6 +495,14 @@ export function formatAnswer(
   return value;
 }
 
+/**
+ * What a request that failed shows: its answer, JSON spread over lines as the original's, or that
+ * none came
+ */
+export function failedAnswer(text: string, contentType: string, status: number): string {
+  return text ? formatAnswer(text, contentType) : `Request failed to get to the server (status code: ${status})`;
+}
+
 /** An answer of OpenSearch to one request, as the console keeps it */
 export interface Answer {
   ok: boolean;
@@ -522,6 +534,25 @@ export interface PastRequest {
   endpoint: string;
   method: string;
   data?: string;
+}
+
+/**
+ * A key pressed in the history's list: the arrows choose a request, Enter applies the chosen one.
+ * The keys are the list's alone: applying gives the focus to the editor, where an Enter left to
+ * the browser would break a line as well.
+ */
+export function historyKey(
+  event: { key: string; preventDefault(): void },
+  selected: number,
+  actions: { choose(index: number): void; apply(): void }
+): void {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    actions.apply();
+  } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+    event.preventDefault();
+    actions.choose(selected + (event.key === 'ArrowUp' ? -1 : 1));
+  }
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -876,6 +907,15 @@ function bodyKeys(path: string[], url: string, names: ClusterNames): string[] {
   if (before === 'range') return RANGE_KEYS;
   if (AGG_TYPES.includes(last)) return AGG_KEYS;
   return [];
+}
+
+/**
+ * Whether something is typed before the cursor on its line. A line just begun, or its indentation,
+ * opens no list of suggestions by itself, as in the original: the next Enter would accept a
+ * suggestion nobody asked for. Ctrl+Space opens the list there.
+ */
+export function typedOnLine(text: string, offset: number): boolean {
+  return /\S/.test(text.slice(text.lastIndexOf('\n', offset - 1) + 1, offset));
 }
 
 /**

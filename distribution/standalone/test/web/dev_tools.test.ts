@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import {
   ROW,
@@ -10,7 +11,9 @@ import {
   deprecationMessages,
   describePast,
   expandToRequests,
+  failedAnswer,
   formatAnswer,
+  historyKey,
   insertRequest,
   keyPath,
   outputOf,
@@ -25,14 +28,18 @@ import {
   rowMode,
   suggest,
   toCurl,
+  typedOnLine,
   type Answer,
   type ClusterNames,
 } from '../../web/apps/dev_tools/console_model';
 import { highlight, indentGuides, tokenClasses, type AceToken } from '../../web/apps/dev_tools/console_highlight';
-import { matchingBracket } from '../../web/apps/dev_tools/console_editor';
+import { askProxy } from '../../web/apps/dev_tools/console';
+import { matchingBracket, selectionOf } from '../../web/apps/dev_tools/console_editor';
 import { MAX_HISTORY, autocompleteRequests, consoleStorage, type KeyValueStore } from '../../web/apps/dev_tools/console_storage';
 import { failureReason, grokSimulation, grokValue, readSimulation } from '../../web/apps/dev_tools/grok_request';
 import { collapseLiteralStrings, expandLiteralStrings, reindentJson, tokenizeJson } from '../../web/lib/json_text';
+import { createServices, type BootData } from '../../web/services';
+import { loadingCount } from '../../web/shell/loading_count';
 
 const TEXT = `# the cluster
 GET _cat/indices?v
@@ -232,6 +239,16 @@ describe('answers', () => {
     ]);
     assert.ok(formatAnswer('{}', 'application/json', { warnings: header }).startsWith('#! Deprecation: [types removal]'));
   });
+  it('spread the JSON of a request that failed over lines too', () => {
+    // The original shows the error of OpenSearch as it shows any other answer, not on one line
+    const error = '{"error":{"type":"index_not_found_exception","index":"nope"},"status":404}';
+    assert.equal(
+      failedAnswer(error, 'application/json; charset=UTF-8', 404),
+      '{\n  "error": {\n    "type": "index_not_found_exception",\n    "index": "nope"\n  },\n  "status": 404\n}'
+    );
+    assert.equal(failedAnswer('No handler found', 'text/plain', 400), 'No handler found');
+    assert.equal(failedAnswer('', 'text/plain', 502), 'Request failed to get to the server (status code: 502)');
+  });
 });
 
 describe('the output pane', () => {
@@ -309,6 +326,16 @@ describe('cURL', () => {
     );
     assert.equal(parseCurl('curl localhost:9200/_cluster/health'), 'GET _cluster/health');
     assert.equal(parseCurl('curl -XDELETE search.example/logs-1'), 'DELETE logs-1');
+  });
+
+  it('is read back with the single quotes of its body', () => {
+    // What "Copy as cURL" writes for a body with a quote in it, pasted again
+    const text = 'POST x/_doc\n{"name": "it\'s", "path": "c:\\\\temp"}';
+    assert.equal(parseCurl(toCurl(blocksBetween(readConsole(text), 0), 'http://h')), text);
+    assert.equal(
+      parseCurl(`curl -XPUT 'http://h:9200/a/_doc/1' -d '\n{"t":"it'\\''s"}\n'\ncurl -XDELETE http://h:9200/a`),
+      'PUT a/_doc/1\n{"t":"it\'s"}\n\nDELETE a'
+    );
   });
 });
 
@@ -458,6 +485,34 @@ describe('what could be typed next', () => {
     });
     assert.equal(keyPath('{ "size": ').expectsKey, false);
   });
+
+  it('replaces the two quotes of a name just begun', () => {
+    // A quote typed is closed by the editor, which then puts the cursor between the two. While
+    // the change is heard the browser still has the cursor after both: asked for from there,
+    // the suggestion would be written after the first quote (""query": {})
+    const text = 'GET _search\n{\n  ""\n}';
+    const between = text.indexOf('""') + 1;
+    const [cursor] = selectionOf([between, between], { selectionStart: between + 1, selectionEnd: between + 1 });
+    const menu = suggest(text, cursor, names);
+    assert.deepEqual([menu?.from, menu?.to], [between - 1, between + 1]);
+    assert.equal(`${text.slice(0, menu?.from)}${menu?.items[0].insert}${text.slice(menu?.to)}`, 'GET _search\n{\n  "query": {}\n}');
+    // Without a replacement under way, the text area's own selection
+    assert.deepEqual(selectionOf(undefined, { selectionStart: 3, selectionEnd: 5 }), [3, 5]);
+    assert.deepEqual(selectionOf(undefined, null), [0, 0]);
+  });
+
+  it('is not offered by itself on a line just begun', () => {
+    // Enter after an opening brace leaves the cursor on an indented, empty line: a list opened
+    // there would have the next Enter accept its first name
+    const begun = 'GET _search\n{\n  "query": {\n    ';
+    assert.equal(typedOnLine(begun, begun.length), false);
+    assert.equal(typedOnLine('GET _search\n', 12), false);
+    assert.equal(typedOnLine('', 0), false);
+    assert.equal(typedOnLine(`${begun}"`, begun.length + 1), true);
+    assert.equal(typedOnLine('GET _c', 6), true);
+    // Asked for with Ctrl+Space, the names are there
+    assert.ok(labels(begun).includes('match'));
+  });
 });
 
 describe('the history of the console', () => {
@@ -480,6 +535,23 @@ describe('the history of the console', () => {
     // The cursor goes to the first line of the request put in
     const { text: after, offset } = insertRequest(text, 1, { method: 'GET', endpoint: 'new' });
     assert.equal(after.slice(offset, offset + 7), 'GET new');
+  });
+
+  it('keeps the keys of its list to itself', () => {
+    // Enter applies the chosen request, which gives the focus to the editor: left to the browser,
+    // the same key press would also break a line there
+    const press = (key: string) => {
+      const seen: string[] = [];
+      historyKey({ key, preventDefault: () => seen.push('kept') }, 2, {
+        choose: (index) => seen.push(`choose ${index}`),
+        apply: () => seen.push('apply'),
+      });
+      return seen;
+    };
+    assert.deepEqual(press('Enter'), ['kept', 'apply']);
+    assert.deepEqual(press('ArrowDown'), ['kept', 'choose 3']);
+    assert.deepEqual(press('ArrowUp'), ['kept', 'choose 1']);
+    assert.deepEqual(press('Tab'), []);
   });
 });
 
@@ -593,5 +665,65 @@ describe('the Grok debugger', () => {
     assert.equal(grokValue({ a: 1 }), '{"a":1}');
     assert.equal(grokValue(null), 'null');
     assert.equal(grokValue(200), '200');
+  });
+});
+
+describe("the console's flyouts", () => {
+  // The z-index a rule of the console's stylesheet gives
+  const stackOf = (selector: string): number => {
+    const sheet = readFileSync('web/styles/dev_tools.css', 'utf8');
+    const start = sheet.indexOf(`\n${selector} {`);
+    assert.ok(start >= 0, `${selector} has a rule`);
+    const found = /z-index:\s*(-?\d+)/.exec(sheet.slice(start, sheet.indexOf('}', start)));
+    assert.ok(found, `${selector} sets a z-index`);
+    return Number(found?.[1]);
+  };
+
+  it('stack no lower than the mask that dims the page behind them', () => {
+    // Under its mask a flyout is dimmed and blurred, and a click on it closes it; at the same
+    // level it is drawn over the mask, which comes before it in the page
+    assert.ok(stackOf('.atlFlyout.dvtFlyout') >= stackOf('.dvtMask'));
+  });
+});
+
+describe("the console's notices", () => {
+  // The kind of toast each message of the console is shown with, read from its source
+  const kindsOf = (message: string): string[] => {
+    const source = readFileSync('web/apps/dev_tools/console.tsx', 'utf8');
+    const quoted = message.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return [...source.matchAll(new RegExp(`services\\.toasts\\.(\\w+)\\(\\s*'${quoted}'`, 'g'))].map((found) => found[1]);
+  };
+
+  it('are plain, with no colour and no icon, as the original\'s toasts.add of a text', () => {
+    // use_send_current_request_to_opensearch.ts and the console menu's copyAsCurl call
+    // notifications.toasts.add with the text alone
+    assert.deepEqual(kindsOf('No request selected. Select a request by placing the cursor inside it.'), ['plain']);
+    assert.deepEqual(kindsOf('Request copied as cURL'), ['plain']);
+  });
+});
+
+describe("the console's requests", () => {
+  it("are counted by the header's loading indicator until their answer is read, as the original's http service counts them", async () => {
+    createServices({ basePath: '/base', version: '3.9.0', name: 'test', settings: {}, settingsDefaults: {}, settingsOverrides: {} } as unknown as BootData);
+    const real = globalThis.fetch;
+    const asked: string[] = [];
+    let answer: (response: Response) => void = () => undefined;
+    globalThis.fetch = ((url: string) => {
+      asked.push(url);
+      return new Promise<Response>((resolve) => (answer = resolve));
+    }) as typeof fetch;
+    try {
+      const before = loadingCount();
+      const reply = askProxy(new URLSearchParams({ path: '_cat/health', method: 'GET' }), { method: 'POST' });
+      assert.equal(loadingCount(), before + 1);
+      answer(new Response('green'));
+      const { response, text } = await reply;
+      assert.equal(response.status, 200);
+      assert.equal(text, 'green');
+      assert.equal(loadingCount(), before);
+      assert.deepEqual(asked, ['/base/api/console/proxy?path=_cat%2Fhealth&method=GET']);
+    } finally {
+      globalThis.fetch = real;
+    }
   });
 });

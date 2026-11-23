@@ -115,6 +115,27 @@ export interface BulkCreateObject {
   initialNamespaces?: string[];
 }
 
+export interface BulkUpdateObject {
+  type: string;
+  id: string;
+  attributes: Record<string, unknown>;
+  version?: string;
+  references?: SavedObjectReference[];
+  namespace?: string;
+}
+
+/** What a bulk update answers for an object it changed: what was sent, not the whole object */
+export interface BulkUpdateResult {
+  id: string;
+  type: string;
+  namespaces?: string[];
+  originId?: string;
+  updated_at: string;
+  version?: string;
+  attributes: Record<string, unknown>;
+  references?: SavedObjectReference[];
+}
+
 const encodeVersion = (seqNo?: number, primaryTerm?: number) =>
   seqNo === undefined || primaryTerm === undefined
     ? undefined
@@ -484,6 +505,71 @@ export class SavedObjectsRepository {
         _seq_no: outcome?._seq_no,
         _primary_term: outcome?._primary_term,
       });
+    });
+  }
+
+  /**
+   * Each object changed, in order, in one request to OpenSearch, as the original's `bulkUpdate`:
+   * one that cannot be changed comes back with an `error`, and a version that cannot be read
+   * refuses them all.
+   */
+  async bulkUpdate(
+    objects: BulkUpdateObject[]
+  ): Promise<Array<BulkUpdateResult | { id: string; type: string; error: ObjectError }>> {
+    const time = new Date().toISOString();
+    const refusal = ({ type, id, namespace }: BulkUpdateObject): ObjectError | undefined => {
+      if (!isAllowedType(type)) return errorContent(notFoundError(type, id));
+      if (namespace === '*') return decoratedContent(badRequestError('"namespace" cannot be "*"'));
+      return undefined;
+    };
+    const lines: string[] = [];
+    for (const object of objects) {
+      if (refusal(object)) continue;
+      const { type, id, attributes, references, version, namespace } = object;
+      // Only the default namespace has objects, whose ids carry none: another one finds nothing
+      const prefix = namespace && namespace !== 'default' && !isNamespaceAgnostic(type) ? `${namespace}:` : '';
+      const action = { update: { _id: `${prefix}${type}:${id}`, _index: this.index, ...(version ? decodeVersion(version) : {}) } };
+      const doc = { [type]: attributes, updated_at: time, ...(Array.isArray(references) ? { references } : {}) };
+      lines.push(JSON.stringify(action), JSON.stringify({ doc }));
+    }
+    const result = lines.length
+      ? await this.call<{
+          items: Array<Record<string, RawDocument & { error?: { type: string; reason?: string }; get?: { _source?: RawSource } }>>;
+        }>({
+          method: 'POST',
+          path: '/_bulk',
+          query: { refresh: 'wait_for', _source_includes: 'originId' },
+          body: `${lines.join('\n')}\n`,
+          headers: { 'content-type': 'application/x-ndjson' },
+        })
+      : { items: [] };
+    let at = 0;
+    return objects.map((object) => {
+      const { type, id } = object;
+      const refused = refusal(object);
+      if (refused) return { id, type, error: refused };
+      const outcome = Object.values(result.items[at] ?? {})[0];
+      at += 1;
+      if (outcome?.error) {
+        const error =
+          outcome.error.type === 'version_conflict_engine_exception'
+            ? errorContent(conflictError(type, id))
+            : outcome.error.type === 'document_missing_exception'
+              ? errorContent(notFoundError(type, id))
+              : { message: outcome.error.reason || JSON.stringify(outcome.error) };
+        return { id, type, error };
+      }
+      const originId = outcome?.get?._source?.originId;
+      return {
+        id,
+        type,
+        ...(isNamespaceAgnostic(type) ? {} : { namespaces: [object.namespace ?? 'default'] }),
+        ...(originId ? { originId } : {}),
+        updated_at: time,
+        version: encodeVersion(outcome?._seq_no, outcome?._primary_term),
+        attributes: object.attributes,
+        references: object.references,
+      };
     });
   }
 

@@ -18,6 +18,8 @@ export interface FieldDescriptor {
   aggregatable: boolean;
   readFromDocValues: boolean;
   subType?: { multi?: { parent: string }; nested?: { path: string } };
+  /** Of a field of several kinds: the indices that hold it as each type */
+  conflictDescriptions?: Record<string, string[] | undefined>;
 }
 
 const KINDS: Record<string, string[]> = {
@@ -64,7 +66,17 @@ const META_OVERRIDES: Record<string, Partial<FieldDescriptor>> = {
 
 type FieldCaps = Record<
   string,
-  Record<string, { type: string; searchable: boolean; aggregatable: boolean; indices?: string[] }>
+  Record<
+    string,
+    {
+      type: string;
+      searchable: boolean;
+      aggregatable: boolean;
+      indices?: string[];
+      non_searchable_indices?: string[] | null;
+      non_aggregatable_indices?: string[] | null;
+    }
+  >
 >;
 
 export function readFieldCaps(fields: FieldCaps, metaFields: string[]): FieldDescriptor[] {
@@ -81,23 +93,26 @@ export function readFieldCaps(fields: FieldCaps, metaFields: string[]): FieldDes
     if (name.startsWith('_') && !metaFields.includes(name)) continue;
 
     const caps = Object.values(byType);
+    // What some of its indices can do a field can do, as the original reads the capabilities
+    const searchable = caps.some((cap) => cap.searchable || (cap.non_searchable_indices?.length ?? 0) > 0);
+    const aggregatable = caps.some((cap) => cap.aggregatable || (cap.non_aggregatable_indices?.length ?? 0) > 0);
     if (kinds.length > 1) {
       described.push({
         name,
         type: 'conflict',
         esTypes,
-        searchable: caps.some((cap) => cap.searchable),
-        aggregatable: caps.some((cap) => cap.aggregatable),
+        searchable,
+        aggregatable,
         readFromDocValues: false,
+        conflictDescriptions: Object.fromEntries(esTypes.map((type) => [type, byType[type].indices])),
       });
       continue;
     }
-    const aggregatable = caps.every((cap) => cap.aggregatable);
     described.push({
       name,
       type: kinds[0],
       esTypes,
-      searchable: caps.every((cap) => cap.searchable),
+      searchable,
       aggregatable,
       readFromDocValues:
         aggregatable && !name.startsWith('_') && !esTypes.some((type) => ['text', 'geo_shape'].includes(type)),
@@ -119,7 +134,7 @@ export function readFieldCaps(fields: FieldCaps, metaFields: string[]): FieldDes
     // `title.keyword` under the field `title` is another way to index the same value
     const parent = parts.slice(0, -1).join('.');
     if (byName.has(parent) && !containers.has(parent)) {
-      field.subType = { ...field.subType, multi: { parent } };
+      field.subType = { multi: { parent }, ...field.subType };
     }
   }
 
@@ -128,7 +143,8 @@ export function readFieldCaps(fields: FieldCaps, metaFields: string[]): FieldDes
     const existing = byName.get(name);
     if (existing) {
       if (override) Object.assign(existing, override);
-    } else if (override) {
+    } else {
+      // A meta field OpenSearch does not describe is a text nothing can be done with
       described.push({
         name,
         type: 'string',

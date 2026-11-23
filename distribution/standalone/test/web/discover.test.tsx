@@ -13,9 +13,9 @@ import {
   tieBreakerField,
 } from '../../web/apps/discover/context';
 import { Pager, filterColumns, isFilterable, sourceEntries, toggledColumns } from '../../web/apps/discover/doc_table';
-import { docFieldType, docFields } from '../../web/apps/discover/doc_viewer';
-import { valueFilter } from '../../web/apps/discover/filters';
-import { allFields } from '../../web/apps/discover/search';
+import { contextLinkState, docFieldType, docFields } from '../../web/apps/discover/doc_viewer';
+import { filtersOf, valueFilter } from '../../web/apps/discover/filters';
+import { allFields, searchTimeRange, sortClause } from '../../web/apps/discover/search';
 import {
   bucketAt,
   bucketSpan,
@@ -43,7 +43,8 @@ import { FieldToken, fieldTypeName } from '../../web/components/field_token';
 import { timeZoneOffset } from '../../web/lib/dates';
 import { createFormatter } from '../../web/lib/field_formats';
 import type { RawHit } from '../../web/lib/docs';
-import type { Field, IndexPattern } from '../../web/lib/types';
+import type { Field, Filter, IndexPattern } from '../../web/lib/types';
+import { appUrl, encodeState } from '../../web/lib/url';
 
 const HOUR = 3600 * 1000;
 const DAY = 24 * HOUR;
@@ -489,6 +490,83 @@ describe("Discover's settings as the original reads them", () => {
     // filters:pinnedByDefault puts it among the pinned filters
     assert.deepEqual(valueFilter({ name: 'agent' }, 'curl', false, 'logs', true).$state, { store: 'globalState' });
   });
+
+  it('takes from an address only the filters there are, as the original does', () => {
+    // An address written by hand: no list, or a list with what is not a filter in it. The original
+    // searches as if those were not there; Discover could not be drawn at all
+    assert.deepEqual(filtersOf({ a: 1 }), []);
+    assert.deepEqual(filtersOf('response:404'), []);
+    assert.deepEqual(filtersOf(undefined), []);
+    const phrase = valueFilter({ name: 'agent' }, 'curl', false, 'logs', false);
+    assert.deepEqual(filtersOf([null, 1, 'x', [phrase], phrase]), [phrase]);
+    // A filter without its meta is given an empty one, as the original's mapFilter gives it
+    assert.deepEqual(filtersOf([{ query: { match_all: {} } }]), [{ query: { match_all: {} }, meta: {} }]);
+    assert.deepEqual(filtersOf([{ meta: null, exists: { field: 'agent' } }]), [{ meta: {}, exists: { field: 'agent' } }]);
+  });
+});
+
+describe('the sort of a search', () => {
+  const fields = [
+    field('@timestamp', 'date'),
+    field('bytes', 'number'),
+    field('message', 'string', { aggregatable: false }),
+    field('_score', 'number', { searchable: false, aggregatable: false }),
+    field('hour', 'number', { scripted: true, script: "doc['@timestamp'].value.getHour()", lang: 'painless' }),
+  ];
+  const pattern: IndexPattern = { ...patternOf(fields), timeFieldName: '@timestamp' };
+  const options = { unmapped_type: 'boolean' };
+
+  it('gives a field the options of sort:options, and the score none of the unmapped_type OpenSearch refuses on it', () => {
+    assert.deepEqual(sortClause(pattern, [['bytes', 'desc'], ['_score', 'asc']], options, 'desc'), [
+      { bytes: { order: 'desc', unmapped_type: 'boolean' } },
+      { _score: { order: 'asc' } },
+    ]);
+    // What else the setting holds stays on the score, as the original leaves it
+    assert.deepEqual(sortClause(pattern, [['_score', 'desc']], { unmapped_type: 'date', missing: '_last' }, 'desc'), [
+      { _score: { order: 'desc', missing: '_last' } },
+    ]);
+  });
+
+  it('leaves out a field that cannot be sorted on, as the original does, so that the search still runs', () => {
+    assert.deepEqual(sortClause(pattern, [['message', 'asc']], options, 'desc'), []);
+    assert.deepEqual(sortClause(pattern, [['nope', 'asc'], ['bytes', 'asc']], options, 'desc'), [
+      { bytes: { order: 'asc', unmapped_type: 'boolean' } },
+    ]);
+  });
+
+  it('sorts on the time field when nothing is chosen, or else on the score, in the order of discover:sort:defaultOrder', () => {
+    assert.deepEqual(sortClause(pattern, [], options, 'desc'), [{ '@timestamp': { order: 'desc', unmapped_type: 'boolean' } }]);
+    assert.deepEqual(sortClause(pattern, [], options, 'asc'), [{ '@timestamp': { order: 'asc', unmapped_type: 'boolean' } }]);
+    const timeless = patternOf(fields);
+    assert.deepEqual(sortClause(timeless, [], options, 'desc'), [{ _score: { order: 'desc' } }]);
+    assert.deepEqual(sortClause(timeless, [], options, 'asc'), [{ _score: { order: 'asc' } }]);
+  });
+
+  it('sorts on a scripted field by its script', () => {
+    assert.deepEqual(sortClause(pattern, [['hour', 'asc']], options, 'desc'), [
+      { _script: { script: { source: "doc['@timestamp'].value.getHour()", lang: 'painless' }, type: 'number', order: 'asc' } },
+    ]);
+  });
+});
+
+describe('the time range of a search', () => {
+  const timed: IndexPattern = { ...patternOf([field('@timestamp', 'date')]), timeFieldName: '@timestamp' };
+
+  it('is none to search in when the address holds one that cannot be read, as the original will not search then', () => {
+    // Without it the search had no time filter and ran over every document there is
+    for (const [from, to] of [
+      ['yesterday', 'now'],
+      ['now-15x', 'now'],
+      ['2026-13-45', 'now'],
+      ['now-30d', 'garbage'],
+    ]) {
+      assert.equal(searchTimeRange(timed, { from, to }), null, `${from} to ${to}`);
+    }
+    const range = searchTimeRange(timed, { from: '2026-11-15T00:00:00.000Z', to: 'now/d' }, 0);
+    assert.equal(range?.from.toISOString(), '2026-11-15T00:00:00.000Z');
+    // A pattern without a time field is searched without a range, whatever the time picker holds
+    assert.equal(searchTimeRange(patternOf([field('@timestamp', 'date')]), { from: 'yesterday', to: 'now' }), undefined);
+  });
 });
 
 describe('a document among its neighbours', () => {
@@ -539,6 +617,34 @@ describe('a document among its neighbours', () => {
     assert.deepEqual(
       contextRows([hit('n1'), hit('n2')], hit('a'), [hit('o1'), hit('o2')]).map((row) => row._id),
       ['n2', 'n1', 'a', 'o1', 'o2']
+    );
+  });
+
+  it('is linked to with the pinned filters alone as _g, then the columns and the own filters switched off', () => {
+    const pinned: Filter = {
+      $state: { store: 'globalState' },
+      meta: { index: 'p', key: 'geo.src', negate: false, disabled: false },
+      query: { match_phrase: { 'geo.src': 'US' } },
+    };
+    const own: Filter = {
+      $state: { store: 'appState' },
+      meta: { index: 'p', key: 'response', negate: true, disabled: false },
+      query: { match_phrase: { response: '404' } },
+    };
+    const global = encodeState({ filters: [pinned], refreshInterval: { pause: true, value: 0 }, time: { from: 'now-7d', to: 'now' } });
+    // The original's link leaves the time range and the refresh interval behind
+    assert.deepEqual(contextLinkState(global, ['timestamp', 'bytes'], [own]), {
+      _g: { filters: [pinned] },
+      _a: { columns: ['timestamp', 'bytes'], filters: [{ ...own, meta: { ...own.meta, disabled: true } }] },
+    });
+    assert.deepEqual(contextLinkState(encodeState({ time: { from: 'now-15m', to: 'now' } }), ['_source'], []), {
+      _g: { filters: [] },
+      _a: { columns: ['_source'], filters: [] },
+    });
+    assert.deepEqual(contextLinkState(undefined)._g, { filters: [] });
+    assert.equal(
+      appUrl('/app/data-explorer/discover', '/context/p/a1', contextLinkState(global, ['bytes'], [])),
+      "/app/data-explorer/discover#/context/p/a1?_g=(filters:!(('$state':(store:globalState),meta:(disabled:!f,index:p,key:geo.src,negate:!f),query:(match_phrase:(geo.src:US)))))&_a=(columns:!(bytes),filters:!())"
     );
   });
 });
