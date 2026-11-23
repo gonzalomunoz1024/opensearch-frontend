@@ -24,6 +24,7 @@ import {
   type RequestContext,
 } from './http';
 import { registerIndexManagement } from './index_management';
+import { registerIndexPatternManagement } from './index_pattern_management';
 import { registerGeospatial } from './geospatial';
 import { fieldsForWildcard } from './index_pattern_fields';
 import type { Logger } from './logger';
@@ -267,6 +268,10 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
 
   registerIndexManagement(router, client);
   registerTimeline(router, { client, repository, uiSettings, config, logger });
+
+  // --- Index patterns: the indices a pattern names, the preview of a scripted field --------------
+
+  registerIndexPatternManagement(router, client);
 
   // --- TSVB ------------------------------------------------------------------------------------
 
