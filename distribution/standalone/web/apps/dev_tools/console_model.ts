@@ -383,6 +383,10 @@ function shellWords(command: string): string[] {
         at = end + 1;
       } else if (command[at] === '\\' && command[at + 1] === '\n') {
         at += 2;
+      } else if (command[at] === '\\' && /['"\\]/.test(command[at + 1] ?? '')) {
+        // A quote or a backslash written between quoted parts: '\'' is a quote inside a body
+        word += command[at + 1];
+        at += 2;
       } else {
         word += command[at];
         at += 1;
@@ -410,7 +414,7 @@ export function parseCurl(text: string): string {
           method = word.slice(2);
         } else if (/^(-d|--data|--data-raw|--data-binary|--data-ascii)$/.test(word)) {
           bodies.push(words[(index += 1)] ?? '');
-        } else if (/^-d./.test(word)) {
+        } else if (/^-d[\s\S]/.test(word)) {
           bodies.push(word.slice(2));
         } else if (/^(-H|--header|-u|--user|-o|--output|--cacert|--cert|--key|-A|--user-agent)$/.test(word)) {
           index += 1;

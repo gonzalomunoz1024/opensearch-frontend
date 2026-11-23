@@ -323,6 +323,16 @@ describe('cURL', () => {
     assert.equal(parseCurl('curl localhost:9200/_cluster/health'), 'GET _cluster/health');
     assert.equal(parseCurl('curl -XDELETE search.example/logs-1'), 'DELETE logs-1');
   });
+
+  it('is read back with the single quotes of its body', () => {
+    // What "Copy as cURL" writes for a body with a quote in it, pasted again
+    const text = 'POST x/_doc\n{"name": "it\'s", "path": "c:\\\\temp"}';
+    assert.equal(parseCurl(toCurl(blocksBetween(readConsole(text), 0), 'http://h')), text);
+    assert.equal(
+      parseCurl(`curl -XPUT 'http://h:9200/a/_doc/1' -d '\n{"t":"it'\\''s"}\n'\ncurl -XDELETE http://h:9200/a`),
+      'PUT a/_doc/1\n{"t":"it\'s"}\n\nDELETE a'
+    );
+  });
 });
 
 // A line as Ace draws it: the indent guides cut from its first token, a token without a class bare
