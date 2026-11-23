@@ -130,6 +130,44 @@ const TABLE_MARGIN = 16;
 const COLUMN_PADDING = 8;
 const MAX_WIDTH = 320;
 
+/**
+ * Measures a tooltip as its content lays it out, then narrows its cells as vislib's tooltip does
+ * once it is placed. Two columns: the labels leave the values their room, or half of it when they
+ * are wider; three (a pie's): the field and the bucket share what the measure leaves. The widths
+ * are set here rather than by React, which would leave alone a width the same as the one it set
+ * last, after the measuring has taken it off
+ */
+export function fitTooltipCells(element: HTMLElement): { width: number; height: number } {
+  // Measured without the widths set last time
+  element.querySelectorAll<HTMLElement>('.visTooltip__labelContainer, .visTooltip__valueContainer').forEach((cell) => {
+    cell.style.maxWidth = '';
+  });
+  // Fractional sizes, as jQuery measures them for the original
+  const measured = element.getBoundingClientRect();
+  const size = { width: measured.width, height: measured.height };
+  let labelWidth: number | undefined;
+  let valueWidth: number | undefined;
+  const columns = element.querySelectorAll('tbody > tr:nth-of-type(1) > td').length;
+  const valueCell = element.querySelector<HTMLElement>(`tbody > tr:nth-of-type(1) > td:nth-child(${columns === 3 ? 3 : 2})`);
+  if (valueCell && columns === 3) {
+    labelWidth = (size.width - valueCell.getBoundingClientRect().width - TABLE_MARGIN) / 2 - COLUMN_PADDING;
+  } else if (valueCell && columns === 2) {
+    const valueSize = valueCell.getBoundingClientRect().width;
+    const greater = valueSize > size.width / 2;
+    labelWidth = greater ? size.width / 2 - TABLE_MARGIN - COLUMN_PADDING * 2 : size.width - valueSize - TABLE_MARGIN - COLUMN_PADDING;
+    if (greater && size.width === MAX_WIDTH) valueWidth = labelWidth;
+  }
+  const narrow = (selector: string, width: number | undefined) => {
+    if (width === undefined) return;
+    element.querySelectorAll<HTMLElement>(selector).forEach((cell) => {
+      cell.style.maxWidth = `${width}px`;
+    });
+  };
+  narrow('.visTooltip__labelContainer', labelWidth);
+  narrow('.visTooltip__valueContainer', valueWidth);
+  return size;
+}
+
 /** The tooltip of a chart, drawn into the page's body while there is something to show */
 export function VislibTooltip({
   state,
@@ -143,7 +181,7 @@ export function VislibTooltip({
   placement: { current?: Placement };
 }) {
   const box = useRef<HTMLDivElement>(null);
-  const [style, setStyle] = useState<{ left: number; top: number; labelWidth?: number; valueWidth?: number }>();
+  const [style, setStyle] = useState<{ left: number; top: number }>();
   useLayoutEffect(() => {
     const element = box.current;
     const chart = container();
@@ -151,13 +189,7 @@ export function VislibTooltip({
       setStyle(undefined);
       return;
     }
-    // Measured without the widths set last time
-    element.querySelectorAll<HTMLElement>('.visTooltip__labelContainer, .visTooltip__valueContainer').forEach((cell) => {
-      cell.style.maxWidth = '';
-    });
-    // Fractional sizes, as jQuery measures them for the original
-    const measured = element.getBoundingClientRect();
-    const size = { width: measured.width, height: measured.height };
+    const size = fitTooltipCells(element);
     const chartBox = chart.getBoundingClientRect();
     const next = placeTooltip(
       size,
@@ -166,24 +198,7 @@ export function VislibTooltip({
       placement.current
     );
     placement.current = next;
-    // Two columns: the labels leave the values their room, or half of it when they are wider;
-    // three (a pie's): the field and the bucket share what the measure leaves
-    let labelWidth: number | undefined;
-    let valueWidth: number | undefined;
-    const columns = element.querySelectorAll('tbody > tr:nth-of-type(1) > td').length;
-    const valueCell = element.querySelector<HTMLElement>(`tbody > tr:nth-of-type(1) > td:nth-child(${columns === 3 ? 3 : 2})`);
-    if (valueCell && columns === 3) {
-      labelWidth = (size.width - valueCell.getBoundingClientRect().width - TABLE_MARGIN) / 2 - COLUMN_PADDING;
-    } else if (valueCell && columns === 2) {
-      const tooltipWidth = size.width;
-      const valueSize = valueCell.getBoundingClientRect().width;
-      const greater = valueSize > tooltipWidth / 2;
-      labelWidth = greater
-        ? tooltipWidth / 2 - TABLE_MARGIN - COLUMN_PADDING * 2
-        : tooltipWidth - valueSize - TABLE_MARGIN - COLUMN_PADDING;
-      if (greater && tooltipWidth === MAX_WIDTH) valueWidth = labelWidth;
-    }
-    setStyle({ left: next.left, top: next.top, labelWidth, valueWidth });
+    setStyle({ left: next.left, top: next.top });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
   if (!state) return null;
@@ -199,7 +214,6 @@ export function VislibTooltip({
     );
   }
   if (state.text !== undefined) content.push(<p key="text">{state.text}</p>);
-  const labelStyle = style?.labelWidth !== undefined ? { maxWidth: style.labelWidth } : undefined;
   if (state.branch?.length) {
     content.push(
       <table key="branch" className="visTooltip__table">
@@ -214,14 +228,10 @@ export function VislibTooltip({
           {state.branch.map((row, index) => (
             <tr key={index} className="visTooltip__value">
               <td>
-                <div className="visTooltip__labelContainer" style={labelStyle}>
-                  {row.field}
-                </div>
+                <div className="visTooltip__labelContainer">{row.field}</div>
               </td>
               <td>
-                <div className="visTooltip__labelContainer" style={labelStyle}>
-                  {row.bucket}
-                </div>
+                <div className="visTooltip__labelContainer">{row.bucket}</div>
               </td>
               <td>{row.metric}</td>
             </tr>
@@ -237,14 +247,10 @@ export function VislibTooltip({
           {state.details.map((detail, index) => (
             <tr key={index}>
               <td className="visTooltip__label">
-                <div className="visTooltip__labelContainer" style={labelStyle}>
-                  {detail.label}
-                </div>
+                <div className="visTooltip__labelContainer">{detail.label}</div>
               </td>
               <td className="visTooltip__value">
-                <div className="visTooltip__valueContainer" style={style?.valueWidth !== undefined ? { maxWidth: style.valueWidth } : undefined}>
-                  {detail.value}
-                </div>
+                <div className="visTooltip__valueContainer">{detail.value}</div>
               </td>
             </tr>
           ))}

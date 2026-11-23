@@ -43,6 +43,10 @@ export interface ComboBoxProps {
   sortMatchesBy?: 'none' | 'startsWith';
   autoFocus?: boolean;
   clearable?: boolean;
+  /**
+   * The original's compressed combo box, which every combo box of the kit is drawn as (32 px, the
+   * type of a field): the class stays for a page's own rules
+   */
   compact?: boolean;
   disabled?: boolean;
   invalid?: boolean;
@@ -351,7 +355,9 @@ export function ComboBox({
             disabled && 'atlCombo--disabled',
             open && !disabled && 'atlCombo--open',
             single && 'atlCombo--single',
-            ((clearable && selected.length > 0 && !disabled) || loading) && 'atlCombo--clearable'
+            // As the original's, the room for the clear button is kept whether something is chosen or not
+            clearable && !disabled && 'atlCombo--clearable',
+            loading && 'atlCombo--loading'
           )}
           onMouseDown={(event) => {
             if (disabled) return;
@@ -433,6 +439,8 @@ export function ComboBox({
             aria-autocomplete="list"
             autoComplete="off"
             spellCheck={false}
+            // As wide as its text where a browser cannot size it to its text, not 20 letters
+            size={Math.max(1, text.length)}
             data-test-subj="comboBoxSearchInput"
           />
           {loading && <span className="atlSpinner" />}

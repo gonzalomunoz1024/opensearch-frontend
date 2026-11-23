@@ -5,7 +5,7 @@
  * the index pattern or the saved search it is drawn from), and the editor.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Badge, Button, cx } from '../../components/basic';
 import { SearchField } from '../../components/form';
 import { Icon, type IconName } from '../../components/icon';
@@ -20,6 +20,7 @@ import { currentGlobalParam, useBreadcrumbs } from '../../shell/state';
 import { canDraw } from '../../vis/visualization';
 import { VIS_BUILDER_APP, VIS_BUILDER_TITLE, VIS_BUILDER_TYPE, visBuilderEditUrl } from '../vis_builder/model';
 import { VISUALIZE, VisEditor } from './editor';
+import { visualizeRoute } from './routes';
 import { editorStateFor, type ContainerInfo } from './state_transfer';
 import '../../styles/visualize.css';
 
@@ -54,6 +55,9 @@ const typeOf = (object: Listed): string => {
 const editUrl = (object: Listed) =>
   object.type === VIS_BUILDER_TYPE ? visBuilderEditUrl(object.id) : appUrl(VISUALIZE, `/edit/${encodeURIComponent(object.id)}`);
 
+// Such a one the original lists under a button, not a link
+const opensElsewhere = (object: Listed) => object.type === VIS_BUILDER_TYPE;
+
 const typeTitle = (type: string) => (type === VIS_BUILDER_TYPE ? VIS_BUILDER_TITLE : (visType(type)?.title ?? type));
 
 /** visualize:enableLabs: whether the kinds still being tried out (the input controls) are offered and listed */
@@ -64,17 +68,19 @@ const isNotLab = (object: Listed) => visType(typeOf(object))?.stage !== 'experim
 
 export function Visualize() {
   const { hashPath, hashParams } = useLocation();
-  const edit = /^\/edit\/(.+)$/.exec(hashPath);
-  if (edit) return <VisEditor key={edit[1]} savedId={decodeURIComponent(edit[1])} />;
-  if (hashPath === '/create' && hashParams.type) {
-    return <VisEditor key={`create:${hashParams.type}:${hashParams.indexPattern ?? ''}:${hashParams.savedSearchId ?? ''}`} />;
+  const route = visualizeRoute(hashPath);
+  if (route.page === 'edit') return <VisEditor key={route.id} savedId={decodeURIComponent(route.id)} />;
+  if (route.page === 'create') {
+    return <VisEditor key={`create:${hashParams.type ?? ''}:${hashParams.indexPattern ?? ''}:${hashParams.savedSearchId ?? ''}`} />;
   }
-  return <VisualizeList creating={hashPath === '/create'} />;
+  return <VisualizeList creating={route.page === 'new'} />;
 }
 
 function VisualizeList({ creating }: { creating: boolean }) {
   useBreadcrumbs([{ text: 'Visualize' }]);
   const [dialog, setDialog] = useState(creating);
+  // As the original's: `/new` opens the dialog, and the list without it closes it, Back and Forward too
+  useEffect(() => setDialog(creating), [creating]);
   return (
     <>
       <Listing
@@ -88,6 +94,7 @@ function VisualizeList({ creating }: { creating: boolean }) {
         onCreate={() => setDialog(true)}
         linkTo={editUrl}
         titleTestId={visTitleTestId}
+        titleAsButton={opensElsewhere}
         editTo={editUrl}
         typeColumn={VIS_TYPE_COLUMN}
         padding="l"
@@ -112,7 +119,8 @@ function VisualizeList({ creating }: { creating: boolean }) {
         <NewVisModal
           onClose={() => {
             setDialog(false);
-            if (creating) navigateHash('/', { _g: currentGlobalParam() }, { replace: true });
+            // Come by `/new`, the address becomes the landing page's, in an entry of its own
+            if (creating) navigateHash('/', { _g: currentGlobalParam() });
           }}
         />
       )}
@@ -191,7 +199,16 @@ export function NewVisModal({
     <Modal title="New Visualization" onClose={onClose} wide>
       <div className="vzeNew" data-test-subj="visNewDialogTypes">
         <div className="vzeNew__types">
-          <SearchField value={filter} onChange={setFilter} placeholder="Filter" aria-label="Filter for a visualization type" autoFocus testId="filterVisType" />
+          {/* The original's compressed search field: 32 px, its magnifier 12 px */}
+          <SearchField
+            compact
+            value={filter}
+            onChange={setFilter}
+            placeholder="Filter"
+            aria-label="Filter for a visualization type"
+            autoFocus
+            testId="filterVisType"
+          />
           <span className="atlScreenReaderOnly" aria-live="polite">
             {filter ? `${shown.length} ${shown.length === 1 ? 'type' : 'types'} found` : ''}
           </span>

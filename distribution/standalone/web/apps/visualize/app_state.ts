@@ -92,11 +92,33 @@ export function migrateAppState(state: VisualizeAppState): VisualizeAppState {
 /**
  * The state the editor opens with, and writes to the address at once: what the address holds,
  * key by key, over the defaults of what was loaded. A visualization of another kind in the
- * address is not taken (the original would turn the loaded one into that kind).
+ * address is not taken (the original would turn the loaded one into that kind); one that names no
+ * kind is this one, as the original's `Vis` takes it.
  */
 export function initialAppState(defaults: VisualizeAppState, fromUrl: Partial<VisualizeAppState>): VisualizeAppState {
   const state = migrateAppState({ ...defaults, ...fromUrl });
-  return state.vis?.type === defaults.vis.type ? state : { ...state, vis: defaults.vis };
+  const vis: unknown = state.vis;
+  const kind = vis !== null && typeof vis === 'object' ? (vis as Partial<AppVisState>).type : null;
+  return kind === undefined || kind === defaults.vis.type ? state : { ...state, vis: defaults.vis };
+}
+
+/**
+ * What is saved of the visualization, as the original's `Vis` holds it: what the address has, the
+ * kind's settings over their defaults (an address may name only some, or none, as the one
+ * Discover's "Visualize" writes), or else what is applied
+ */
+export function savedVisState(
+  fromUrl: Partial<AppVisState> | undefined,
+  applied: Pick<AppVisState, 'aggs' | 'params'>,
+  title: string,
+  type: string
+): AppVisState {
+  return {
+    title,
+    type,
+    aggs: fromUrl?.aggs ?? applied.aggs,
+    params: fromUrl?.params ? paramsWithDefaults(type, fromUrl.params) : applied.params,
+  };
 }
 
 /**

@@ -9,13 +9,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
-import { Button } from '../../components/basic';
+import { Button, CallOut } from '../../components/basic';
 import { Icon } from '../../components/icon';
 import { Tooltip } from '../../components/overlay';
 import { executeQuery, parseQuery, QuerySyntaxError, type QueryClause } from '../../lib/search_query';
+import { useLocation } from '../../router';
 import { services } from '../../services';
 import { errorMessage } from '../../services/http';
 import { useBreadcrumbs } from '../../shell/state';
+import { managementTrail } from './frame';
 import { Field } from './settings_field';
 import {
   ariaName,
@@ -82,23 +84,19 @@ function VoiceAnnouncement({ queryText, visible }: { queryText: string; visible:
   );
 }
 
+/** The original's warning call-out, with its bolt */
 function CallOuts() {
   return (
-    <div className="mgtSettingsCallOut" role="status">
-      <p className="mgtSettingsCallOut__title">
-        {/* The theme's bolt: a thin line, not the filled one of this product's icons */}
-        <svg className="atlIcon mgtSettingsCallOut__icon" viewBox="0 0 16 16" aria-hidden>
-          <path d="M8.75 1.5L4.75 8.25h4.5L7.25 14.5" />
-        </svg>
-        <span>Caution: You can break stuff here</span>
-      </p>
-      <p className="mgtSettingsCallOut__text">
-        Be careful in here, these settings are for very advanced users only. Tweaks you make here can break large
-        portions of OpenSearch Dashboards. Some of these settings may be undocumented, unsupported or experimental. If a
-        field has a default value, blanking the field will reset it to its default which may be unacceptable given other
-        configuration directives. Deleting a custom setting will permanently remove it from OpenSearch Dashboards&apos;s
-        config.
-      </p>
+    <div className="mgtSettingsCallOut">
+      <CallOut tone="warning" icon="bolt" title="Caution: You can break stuff here">
+        <p>
+          Be careful in here, these settings are for very advanced users only. Tweaks you make here can break large
+          portions of OpenSearch Dashboards. Some of these settings may be undocumented, unsupported or experimental. If
+          a field has a default value, blanking the field will reset it to its default which may be unacceptable given
+          other configuration directives. Deleting a custom setting will permanently remove it from OpenSearch
+          Dashboards&apos;s config.
+        </p>
+      </CallOut>
     </div>
   );
 }
@@ -155,7 +153,7 @@ function BottomBar({
 }
 
 export function AdvancedSettings({ query = '' }: { query?: string }) {
-  useBreadcrumbs([{ text: 'Dashboards Management', to: '/app/management' }, { text: 'Advanced settings' }]);
+  useBreadcrumbs(managementTrail(useLocation().pathname, [{ text: 'Advanced settings' }]));
   const client = services.uiSettings;
   const version = useSyncExternalStore(client.subscribe, client.getVersion);
   const [status, setStatus] = useState<'loading' | 'ready' | 'failed'>('loading');
@@ -308,7 +306,7 @@ export function AdvancedSettings({ query = '' }: { query?: string }) {
       <CallOuts />
       {status === 'loading' ? (
         <div className="mgtSettings__loading">
-          <span className="atlSpinner atlSpinner--l" role="progressbar" data-test-subj="advancedSettingsLoading" />
+          <span className="atlSpinner atlSpinner--xl" role="progressbar" data-test-subj="advancedSettingsLoading" />
         </div>
       ) : status === 'failed' ? (
         <div className="atlEmpty mgtSettings__loadError" data-test-subj="advancedSettingsLoadError">

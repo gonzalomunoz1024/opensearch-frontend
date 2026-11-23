@@ -1,7 +1,10 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import {
   HALF_HOURS,
   MIN_COUNT_ERROR,
@@ -59,6 +62,14 @@ import {
   zoneOffset,
   type SMPolicy,
 } from '../../web/apps/index_management/snapshot_model';
+import { CronSchedule, IndicesRepositoryInput } from '../../web/apps/index_management/snapshot_parts';
+import { policyChannel } from '../../web/apps/index_management/snapshot_policies';
+import {
+  RestoreActivities,
+  askRestore,
+  toastFailure,
+} from '../../web/apps/index_management/snapshots';
+import { createServices, services, type BootData } from '../../web/services';
 
 describe('the words of Snapshot Management', () => {
   it('cuts a text to a length with the three dots counted in it', () => {
@@ -570,4 +581,182 @@ describe('snapshot policies', () => {
       'creation, failure'
     );
   });
+});
+
+describe('the channel on the page of a policy', () => {
+  // The routes of the server, answering every request with the answer given; the toasts' waits are not run
+  const withAnswer = async (answer: unknown, run: (asked: string[]) => Promise<void>) => {
+    const asked: string[] = [];
+    const original = globalThis.fetch;
+    const globals = globalThis as { window?: unknown };
+    globals.window = { setTimeout: () => 0 };
+    globalThis.fetch = (async (url: string) => {
+      asked.push(url);
+      return new Response(JSON.stringify(answer), { headers: { 'content-type': 'application/json' } });
+    }) as typeof fetch;
+    try {
+      createServices({ basePath: '', settings: {} } as unknown as BootData);
+      await run(asked);
+    } finally {
+      globalThis.fetch = original;
+      delete globals.window;
+    }
+  };
+
+  it('is none, with no message, when it cannot be loaded, as the original shows it', () =>
+    withAnswer(
+      { ok: false, error: 'no handler found for uri [/_plugins/_notifications/configs/a b] and method [GET]' },
+      async (asked) => {
+        assert.equal(await policyChannel('a b'), undefined);
+        assert.deepEqual(asked, ['/api/ism/_notifications/channels/a%20b']);
+        assert.deepEqual(services.toasts.get(), []);
+      }
+    ));
+
+  it('is the one channel the notifications plugin finds', async () => {
+    const found = { config_id: 'c1', config: { name: 'Ops', config_type: 'slack' } };
+    await withAnswer({ ok: true, response: { config_list: [found] } }, async () => {
+      assert.deepEqual(await policyChannel('c1'), found);
+    });
+    await withAnswer({ ok: true, response: { config_list: [found, found] } }, async () => {
+      assert.equal(await policyChannel('c1'), undefined);
+    });
+  });
+});
+
+describe('the head of a list of Snapshot Management', () => {
+  it('is never narrower than its title, which the buttons beside it would cover', () => {
+    // At 1000 px the plugin's "Snapshots" keeps its 138 px and its buttons go past the panel; a
+    // heading allowed to shrink to nothing put the buttons over the title
+    const sheet = readFileSync('web/styles/index_management.css', 'utf8');
+    const start = sheet.indexOf('\n.ismListPanel__heading {');
+    assert.ok(start >= 0, '.ismListPanel__heading has a rule');
+    const rule = sheet.slice(start, sheet.indexOf('}', start));
+    assert.equal(/min-width:\s*0/.test(rule), false);
+  });
+});
+
+describe('the combo boxes of Snapshot Management', () => {
+  it('are as tall as the fields beside them, as the plugin\'s (32 px), not of the small size', () => {
+    const none = () => undefined;
+    const indices = renderToStaticMarkup(
+      createElement(IndicesRepositoryInput, {
+        options: [],
+        onSearch: none,
+        indices: [],
+        onIndices: none,
+        repositories: [],
+        repository: '',
+        onRepository: none,
+      })
+    );
+    const zone = renderToStaticMarkup(
+      createElement(CronSchedule, {
+        title: 'Snapshot frequency',
+        frequencyType: 'daily',
+        onFrequencyType: none,
+        expression: '0 20 * * *',
+        onExpression: none,
+        timezone: 'UTC',
+        onTimezone: none,
+      })
+    );
+    for (const markup of [indices, zone]) {
+      assert.match(markup, /atlCombo/);
+      assert.equal(/atlCombo--s\b/.test(markup), false);
+    }
+  });
+});
+
+describe('the failures and the restores of the list of snapshots', () => {
+  // The routes of the server, answering every request with the answer given, and when each was
+  // asked; the toasts' waits are kept, not run
+  const withAnswer = async (
+    answer: unknown,
+    run: (asked: Array<{ url: string; at: number }>, waits: number[]) => Promise<void>
+  ) => {
+    const asked: Array<{ url: string; at: number }> = [];
+    const waits: number[] = [];
+    const original = globalThis.fetch;
+    const globals = globalThis as { window?: unknown };
+    globals.window = {
+      setTimeout: (_run: unknown, wait: number) => {
+        waits.push(wait);
+        return 0;
+      },
+    };
+    globalThis.fetch = (async (url: string) => {
+      asked.push({ url, at: Date.now() });
+      return new Response(JSON.stringify(answer), { headers: { 'content-type': 'application/json' } });
+    }) as typeof fetch;
+    try {
+      createServices({ basePath: '', settings: {} } as unknown as BootData);
+      await run(asked, waits);
+    } finally {
+      globalThis.fetch = original;
+      delete globals.window;
+    }
+  };
+  const refusal = JSON.stringify({
+    error: {
+      root_cause: [{ type: 'snapshot_missing_exception', reason: '[zz-repo:zz-snap] The snapshot is missing. Look again' }],
+    },
+  });
+
+  it("are toasted as the plugin's addError: kept as long as errors, with the whole answer to see", () =>
+    withAnswer({}, async (_asked, waits) => {
+      toastFailure('There was a problem deleting the snapshot.', refusal);
+      // Taking one, the plugin writes the whole answer
+      toastFailure('There was a problem creating the snapshot.', refusal, refusal);
+      const [deleted, created] = services.toasts.get();
+      assert.equal(deleted.kind, 'critical');
+      assert.equal(deleted.title, 'There was a problem deleting the snapshot.');
+      assert.equal(
+        deleted.text,
+        ' The snapshot is missing. Open browser console & click below for details.'
+      );
+      assert.equal(deleted.error?.message, refusal);
+      assert.equal(created.text, `${refusal} Open browser console & click below for details.`);
+      assert.deepEqual(waits, [300000, 300000]);
+    }));
+
+  it('follows a restore only once OpenSearch took it, counting from before it was asked for', async () => {
+    await withAnswer({ ok: false, error: refusal }, async (asked) => {
+      const refused = await askRestore({ id: 'zz-snap', repository: 'zz-repo' }, { indices: 'a' }, ['a']);
+      assert.deepEqual(refused, { error: refusal });
+      assert.deepEqual(
+        asked.map((one) => one.url),
+        ['/api/ism/_snapshots/zz-snap?repository=zz-repo']
+      );
+    });
+    await withAnswer({ ok: true, response: { accepted: true } }, async (asked) => {
+      const before = Date.now();
+      const taken = await askRestore({ id: 'zz-snap', repository: 'zz-repo' }, {}, ['a', 'b']);
+      assert.ok('restore' in taken);
+      const { restore } = taken as { restore: { startedAt: number } };
+      assert.deepEqual(taken, {
+        restore: { snapshotId: 'zz-snap', startedAt: restore.startedAt, indices: ['a', 'b'] },
+      });
+      assert.ok(restore.startedAt >= before && restore.startedAt <= asked[0].at);
+    });
+  });
+
+  it('shows at once what was last read of a restore when its tab is opened again', () =>
+    withAnswer({}, async () => {
+      const markup = renderToStaticMarkup(
+        createElement(RestoreActivities, {
+          restore: {
+            snapshotId: 'zz-snap',
+            startedAt: 1,
+            indices: ['a', 'b'],
+            progress: { indices: [], startTime: 1, stopTime: 2, stage: 'Completed (100%)' },
+          },
+          onSeen: () => undefined,
+          onFailure: () => undefined,
+        })
+      );
+      assert.match(markup, /Completed \(100%\)/);
+      assert.match(markup, /zz-snap/);
+      assert.match(markup, /2 Indices/);
+    }));
 });

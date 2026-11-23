@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { startRouter } from '../../web/router';
 import { Http } from '../../web/services/http';
 import { HeaderBreadcrumbs } from '../../web/shell/header_breadcrumbs';
 import { HELP_LINKS, HelpMenuContent } from '../../web/shell/help_menu';
@@ -62,6 +63,36 @@ describe('the trail of the header, drawn', () => {
     assert.equal(count(two, 'Indexes'), 0);
     assert.ok(two.indexOf('breadcrumb first') < two.indexOf('shlCrumb__more'));
     assert.ok(two.indexOf('shlCrumb__more') < two.indexOf('breadcrumb last'));
+  });
+
+  it('carries an address given as it is, as the original’s crumbs their href, and a path after the base path', () => {
+    const globals = globalThis as { window?: unknown; document?: unknown };
+    const location = {
+      pathname: '/proxy/app/opensearch-query-workbench',
+      search: '',
+      hash: '',
+      href: 'http://localhost:5601/proxy/app/opensearch-query-workbench',
+    };
+    globals.window = { location, history: { state: null }, addEventListener: () => undefined };
+    globals.document = { addEventListener: () => undefined };
+    try {
+      startRouter('/proxy');
+      const out = renderToStaticMarkup(
+        <HeaderBreadcrumbs breadcrumbs={[{ text: 'Dev Tools', href: '#/' }, { text: 'Query Workbench', href: '#' }]} limit={6} />
+      );
+      assert.match(out, /<a class="shlCrumb" href="#\/" rel="noreferrer" title="Dev Tools" data-test-subj="breadcrumb first">Dev Tools<\/a>/);
+      // The last crumb too is a link when it has an address, and not marked as the page
+      assert.match(out, /<a class="shlCrumb shlCrumb--last" href="#" rel="noreferrer" title="Query Workbench" data-test-subj="breadcrumb last">Query Workbench<\/a>/);
+      assert.equal(count(out, 'aria-current'), 0);
+      const path = renderToStaticMarkup(
+        <HeaderBreadcrumbs breadcrumbs={[{ text: 'Dashboards Management', to: '/app/management/' }]} limit={6} />
+      );
+      assert.match(path, / href="\/proxy\/app\/management\/" /);
+    } finally {
+      startRouter('');
+      delete globals.window;
+      delete globals.document;
+    }
   });
 });
 

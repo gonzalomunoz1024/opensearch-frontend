@@ -356,6 +356,25 @@ describe('the CSV of the export', () => {
     assert.equal(toCsv(true, data.tableGroups[0].table.rows, [bucket], ',', true), '"geo.dest: Descending"\r\n\r\n');
   });
 
+  it('writes an empty word by the format of its field, as a static lookup writes its value for unknown keys', () => {
+    const lookup = { id: 'static_lookup', params: { lookupEntries: [{ key: 'CN', value: 'China' }], unknownKeyValue: 'other' } };
+    const known: AggContext = { indexPattern: { ...logs, fieldFormatMap: { 'machine.os': lookup, 'geo.dest': lookup } } };
+    const { columns, rows } = tabify(
+      [count, os, dest],
+      { aggregations: { '5': { buckets: [{ key: '', doc_count: 5, '3': { buckets: [{ key: '', doc_count: 4 }, { key: 'CN', doc_count: 1 }] } }] } } },
+      known
+    );
+    const data = tableVisData({ columns, rows }, {}, known, true);
+    assert.equal(data.tableGroups[0].title, 'other: machine.os: Descending');
+    const { table } = data.tableGroups[0];
+    const [bucket] = table.columns;
+    assert.deepEqual(
+      table.rows.map((row) => bucket.cell(row[bucket.id]).text),
+      ['other', 'China']
+    );
+    assert.equal(toCsv(true, table.rows, [bucket], ',', true), '"geo.dest: Descending"\r\nother\r\nChina\r\n');
+  });
+
   it('writes a range by its ends and an object as JSON in the raw export', () => {
     assert.equal(rawText({ gte: 0, lt: 1000 }), 'from:0,to:1000');
     assert.equal(rawText({ a: 1 }), '{"a":1}');

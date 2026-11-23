@@ -12,6 +12,7 @@ import { Checkbox, FormRow, RadioGroup, TextArea, TextField } from '../../compon
 import { Icon } from '../../components/icon';
 import { Flyout, Modal } from '../../components/overlay';
 import { searchItems } from '../../lib/search_syntax';
+import { services } from '../../services';
 import { useBreadcrumbs } from '../../shell/state';
 import {
   ExternalLink,
@@ -98,6 +99,22 @@ interface SnapshotDetail {
 const snapshotPath = (id: string) => `_snapshots/${encodeURIComponent(id)}`;
 
 const MORE = 'Open browser console & click below for details.';
+
+/**
+ * A request OpenSearch refused, as the plugin's addError: the first sentence of the reason and
+ * where to look, kept as long as errors are, with the whole answer behind "See the full error".
+ * The plugin's button throws, as it is given the answer's text and not an error.
+ */
+export function toastFailure(
+  title: string,
+  error: string | undefined,
+  sentence = failureSentence(error)
+) {
+  return services.toasts.addError(new Error(error ?? ''), {
+    title,
+    toastMessage: `${sentence} ${MORE}`,
+  });
+}
 
 // --- One snapshot ----------------------------------------------------------------------------------------
 
@@ -393,10 +410,7 @@ function RestoreSnapshotFlyout({
         setSnapshot(answer.response);
         setForm(newRestoreForm(answer.response));
       } else {
-        toasts.danger(
-          'There was a problem getting the snapshot',
-          `${failureSentence(answer.error)} ${MORE}`
-        );
+        toastFailure('There was a problem getting the snapshot', answer.error);
       }
     });
     return () => {
@@ -498,7 +512,6 @@ function RestoreSnapshotFlyout({
                 selected={form.selected}
                 onChange={(selected) => change({ selected })}
                 allowCustom
-                compact
                 invalid={errors.noIndicesSelected}
                 placeholder="Select indices or input index patterns."
               />
@@ -779,43 +792,64 @@ function IndexSettingsInput({
 
 // --- How far a restore has come ---------------------------------------------------------------------------
 
-/** A restore that was asked for on this page */
-interface Restore {
+/**
+ * A restore that OpenSearch took on this page, and what was last read of it. The page keeps it, so
+ * that the tab shows it again at once when it is opened again.
+ */
+export interface Restore {
   snapshotId: string;
   startedAt: number;
   indices: string[];
+  progress?: RestoreProgress;
+  /** The stage it was at when its recoveries could not be read, "Failed (50%)" */
+  failed?: string;
 }
 
-function RestoreActivities({
+/**
+ * Asks OpenSearch to restore a snapshot: the restore to follow when it is taken, or why it was
+ * not. Only the recoveries that begin after the request count. The plugin follows a restore that
+ * was refused too, a row of 1970 at "Copying (0%)" among the activities.
+ */
+export async function askRestore(
+  row: { id: string; repository: string },
+  body: Record<string, unknown>,
+  indices: string[]
+): Promise<{ restore: Restore } | { error: string }> {
+  const startedAt = Date.now();
+  const answer = await ism.post(snapshotPath(row.id), body, { repository: row.repository });
+  return answer.ok
+    ? { restore: { snapshotId: row.id, startedAt, indices } }
+    : { error: answer.error ?? '' };
+}
+
+export function RestoreActivities({
   restore,
+  onSeen,
   onFailure,
 }: {
   restore: Restore | undefined;
+  /** What was read of the restore that began at `startedAt` */
+  onSeen: (startedAt: number, seen: Pick<Restore, 'progress' | 'failed'>) => void;
   /** Called when the recoveries cannot be read, with why */
   onFailure: (error: string) => void;
 }) {
-  const [progress, setProgress] = useState<RestoreProgress>();
-  const [failed, setFailed] = useState<string>();
+  const progress = restore?.progress;
+  const failed = restore?.failed;
   const [listed, setListed] = useState(false);
   const here = useRef(true);
   const stage = failed ?? progress?.stage ?? '';
 
   const check = async () => {
     if (!restore) return;
+    const { snapshotId, startedAt, indices } = restore;
     const answer = await ism.get<Recovery>('_recovery');
     if (!here.current) return;
     if (answer.ok) {
-      setProgress(
-        restoreProgress(
-          answer.response ?? {},
-          restore.snapshotId,
-          restore.startedAt,
-          restore.indices,
-          Date.now()
-        )
-      );
+      onSeen(startedAt, {
+        progress: restoreProgress(answer.response ?? {}, snapshotId, startedAt, indices, Date.now()),
+      });
     } else {
-      setFailed(failedStage(stage));
+      onSeen(startedAt, { failed: failedStage(stage) });
       onFailure(`${answer.error ?? ''}, please check your connection`);
     }
   };
@@ -831,7 +865,7 @@ function RestoreActivities({
     const timer = window.setInterval(() => void check(), 2000);
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [restore, stage, failed]);
+  }, [restore?.startedAt, stage, failed]);
 
   interface Row {
     start_time: string;
@@ -958,10 +992,7 @@ export function Snapshots() {
         found.filter((row) => before.some((item) => snapshotRowId(item) === snapshotRowId(row)))
       );
     } else {
-      toasts.danger(
-        'There was a problem getting the snapshots.',
-        `${failureSentence(answer.error)} ${MORE}`
-      );
+      toastFailure('There was a problem getting the snapshots.', answer.error);
     }
     setLoading(false);
   };
@@ -979,11 +1010,7 @@ export function Snapshots() {
       const answer = await ism.delete(snapshotPath(row.id), { repository: row.repository });
       if (answer.ok)
         toasts.success(`Deleted snapshot ${row.id} from repository ${row.repository}.`);
-      else
-        toasts.danger(
-          'There was a problem deleting the snapshot.',
-          `${failureSentence(answer.error)} ${MORE}`
-        );
+      else toastFailure('There was a problem deleting the snapshot.', answer.error);
     }
     if (here.current) await load();
   };
@@ -996,7 +1023,7 @@ export function Snapshots() {
       toasts.success(`Created snapshot ${snapshotId} in repository ${repository}.`);
       await load();
     } else {
-      toasts.danger('There was a problem creating the snapshot.', `${answer.error ?? ''} ${MORE}`);
+      toastFailure('There was a problem creating the snapshot.', answer.error, answer.error ?? '');
     }
   };
 
@@ -1019,10 +1046,10 @@ export function Snapshots() {
     body: Record<string, unknown>,
     indices: string[]
   ) => {
-    setRestore({ snapshotId: row.id, startedAt: Date.now(), indices });
-    const answer = await ism.post(snapshotPath(row.id), body, { repository: row.repository });
+    const asked = await askRestore(row, body, indices);
     if (!here.current) return;
-    if (answer.ok) {
+    if ('restore' in asked) {
+      setRestore(asked.restore);
       toasts.success(
         `Restore from snapshot "${row.id}" is in progress.`,
         <span className="ismToastAction">
@@ -1033,7 +1060,7 @@ export function Snapshots() {
         6000
       );
     } else {
-      showFailure(row.id, answer.error ?? '', restoreFailureText(answer.error));
+      showFailure(row.id, asked.error, restoreFailureText(asked.error));
     }
   };
 
@@ -1118,6 +1145,11 @@ export function Snapshots() {
       {tab === 'restore' ? (
         <RestoreActivities
           restore={restore}
+          onSeen={(startedAt, seen) =>
+            setRestore((before) =>
+              before?.startedAt === startedAt ? { ...before, ...seen } : before
+            )
+          }
           onFailure={(error) => {
             if (restore) showFailure(restore.snapshotId, error, '');
           }}
