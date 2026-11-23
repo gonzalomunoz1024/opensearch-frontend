@@ -155,10 +155,9 @@ function AggVisualization({ vis: saved, input, tick, uiState, onUiState, onFilte
     body = null;
   } else {
     const parts = vis.type === 'table' || vis.type in DRAWN ? splitTables(data.table) : [{ table: data.table }];
-    const split = vis.aggs.find((agg) => agg.schema === 'split' && agg.enabled !== false);
-    // Rows or columns: the original reads them from the visualization's params, where its editor
-    // puts them; this product's editor has put them on the aggregation
-    const asRows = vis.params.row !== undefined ? Boolean(vis.params.row) : split?.params?.row !== false;
+    // Rows or columns, as the original reads them from the visualization's params: columns unless
+    // it says rows, which its editor says once a chart is split
+    const asRows = Boolean(vis.params.row);
     const clicks = onFilter && !MAPS.has(vis.type) ? choice.apply : onFilter;
     const props = { vis, uiState: uiState ?? vis.uiState, onUiState, onFilter: clicks, onTimeChange, onAggParams };
     body =
