@@ -10,15 +10,7 @@ import { Button } from '../../components/basic';
 import { SearchField } from '../../components/form';
 import { searchItems } from '../../lib/search_syntax';
 import { useBreadcrumbs } from '../../shell/state';
-import {
-  ContentPanel,
-  DeleteModal,
-  FilterButton,
-  LocalTable,
-  ism,
-  toasts,
-  type TableColumn,
-} from './common';
+import { DeleteModal, LocalTable, ism, toasts, type TableColumn } from './common';
 import { CRUMBS } from './routes';
 import {
   distinct,
@@ -28,20 +20,22 @@ import {
   withFieldValues,
   type Repository,
 } from './snapshot_model';
-import { CreateRepositoryFlyout } from './snapshot_parts';
+import { CreateRepositoryFlyout, FilterGroup, GroupFilter, ListPanel } from './snapshot_parts';
 
 const COLUMNS: Array<TableColumn<Repository>> = [
   {
     field: 'id',
     name: 'Repository name',
     sortable: true,
+    width: '15%',
     render: (row) => <span title={row.id}>{truncate(row.id, 30)}</span>,
   },
-  { field: 'type', name: 'Type', sortable: true, render: (row) => row.type },
+  { field: 'type', name: 'Type', sortable: true, width: '10%', render: (row) => row.type },
   {
     field: 'snapshotCount',
     name: 'Snapshot count',
     sortable: true,
+    width: '80%',
     render: (row) => row.snapshotCount,
   },
 ];
@@ -104,16 +98,15 @@ export function Repositories() {
   ) as unknown as Repository[];
   return (
     <>
-      <ContentPanel
+      <ListPanel
         title="Repositories"
         description="Repositories are remote storage locations used to store snapshots."
         actions={
           <>
-            <Button size="s" icon="refresh" onClick={() => void load()} testId="refreshButton">
+            <Button icon="refresh" onClick={() => void load()} testId="refreshButton">
               Refresh
             </Button>
             <Button
-              size="s"
               variant="danger"
               disabled={selected.length === 0}
               onClick={() => setDialog('delete')}
@@ -121,7 +114,7 @@ export function Repositories() {
             >
               Delete
             </Button>
-            <Button size="s" variant="primary" icon="plus" onClick={() => setDialog('create')}>
+            <Button variant="primary" icon="plus" onClick={() => setDialog('create')}>
               Create repository
             </Button>
           </>
@@ -130,6 +123,7 @@ export function Repositories() {
         <div className="ismSearchRow">
           <div className="atlGrow">
             <SearchField
+              compact
               value={text}
               onChange={(value) => {
                 setText(value);
@@ -142,12 +136,14 @@ export function Repositories() {
               aria-label="Search repository"
             />
           </div>
-          <FilterButton
-            name="Type"
-            options={distinct(repositories.map((row) => row.type)).map((value) => ({ value }))}
-            selected={fieldValues(text, 'type')}
-            onChange={filter}
-          />
+          <FilterGroup>
+            <GroupFilter
+              name="Type"
+              options={distinct(repositories.map((row) => row.type))}
+              selected={fieldValues(text, 'type')}
+              onChange={filter}
+            />
+          </FilterGroup>
         </div>
         <LocalTable
           columns={COLUMNS}
@@ -158,7 +154,7 @@ export function Repositories() {
           onSelect={setSelected}
           empty={loading ? 'Loading repositories...' : 'No items found'}
         />
-      </ContentPanel>
+      </ListPanel>
       {dialog === 'create' && (
         <CreateRepositoryFlyout
           onClose={() => setDialog(undefined)}

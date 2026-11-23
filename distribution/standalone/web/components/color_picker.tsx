@@ -7,9 +7,10 @@
  * separated by commas; whatever else is typed is no colour.
  */
 
-import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { cx } from './basic';
 import { Popover } from './overlay';
+import { arrowPopoverPlace } from './popover_place';
 
 /** The colours offered under the square: the palette the charts start with */
 export const SWATCHES = ['#54B399', '#6092C0', '#D36086', '#9170B8', '#CA8EAE', '#D6BF57', '#B9A888', '#DA8B45', '#AA6556', '#E7664C'];
@@ -48,6 +49,13 @@ export function parseColor(text: string | null | undefined): Rgba | undefined {
   if (digits.length <= 4) digits = [...digits].map((digit) => digit + digit).join('');
   const channel = (at: number) => parseInt(digits.slice(at, at + 2), 16);
   return [channel(0), channel(2), channel(4), digits.length === 8 ? Math.round((channel(6) / 255) * 100) / 100 : 1];
+}
+
+/** Whether a typed opacity is one: a number from 0 to 100, as the original's range checks it */
+export function isPercent(text: string): boolean {
+  if (text === '') return false;
+  const value = Number(text);
+  return value >= 0 && value <= 100;
 }
 
 export function toHex([red, green, blue, alpha]: Rgba): string {
@@ -103,15 +111,36 @@ export interface ColorPickerProps {
   /** What the swatch that opens it says to a screen reader */
   label?: string;
   testId?: string;
+  /**
+   * Opens as EuiColorPicker opens from a `button`, as TSVB's picker does: a panel with an arrow
+   * hung from the swatch where the component library hangs it, its text field focused
+   */
+  fromSwatch?: boolean;
 }
 
-/** A swatch that opens a colour picker */
-export function ColorPicker({ color, onChange, showAlpha, swatches = SWATCHES, label, testId }: ColorPickerProps) {
+/**
+ * Where the original's picker hangs from its swatch: under it and along its left edge, as
+ * EuiPopover hangs a panel with an arrow from a button, over it when there is no room below
+ */
+const underSwatch = (anchor: DOMRect, panel: { width: number; height: number }) =>
+  arrowPopoverPlace(
+    anchor,
+    panel,
+    { width: document.documentElement.clientWidth || window.innerWidth, height: document.documentElement.clientHeight || window.innerHeight },
+    'bottom',
+    'left'
+  );
+
+/** A swatch that opens a colour picker, its field first and in focus */
+export function ColorPicker({ color, onChange, showAlpha, swatches = SWATCHES, label, testId, fromSwatch }: ColorPickerProps) {
   const [open, setOpen] = useState(false);
   return (
     <Popover
       open={open}
       onClose={() => setOpen(false)}
+      placeAt={fromSwatch ? underSwatch : undefined}
+      className={fromSwatch ? 'atlColorPicker__popover' : undefined}
+      anchorClassName={fromSwatch ? 'atlColorPicker__anchor' : undefined}
       button={
         <button
           type="button"
@@ -123,7 +152,14 @@ export function ColorPicker({ color, onChange, showAlpha, swatches = SWATCHES, l
         />
       }
     >
-      <ColorPickerPanel color={color} onChange={onChange} showAlpha={showAlpha} swatches={swatches} onPicked={() => setOpen(false)} />
+      <ColorPickerPanel
+        color={color}
+        onChange={onChange}
+        showAlpha={showAlpha}
+        swatches={swatches}
+        focusInput={fromSwatch}
+        onPicked={() => setOpen(false)}
+      />
     </Popover>
   );
 }
@@ -137,13 +173,22 @@ export interface ColorPickerPanelProps {
   swatches?: string[];
   /** Without a field for the text, when it is typed in the field the picker opens from */
   showInput?: boolean;
+  /** The field for the text in focus once the panel shows, as the original's popover focuses what comes first */
+  focusInput?: boolean;
   /** A ready colour was chosen, and the picker may close */
   onPicked?: () => void;
 }
 
 /** What a colour picker holds: the text, the square, the hues, the ready colours and the opacity */
-export function ColorPickerPanel({ color, onChange, showAlpha, swatches = SWATCHES, showInput = true, onPicked }: ColorPickerPanelProps) {
+export function ColorPickerPanel({ color, onChange, showAlpha, swatches = SWATCHES, showInput = true, focusInput, onPicked }: ColorPickerPanelProps) {
   const current = parseColor(color);
+  const input = useRef<HTMLInputElement>(null);
+  // A frame later: the panel is placed, and shown, only once it is laid out
+  useEffect(() => {
+    if (!focusInput) return undefined;
+    const frame = requestAnimationFrame(() => input.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [focusInput]);
   // The hue is kept apart: a grey has none, and the strip should not jump back to red
   const [hsv, setHsv] = useState<Hsv>(() => (current ? rgbToHsv(current) : [0, 0, 0]));
   const alpha = current ? current[3] : 1;
@@ -162,9 +207,18 @@ export function ColorPickerPanel({ color, onChange, showAlpha, swatches = SWATCH
     const rgba = parseColor(text);
     if (rgba) setHsv(rgbToHsv(rgba));
   };
-  const pickAlpha = (percent: number) => {
-    if (!current) return;
-    const rgba: Rgba = [current[0], current[1], current[2], clamp(percent, 0, 100) / 100];
+  // The opacity as the original keeps it: as typed, and a colour only once it is a percent from 0
+  // to 100; with no colour, it is no colour still
+  const [alphaText, setAlphaText] = useState(() => (alpha * 100).toFixed());
+  useEffect(() => setAlphaText((alpha * 100).toFixed()), [alpha]);
+  const pickAlpha = (typedAlpha: string) => {
+    setAlphaText(typedAlpha);
+    if (!isPercent(typedAlpha)) return;
+    if (!current) {
+      onChange('', { rgba: [NaN, NaN, NaN, 1], hex: '', isValid: false });
+      return;
+    }
+    const rgba: Rgba = [current[0], current[1], current[2], Number.parseInt(typedAlpha, 10) / 100];
     const text = asChannels ? (rgba[3] < 1 ? rgba : rgba.slice(0, 3)).join(', ') : toHex(rgba);
     onChange(text, { rgba, hex: toHex(rgba), isValid: true });
   };
@@ -174,11 +228,13 @@ export function ColorPickerPanel({ color, onChange, showAlpha, swatches = SWATCH
     const box = square.current?.getBoundingClientRect();
     if (!box) return;
     const saturation = clamp((event.clientX - box.left) / box.width, 0, 1);
-    const value = 1 - clamp((event.clientY - box.top) / box.height, 0, 1);
+    // Brightness is read over the original's layer of shades, which starts a pixel above the square
+    const value = 1 - clamp((event.clientY - box.top + 1) / (box.height + 1), 0, 1);
     pickHsv([hsv[0], saturation, value]);
   };
   const squareKeys = (event: KeyboardEvent<HTMLDivElement>) => {
-    const step = event.shiftKey ? 0.1 : 0.01;
+    // A hundredth of the square for each press, as the original's
+    const step = 0.01;
     const moves: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] };
     const move = moves[event.key];
     if (!move) return;
@@ -186,18 +242,23 @@ export function ColorPickerPanel({ color, onChange, showAlpha, swatches = SWATCH
     pickHsv([hsv[0], clamp(hsv[1] + move[0], 0, 1), clamp(hsv[2] + move[1], 0, 1)]);
   };
   const shownHsv: Hsv = current && hsvToRgb(hsv).join() !== current.slice(0, 3).join() ? rgbToHsv(current) : hsv;
-  const percent = Math.round(alpha * 100);
 
   return (
     <div className="atlColorPicker" data-test-subj="colorPickerPopover">
       {showInput && (
-        <input
-          className={cx('atlField', 'atlField--s', color !== '' && !current && 'atlField--invalid')}
-          value={color}
-          aria-label="Color value"
-          onChange={(event) => typed(event.target.value)}
-          data-test-subj="colorPickerInput"
-        />
+        <div className="atlColorPicker__text">
+          <input
+            ref={input}
+            className={cx('atlField', color !== '' && !current && 'atlField--invalid')}
+            value={color.toUpperCase()}
+            placeholder={color ? undefined : 'Transparent'}
+            autoComplete="off"
+            aria-label="Color value"
+            onChange={(event) => typed(event.target.value)}
+            data-test-subj="colorPickerInput"
+          />
+          {color !== '' && !current && <div className="atlFormRow__error">Invalid color value</div>}
+        </div>
       )}
       <div
         ref={square}
@@ -216,17 +277,21 @@ export function ColorPickerPanel({ color, onChange, showAlpha, swatches = SWATCH
         }}
         onKeyDown={squareKeys}
       >
-        <span className="atlColorPicker__thumb" style={{ left: `${shownHsv[1] * 100}%`, top: `${(1 - shownHsv[2]) * 100}%` }} />
+        <span
+          className="atlColorPicker__thumb"
+          style={{ left: `${shownHsv[1] * 100}%`, top: `calc(${(1 - shownHsv[2]) * 100}% + ${1 - shownHsv[2]}px)` }}
+        />
       </div>
-      <input
-        type="range"
-        className="atlColorPicker__hue"
-        min={0}
-        max={359}
-        value={Math.round(shownHsv[0])}
-        aria-label="Hue"
-        onChange={(event) => pickHsv([Number(event.target.value), shownHsv[1], shownHsv[2]])}
-      />
+      <div className="atlColorPicker__hue">
+        <input
+          type="range"
+          min={0}
+          max={359}
+          value={Math.round(shownHsv[0])}
+          aria-label="Hue"
+          onChange={(event) => pickHsv([Number(event.target.value), shownHsv[1], shownHsv[2]])}
+        />
+      </div>
       <div className="atlColorPicker__swatches">
         {swatches.map((swatch) => (
           <button
@@ -246,23 +311,22 @@ export function ColorPickerPanel({ color, onChange, showAlpha, swatches = SWATCH
         <div className="atlColorPicker__alpha">
           <input
             type="range"
-            className="atlRange"
+            className="atlColorPicker__alphaRange"
             min={0}
             max={100}
-            value={percent}
-            disabled={!current}
-            aria-label="Opacity"
-            onChange={(event) => pickAlpha(Number(event.target.value))}
+            value={alphaText}
+            aria-label="Alpha channel (opacity) value"
+            onChange={(event) => pickAlpha(event.target.value)}
           />
-          <span className="atlField atlField--s atlFieldGroup atlColorPicker__percent">
+          <span className="atlColorPicker__spacer" />
+          <span className="atlColorPicker__percent">
             <input
               type="number"
               min={0}
               max={100}
-              value={percent}
-              disabled={!current}
-              aria-label="Opacity, in percent"
-              onChange={(event) => event.target.value !== '' && pickAlpha(Number(event.target.value))}
+              value={alphaText}
+              aria-label="Alpha channel (opacity) value"
+              onChange={(event) => pickAlpha(event.target.value)}
             />
             <span>%</span>
           </span>
