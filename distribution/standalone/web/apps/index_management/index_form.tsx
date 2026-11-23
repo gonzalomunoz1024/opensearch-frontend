@@ -230,6 +230,7 @@ export function AdvancedSettings({
   label = 'Specify advanced index settings',
   forTemplate,
   nested,
+  fullWidth = true,
   children,
 }: {
   value: Settings;
@@ -240,6 +241,8 @@ export function AdvancedSettings({
   forTemplate?: boolean;
   /** The value is more than settings: what is nested in it stays nested */
   nested?: boolean;
+  /** The row as wide as what holds it; without, the theme's 400 px, as a split or a shrink has it */
+  fullWidth?: boolean;
   title?: ReactNode;
   label?: ReactNode;
   children?: ReactNode;
@@ -271,7 +274,7 @@ export function AdvancedSettings({
         <div className="ismAccordion__body">
           <FormRow
             label={label}
-            fullWidth
+            fullWidth={fullWidth}
             testId="formNameAdvancedSettings"
             help={
               children ?? (

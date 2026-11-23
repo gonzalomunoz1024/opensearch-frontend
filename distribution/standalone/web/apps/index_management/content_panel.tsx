@@ -8,7 +8,7 @@
  */
 
 import { useState, type CSSProperties, type ReactNode } from 'react';
-import { Button, Panel, cx, type ButtonProps } from '../../components/basic';
+import { Button, IconButton, Panel, cx, type ButtonProps } from '../../components/basic';
 import { Icon } from '../../components/icon';
 
 export function ContentPanel({
@@ -142,6 +142,34 @@ export function ContentPanelActions({ actions }: { actions: PanelAction[] }) {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * The title of a part of an operation's page that opens: the theme's small icon button with its
+ * arrow, then the panel's small title, as the plugin's advanced settings have it.
+ */
+export function FoldTitle({
+  open,
+  onToggle,
+  children,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="ismFoldTitle">
+      {/* The theme's icon button says what it is to a screen reader only: no hover */}
+      <IconButton
+        icon={open ? 'chevronDown' : 'chevronRight'}
+        label="drop down icon"
+        title=""
+        testId="advanceOptionToggle"
+        onClick={onToggle}
+      />
+      <h2 className="ismPanelTitle">{children}</h2>
     </div>
   );
 }

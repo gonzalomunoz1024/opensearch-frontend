@@ -1117,6 +1117,7 @@ button.ismTreeView__inner {
   color: var(--color-accent);
 }
 
+.ismAccordion__button h2,
 .ismAccordion__button h3,
 .ismAccordion__button h4 {
   margin: 0;
@@ -1397,6 +1398,175 @@ button.ismTreeView__inner {
 .ismRadios > .atlRadio {
   height: 24px;
   line-height: 24px;
+}
+
+/* The radios of a form row (form_row.tsx): a fieldset with no frame, its legend a field's title */
+fieldset.ismRadios {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.ismRadios__legend {
+  margin-bottom: var(--space-1);
+  padding: 0;
+}
+
+/* As wide as the row, as the theme's radio group is */
+.ismCustomRow__field > .ismRadios {
+  align-self: stretch;
+}
+
+/* A box to check in a form row: the theme's compressed checkbox, a line of 24 px */
+.ismCustomRow__field > .atlCheckbox {
+  height: 24px;
+  font-size: var(--font-size-s);
+  line-height: 24px;
+}
+
+/* --- The pages of the index operations: force merge, reindex, split, shrink and roll over ------- */
+
+/* The frame of a form of the index pages, without the width and the room under it of the older
+   forms (the notifications of an operation keep the look that frame gives them) */
+.ismFormPage.ismPage--form {
+  max-width: none;
+  margin: 0;
+  padding-bottom: 0;
+}
+
+/* The title of a part that opens: the arrow's button, then the title, nothing between them */
+.ismFoldTitle {
+  display: flex;
+  align-items: center;
+}
+
+/* Where a reindex goes: its field 400 px wide at most, the button to create an index 24 px after it,
+   both on the field's bottom line */
+.ismDestination {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-6);
+}
+
+.ismDestination__field {
+  flex: 1 1 0%;
+  min-width: 0;
+  max-width: 400px;
+}
+
+/* A label with something at its right, as the theme's label wrapper */
+.ismCustomRow__label--append {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.ismCustomRow__append {
+  font-weight: var(--font-weight-regular);
+  line-height: 18px;
+}
+
+.ismCustomRow__append .ismExternal {
+  gap: var(--space-1);
+}
+
+.ismCustomRow__append .ismExternal .atlIcon {
+  width: 12px;
+  height: 12px;
+}
+
+/* What stands in the way of a split or a shrink: the items of a list, a call-out each, 24 px under
+   each; in a call-out, a paragraph a line and a half above what follows, as the theme's small text */
+.ismReasonList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ismReasonList .atlCallOut__body > p {
+  margin: 0 0 1.5em;
+}
+
+.ismReasonList .atlCallOut__body > :last-child {
+  margin-bottom: 0;
+}
+
+/* The plugin's panel that opens as an accordion (the notifications of a split or a shrink): the
+   arrow 4 px in, the title 8 px after it, 12 px above and below it; a rule under them, open or
+   not; what opens 16 px in from the sides */
+.ismAccordionPanel__button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: var(--space-3) 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ismAccordionPanel__button:hover,
+.ismAccordionPanel__button:focus {
+  text-decoration: underline;
+}
+
+.ismAccordionPanel__button:focus {
+  outline: none;
+}
+
+.ismAccordionPanel__button:focus-visible .ismAccordion__icon {
+  color: var(--color-accent);
+}
+
+.ismAccordionPanel__button[aria-expanded='true'] .ismAccordion__icon {
+  transform: rotate(90deg);
+}
+
+.ismAccordionPanel > .ismRule {
+  margin: 0;
+}
+
+.ismAccordionPanel__body {
+  padding: 0 var(--space-4);
+}
+
+/* Cancel, flush as the plugin's: no padding, 8 px more before the button beside it */
+.ismEndButtons > .ismEndButtons__flush {
+  padding-inline: 0;
+  margin-right: var(--space-2);
+}
+
+/* A panel's title with a button at its right, both on the middle line, 4 px apart */
+.ismTitleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.ismTitleRow > :first-child {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+/* What a roll over does, 20 px above the panel of its source */
+.ismRollover__intro {
+  margin-bottom: var(--space-5);
+}
+
+/* An index of the alias to write to, with the button that makes it so 24 px after it, both on the
+   bottom line */
+.ismRollover__assign {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-6);
+}
+
+.ismRollover__choice {
+  flex: none;
+  min-width: 0;
 }
 
 /* The two ways to define a template: the theme's checkable cards, 350 px wide, 24 px apart */
