@@ -36,6 +36,13 @@ export const totalOf = (response: SearchResponse | undefined): number => {
 export interface RequestRecord {
   name: string;
   index: string;
+  /**
+   * The id of the index pattern the search was made for: given it, the inspector's statistics name
+   * the index pattern and its id, as the original's do; a search of no index pattern has none
+   */
+  indexPatternId?: string;
+  /** What the inspector says of the request under its name, as the original's description */
+  description?: string;
   body: unknown;
   response?: unknown;
   error?: string;

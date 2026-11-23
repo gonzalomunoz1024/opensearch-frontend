@@ -114,6 +114,22 @@ function parse(value: string, roundUp: boolean, context: DateContext): Date | un
   return parseDateMath(value, { roundUp, now: context.now, weekStart: context.weekStart });
 }
 
+/** The moment one end of a range is, read as the original's date math reads it; none when it is no date */
+export function dateOf(value: string, roundUp = false, context: DateContext = {}): Date | undefined {
+  return parse(value, roundUp, context);
+}
+
+/**
+ * Whether a range stands as it is, as the original's validateTimeRange has it: both of its ends
+ * are dates of the date math. One that does not is searched and shown as the default range.
+ */
+export function isValidTimeRange(time: unknown, context: DateContext = {}): time is TimeRange {
+  if (typeof time !== 'object' || time === null) return false;
+  const { from, to } = time as { from?: unknown; to?: unknown };
+  if (typeof from !== 'string' || typeof to !== 'string') return false;
+  return dateOf(from, false, context) !== undefined && dateOf(to, false, context) !== undefined;
+}
+
 /** How long a number of milliseconds is in a unit, the way a moment duration counts it */
 function durationAs(ms: number, unit: RelativeUnit): number {
   const days = ms / 864e5;
@@ -206,17 +222,35 @@ export function toRelativeString(value: string, context: DateContext = {}): stri
 
 // --- How a date and a range are written ----------------------------------------------------------
 
-/** The months between two dates and the milliseconds left over, the first no later than the second */
-function monthsAndRest(base: Date, other: Date): { months: number; ms: number } {
-  let months = other.getMonth() - base.getMonth() + (other.getFullYear() - base.getFullYear()) * 12;
+/** The month a moment falls in on the clock of a zone, counted from the year 0 */
+function monthOnClock(date: Date, timeZone?: string): number {
+  let parts: ZonedParts;
+  try {
+    parts = zonedParts(date, timeZone);
+  } catch {
+    // A zone the browser does not know: its own clock, which the date math then counts on too
+    parts = zonedParts(date);
+  }
+  return parts.year * 12 + parts.month;
+}
+
+/**
+ * The months between two dates and the milliseconds left over, the first no later than the
+ * second, as moment counts them: months of the clock of the zone its dates are in
+ */
+function monthsAndRest(base: Date, other: Date, timeZone?: string): { months: number; ms: number } {
+  let months = monthOnClock(other, timeZone) - monthOnClock(base, timeZone);
   if (addUnits(base, months, 'M').getTime() > other.getTime()) months -= 1;
   return { months, ms: other.getTime() - addUnits(base, months, 'M').getTime() };
 }
 
-/** How long ago a date was, or how far ahead it is, in the words of moment's English `fromNow` */
-export function fromNow(date: Date, now: Date = new Date()): string {
+/**
+ * How long ago a date was, or how far ahead it is, in the words of moment's English `fromNow`;
+ * the months are counted on the clock of the zone given (the product's), else the browser's
+ */
+export function fromNow(date: Date, now: Date = new Date(), timeZone?: string): string {
   const future = now.getTime() < date.getTime();
-  const { months, ms } = future ? monthsAndRest(now, date) : monthsAndRest(date, now);
+  const { months, ms } = future ? monthsAndRest(now, date, timeZone) : monthsAndRest(date, now, timeZone);
   const wholeDays = Math.round((months * 146097) / 4800);
   const seconds = Math.round(wholeDays * 86400 + ms / 1000);
   const minutes = Math.round(wholeDays * 1440 + ms / 6e4);
@@ -266,7 +300,7 @@ export function formatTimeString(
   if (value === 'now') return 'now';
   const now = context.now ?? new Date();
   const date = parse(value, roundUp, { ...context, now });
-  if (date) return `~ ${fromNow(date, now)}`;
+  if (date) return `~ ${fromNow(date, now, context.timeZone)}`;
   // A date that is not one is still a date to the original's date math, an invalid one
   return invalidBase(value) ? '~ Invalid date' : value;
 }

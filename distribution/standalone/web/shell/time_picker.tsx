@@ -1,511 +1,390 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
 /*
- * The time picker: quick ranges, a start and an end that are each a date, a relative expression
- * or "now", and the refresh interval. A change to a date waits for the Update button; a quick
- * range applies at once.
+ * The date picker of the bar, as the original's super date picker in its query bar: the button of
+ * the quick menu, and beside it the range, by its name ("Last 15 minutes") or as its two ends, each
+ * a button that opens the ways to change it. It applies nothing itself: a change of an end is given
+ * up to wait for the Update button, a choice of the quick menu to be applied at once.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, Segments, cx } from '../components/basic';
-import { NumberField, Select, Switch } from '../components/form';
+import { useCallback, useId, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { Button } from '../components/basic';
+import { Select } from '../components/form';
 import { Icon } from '../components/icon';
 import { Popover, Tooltip } from '../components/overlay';
+import type { TimeRange } from '../lib/dates';
 import {
-  UNIT_NAMES,
-  formatDate,
-  parseDateMath,
-  type TimeRange,
-  type TimeUnit,
-} from '../lib/dates';
+  COMMON_DURATION_RANGES,
+  TIME_UNITS_PLURAL,
+  isRangeInvalid,
+  isRelativeUnit,
+  parseTimeParts,
+  prettyDuration,
+  quickSelectRange,
+  showPrettyDuration,
+  stepRange,
+  type QuickRange,
+  type QuickSelect,
+  type RelativeUnit,
+  type TimeTense,
+} from '../lib/date_picker';
 import type { RefreshInterval } from '../lib/types';
 import { services } from '../services';
-import { readStored, writeStored } from './state';
+import { DatePopoverButton, pickerDateContext, pickerDateFormat } from './date_popover';
+import { prettyInterval } from './refresh_interval';
+import { RefreshEvery } from './refresh_picker';
 
-interface QuickRange {
-  from: string;
-  to: string;
-  display: string;
+/** The ranges the product offers as commonly used (the `timepicker:quickRanges` setting) */
+export function quickRanges(): QuickRange[] {
+  const ranges = services.uiSettings.get<QuickRange[]>('timepicker:quickRanges', []);
+  return Array.isArray(ranges) ? ranges : [];
 }
 
-const UNITS: TimeUnit[] = ['s', 'm', 'h', 'd', 'w', 'M', 'y'];
+/** The test id of a commonly used range: the original puts a line in place of the first space only */
+export const commonlyUsedTestId = (label: string) => `superDatePickerCommonlyUsed_${label.replace(' ', '_')}`;
 
-const RELATIVE = /^now([+-])(\d+)([smhdwMy])(?:\/([smhdwMy]))?$/;
-
-const plural = (count: number, unit: TimeUnit) => UNIT_NAMES[unit][count === 1 ? 0 : 1];
-
-function dateSettings() {
-  return {
-    format: services.uiSettings.get<string>('dateFormat', 'MMM D, YYYY @ HH:mm:ss.SSS'),
-    timeZone: services.timeZone(),
-    weekStart: services.weekStart(),
-  };
-}
-
-/** What a range is called: a quick range's name, "Last 15 minutes", or nothing */
-export function prettyRange(range: TimeRange, quickRanges: QuickRange[]): string | undefined {
-  const quick = quickRanges.find((item) => item.from === range.from && item.to === range.to);
-  if (quick) return quick.display;
-  const from = RELATIVE.exec(range.from);
-  const to = RELATIVE.exec(range.to);
-  if (range.to === 'now' && from && from[1] === '-') {
-    const unit = from[3] as TimeUnit;
-    if (!from[4] || from[4] === unit) {
-      return `Last ${from[2]} ${plural(Number(from[2]), unit)}${from[4] ? ', rounded' : ''}`;
-    }
-  }
-  if (range.from === 'now' && to && to[1] === '+') {
-    return `Next ${to[2]} ${plural(Number(to[2]), to[3] as TimeUnit)}`;
-  }
-  return undefined;
-}
-
-/** One end of a range, in words */
-export function describeDate(text: string, roundUp: boolean): string {
-  if (text === 'now') return 'now';
-  const relative = RELATIVE.exec(text);
-  if (relative) {
-    const count = Number(relative[2]);
-    const words = `${count} ${plural(count, relative[3] as TimeUnit)}`;
-    return relative[1] === '-' ? `~ ${words} ago` : `~ in ${words}`;
-  }
-  const { format, timeZone, weekStart } = dateSettings();
-  const date = parseDateMath(text, { roundUp, weekStart });
-  return date ? formatDate(date, format, timeZone) : 'Invalid date';
-}
-
-const pad = (value: number) => String(value).padStart(2, '0');
-
-/** The value of a datetime-local field for a date, in the browser's own zone */
-function toLocalInput(date: Date): string {
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
-    date.getHours()
-  )}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-}
-
-function DateEditor({
-  value,
-  onChange,
-  roundUp,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  roundUp: boolean;
-}) {
-  const { weekStart } = dateSettings();
-  const relative = RELATIVE.exec(value);
-  const initial = value === 'now' ? 'now' : relative ? 'relative' : 'absolute';
-  const [tab, setTab] = useState<'absolute' | 'relative' | 'now'>(initial);
-  const resolved = parseDateMath(value, { roundUp, weekStart });
-
-  const count = relative ? Number(relative[2]) : 15;
-  const unit = (relative?.[3] as TimeUnit | undefined) ?? 'm';
-  const direction = relative?.[1] ?? '-';
-  const rounded = Boolean(relative?.[4]);
-  const setRelative = (next: { count?: number; unit?: TimeUnit; direction?: string; rounded?: boolean }) => {
-    const nextUnit = next.unit ?? unit;
-    const round = (next.rounded ?? rounded) ? `/${nextUnit}` : '';
-    onChange(`now${next.direction ?? direction}${Math.max(0, next.count ?? count)}${nextUnit}${round}`);
-  };
-
-  return (
-    <div className="shlDateEditor atlStack">
-      <Segments
-        options={[
-          { id: 'absolute', label: 'Absolute' },
-          { id: 'relative', label: 'Relative' },
-          { id: 'now', label: 'Now' },
-        ]}
-        value={tab}
-        onChange={(next) => {
-          setTab(next);
-          if (next === 'now') onChange('now');
-          else if (next === 'relative' && !relative) onChange(`now-15m`);
-          else if (next === 'absolute' && resolved) onChange(resolved.toISOString());
-        }}
-      />
-      {tab === 'absolute' && (
-        <>
-          <input
-            type="datetime-local"
-            className="atlField"
-            step={1}
-            value={resolved ? toLocalInput(resolved) : ''}
-            onChange={(event) => {
-              const date = new Date(event.target.value);
-              if (!Number.isNaN(date.getTime())) onChange(date.toISOString());
-            }}
-            aria-label="Date and time"
-          />
-          <span className="atlSubdued atlSmall">{describeDate(value, roundUp)}</span>
-        </>
-      )}
-      {tab === 'relative' && (
-        <>
-          <div className="atlRow">
-            <NumberField
-              min={0}
-              value={count}
-              onChange={(next) => setRelative({ count: next ?? 0 })}
-              aria-label="Amount"
-              style={{ width: 96 }}
-            />
-            <Select
-              value={`${direction}${unit}`}
-              onChange={(next) => setRelative({ direction: next[0], unit: next.slice(1) as TimeUnit })}
-              options={[
-                ...UNITS.map((item) => ({
-                  value: `-${item}`,
-                  label: `${UNIT_NAMES[item][1][0].toUpperCase()}${UNIT_NAMES[item][1].slice(1)} ago`,
-                })),
-                ...UNITS.map((item) => ({
-                  value: `+${item}`,
-                  label: `${UNIT_NAMES[item][1][0].toUpperCase()}${UNIT_NAMES[item][1].slice(1)} from now`,
-                })),
-              ]}
-              aria-label="Unit"
-            />
-          </div>
-          <Switch
-            checked={rounded}
-            onChange={(next) => setRelative({ rounded: next })}
-            label={`Round to the ${UNIT_NAMES[unit][0]}`}
-          />
-          <span className="atlSubdued atlSmall">
-            {resolved
-              ? formatDate(resolved, dateSettings().format, dateSettings().timeZone)
-              : 'Invalid date'}
-          </span>
-        </>
-      )}
-      {tab === 'now' && (
-        <span className="atlSubdued">
-          Setting the time to “now” means that on every refresh this time is set to the time of the
-          refresh.
-        </span>
-      )}
-    </div>
-  );
-}
-
-function DateButton({
-  value,
-  onChange,
-  roundUp,
-  label,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  roundUp: boolean;
-  label: string;
-}) {
+/**
+ * The button the picker starts with and the menu it opens. It is a calendar, and a clock while the
+ * page refreshes itself or has no dates.
+ */
+function QuickMenu({ clock, children }: { clock: boolean; children: (close: () => void) => ReactNode }) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
-  const text = describeDate(value, roundUp);
   return (
     <Popover
       open={open}
       onClose={close}
-      padded
-      align={roundUp ? 'right' : 'left'}
-      anchorStyle={{ height: '100%' }}
+      position="downLeft"
+      className="shlQuickMenu__panel"
+      anchorClassName="shlDatePicker__quickAnchor"
       button={
         <button
           type="button"
-          className={cx('shlTime__date', text === 'Invalid date' && 'shlTime__date--invalid')}
-          aria-expanded={open}
-          aria-label={label}
-          onClick={() => setOpen(!open)}
-          data-test-subj={roundUp ? 'superDatePickerendDatePopoverButton' : 'superDatePickerstartDatePopoverButton'}
+          className="shlDatePicker__quick"
+          aria-label="Date quick select"
+          onClick={() => setOpen((was) => !was)}
+          data-test-subj="superDatePickerToggleQuickMenuButton"
         >
-          {text}
+          <Icon name={clock ? 'clock' : 'calendar'} />
+          <Icon name="chevronDown" size="s" />
         </button>
       }
     >
-      <DateEditor value={value} onChange={onChange} roundUp={roundUp} />
+      <div className="shlQuickMenu" data-test-subj="superDatePickerQuickMenu">
+        {children(close)}
+      </div>
     </Popover>
   );
 }
 
-const REFRESH_UNITS: Array<{ value: string; label: string; ms: number }> = [
-  { value: 's', label: 'seconds', ms: 1000 },
-  { value: 'm', label: 'minutes', ms: 60000 },
-  { value: 'h', label: 'hours', ms: 3600000 },
+const TENSES: Array<{ value: TimeTense; label: string }> = [
+  { value: 'last', label: 'Last' },
+  { value: 'next', label: 'Next' },
 ];
+const UNITS = (Object.keys(TIME_UNITS_PLURAL) as RelativeUnit[]).map((unit) => ({
+  value: unit,
+  label: TIME_UNITS_PLURAL[unit],
+}));
 
-function refreshParts(ms: number) {
-  if (ms >= 3600000 && ms % 3600000 === 0) return { count: ms / 3600000, unit: 'h' };
-  if (ms >= 60000 && ms % 60000 === 0) return { count: ms / 60000, unit: 'm' };
-  return { count: Math.max(1, Math.round(ms / 1000)), unit: 's' };
-}
-
-function QuickMenu({
+/**
+ * "Quick select": a length of time back from the present or on from it, and the two arrows that
+ * step the range a whole length back or on. It starts from what was applied with it last, and
+ * otherwise from the range.
+ */
+function QuickSelectFields({
+  range,
+  previous,
   onApply,
-  refreshInterval,
-  onRefreshChange,
-  quickRanges,
+  onStep,
 }: {
-  onApply: (range: TimeRange) => void;
-  refreshInterval: RefreshInterval;
-  onRefreshChange: (interval: RefreshInterval) => void;
-  quickRanges: QuickRange[];
+  range: TimeRange;
+  previous: QuickSelect | undefined;
+  onApply: (quickSelect: QuickSelect) => void;
+  onStep: (range: TimeRange) => void;
 }) {
-  const [tense, setTense] = useState('last');
-  const [count, setCount] = useState(15);
-  const [unit, setUnit] = useState<TimeUnit>('m');
-  const initialRefresh = refreshParts(refreshInterval.value || 10000);
-  const [refreshCount, setRefreshCount] = useState(initialRefresh.count);
-  const [refreshUnit, setRefreshUnit] = useState(initialRefresh.unit);
-  const recent = readStored<TimeRange[]>('recentRanges', []);
-  const refreshMs = refreshCount * (REFRESH_UNITS.find((item) => item.value === refreshUnit)?.ms ?? 1000);
+  const [state, setState] = useState<QuickSelect>(() => {
+    const parsed = parseTimeParts(range.from, range.to, pickerDateContext());
+    return {
+      timeTense: previous?.timeTense || parsed.timeTense,
+      timeValue: previous?.timeValue || parsed.timeValue,
+      timeUnits: previous?.timeUnits || parsed.timeUnits,
+    };
+  });
+  const legend = useId();
+  const description = useId();
+  const described = `${description} ${legend}`;
+
+  // The original's Enter applies a length its button refuses, nothing or less: not copied
+  const apply = () => {
+    if (state.timeValue > 0) onApply(state);
+  };
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.key === 'Enter') apply();
+  };
+  const step = (direction: 1 | -1) => onStep(stepRange(range.from, range.to, direction, pickerDateContext()));
 
   return (
-    <div className="shlTimeMenu" data-test-subj="superDatePickerQuickMenu">
-      <div className="shlTimeMenu__section">
-        <div className="atlTitleXxs">Quick select</div>
-        <div className="atlRow" style={{ marginTop: 'var(--space-2)' }}>
-          <Select
-            compact
-            value={tense}
-            onChange={setTense}
-            options={[
-              { value: 'last', label: 'Last' },
-              { value: 'next', label: 'Next' },
-            ]}
-            aria-label="Time tense"
-            style={{ width: 80 }}
-          />
-          <NumberField
-            compact
-            min={1}
-            value={count}
-            onChange={(next) => setCount(next ?? 1)}
-            aria-label="Time value"
-            style={{ width: 80 }}
-          />
-          <Select
-            compact
-            value={unit}
-            onChange={(next) => setUnit(next as TimeUnit)}
-            options={UNITS.map((item) => ({ value: item, label: UNIT_NAMES[item][1] }))}
-            aria-label="Time unit"
-          />
-          {/* The original's small button, not filled: the kit's own size and look */}
-          <Button
-            onClick={() =>
-              onApply(
-                tense === 'last'
-                  ? { from: `now-${count}${unit}`, to: 'now' }
-                  : { from: 'now', to: `now+${count}${unit}` }
-              )
-            }
-            testId="superDatePickerQuickMenuApply"
-          >
-            Apply
-          </Button>
+    <fieldset className="shlQuickMenu__fieldset">
+      <legend id={legend} className="atlScreenReaderOnly">
+        Quick select a time range
+      </legend>
+      <div className="shlQuickMenu__head">
+        <div className="shlQuickMenu__label" aria-hidden="true">
+          Quick select
         </div>
-      </div>
-      <div className="shlTimeMenu__section">
-        <div className="atlTitleXxs">Commonly used</div>
-        <div className="shlTimeMenu__ranges">
-          {quickRanges.map((range) => (
-            <button
-              key={`${range.from}${range.to}`}
-              type="button"
-              className="atlLinkButton"
-              onClick={() => onApply({ from: range.from, to: range.to })}
-              data-test-subj={`superDatePickerCommonlyUsed_${range.display.replace(/ /g, '_')}`}
-            >
-              {range.display}
+        <div className="shlQuickMenu__steps">
+          <Tooltip content="Previous time window" delay="regular">
+            <button type="button" className="shlQuickMenu__step" aria-label="Previous time window" onClick={() => step(-1)}>
+              <Icon name="chevronLeft" />
             </button>
-          ))}
+          </Tooltip>
+          <Tooltip content="Next time window" delay="regular">
+            <button type="button" className="shlQuickMenu__step" aria-label="Next time window" onClick={() => step(1)}>
+              <Icon name="chevronRight" />
+            </button>
+          </Tooltip>
         </div>
       </div>
-      {recent.length > 0 && (
-        <div className="shlTimeMenu__section">
-          <div className="atlTitleXxs">Recently used date ranges</div>
-          <div className="atlStack" style={{ gap: 2, marginTop: 'var(--space-2)', alignItems: 'flex-start' }}>
-            {recent.map((range) => (
-              <button
-                key={`${range.from}${range.to}`}
-                type="button"
-                className="atlLinkButton"
-                onClick={() => onApply(range)}
-              >
-                {prettyRange(range, quickRanges) ??
-                  `${describeDate(range.from, false)} to ${describeDate(range.to, true)}`}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-      <div className="shlTimeMenu__section">
-        <div className="atlTitleXxs">Refresh every</div>
-        <div className="atlRow" style={{ marginTop: 'var(--space-2)' }}>
-          <NumberField
-            compact
-            min={1}
-            value={refreshCount}
-            onChange={(next) => setRefreshCount(next ?? 1)}
-            aria-label="Refresh interval value"
-            style={{ width: 80 }}
-            testId="superDatePickerRefreshIntervalInput"
-          />
+      <div className="shlQuickMenu__fields">
+        {/* Each in an item of its own, so that the three share the room whatever their padding */}
+        <div className="shlQuickMenu__field">
           <Select
             compact
-            value={refreshUnit}
-            onChange={setRefreshUnit}
-            options={REFRESH_UNITS.map((item) => ({ value: item.value, label: item.label }))}
-            aria-label="Refresh interval units"
+            value={state.timeTense}
+            onChange={(next) => setState({ ...state, timeTense: next === 'next' ? 'next' : 'last' })}
+            onKeyDown={onKeyDown}
+            options={TENSES}
+            aria-label="Time tense"
+            aria-describedby={described}
           />
-          <Button
-            icon={refreshInterval.pause ? 'play' : 'stop'}
-            onClick={() => onRefreshChange({ pause: !refreshInterval.pause, value: refreshMs })}
-            testId="superDatePickerToggleRefreshButton"
-          >
-            {refreshInterval.pause ? 'Start' : 'Stop'}
-          </Button>
         </div>
+        <div className="shlQuickMenu__field">
+          <input
+            type="number"
+            className="atlField atlField--s"
+            value={state.timeValue}
+            onChange={(event) => {
+              // Read as the original reads it: the whole number it starts with, nothing for the rest
+              const value = parseInt(event.target.value, 10);
+              setState({ ...state, timeValue: Number.isNaN(value) ? 0 : value });
+            }}
+            onKeyDown={onKeyDown}
+            aria-label="Time value"
+            aria-describedby={described}
+          />
+        </div>
+        <div className="shlQuickMenu__field">
+          <Select
+            compact
+            value={state.timeUnits}
+            onChange={(next) => setState({ ...state, timeUnits: isRelativeUnit(next) ? next : state.timeUnits })}
+            onKeyDown={onKeyDown}
+            options={UNITS}
+            aria-label="Time unit"
+            aria-describedby={described}
+          />
+        </div>
+        <Button className="shlQuickMenu__apply" disabled={state.timeValue <= 0} onClick={apply} aria-describedby={described}>
+          Apply
+        </Button>
+      </div>
+      <hr className="shlQuickMenu__rule" />
+      <p id={description} className="atlScreenReaderOnly">
+        Currently set to {state.timeTense} {state.timeValue} {TIME_UNITS_PLURAL[state.timeUnits]}.
+      </p>
+    </fieldset>
+  );
+}
+
+/** A list of ranges of the quick menu under its heading: a press on one applies it */
+function RangeList({
+  legend,
+  columns,
+  items,
+  onApply,
+}: {
+  legend: string;
+  /** In two columns, filled one after the other, as the commonly used ranges */
+  columns?: boolean;
+  items: Array<{ key: string; label: string; range: TimeRange; testId?: string }>;
+  onApply: (range: TimeRange) => void;
+}) {
+  const id = useId();
+  return (
+    <fieldset className="shlQuickMenu__fieldset">
+      <legend id={id} className="shlQuickMenu__title">
+        {legend}
+      </legend>
+      <div className="shlQuickMenu__section">
+        <ul className={columns ? 'shlQuickMenu__grid' : 'shlQuickMenu__list'} aria-labelledby={columns ? id : undefined}>
+          {items.map((item) => (
+            <li key={item.key} className="shlQuickMenu__item">
+              <button
+                type="button"
+                className="shlQuickMenu__link"
+                onClick={() => onApply(item.range)}
+                data-test-subj={item.testId}
+              >
+                {item.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <hr className="shlQuickMenu__rule" />
+    </fieldset>
+  );
+}
+
+export interface TimePickerProps {
+  /** The range as it stands in the bar: the one applied, or one changed that waits for the Update button */
+  range: TimeRange;
+  /** An end of the range was changed: it waits */
+  onChange: (range: TimeRange) => void;
+  /** A range was chosen in the quick menu: it is applied at once */
+  onQuickApply: (range: TimeRange) => void;
+  /** The ranges applied before, the newest first */
+  recentRanges: TimeRange[];
+  refreshInterval: RefreshInterval;
+  onRefreshChange: (interval: RefreshInterval) => void;
+}
+
+export function TimePicker({ range, onChange, onQuickApply, recentRanges, refreshInterval, onRefreshChange }: TimePickerProps) {
+  const ranges = quickRanges();
+  const format = pickerDateFormat();
+  const context = pickerDateContext();
+  // Whether the range is written by its name: decided again whenever it changes
+  const [shown, setShown] = useState(() => ({ ...range, pretty: showPrettyDuration(range.from, range.to, ranges) }));
+  if (shown.from !== range.from || shown.to !== range.to) {
+    setShown({ ...range, pretty: showPrettyDuration(range.from, range.to, ranges) });
+  }
+  const [startOpen, setStartOpen] = useState(false);
+  const [endOpen, setEndOpen] = useState(false);
+  const closeStart = useCallback(() => setStartOpen(false), []);
+  const closeEnd = useCallback(() => setEndOpen(false), []);
+  // What the quick select applied last, kept while the picker is there
+  const [quickSelect, setQuickSelect] = useState<QuickSelect>();
+
+  const invalid = isRangeInvalid(range.from, range.to, context);
+
+  // As the original's: what the menu applies is named after the component library's own ranges,
+  // until the range that comes back is another one and is named after the product's
+  const quickApply = (next: TimeRange) => {
+    setShown((was) => ({ ...was, pretty: showPrettyDuration(next.from, next.to, COMMON_DURATION_RANGES) }));
+    onQuickApply(next);
+  };
+
+  return (
+    <div className="shlDatePicker">
+      <QuickMenu clock={!refreshInterval.pause}>
+        {(close) => (
+          <>
+            <QuickSelectFields
+              range={range}
+              previous={quickSelect}
+              onApply={(next) => {
+                setQuickSelect(next);
+                quickApply(quickSelectRange(next));
+                close();
+              }}
+              onStep={quickApply}
+            />
+            <RangeList
+              legend="Commonly used"
+              columns
+              items={ranges.map((item) => ({
+                key: item.display,
+                label: item.display,
+                range: { from: item.from, to: item.to },
+                testId: item.display ? commonlyUsedTestId(item.display) : undefined,
+              }))}
+              onApply={(next) => {
+                quickApply(next);
+                close();
+              }}
+            />
+            {recentRanges.length > 0 && (
+              <RangeList
+                legend="Recently used date ranges"
+                items={recentRanges.map((item) => ({
+                  key: `${item.from}-${item.to}`,
+                  label: prettyDuration(item.from, item.to, ranges, format, context),
+                  range: item,
+                }))}
+                onApply={(next) => {
+                  quickApply(next);
+                  close();
+                }}
+              />
+            )}
+            <RefreshEvery refreshInterval={refreshInterval} onRefreshChange={onRefreshChange} />
+          </>
+        )}
+      </QuickMenu>
+      <div className="shlDatePicker__range">
+        {shown.pretty && !startOpen && !endOpen ? (
+          <button
+            type="button"
+            className="shlDatePicker__pretty"
+            onClick={() => {
+              setShown({ ...shown, pretty: false });
+              setStartOpen(true);
+            }}
+            data-test-subj="superDatePickerShowDatesButton"
+          >
+            {prettyDuration(range.from, range.to, ranges, format, context)}
+            <span className="shlDatePicker__prettyLink">Show dates</span>
+          </button>
+        ) : (
+          <>
+            <DatePopoverButton
+              position="start"
+              value={range.from}
+              invalid={invalid}
+              open={startOpen}
+              onToggle={() => setStartOpen((was) => !was)}
+              onClose={closeStart}
+              onChange={(from) => onChange({ from, to: range.to })}
+            />
+            <div className="shlDatePicker__delimiter">
+              <span>→</span>
+            </div>
+            <DatePopoverButton
+              position="end"
+              value={range.to}
+              invalid={invalid}
+              open={endOpen}
+              onToggle={() => setEndOpen((was) => !was)}
+              onClose={closeEnd}
+              onChange={(to) => onChange({ from: range.from, to })}
+            />
+          </>
+        )}
       </div>
     </div>
   );
 }
 
-export interface TimePickerProps {
-  time: TimeRange;
-  refreshInterval: RefreshInterval;
-  onTimeChange: (range: TimeRange) => void;
-  onRefreshChange: (interval: RefreshInterval) => void;
-  /** Asked again without a change: the Refresh button */
-  onRefresh: () => void;
-  loading?: boolean;
-  /** Something else on the page waits for the Update button too: a query being typed */
-  dirty?: boolean;
-  /** What the Update button applies besides the dates */
-  onUpdate?: () => void;
-  showUpdateButton?: boolean;
-  /** Out of the way while the query is typed, as the original's are: the button stays */
-  hidden?: boolean;
-}
-
-export function TimePicker({
-  time,
+/**
+ * The picker without its dates, for a page a range of dates means nothing to (the original's "auto
+ * refresh only"): its button opens "Refresh every" alone, and beside it the interval is written out.
+ */
+export function RefreshOnlyPicker({
   refreshInterval,
-  onTimeChange,
   onRefreshChange,
-  onRefresh,
-  loading,
-  dirty,
-  onUpdate,
-  showUpdateButton = true,
-  hidden,
-}: TimePickerProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [draft, setDraft] = useState(time);
-  const [showDates, setShowDates] = useState(false);
-  const closeMenu = useCallback(() => setMenuOpen(false), []);
-  useEffect(() => setDraft(time), [time]);
-
-  const quickRanges = useMemo(
-    () => services.uiSettings.get<QuickRange[]>('timepicker:quickRanges', []),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [services.uiSettings.getVersion()]
-  );
-  const changed = draft.from !== time.from || draft.to !== time.to;
-  const pretty = prettyRange(draft, quickRanges);
-  const { weekStart } = dateSettings();
-  const from = parseDateMath(draft.from, { weekStart });
-  const to = parseDateMath(draft.to, { weekStart, roundUp: true });
-  const invalid = !from || !to || from.getTime() > to.getTime();
-
-  const apply = (range: TimeRange) => {
-    const recent = readStored<TimeRange[]>('recentRanges', []).filter(
-      (item) => !(item.from === range.from && item.to === range.to)
-    );
-    writeStored('recentRanges', [range, ...recent].slice(0, 5));
-    setShowDates(false);
-    setMenuOpen(false);
-    if (range.from === time.from && range.to === time.to) onRefresh();
-    else onTimeChange(range);
-  };
-
-  const needsUpdate = changed || Boolean(dirty);
+}: {
+  refreshInterval: RefreshInterval;
+  onRefreshChange: (interval: RefreshInterval) => void;
+}) {
   return (
-    <>
-      <div className={cx('shlSearchBar__dates', hidden && 'shlSearchBar__dates--hidden')}>
-      <div className={cx('atlField', 'shlTime', invalid && 'atlField--invalid')} data-test-subj="superDatePickerToggleQuickMenuButtonWrapper">
-        <Popover
-          open={menuOpen}
-          onClose={closeMenu}
-          padded
-          anchorStyle={{ height: '100%' }}
-          button={
-            <button
-              type="button"
-              className="shlTime__quick"
-              aria-label="Date quick select"
-              aria-expanded={menuOpen}
-              onClick={() => setMenuOpen(!menuOpen)}
-              data-test-subj="superDatePickerToggleQuickMenuButton"
-            >
-              {/* As the original's: a clock while the page refreshes itself */}
-              <Icon name={refreshInterval.pause ? 'calendar' : 'clock'} />
-              <Icon name="chevronDown" size="s" />
-            </button>
-          }
-        >
-          <QuickMenu
-            onApply={apply}
-            refreshInterval={refreshInterval}
-            onRefreshChange={onRefreshChange}
-            quickRanges={quickRanges}
-          />
-        </Popover>
-        {pretty && !showDates ? (
-          <button
-            type="button"
-            className="shlTime__range"
-            onClick={() => setShowDates(true)}
-            data-test-subj="superDatePickerShowDatesButton"
-          >
-            <span>{pretty}</span>
-            <span>Show dates</span>
-          </button>
-        ) : (
-          <>
-            <DateButton
-              label="Start date"
-              value={draft.from}
-              roundUp={false}
-              onChange={(value) => setDraft({ ...draft, from: value })}
-            />
-            {/* The original's delimiter is a character, not an icon */}
-            <span className="shlTime__arrow" aria-hidden="true">
-              →
-            </span>
-            <DateButton
-              label="End date"
-              value={draft.to}
-              roundUp
-              onChange={(value) => setDraft({ ...draft, to: value })}
-            />
-          </>
-        )}
+    <div className="shlDatePicker">
+      <QuickMenu clock>
+        {() => <RefreshEvery refreshInterval={refreshInterval} onRefreshChange={onRefreshChange} />}
+      </QuickMenu>
+      <div className="shlDatePicker__range">
+        <span className="shlDatePicker__pretty">{prettyInterval(refreshInterval.pause, refreshInterval.value)}</span>
       </div>
-      </div>
-      {showUpdateButton && (
-        <SuperUpdateButton
-          needsUpdate={needsUpdate}
-          loading={loading}
-          disabled={invalid}
-          onClick={() => {
-            onUpdate?.();
-            if (changed) apply(draft);
-            else if (!dirty) onRefresh();
-          }}
-        />
-      )}
-    </>
+    </div>
   );
 }
 

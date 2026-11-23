@@ -1,0 +1,297 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/*
+ * Inspect: the original's inspector as the theme draws it, in its medium flyout under the header:
+ * the view chooser beside the title, the data table with its CSV, and the requests with their
+ * statistics and the code of what was asked and answered.
+ */
+
+/* --- The flyout ---------------------------------------------------------------------------- */
+
+/* Half the window and 424 px at least, under the header, as the original's medium flyout */
+.shlInspector.atlFlyout {
+  top: var(--header-height);
+  width: max(424px, 50vw);
+  max-width: 100vw;
+}
+
+/* The page behind is dimmed and blurred from under the header, as the original's mask there */
+.atlFlyoutMask.shlInspector__mask {
+  top: var(--header-height);
+  backdrop-filter: blur(4px);
+}
+
+/* Its close button in the corner, 8 px in, over the header */
+.shlInspector__close.atlButton {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: 3;
+}
+
+/* The title and the chooser on a line, 24 px apart, a hairline under them */
+.shlInspector__header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-6);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+/* A long title wraps, as the original's */
+.shlInspector__title {
+  flex: 1 1 0;
+  min-width: 0;
+  white-space: normal;
+}
+
+.shlInspector__chooser {
+  flex: none;
+  display: flex;
+  align-items: center;
+}
+
+/* The only view's name, in the original's small text */
+.shlInspector__viewName {
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+/* The body scrolls and takes the focus, its view 24 px in */
+.shlInspector__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-6);
+}
+
+/* The original's small context menu in its popover: as wide as its longest item */
+.shlInspector__menu {
+  min-width: 0;
+}
+
+.shlInspector__menu .atlContextMenu__text {
+  white-space: nowrap;
+}
+
+/* --- Data ---------------------------------------------------------------------------------- */
+
+/* "Download CSV" at the right, 8 px over the table */
+.shlInspector__download {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--space-2);
+}
+
+/* The original's table writes its figures in columns */
+.shlInspector__data .atlTable,
+.shlInspector__stats {
+  font-feature-settings: "calt", "kern", "liga", "tnum";
+}
+
+/* The column the rows are sorted by: its button in the colour of the text, its name in the accent
+   colour, as the theme's */
+.shlInspector__data .atlTable__sort--sorted {
+  color: var(--color-text-primary);
+}
+
+.shlInspector__data .atlTable__sort--sorted > .atlTable__headerText {
+  color: var(--color-accent);
+}
+
+/* A cell's value, then its two filter buttons 8 px after it */
+.shlInspector__cell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.shlInspector__value {
+  flex: none;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.shlInspector__filters {
+  flex: none;
+  display: flex;
+  align-items: center;
+}
+
+/* The buttons show while the pointer is over their row, or one has the focus, as the original's */
+.shlInspector__filter.atlButton {
+  opacity: 0;
+}
+
+.shlInspector__data tbody tr:hover .shlInspector__filter.atlButton,
+.shlInspector__filter.atlButton:focus {
+  opacity: 1;
+}
+
+/* --- Requests ------------------------------------------------------------------------------ */
+
+/* Its parts one under the other, their spaces added up as the original's spacers are, not
+   collapsed into one */
+.shlInspector__requests {
+  display: flex;
+  flex-direction: column;
+}
+
+/* "1 request was made" and a request's description, in the original's extra small text */
+.shlInspector__status,
+.shlInspector__description {
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+.shlInspector__failedText {
+  color: var(--color-critical-text);
+}
+
+/* "Request:", the request, and how long it took at the end of the line, 4 px apart, with 4 px
+   over and under it whether a description follows or not, as the original's spacers */
+.shlInspector__selector {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: var(--space-1) 0;
+}
+
+.shlInspector__requestLabel {
+  flex: none;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+}
+
+.shlInspector__requestName {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.shlInspector__singleRequest {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  height: var(--control-height);
+  padding: 0 var(--space-2);
+  line-height: 1;
+}
+
+.shlInspector__menuSpinner {
+  display: inline-flex;
+  margin-left: var(--space-1);
+  vertical-align: middle;
+}
+
+/* The time a request took in the theme's badge: the healthy tint and its button's text, or the
+   critical ones when it failed */
+.shlInspector__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 1px var(--space-2);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--color-healthy-tint);
+  color: var(--color-healthy-button-text);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.shlInspector__badge--failed {
+  background: var(--color-critical-tint);
+  color: var(--color-critical-button-text);
+}
+
+/* A tooltip's title over its text, as the original's */
+.shlInspector__tipTitle {
+  margin-bottom: var(--space-1);
+  padding-bottom: var(--space-1);
+  border-bottom: 1px solid var(--color-border-light);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* The tabs of a request 16 px under its description, and what they show right under them */
+.shlInspector__details {
+  margin-top: var(--space-4);
+}
+
+/* The statistics: a long value breaks where it must, as the original's cells */
+.shlInspector__stats td {
+  overflow-wrap: break-word;
+}
+
+/* A question mark 8 px before each name, in the secondary colour */
+.shlInspector__statIcon {
+  display: inline-flex;
+  margin-right: var(--space-2);
+  vertical-align: middle;
+  color: var(--color-text-secondary);
+}
+
+.shlInspector__statTip {
+  display: inline-flex;
+}
+
+/* --- Code ---------------------------------------------------------------------------------- */
+
+/* The original's small code block: the secondary surface in a hairline, its copy button in the
+   corner, its lines wrapped */
+.shlInspector__code {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+}
+
+.shlInspector__pre {
+  margin: 0;
+  /* Room on the right for the copy button, as the original's */
+  padding: var(--space-2) calc(var(--space-8) + var(--space-1)) var(--space-2) var(--space-2);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.shlInspector__json {
+  display: block;
+  color: var(--color-text-primary);
+  font-family: var(--font-family-code);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+.shlInspector__codeControls {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: flex;
+}
+
+/* JSON in the component library's colours: the signs faint, strings, numbers with true and false,
+   and null each in their own */
+.shlInspector__token--punctuation {
+  opacity: 0.7;
+}
+
+.shlInspector__token--string {
+  color: var(--code-block-string);
+}
+
+.shlInspector__token--number {
+  color: var(--code-block-number);
+}
+
+.shlInspector__token--keyword {
+  color: var(--code-block-keyword);
+}

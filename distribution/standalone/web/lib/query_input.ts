@@ -113,6 +113,23 @@ export function matchingSearches(items: unknown[], typed: string): string[] {
   return items.map((item) => toUser(item)).filter((text) => text.trim() !== '' && text.includes(typed));
 }
 
+/** A search made before, offered under the bar in place of the whole text */
+export interface RecentSuggestion {
+  type: 'recentSearch';
+  text: string;
+  start: number;
+  end: number;
+}
+
+/**
+ * All the list under the bar offers, as the original's query string input: the searches made
+ * before that hold the text, in DQL as in Lucene. Its DQL suggestions are asked without the
+ * services they need and come back empty, so no field, value or conjunction is offered.
+ */
+export function barSuggestions(items: unknown[], typed: string): RecentSuggestion[] {
+  return matchingSearches(items, typed).map((text) => ({ type: 'recentSearch', text, start: 0, end: typed.length }));
+}
+
 /** The suggestion the arrow keys move to: the list wraps round at both ends */
 export function stepIndex(index: number, count: number, step: 1 | -1): number {
   if (count <= 0) return 0;
