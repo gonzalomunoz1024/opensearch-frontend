@@ -2,6 +2,7 @@
 
 /* The settings of a new coordinate map and of its geohash_grid: tile_map_type.js and geo_hash.ts. */
 
+import { services } from '../../services';
 import { COLOR_SCHEMAS } from './geo';
 
 /** The setting visualization:tileMap:WMSdefaults as OpenSearch Dashboards ships it */
@@ -11,8 +12,22 @@ export const DEFAULT_WMS = {
   options: { version: '', layers: '', format: 'image/png', transparent: true, attribution: '', styles: '' },
 };
 
-/** visConfig.defaults of tile_map */
-export function tileMapDefaults(wms: Record<string, unknown> = DEFAULT_WMS): Record<string, unknown> {
+/** What `wms` of a new coordinate or region map starts as: the setting, as the original reads it */
+export function wmsSetting(): Record<string, unknown> {
+  // Before the app has started, as in a unit test, the setting is what it ships with
+  const value = services ? services.uiSettings.get<unknown>('visualization:tileMap:WMSdefaults', undefined) : undefined;
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value) as Record<string, unknown>;
+    } catch {
+      return DEFAULT_WMS;
+    }
+  }
+  return value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : DEFAULT_WMS;
+}
+
+/** visConfig.defaults of tile_map, whose `wms` is the setting's */
+export function tileMapDefaults(wms: Record<string, unknown> = wmsSetting()): Record<string, unknown> {
   return {
     colorSchema: 'Yellow to Red',
     mapType: 'Scaled Circle Markers',
