@@ -13,6 +13,7 @@ import { Icon } from '../../components/icon';
 import { ConfirmModal, Flyout, Modal, Popover, Portal, Tooltip, downloadFile } from '../../components/overlay';
 import { formatDate } from '../../lib/dates';
 import { services } from '../../services';
+import { trackLoading } from '../../shell/loading_count';
 import { ConsoleEditor, ConsoleSuggestions, type ConsoleEditorHandle } from './console_editor';
 import {
   autoIndent,
@@ -72,6 +73,15 @@ const REASONS: Record<number, string> = {
   504: 'Gateway Timeout',
 };
 
+/**
+ * A request to the console's proxy, read to its end. The header's loading indicator counts it
+ * until then, as the original's console asks through the http service, which counts its requests.
+ */
+export function askProxy(query: URLSearchParams, init: RequestInit): Promise<{ response: Response; text: string }> {
+  const asked = fetch(`${services.http.prepend('/api/console/proxy')}?${query.toString()}`, { ...init, credentials: 'same-origin' });
+  return trackLoading(asked.then(async (response) => ({ response, text: await response.text() })));
+}
+
 /** Sends one request through the console's proxy, as the original does */
 async function send(request: ConsoleRequest, several: boolean, signal: AbortSignal): Promise<Answer> {
   const data = bodyOf(request);
@@ -80,16 +90,16 @@ async function send(request: ConsoleRequest, several: boolean, signal: AbortSign
   const titled = (value: string) => (several ? `# ${request.method} ${request.url}\n${value}` : value);
   try {
     const query = new URLSearchParams({ path: request.url, method: request.method });
-    const response = await fetch(`${services.http.prepend('/api/console/proxy')}?${query.toString()}`, {
+    const asked = await askProxy(query, {
       method: 'POST',
       headers: { 'osd-xsrf': 'true', 'content-type': 'application/json' },
       body: data || undefined,
-      credentials: 'same-origin',
       signal,
     });
+    const response = asked.response;
     const status = response.status;
     const statusText = response.statusText || REASONS[status] || '';
-    let text = await response.text();
+    let text = asked.text;
     let contentType = response.headers.get('content-type') ?? 'text/plain';
     // OpenSearch Dashboards answers a HEAD request with its status as text
     if (request.method.toUpperCase() === 'HEAD') {
@@ -133,13 +143,12 @@ function fieldNames(properties: unknown, prefix = ''): string[] {
 
 async function systemGet<T>(path: string): Promise<T> {
   const query = new URLSearchParams({ path, method: 'GET' });
-  const response = await fetch(`${services.http.prepend('/api/console/proxy')}?${query.toString()}`, {
+  const { response, text } = await askProxy(query, {
     method: 'POST',
     headers: { 'osd-xsrf': 'true', 'osd-system-request': 'true' },
-    credentials: 'same-origin',
   });
   if (!response.ok) throw new Error(String(response.status));
-  return (await response.json()) as T;
+  return JSON.parse(text) as T;
 }
 
 function useClusterNames(settings: ConsoleSettings): [ClusterNames, () => void] {
