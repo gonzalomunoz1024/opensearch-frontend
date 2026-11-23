@@ -15,7 +15,7 @@ import { Pagination } from '../../components/table';
 import { LocalTable, ism, toasts, type Answer, type TableColumn } from './common';
 import { useSpaced } from './index_select';
 import { leadingDebounce } from './jobs';
-import { aceActiveLine, aceGutterWidth, aceJsonTokens } from './policy_model';
+import { aceActiveLine, aceEditorTokens, aceGutterWidth, aceLineRange } from './policy_model';
 import { wildcardOption, type FieldItem } from './rollup_model';
 
 // --- The panels and spaces of the plugin's pages ------------------------------------------------------
@@ -140,7 +140,8 @@ export function JobsPanel({ title, actions, children }: { title: ReactNode; acti
 
 /**
  * A panel of a form or of a page of details: the title at 17 px, "– optional" after it when the
- * panel may be left empty, a line of what it is for, a line, and what it holds.
+ * panel may be left empty, a line of what it is for, a line, and what it holds. `optional="title"`
+ * sets "– optional" as tight as a title, where the plugin wraps it in one.
  */
 export function TitledPanel({
   title,
@@ -151,7 +152,7 @@ export function TitledPanel({
   testId,
 }: {
   title: ReactNode;
-  optional?: boolean;
+  optional?: boolean | 'title';
   description?: ReactNode;
   actions?: ReactNode;
   children?: ReactNode;
@@ -161,7 +162,7 @@ export function TitledPanel({
     <section className="atlPanel ismTp" data-test-subj={testId}>
       <div className={cx('ismTp__header', optional && 'ismTp__header--optional')}>
         <h2 className="atlTitleS ismTp__title">{title}</h2>
-        {optional && <i className="ismTp__optional">– optional</i>}
+        {optional && <i className={cx('ismTp__optional', optional === 'title' && 'ismTp__optional--title')}>– optional</i>}
         {actions && <div className="ismTp__actions">{actions}</div>}
       </div>
       {description && <p className="ismTp__description">{description}</p>}
@@ -218,9 +219,10 @@ export function FormButtons({ children }: { children: ReactNode }) {
  * The cursor starts where the plugin's editor leaves it: at the start of a text that arrives after
  * the editor is drawn, at the end of one it is drawn with (`cursorAtEnd`).
  *
- * As the plugin's, the text is reached through a hint that lies over it: a click on it, or Enter
- * once the Tab key has come to it and shown it, starts the editing where the cursor was left, and
- * Escape goes back to the hint without closing what the editor is in.
+ * As the plugin's, the Tab key reaches the text through a hint that lies under it and comes over it
+ * while it has the focus: Enter or a click there starts the editing where the cursor was left, and
+ * hides the hint until the text loses the focus. A click on the text itself goes to the text, at
+ * the place clicked. Escape goes back to the hint without closing what the editor is in.
  */
 export function AceJsonEditor({
   value,
@@ -238,7 +240,8 @@ export function AceJsonEditor({
   const [cursor, setCursor] = useState<[number, number]>(() =>
     cursorAtEnd ? [value.length, value.length] : [0, 0]
   );
-  const [editing, setEditing] = useState(false);
+  // The hint is put away by the editing it starts, and back once the text loses the focus
+  const [hintActive, setHintActive] = useState(true);
   const [scrolled, setScrolled] = useState(0);
   const [lineHeight, setLineHeight] = useState(16);
   const box = useRef<HTMLDivElement>(null);
@@ -252,7 +255,7 @@ export function AceJsonEditor({
     if (line) setLineHeight(line.getBoundingClientRect().height || 16);
   }, []);
   const start = () => {
-    setEditing(true);
+    setHintActive(false);
     const text = area();
     if (!text) return;
     text.focus({ preventScroll: true });
@@ -260,21 +263,31 @@ export function AceJsonEditor({
   };
   const active = aceActiveLine(value, cursor[0], cursor[1]);
   const gutter = aceGutterWidth(value.split('\n').length, height, lineHeight, scrolled);
+  // The marks to fold blocks, and the box around the bracket that pairs with the one at the cursor
+  const lead = cursor[1];
+  const tokenize = useCallback((text: string) => aceEditorTokens(text, lead), [lead]);
   return (
     <div
       ref={box}
       className="ismAceBox"
       style={{ '--ace-gutter-width': `${gutter}px` } as CSSProperties}
       onBlur={(event) => {
-        if (event.target instanceof HTMLTextAreaElement) setEditing(false);
+        if (event.target instanceof HTMLTextAreaElement) setHintActive(true);
+      }}
+      onClick={(event) => {
+        // As Ace's: a click on a line's number selects the line, a double click there everything
+        const text = area();
+        const left = box.current?.getBoundingClientRect().left ?? 0;
+        if (!text || event.target !== text || event.clientX - left >= gutter) return;
+        const [from, to] = event.detail >= 2 ? [0, value.length] : aceLineRange(value, text.selectionStart);
+        text.setSelectionRange(from, to);
       }}
       data-test-subj="codeEditorContainer"
     >
       <button
         ref={hint}
         type="button"
-        className={cx('ismAceHint', editing && 'ismAceHint--inactive')}
-        tabIndex={editing ? -1 : 0}
+        className={cx('ismAceHint', !hintActive && 'ismAceHint--inactive')}
         onClick={start}
         onKeyDown={(event) => {
           if (event.key !== 'Enter') return;
@@ -290,7 +303,7 @@ export function AceJsonEditor({
         value={value}
         onChange={onChange}
         height={height}
-        tokenize={aceJsonTokens}
+        tokenize={tokenize}
         ariaLabel="Code Editor"
         testId={testId}
         className="ismAce"
@@ -302,8 +315,9 @@ export function AceJsonEditor({
           // The key leaves the text and nothing else hears it
           event.preventDefault();
           event.stopPropagation();
-          setEditing(false);
-          hint.current?.focus();
+          setHintActive(true);
+          // Once React has shown the hint again
+          setTimeout(() => hint.current?.focus(), 0);
         }}
       />
     </div>

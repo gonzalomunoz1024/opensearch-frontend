@@ -3,7 +3,16 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { leadingDebounce } from '../../web/apps/index_management/jobs';
-import { aceActiveLine, aceGutterWidth, aceJsonTokens, draftIsValid } from '../../web/apps/index_management/policy_model';
+import {
+  aceActiveLine,
+  aceEditorTokens,
+  aceFoldsAt,
+  aceGutterWidth,
+  aceJsonTokens,
+  aceLineRange,
+  aceMatchingBracket,
+  draftIsValid,
+} from '../../web/apps/index_management/policy_model';
 
 /** A clock whose time goes on only when told, with the timers set on it */
 function fakeClock() {
@@ -165,6 +174,103 @@ describe('the line the JSON editor draws on a band, as Ace does', () => {
   it('stays in the text when the text has become shorter than the cursor', () => {
     assert.equal(aceActiveLine('{}', 40, 40), 0);
     assert.equal(aceActiveLine('', 0, 0), 0);
+  });
+});
+
+describe('the line a click on its number selects in the JSON editor, as Ace does', () => {
+  const text = '{\n  "a": 1,\n  "b": 2\n}';
+
+  it('is the line with its break', () => {
+    assert.deepEqual(aceLineRange(text, 0), [0, 2]);
+    assert.deepEqual(aceLineRange(text, 2), [2, 12]);
+    assert.deepEqual(aceLineRange(text, 5), [2, 12]);
+    assert.deepEqual(aceLineRange(text, 12), [12, 21]);
+  });
+
+  it('ends with the text on the last line', () => {
+    assert.deepEqual(aceLineRange(text, 21), [21, 22]);
+    assert.deepEqual(aceLineRange(text, 22), [21, 22]);
+  });
+
+  it('is an empty line where the line is empty', () => {
+    assert.deepEqual(aceLineRange('\n\nx', 0), [0, 1]);
+    assert.deepEqual(aceLineRange('\n\nx', 1), [1, 2]);
+    assert.deepEqual(aceLineRange('', 0), [0, 0]);
+    assert.deepEqual(aceLineRange('{}', 40), [0, 2]);
+  });
+});
+
+describe('the lines the JSON editor marks for folding, as Ace does', () => {
+  it('marks a line where a brace or bracket opens and is not closed on it', () => {
+    assert.ok(aceFoldsAt('{'));
+    assert.ok(aceFoldsAt('    "states": ['));
+    assert.ok(aceFoldsAt('  "a": { "b": 1,'));
+    assert.ok(!aceFoldsAt('  "a": {},'));
+    assert.ok(!aceFoldsAt('  "a": [1, 2]'));
+    assert.ok(!aceFoldsAt('    ],'));
+    assert.ok(!aceFoldsAt('}'));
+    assert.ok(!aceFoldsAt(''));
+  });
+
+  it('looks into strings as Ace does', () => {
+    assert.ok(!aceFoldsAt('  "source": "{{ctx.index}}_shrunken"'));
+    assert.ok(aceFoldsAt('  "a": "[x"'));
+  });
+
+  it('marks a comment that opens, not one that closes on its line', () => {
+    assert.ok(aceFoldsAt('  /* a'));
+    assert.ok(!aceFoldsAt('  /* a */'));
+    assert.ok(aceFoldsAt('//#region policies'));
+    assert.ok(!aceFoldsAt('// #region'));
+  });
+});
+
+describe('the bracket the JSON editor draws a box around, as Ace does', () => {
+  const text = '{\n    "a": [1, {}],\n    "s": "{x}"\n}';
+  const lines = aceJsonTokens(text);
+
+  it('is the one that pairs with a bracket just before the cursor', () => {
+    assert.deepEqual(aceMatchingBracket(lines, 3, 1), [0, 0]);
+    assert.deepEqual(aceMatchingBracket(lines, 0, 1), [3, 0]);
+    assert.deepEqual(aceMatchingBracket(lines, 1, 10), [1, 15]);
+    assert.deepEqual(aceMatchingBracket(lines, 1, 16), [1, 9]);
+    assert.deepEqual(aceMatchingBracket(lines, 1, 14), [1, 14]);
+  });
+
+  it('pairs a bracket in a string only with one in a string', () => {
+    assert.deepEqual(aceMatchingBracket(lines, 2, 13), [2, 10]);
+    const quoted = aceJsonTokens('{ "a": "}" }');
+    assert.deepEqual(aceMatchingBracket(quoted, 0, 1), [0, 11]);
+  });
+
+  it('is none at the start of a line, after anything else, or without a pair', () => {
+    assert.equal(aceMatchingBracket(lines, 1, 0), undefined);
+    assert.equal(aceMatchingBracket(lines, 1, 6), undefined);
+    assert.equal(aceMatchingBracket(aceJsonTokens('{\n  "a": 1'), 0, 1), undefined);
+  });
+
+  it('is drawn by a run of its own before the bracket, with the marks for folding at the starts of lines', () => {
+    const drawn = aceEditorTokens(text, text.length);
+    assert.deepEqual(drawn[0], [{ text: '', kind: 'Fold' }, { text: '', kind: 'Bracket' }, { text: '{', kind: 'Paren' }]);
+    assert.deepEqual(drawn[1][0], { text: '    ' });
+    assert.deepEqual(drawn[3], [{ text: '}', kind: 'Paren' }]);
+    const nested = aceEditorTokens('{\n    "a": [\n        1\n    ]\n}');
+    assert.deepEqual(
+      nested.map((line) => line[0].kind),
+      ['Fold', 'Fold', 'Indent', undefined, 'Paren']
+    );
+    const inString = aceEditorTokens(text, text.indexOf('x}') + 2)[2];
+    assert.deepEqual(inString.slice(-3), [
+      { text: '"', kind: 'String' },
+      { text: '', kind: 'Bracket' },
+      { text: '{x}"', kind: 'String' },
+    ]);
+    assert.equal(
+      aceEditorTokens(text, 0)
+        .flat()
+        .filter((token) => token.kind === 'Bracket').length,
+      0
+    );
   });
 });
 

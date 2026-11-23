@@ -528,3 +528,106 @@ export function aceActiveLine(text: string, start: number, end: number): number 
   const first = lineAt(Math.min(start, text.length));
   return first === lineAt(Math.min(end, text.length)) ? first : undefined;
 }
+
+/**
+ * What a click on a line's number selects in Ace, as offsets in the text: the line the place is
+ * on with the break after it, or up to the end of the text on the last line.
+ */
+export function aceLineRange(text: string, offset: number): [number, number] {
+  const at = Math.max(0, Math.min(offset, text.length));
+  const start = at > 0 ? text.lastIndexOf('\n', at - 1) + 1 : 0;
+  const next = text.indexOf('\n', start);
+  return [start, next < 0 ? text.length : next + 1];
+}
+
+/**
+ * Whether Ace draws its mark to fold a block away beside a line, in the style the plugin's editors
+ * keep: where a brace, bracket or parenthesis opens and nothing closes after it on the line, even in
+ * a string, or where a comment opens and does not close.
+ */
+export function aceFoldsAt(line: string): boolean {
+  const region = /^\s*(\/\*|\/\/)#?region\b/.test(line);
+  if (/^\s*(\/\*).*\*\/\s*$/.test(line) && !region && !/^\s*(\/\*\*\*).*\*\/\s*$/.test(line)) return false;
+  return /([{[(])[^}\])]*$|^\s*(\/\*)/.test(line) || region;
+}
+
+const BRACKET_PAIRS: Record<string, string> = { '{': '}', '[': ']', '(': ')', '}': '{', ']': '[', ')': '(' };
+
+/** The kind of token whose brackets pair with one another in Ace: a run's own, or plain text */
+const bracketGroup = (kind?: string) =>
+  kind === 'Paren' || kind === 'String' || kind === 'Key' || kind === 'Comment' ? kind : 'Text';
+
+/**
+ * Where the bracket is, as line and column, that Ace draws a box around for a cursor at a line and
+ * column: the one that pairs with the bracket just before the cursor. As Ace's, the search counts only
+ * the brackets of the pair, in runs of the kind the first one is in, so that a brace in a string pairs
+ * only with one in a string.
+ */
+export function aceMatchingBracket(lines: CodeToken[][], row: number, column: number): [number, number] | undefined {
+  const runs: { row: number; column: number; text: string; group: string }[] = [];
+  lines.forEach((line, at) => {
+    let start = 0;
+    for (const token of line) {
+      if (token.text) runs.push({ row: at, column: start, text: token.text, group: bracketGroup(token.kind) });
+      start += token.text.length;
+    }
+  });
+  const index = runs.findIndex(
+    (run) => run.row === row && run.column < column && column <= run.column + run.text.length
+  );
+  if (column === 0 || index < 0) return undefined;
+  const first = runs[index];
+  const bracket = first.text[column - 1 - first.column];
+  const pair = BRACKET_PAIRS[bracket];
+  if (!pair) return undefined;
+  const step = '{[('.includes(bracket) ? 1 : -1;
+  let depth = 1;
+  let offset = column - 1 - first.column + step;
+  for (let at = index; at >= 0 && at < runs.length; at += step) {
+    const run = runs[at];
+    if (at !== index) offset = step > 0 ? 0 : run.text.length - 1;
+    if (run.group !== first.group) continue;
+    for (; offset >= 0 && offset < run.text.length; offset += step) {
+      if (run.text[offset] === pair) {
+        depth -= 1;
+        if (depth === 0) return [run.row, run.column + offset];
+      } else if (run.text[offset] === bracket) depth += 1;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * JSON as the plugin's editor draws it for a cursor at an offset: the runs of `aceJsonTokens`, with
+ * a run of the kind `Fold` and no text at the start of a line Ace draws its folding mark beside, and
+ * one of the kind `Bracket` just before the bracket Ace draws a box around.
+ */
+export function aceEditorTokens(text: string, cursor?: number): CodeToken[][] {
+  const lines = aceJsonTokens(text);
+  const texts = text.split('\n');
+  let match: [number, number] | undefined;
+  if (cursor !== undefined) {
+    const at = Math.max(0, Math.min(cursor, text.length));
+    const before = text.slice(0, at).split('\n');
+    match = aceMatchingBracket(lines, before.length - 1, before[before.length - 1].length);
+  }
+  return lines.map((line, row) => {
+    let tokens = line;
+    if (match && match[0] === row) {
+      const column = match[1];
+      let start = 0;
+      tokens = line.flatMap((token) => {
+        const from = start;
+        start += token.text.length;
+        if (column < from || column >= start) return [token];
+        const cut = column - from;
+        return [
+          ...(cut > 0 ? [{ ...token, text: token.text.slice(0, cut) }] : []),
+          { text: '', kind: 'Bracket' },
+          { ...token, text: token.text.slice(cut) },
+        ];
+      });
+    }
+    return aceFoldsAt(texts[row] ?? '') ? [{ text: '', kind: 'Fold' }, ...tokens] : tokens;
+  });
+}

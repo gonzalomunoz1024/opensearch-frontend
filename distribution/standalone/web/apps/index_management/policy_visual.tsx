@@ -1661,7 +1661,7 @@ export function VisualCreatePolicy({ isEdit }: { isEdit: boolean }) {
       <Spacer size="m" />
       <TitledPanel
         title="Error notification"
-        optional
+        optional="title"
         description={
           <>
             You can set up an error notification for when a policy execution fails.{' '}

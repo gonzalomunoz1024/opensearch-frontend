@@ -509,12 +509,14 @@
   margin-right: var(--space-4);
 }
 
-/* The headings in the flyout: 17 px, and 7 px over a field of the state itself */
+/* The headings in the flyout: 17 px, as tight as the theme's titles, and 7 px over a field of the
+   state itself */
 .ismSfTitle {
   margin: 0;
   font-size: var(--font-size-l);
   font-weight: var(--font-weight-semibold);
   line-height: 22px;
+  letter-spacing: -0.022em;
 }
 
 .ismSfTitle--field {
@@ -535,9 +537,23 @@
   line-height: 18px;
 }
 
-/* A switch alone on its line, which is as tall as the switch */
+/* A switch alone on a line of the body's 14 px, sitting on it as the component library's does: the
+   switch's baseline is where its track's middle meets the middle of small letters, which leaves
+   the line 16.2 px tall with the switch 0.2 px down */
 .ismSfSwitch {
   line-height: 1;
+}
+
+.ismSfSwitch .atlSwitch__track {
+  font-size: inherit;
+  line-height: 0;
+}
+
+.ismSfSwitch .atlSwitch__track::before {
+  content: "";
+  display: inline-block;
+  height: 16px;
+  vertical-align: middle;
 }
 
 .ismSfOrder {
@@ -1199,6 +1215,11 @@
   line-height: 21px;
 }
 
+/* Where the plugin puts it in a title, it is as tight as the theme's titles */
+.ismTp__optional--title {
+  letter-spacing: -0.022em;
+}
+
 .ismTp__description {
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
@@ -1357,12 +1378,14 @@
   color: var(--color-text-tertiary);
 }
 
-/* A field's name at 17 px and what it is for in 14 px light type, as the plugin's own labels */
+/* A field's name at 17 px, set as tight as the theme's titles, and what it is for in 14 px light
+   type, as the plugin's own labels */
 .ismLabel__title {
   margin: 0 0 5px;
   font-size: var(--font-size-l);
   font-weight: var(--font-weight-semibold);
   line-height: 22px;
+  letter-spacing: -0.022em;
 }
 
 /* In the red the theme writes for a label in error */
@@ -1435,9 +1458,9 @@
   gap: var(--space-2);
 }
 
-/* What lies over the plugin's code editor until it is edited: it takes the click that starts the
-   editing, and shows itself, white at 70 % as the theme writes it in both modes, when the Tab key
-   comes to it */
+/* What lies under the plugin's code editor, which is drawn after it, until the Tab key comes to it:
+   then it comes over the editor, white at 70 % as the theme writes it in both modes. A click on
+   the editor goes to the editor. */
 .ismAceBox {
   position: relative;
 }
@@ -1446,7 +1469,6 @@
   position: absolute;
   top: 0;
   left: 0;
-  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1469,15 +1491,14 @@
 }
 
 .ismAceHint:focus {
+  z-index: 1000;
   border: 2px solid var(--color-accent);
   outline: none;
   opacity: 1;
 }
 
 .ismAceHint.ismAceHint--inactive {
-  border: 0;
-  opacity: 0;
-  pointer-events: none;
+  display: none;
 }
 
 /* JSON as the plugin's code editor shows it. Light: Ace's "github" theme in Ace's own fonts, the
@@ -1504,7 +1525,11 @@
   --ace-margin: #e8e8e8;
   --ace-cursor: #000000;
   --ace-selection: rgb(0 110 255 / 29%);
-  --ace-guide: linear-gradient(#ffffff 50%, #d3d3d3 50%) right top / 1px 2px repeat-y;
+  /* Ace's dots: a white pixel over a grey one, from the middle of the run up and down */
+  --ace-guide: linear-gradient(#ffffff 50%, #d3d3d3 50%) right center / 1px 2px repeat-y;
+  /* Ace's own drawing of its mark to fold a block, and the colour of its box around a bracket */
+  --ace-fold: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAANElEQVR42mWKsQ0AMAzC8ixLlrzQjzmBiEjp0A6WwBCSPgKAXoLkqSot7nN3yMwR7pZ32NzpKkVoDBUxKAAAAABJRU5ErkJggg==');
+  --ace-bracket: rgb(192 192 192);
   border: 0;
   border-radius: 0;
   background:
@@ -1535,10 +1560,14 @@
   --ace-cursor: #ffffff;
   --ace-selection: rgb(10 132 255 / 30%);
   --ace-guide: linear-gradient(to left, var(--color-text-tertiary) 1px, transparent 1px);
+  /* The mark to fold a block stays Ace's light one, as the theme leaves it */
+  --ace-bracket: var(--color-border-light);
   font-family: var(--font-family-code);
 }
 
+/* While the text has the focus, the band of the line is Ace's yellow (the dark theme keeps its own) */
 .ismAce.atlCodeEditor:focus-within {
+  --ace-active: rgb(255 255 204);
   border-color: transparent;
   box-shadow: none;
 }
@@ -1581,6 +1610,60 @@
 .ismAce .atlCodeEditor__line--marked::before {
   background: linear-gradient(90deg, var(--ace-edge-color) var(--ace-edge), var(--ace-gutter-active) var(--ace-edge));
   box-shadow: 13px 0 0 var(--ace-gutter-active);
+}
+
+/* The numbers, and the marks beside them, stay over what a long line scrolls under them, as Ace's
+   gutter does; what is drawn in layers stays inside the editor */
+.ismAce.atlCodeEditor {
+  isolation: isolate;
+}
+
+.ismAce .atlCodeEditor__line::before {
+  z-index: 1;
+}
+
+/* Ace's mark to fold a block away, beside the number of a line that opens one: 11 pixels a pixel
+   after the number, in the 13 pixels Ace keeps there */
+.ismAce .tokFold {
+  position: sticky;
+  z-index: 1;
+  left: calc(var(--ace-gutter-width, 50px) - 12px + var(--ace-edge));
+  display: inline-block;
+  box-sizing: border-box;
+  width: 11px;
+  height: 1lh;
+  margin: 0 5px 0 -16px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: var(--ace-fold) no-repeat center;
+  vertical-align: top;
+}
+
+/* Ace's box around the bracket that pairs with the one before the cursor: as big as the place of
+   the bracket, a pixel up and to the left, rounded, over the band of the line and under its text */
+.ismAce .atlCodeEditor__line:has(> .tokBracket) {
+  isolation: isolate;
+}
+
+.ismAce .tokBracket {
+  position: relative;
+  display: inline-block;
+  width: 0;
+  height: 1lh;
+  vertical-align: top;
+}
+
+.ismAce .tokBracket::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: -1px;
+  left: -1px;
+  box-sizing: border-box;
+  width: 1ch;
+  height: 1lh;
+  border: 1px solid var(--ace-bracket);
+  border-radius: 3px;
 }
 
 .ismAce .tokKey {
