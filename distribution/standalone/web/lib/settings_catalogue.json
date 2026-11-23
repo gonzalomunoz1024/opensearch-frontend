@@ -1280,6 +1280,62 @@
    "global"
   ]
  },
+ "timeline:es.default_index": {
+  "name": "Default index",
+  "value": "_all",
+  "description": "Default opensearch index to search with .opensearch()",
+  "category": [
+   "timeline"
+  ]
+ },
+ "timeline:es.timefield": {
+  "name": "Time field",
+  "value": "@timestamp",
+  "description": "Default field containing a timestamp when using .opensearch()",
+  "category": [
+   "timeline"
+  ]
+ },
+ "timeline:graphite.url": {
+  "name": "Graphite URL",
+  "value": null,
+  "description": "<em>[experimental]</em> The URL of your graphite host",
+  "category": [
+   "timeline"
+  ]
+ },
+ "timeline:max_buckets": {
+  "name": "Maximum buckets",
+  "value": 2000,
+  "description": "The maximum number of buckets a single datasource can return",
+  "category": [
+   "timeline"
+  ]
+ },
+ "timeline:min_interval": {
+  "name": "Minimum interval",
+  "value": "1ms",
+  "description": "The smallest interval that will be calculated when using \"auto\"",
+  "category": [
+   "timeline"
+  ]
+ },
+ "timeline:quandl.key": {
+  "name": "Quandl key",
+  "value": "someKeyHere",
+  "description": "<em>[experimental]</em> Your API key from www.quandl.com",
+  "category": [
+   "timeline"
+  ]
+ },
+ "timeline:target_buckets": {
+  "name": "Target buckets",
+  "value": 200,
+  "description": "The number of buckets to shoot for when using auto intervals",
+  "category": [
+   "timeline"
+  ]
+ },
  "timepicker:quickRanges": {
   "name": "Time filter quick ranges",
   "value": "[\n  {\n    \"from\": \"now/d\",\n    \"to\": \"now/d\",\n    \"display\": \"Today\"\n  },\n  {\n    \"from\": \"now/w\",\n    \"to\": \"now/w\",\n    \"display\": \"This week\"\n  },\n  {\n    \"from\": \"now-15m\",\n    \"to\": \"now\",\n    \"display\": \"Last 15 minutes\"\n  },\n  {\n    \"from\": \"now-30m\",\n    \"to\": \"now\",\n    \"display\": \"Last 30 minutes\"\n  },\n  {\n    \"from\": \"now-1h\",\n    \"to\": \"now\",\n    \"display\": \"Last 1 hour\"\n  },\n  {\n    \"from\": \"now-24h\",\n    \"to\": \"now\",\n    \"display\": \"Last 24 hours\"\n  },\n  {\n    \"from\": \"now-7d\",\n    \"to\": \"now\",\n    \"display\": \"Last 7 days\"\n  },\n  {\n    \"from\": \"now-30d\",\n    \"to\": \"now\",\n    \"display\": \"Last 30 days\"\n  },\n  {\n    \"from\": \"now-90d\",\n    \"to\": \"now\",\n    \"display\": \"Last 90 days\"\n  },\n  {\n    \"from\": \"now-1y\",\n    \"to\": \"now\",\n    \"display\": \"Last 1 year\"\n  }\n]",

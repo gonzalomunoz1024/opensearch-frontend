@@ -82,8 +82,6 @@ export interface SettingsSource {
   userControl: boolean;
   /** The default in effect, the server's settings file's or the registered one */
   defaultOf(key: string): unknown;
-  /** Settings this product leaves out, which are not shown even when they are stored */
-  leftOut?(key: string): boolean;
 }
 
 /** The page shows the settings of the global scope, and those only an administrator sets */
@@ -97,7 +95,6 @@ export function toFieldSettings(source: SettingsSource): FieldSetting[] {
   const keys = new Set([...Object.keys(source.definitions), ...Object.keys(source.stored)]);
   const rows: FieldSetting[] = [];
   for (const name of keys) {
-    if (source.leftOut?.(name)) continue;
     const definition = source.definitions[name];
     if (!onThePage(definition) || definition?.readonly) continue;
     const isCustom = definition === undefined;

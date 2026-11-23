@@ -31,9 +31,6 @@ import {
 } from './settings_model';
 import { SettingsSearch } from './settings_search';
 
-/** Stored settings this product leaves out with the Timeline plugin, which are not listed */
-const leftOut = (key: string) => key.startsWith('timeline:') || key.startsWith('timelion:');
-
 function readQuery(text: string): { clauses: QueryClause[]; error?: string } {
   try {
     return { clauses: parseQuery(text) };
@@ -56,7 +53,6 @@ function currentSettings(): FieldSetting[] {
     isOverridden: (key) => client.isOverridden(key),
     userControl: client.userControl(),
     defaultOf: (key) => client.defaultOf(key),
-    leftOut,
   });
 }
 

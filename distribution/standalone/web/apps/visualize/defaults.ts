@@ -197,6 +197,7 @@ const DEFAULT_PARAMS: Record<string, () => Record<string, unknown>> = {
     percentageCol: '',
   }),
   markdown: () => ({ fontSize: 12, openLinksInNewTab: false, markdown: '' }),
+  timelion: () => ({ expression: '.opensearch(*)', interval: 'auto' }),
   input_control_vis: () => ({ controls: [], updateFiltersOnChange: false, useTimeFilter: false, pinFilters: false }),
   metrics: () => tsvbDefaults(),
   vega: () => ({ spec: DEFAULT_VEGA_SPEC }),
