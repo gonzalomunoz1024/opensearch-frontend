@@ -368,6 +368,17 @@ select.atlField {
   color: var(--color-text-primary);
 }
 
+/* As the original's compressed field with an icon: the icon 8 px in from the outer edge, the text
+   32 px in. The text's room is the kit's least rule, so that a page that places its own icon keeps
+   its own */
+.atlField--s.atlFieldGroup {
+  padding-left: calc(var(--space-2) - 1px);
+}
+
+:where(.atlField--s.atlFieldGroup > .atlIcon:first-child) + input {
+  padding-left: var(--space-2);
+}
+
 .atlFormRow {
   display: flex;
   flex-direction: column;

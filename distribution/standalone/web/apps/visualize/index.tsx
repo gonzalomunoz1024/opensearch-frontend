@@ -195,7 +195,16 @@ export function NewVisModal({
     <Modal title="New Visualization" onClose={onClose} wide>
       <div className="vzeNew" data-test-subj="visNewDialogTypes">
         <div className="vzeNew__types">
-          <SearchField value={filter} onChange={setFilter} placeholder="Filter" aria-label="Filter for a visualization type" autoFocus testId="filterVisType" />
+          {/* The original's compressed search field: 32 px, its magnifier 12 px */}
+          <SearchField
+            compact
+            value={filter}
+            onChange={setFilter}
+            placeholder="Filter"
+            aria-label="Filter for a visualization type"
+            autoFocus
+            testId="filterVisType"
+          />
           <span className="atlScreenReaderOnly" aria-live="polite">
             {filter ? `${shown.length} ${shown.length === 1 ? 'type' : 'types'} found` : ''}
           </span>
