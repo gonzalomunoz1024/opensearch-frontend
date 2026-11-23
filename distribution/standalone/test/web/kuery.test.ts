@@ -95,8 +95,9 @@ describe('DQL, as OpenSearch Dashboards reads it', () => {
     }
   });
 
-  it('asks scripted fields whether they exist as the original does', () => {
-    // What the original's own functions give for a_*:* over these fields, in these orders
+  it('leaves scripted fields out of an exists query, without the fault of the original', () => {
+    // The original's own functions drop what they had gathered at a scripted field, then fail on
+    // the next plain field; here a scripted field adds nothing and the others are kept
     const field = (name: string, scripted = false) => ({
       name,
       type: 'string',
@@ -112,15 +113,17 @@ describe('DQL, as OpenSearch Dashboards reads it', () => {
         return `${(error as Error).name} ${(error as Error).message}`;
       }
     };
-    const nothing = { bool: { should: [], minimum_should_match: 1 } };
-    assert.deepEqual(ask(field('a_one'), field('a_two', true)), nothing);
-    assert.deepEqual(ask(field('a_one'), field('a_two', true), field('a_four', true)), nothing);
-    assert.equal(ask(field('a_one'), field('a_two', true), field('a_three')), 'TypeError accumulator is not iterable');
-    assert.equal(ask(field('a_two', true), field('a_one')), 'TypeError accumulator is not iterable');
-    // without a scripted field nothing is lost
-    assert.deepEqual(ask(field('a_one'), field('a_three')), {
-      bool: { should: [{ exists: { field: 'a_one' } }, { exists: { field: 'a_three' } }], minimum_should_match: 1 },
+    const exist = (...names: string[]) => ({
+      bool: { should: names.map((name) => ({ exists: { field: name } })), minimum_should_match: 1 },
     });
+    assert.deepEqual(ask(field('a_one'), field('a_two', true)), exist('a_one'));
+    assert.deepEqual(ask(field('a_one'), field('a_two', true), field('a_four', true)), exist('a_one'));
+    assert.deepEqual(ask(field('a_one'), field('a_two', true), field('a_three')), exist('a_one', 'a_three'));
+    assert.deepEqual(ask(field('a_two', true), field('a_one')), exist('a_one'));
+    assert.deepEqual(ask(field('a_one'), field('a_three')), exist('a_one', 'a_three'));
+    // a scripted field asked for a value is still asked by its script
+    const scripted = kueryToDsl(parseKuery('a_two:x'), { fields: [field('a_two', true)] } as unknown as IndexPattern);
+    assert.ok(JSON.stringify(scripted).includes('"script"'));
   });
 
   it('reads words without quotes as one value, spaces included', () => {

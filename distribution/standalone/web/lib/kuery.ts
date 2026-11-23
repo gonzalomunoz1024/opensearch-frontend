@@ -928,21 +928,15 @@ function isQuery(node: FunctionNode, indexPattern: IndexPattern | undefined, con
     Boolean(indexPattern && fields.length === indexPattern.fields.length);
   if (isExistsQuery && isAllFieldsQuery) return { match_all: {} };
 
-  let queries: Dsl[] = [];
-  // The original gathers the queries field by field and, for a scripted field asked whether it
-  // exists, hands on nothing instead of what it had gathered: when only scripted fields follow,
-  // the query asks for nothing and so finds nothing, and the next plain field fails on it
-  let dropped = false;
+  const queries: Dsl[] = [];
   for (const field of fields) {
     const wrap = wrapper(fieldNode, field, context);
     if (field.scripted) {
+      // An exists query means nothing for a scripted field, so it adds nothing, as the original
+      // means it to. The original's reducer (functions/is.ts) returns nothing for it, which drops
+      // what it had gathered and fails on the next plain field ("accumulator is not iterable"): a
+      // fault not copied
       if (!isExistsQuery) queries.push({ script: { ...phraseScript(field, value) } });
-      else {
-        dropped = true;
-        queries = [];
-      }
-    } else if (dropped) {
-      throw new TypeError('accumulator is not iterable');
     } else if (isExistsQuery) {
       queries.push(wrap({ exists: { field: field.name } }));
     } else if (valueArg.type === 'wildcard') {
