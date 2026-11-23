@@ -93,7 +93,10 @@ look as they do there, and are derived from it under its licence: its styles, it
 the folding marks and of an error in the gutter, the way it draws the selection and the cursor
 (web/apps/dev_tools/console_editor.tsx and web/styles/dev_tools.css), and the way its tokenizer
 applies the rules of a mode (web/apps/dev_tools/console_highlight.ts); BSD 3-Clause License,
-Copyright (c) 2010, Ajax.org B.V.
+Copyright (c) 2010, Ajax.org B.V. So are the two code editors of TSVB's markdown panel: the way
+the tokenizer applies a mode, the rules of its markdown and less modes and their folding marks
+(web/apps/visualize/tsvb/ace_tokenizer.ts, ace_markdown.ts and ace_less.ts), and its pictures of
+the folding marks (web/styles/tsvb_editor.css).
 
 The Markdown of the custom banner is drawn as react-markdown 6.0.3 draws it, which OpenSearch
 Dashboards draws it with, and is derived from its code and from that of mdast-util-to-hast
