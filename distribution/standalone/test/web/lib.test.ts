@@ -243,6 +243,20 @@ describe('numbers', () => {
     assert.equal(createFormatter({ id: 'static_lookup', params: { lookupEntries: entries, unknownKeyValue: null } })('png').text, 'png');
     assert.equal(createFormatter({ id: 'static_lookup' })('png').text, 'png');
   });
+
+  it('writes an empty text with its format, as the original does, and no value at all as a dash', () => {
+    // An empty term is a bucket of its own: its cell, its label and the pill of its filter
+    const others = createFormatter({ id: 'static_lookup', params: { lookupEntries: [{ key: 'css', value: 'Style sheet' }], unknownKeyValue: 'other' } });
+    assert.equal(others('').text, 'other');
+    assert.deepEqual(
+      ['string', 'number', 'bytes', 'date', 'boolean'].map((id) => createFormatter({ id })('').text),
+      ['', '', '', '', '']
+    );
+    assert.equal(createFormatter({ id: 'string' })(['a', '']).text, 'a, ');
+    const link = createFormatter({ id: 'url', params: { urlTemplate: 'http://example.com/{{value}}' } })('');
+    assert.deepEqual([link.text, link.href], ['http://example.com/', 'http://example.com/']);
+    assert.equal(createFormatter({ id: 'string' })(null).text, '-');
+  });
 });
 
 const pattern: IndexPattern = {

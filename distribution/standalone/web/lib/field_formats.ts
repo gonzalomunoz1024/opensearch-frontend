@@ -72,7 +72,8 @@ export type Formatter = (value: unknown) => Formatted;
 
 export const MISSING = '-';
 
-const isMissing = (value: unknown) => value === null || value === undefined || value === '';
+// An empty text is a value, which each format writes as the original's does: mostly as nothing
+const isMissing = (value: unknown) => value === null || value === undefined;
 
 function toNumber(value: unknown): number | undefined {
   if (typeof value === 'number') return value;
