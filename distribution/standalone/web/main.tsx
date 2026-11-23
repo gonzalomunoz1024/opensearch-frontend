@@ -24,6 +24,7 @@ import { DEFAULT_MAP_CONFIG } from '../common/map_config';
 import './styles/search_bar.css';
 import './styles/date_picker.css';
 import './styles/share.css';
+import './styles/inspect.css';
 
 function readBootData(): BootData {
   const element = document.getElementById('boot-data');

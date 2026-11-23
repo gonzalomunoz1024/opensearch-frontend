@@ -237,7 +237,7 @@ function failureOf(failure: unknown): string {
  * Copies a text as the original's `EuiCopy` does, without moving the focus: a selection of a hidden
  * span the browser copies. Says whether it could.
  */
-function copySelection(text: string): boolean {
+export function copySelection(text: string): boolean {
   const span = document.createElement('span');
   span.textContent = text;
   // Kept out of sight without scrolling the page, its spaces and lines as they are
