@@ -6,15 +6,18 @@
  * a donut, and seven tenths of the radius when the slices are named beside it. A name sits on the
  * side of its slice's middle, at a height that runs into no name kept before it on that side, or
  * is left out, with a line from the slice. Pointing at a slice dims the others and shows the
- * slice and those it is inside; a click filters on them.
+ * slice and those it is inside; a click filters on them. A split draws a pie per bucket in the
+ * frame of vislib's pie layout: one legend for them all, a title beside each row or under each
+ * column, and one message in place of them all when a pie has no room.
  */
 
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useSize } from '../../charts/core';
 import { truncateLabel } from './axis';
 import { VisLegend, type LegendPosition, type VisLegendProps } from './legend';
 import { partition, percentText, type PieSlice } from './pie_data';
 import { arcCentroid, arcPath } from './shapes';
+import { SplitCharts, SplitTitles } from './split';
 import { measureText, type TextFont } from './text';
 import { VislibTooltip, type Placement, type TooltipState } from './tooltip';
 
@@ -28,9 +31,17 @@ export interface PieLabelsConfig {
   truncate: number;
 }
 
-export interface PieChartProps {
-  /** The slices, those of nothing left out */
+/** One pie: its slices, those of nothing left out, and in a split the title of its bucket */
+export interface PieChartPart {
   root: PieSlice;
+  title?: string;
+}
+
+export interface PieChartProps {
+  /** The pie, or the pies of a split */
+  charts: PieChartPart[];
+  /** In a split, whether its pies are rows, one under another, or columns side by side */
+  rows?: boolean;
   /** The names of the legend, which the colours are dealt by */
   names: string[];
   isDonut: boolean;
@@ -41,7 +52,8 @@ export interface PieChartProps {
   /** How the measure of a slice is written */
   metricFormat: (value: number) => string;
   legend?: Omit<VisLegendProps, 'labels' | 'colorOf' | 'opacityOf' | 'onHighlight'>;
-  onSliceClick?: (slice: PieSlice) => void;
+  /** A click on a slice of the pie at `chart` among them */
+  onSliceClick?: (slice: PieSlice, chart: number) => void;
 }
 
 interface PlacedLabel {
@@ -86,21 +98,48 @@ interface Hover {
 }
 
 const TWO_PI = 2 * Math.PI;
+const TOO_SMALL = 'This container is too small to render the visualization';
 
-export function PieChart({ root, names, isDonut, labels, addTooltip, colorOf, dimming, metricFormat, legend, onSliceClick }: PieChartProps) {
+interface PieCanvasProps extends Pick<PieChartProps, 'isDonut' | 'labels' | 'addTooltip' | 'colorOf' | 'metricFormat'> {
+  root: PieSlice;
+  index: number;
+  opacityOf: (label: string) => number | undefined;
+  onHighlight: (label: string | undefined) => void;
+  onTooltip: (state: TooltipState | undefined) => void;
+  onLeave: () => void;
+  onSliceClick?: (slice: PieSlice, chart: number) => void;
+  /**
+   * In a split: told whether this pie lacks room. A pie without room there draws no message of
+   * its own: the split shows one in place of them all, as vislib's handler does.
+   */
+  onRoom?: (index: number, tooSmall: boolean) => void;
+}
+
+/** A pie in the room of its chart */
+function PieCanvas({
+  root,
+  index,
+  isDonut,
+  labels,
+  addTooltip,
+  colorOf,
+  metricFormat,
+  opacityOf,
+  onHighlight,
+  onTooltip,
+  onLeave,
+  onSliceClick,
+  onRoom,
+}: PieCanvasProps) {
   const [chartRef, size] = useSize<HTMLDivElement>();
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  const [hover, setHover] = useState<Hover>({ touched: false });
-  const [tooltip, setTooltip] = useState<TooltipState>();
-  const placement = useRef<Placement | undefined>(undefined);
-
   const nodes = useMemo(() => partition(root), [root]);
   const maxDepth = nodes.reduce((deepest, node) => Math.max(deepest, node.depth), 0);
 
   const drawn = useMemo(() => {
     const { width, height } = size;
-    if (!width || !height) return undefined;
-    if (width <= 20 || height <= 20) return { error: 'This container is too small to render the visualization', paths: [], labels: [] };
+    // A pie of no slice draws nothing and asks for no room, as in a split where the others draw
+    if (!width || !height || !root.children.length) return undefined;
+    if (width <= 20 || height <= 20) return { error: TOO_SMALL, paths: [], labels: [] };
     const radius = (Math.min(width, height) / 2) * 0.95;
     const x = (value: number) => value * TWO_PI;
     const yRange = labels.show ? radius * 0.7 : radius;
@@ -123,7 +162,7 @@ export function PieChart({ root, names, isDonut, labels, addTooltip, colorOf, di
         const outer = arcCentroid(radius * 0.8, radius * 0.8, startAngle(d), endAngle(d));
         const px = (0.7 + d.depth / 10) * radius * (midAngle < Math.PI ? 1 : -1);
         const py = outer[1] + 4;
-        const height = box.ascent + box.descent;
+        const textHeight = box.ascent + box.descent;
         return {
           d,
           text,
@@ -131,12 +170,12 @@ export function PieChart({ root, names, isDonut, labels, addTooltip, colorOf, di
           x: px,
           y: py,
           outer,
-          box: { left: midAngle < Math.PI ? px : px - box.width, top: py - height - 5, bottom: py + 5 },
+          box: { left: midAngle < Math.PI ? px : px - box.width, top: py - textHeight - 5, bottom: py + 5 },
         };
       });
       const kept = keptPieLabels(candidates.map((candidate) => candidate?.box));
-      placed = candidates.flatMap((candidate, index) => {
-        if (!candidate || !kept[index]) return [];
+      placed = candidates.flatMap((candidate, at) => {
+        if (!candidate || !kept[at]) return [];
         const { d } = candidate;
         const from = arcCentroid(innerRadius(d), outerRadius(d), startAngle(d), endAngle(d));
         const x2 = candidate.x > 0 ? candidate.x - 10 : candidate.x + 10;
@@ -154,15 +193,13 @@ export function PieChart({ root, names, isDonut, labels, addTooltip, colorOf, di
       });
     }
     return { error: undefined, paths, labels: placed };
-  }, [size, nodes, labels, isDonut, maxDepth]);
+  }, [size, root, nodes, labels, isDonut, maxDepth]);
 
-  const highlight = useCallback((label: string | undefined) => {
-    setHover((current) => (label === undefined ? { touched: current.touched || current.label !== undefined } : { label, touched: true }));
-  }, []);
-  const opacityOf = (label: string): number | undefined => {
-    if (hover.label !== undefined) return hover.label === label ? 1 : dimming;
-    return hover.touched ? 1 : undefined;
-  };
+  const tooSmall = drawn?.error !== undefined;
+  useEffect(() => {
+    onRoom?.(index, tooSmall);
+    return () => onRoom?.(index, false);
+  }, [onRoom, index, tooSmall]);
 
   const tooltipFor = (slice: PieSlice, clientX: number, clientY: number): TooltipState => {
     const branch: PieSlice[] = [];
@@ -181,7 +218,7 @@ export function PieChart({ root, names, isDonut, labels, addTooltip, colorOf, di
 
   let body: ReactNode = null;
   if (drawn?.error) {
-    body = (
+    body = onRoom ? null : (
       <div className="visError" role="alert">
         <h2 className="visError__title">{drawn.error}</h2>
       </div>
@@ -192,29 +229,29 @@ export function PieChart({ root, names, isDonut, labels, addTooltip, colorOf, di
       <svg width={width} height={height} focusable="false">
         <g transform={`translate(${width / 2},${height / 2})`}>
           <g className="arcs">
-            {drawn.paths.map(({ node, d }, index) => {
-              if (node.depth === 0) return <path key={index} d={d} style={{ fill: 'none' }} />;
+            {drawn.paths.map(({ node, d }, at) => {
+              if (node.depth === 0) return <path key={at} d={d} style={{ fill: 'none' }} />;
               const clickable = Boolean(onSliceClick && node.bucket);
               return (
                 <path
-                  key={index}
+                  key={at}
                   d={d}
                   className="slice"
                   data-label={node.name}
                   data-test-subj={node.name ? `pieSlice-${node.name.split(' ').join('-')}` : undefined}
                   style={{ fill: colorOf(node.name), opacity: opacityOf(node.name), cursor: clickable ? 'pointer' : undefined }}
-                  onMouseOver={() => highlight(node.name)}
-                  onMouseOut={() => highlight(undefined)}
-                  onMouseMove={addTooltip ? (event) => setTooltip(tooltipFor(node, event.clientX, event.clientY)) : undefined}
-                  onMouseLeave={() => setTooltip(undefined)}
-                  onClick={clickable ? () => onSliceClick?.(node) : undefined}
+                  onMouseOver={() => onHighlight(node.name)}
+                  onMouseOut={() => onHighlight(undefined)}
+                  onMouseMove={addTooltip ? (event) => onTooltip(tooltipFor(node, event.clientX, event.clientY)) : undefined}
+                  onMouseLeave={() => onTooltip(undefined)}
+                  onClick={clickable ? () => onSliceClick?.(node, index) : undefined}
                 />
               );
             })}
           </g>
           <g className="labels">
-            {drawn.labels.map((label, index) => (
-              <g key={index} className="label">
+            {drawn.labels.map((label, at) => (
+              <g key={at} className="label">
                 <text className="label-text" x={label.x} y={label.y} textAnchor={label.anchor}>
                   {label.text}
                 </text>
@@ -226,19 +263,77 @@ export function PieChart({ root, names, isDonut, labels, addTooltip, colorOf, di
       </svg>
     );
   }
+  return (
+    <div className="chart" ref={chartRef} onMouseLeave={onLeave}>
+      {body}
+    </div>
+  );
+}
+
+export function PieChart({ charts, rows, names, isDonut, labels, addTooltip, colorOf, dimming, metricFormat, legend, onSliceClick }: PieChartProps) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [hover, setHover] = useState<Hover>({ touched: false });
+  const [tooltip, setTooltip] = useState<TooltipState>();
+  const placement = useRef<Placement | undefined>(undefined);
+  // The pies of a split that lack room
+  const [cramped, setCramped] = useState<ReadonlySet<number>>(new Set());
+  const split = rows !== undefined;
+
+  const highlight = useCallback((label: string | undefined) => {
+    setHover((current) => (label === undefined ? { touched: current.touched || current.label !== undefined } : { label, touched: true }));
+  }, []);
+  // Pointing at a name dims the others in every pie and in the legend, as vislib's highlight does
+  const opacityOf = (label: string): number | undefined => {
+    if (hover.label !== undefined) return hover.label === label ? 1 : dimming;
+    return hover.touched ? 1 : undefined;
+  };
+  const onRoom = useCallback((index: number, tooSmall: boolean) => {
+    setCramped((current) => {
+      if (current.has(index) === tooSmall) return current;
+      const next = new Set(current);
+      if (tooSmall) next.add(index);
+      else next.delete(index);
+      return next;
+    });
+  }, []);
+  const onLeave = useCallback(() => (placement.current = undefined), []);
+
+  const canvases = charts.map((chart, index) => (
+    <PieCanvas
+      key={index}
+      root={chart.root}
+      index={index}
+      isDonut={isDonut}
+      labels={labels}
+      addTooltip={addTooltip}
+      colorOf={colorOf}
+      metricFormat={metricFormat}
+      opacityOf={opacityOf}
+      onHighlight={highlight}
+      onTooltip={setTooltip}
+      onLeave={onLeave}
+      onSliceClick={onSliceClick}
+      onRoom={split ? onRoom : undefined}
+    />
+  ));
+  const titles = charts.map((chart) => chart.title ?? '');
+  const failed = split && cramped.size > 0;
 
   const legendPosition: LegendPosition | undefined = legend?.position;
   return (
     <div className={`visLib${legendPosition ? ` visLib--legend-${legendPosition}` : ''}`} data-test-subj="visLib">
       <div className="visLib__chart">
-        <div className="visWrapper" ref={wrapperRef} data-test-subj="visChart">
+        <div className={`visWrapper${failed ? ' visWrapper--failed' : ''}`} ref={wrapperRef} data-test-subj="visChart">
+          {split && rows && <SplitTitles rows labels={titles} />}
           <div className="visWrapper__column">
-            <div className="visWrapper__chart">
-              <div className="chart" ref={chartRef} onMouseLeave={() => (placement.current = undefined)}>
-                {body}
-              </div>
-            </div>
+            {split ? <SplitCharts rows={Boolean(rows)}>{canvases}</SplitCharts> : <div className="visWrapper__chart">{canvases}</div>}
+            {split && !rows && <SplitTitles rows={false} labels={titles} />}
           </div>
+          {failed && (
+            <div className="visError visError--split" role="alert">
+              <h2 className="visError__title">{TOO_SMALL}</h2>
+            </div>
+          )}
         </div>
       </div>
       <div className="visLib__legend">

@@ -226,6 +226,52 @@
   overflow: visible;
 }
 
+/* The charts of a split: side by side or one under another, five pixels from each other, a title
+   under each column or beside each row */
+
+.visWrapper__splitCharts--column {
+  display: flex;
+  flex: 1 0 20px;
+  flex-direction: row;
+  min-width: 0;
+  min-height: 0;
+}
+
+.visWrapper__splitCharts--column > .visWrapper__chart {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.visWrapper__splitCharts--row {
+  display: flex;
+  flex: 1 1 100%;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.visWrapper__splitCharts--row > .visWrapper__chart {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.visWrapper .chart-title text {
+  fill: var(--color-text-secondary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-chart);
+}
+
+/* One chart of a split too small to draw: the message in place of them all, as vislib's handler
+   shows it */
+.visWrapper--failed > :not(.visError) {
+  visibility: hidden;
+}
+
+.visWrapper > .visError--split {
+  position: absolute;
+  inset: 0;
+}
+
 /* A gauge's room (vislib's gauge layout): the titles of a split beside and under the chart, which
    a gauge leaves empty, and the gauges on lines as high as the text, their name under them */
 
@@ -252,10 +298,12 @@
   line-height: 1;
 }
 
+/* A title's line is as high as its text, as every line of the original's page is (EUI's reset) */
 .visWrapper .chart-title {
   flex: 1 1 100%;
   min-width: 14px;
   min-height: 14px;
+  line-height: 1;
 }
 
 .visWrapper .chart-label {

@@ -5,7 +5,7 @@
  * filters or the visualization itself change, and hands the answer to the drawing of its kind.
  */
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ChartMessage } from '../charts/core';
 import { ErrorBoundary } from '../components/basic';
 import type { Table } from '../lib/aggs';
@@ -26,7 +26,7 @@ import { fetchVisData, type VisData, type VisInput } from './request';
 import { TableVis } from './table_vis';
 import { TagCloudVis } from './tag_cloud_vis';
 import { TileMapVis } from './tile_map/tile_map_vis';
-import { splitTables, visFailure, type VisFailure, type VisRenderProps } from './types';
+import { splitParts, splitTables, visFailure, type VisFailure, type VisRenderProps } from './types';
 import type { TsvbData, TsvbTableData } from './tsvb/data';
 import { TimelineVis } from './timeline/timeline_vis';
 import { TsvbVis } from './tsvb/vis';
@@ -96,6 +96,10 @@ const MAPS = new Set(['region_map', 'tile_map']);
 // vislib's gauge layout has no titles over the charts of a split: each names itself under its gauges
 const UNTITLED_SPLITS = new Set(['gauge', 'goal']);
 
+// The kinds that lay out the charts of a split themselves, in vislib's frame: one legend for them
+// all and the titles beside the rows or under the columns
+const VISLIB_SPLITS = new Set(['pie']);
+
 function AggVisualization({ vis: saved, input, tick, uiState, onUiState, onFilter, onTimeChange, onData, turn, onError }: VisualizationProps) {
   // Params a drawing sets on an aggregation (a map's bounds and precision), until the aggregations change
   const [aggPatch, setAggPatch] = useState<{ aggs: string; params: Record<string, Record<string, unknown>> }>();
@@ -142,6 +146,15 @@ function AggVisualization({ vis: saved, input, tick, uiState, onUiState, onFilte
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, tick]);
 
+  // Rows or columns, as the original reads them from the visualization's params: columns unless
+  // it says rows, which its editor says once a chart is split
+  const asRows = Boolean(vis.params.row);
+  // A split its drawing lays out itself, the same while the data is
+  const splits = useMemo(() => {
+    const parts = data && VISLIB_SPLITS.has(vis.type) ? splitParts(data.table) : undefined;
+    return parts?.length ? { rows: asRows, parts } : undefined;
+  }, [data, vis.type, asRows]);
+
   const draw = DRAWN[vis.type];
   let body: ReactNode;
   if (error) {
@@ -155,26 +168,24 @@ function AggVisualization({ vis: saved, input, tick, uiState, onUiState, onFilte
     body = null;
   } else {
     const parts = vis.type === 'table' || vis.type in DRAWN ? splitTables(data.table) : [{ table: data.table }];
-    // Rows or columns, as the original reads them from the visualization's params: columns unless
-    // it says rows, which its editor says once a chart is split
-    const asRows = Boolean(vis.params.row);
     const clicks = onFilter && !MAPS.has(vis.type) ? choice.apply : onFilter;
     const props = { vis, uiState: uiState ?? vis.uiState, onUiState, onFilter: clicks, onTimeChange, onAggParams };
-    body =
-      parts.length === 1 && parts[0].label === undefined ? (
-        draw({ ...props, data })
-      ) : parts.length === 0 ? (
-        <ChartMessage>No results found</ChartMessage>
-      ) : (
-        <div className={`visSplit ${asRows ? 'visSplit--rows' : 'visSplit--columns'}`}>
-          {parts.map((part) => (
-            <div key={part.label} className="visSplit__part">
-              {!UNTITLED_SPLITS.has(vis.type) && <div className="visSplit__title">{part.label}</div>}
-              <div className="visSplit__body">{draw({ ...props, data: { ...data, table: part.table }, split: part.split })}</div>
-            </div>
-          ))}
-        </div>
-      );
+    body = splits ? (
+      draw({ ...props, data, splits })
+    ) : parts.length === 1 && parts[0].label === undefined ? (
+      draw({ ...props, data })
+    ) : parts.length === 0 ? (
+      <ChartMessage>No results found</ChartMessage>
+    ) : (
+      <div className={`visSplit ${asRows ? 'visSplit--rows' : 'visSplit--columns'}`}>
+        {parts.map((part) => (
+          <div key={part.label} className="visSplit__part">
+            {!UNTITLED_SPLITS.has(vis.type) && <div className="visSplit__title">{part.label}</div>}
+            <div className="visSplit__body">{draw({ ...props, data: { ...data, table: part.table }, split: part.split })}</div>
+          </div>
+        ))}
+      </div>
+    );
   }
   return (
     <>

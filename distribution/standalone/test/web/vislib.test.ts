@@ -5,7 +5,7 @@ import { describe, it } from 'node:test';
 import { bucketFilter, otherBucketTerms, tabify, type AggConfig, type AggContext, type TableColumn } from '../../web/lib/aggs';
 import { DEFAULT_FORMAT_SETTINGS } from '../../web/lib/field_formats';
 import type { Filter, IndexPattern } from '../../web/lib/types';
-import { splitTables, splitTimeFilter } from '../../web/vis/types';
+import { splitParts, splitTables, splitTimeFilter } from '../../web/vis/types';
 import { axisConfig, keptTicks, placeTick, truncateLabel, type AxisScaleInfo } from '../../web/vis/vislib/axis';
 import { heatmapColor } from '../../web/vis/vislib/color_maps';
 import { drawMeter, gaugeBucket, gaugeColors, gaugeLabels, gaugeSize, meterConfig } from '../../web/vis/vislib/gauge';
@@ -21,6 +21,7 @@ import {
 } from '../../web/vis/vislib/point_series_data';
 import { layoutPointSeries } from '../../web/vis/vislib/point_series_layout';
 import { keptPieLabels } from '../../web/vis/vislib/pie_chart';
+import { splitTitleText } from '../../web/vis/vislib/split';
 import {
   buildSlices,
   convertToPercentage,
@@ -664,6 +665,21 @@ describe('the buckets of a chart', () => {
     // Its click is in the table before the split, at the bucket's first row
     assert.equal(parts[1].split?.cell.table.rows.length, 3);
     assert.deepEqual(parts[1].split?.cell.row, { 'col-0-4': 'osx', 'col-1-1': 2 });
+  });
+
+  it('leave a chart that is not split whole', () => {
+    const count = columnOf('col-0-1', 'Count', aggOf('1', 'count', 'metric'));
+    const table = { columns: [count], rows: [{ 'col-0-1': 4 }] };
+    assert.equal(splitParts(table), undefined);
+    assert.deepEqual(splitTables(table), [{ table }]);
+  });
+
+  it('cut the title of a chart of a split as vislib does: to the letters nine tenths of its room hold, less five', () => {
+    // Ten pixels a letter
+    const measure = (text: string) => text.length * 10;
+    assert.equal(splitTitleText('abcdefghij', 200, measure), 'abcdefghij');
+    assert.equal(splitTitleText('abcdefghij', 100, measure), 'abcd...');
+    assert.equal(splitTitleText('abcdefghij', 20, measure), '...');
   });
 
   it('filter out the terms beside the "Other" bucket, those of the rows it was clicked in', () => {

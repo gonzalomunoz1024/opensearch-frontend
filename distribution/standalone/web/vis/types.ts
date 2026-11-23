@@ -22,6 +22,11 @@ export interface VisRenderProps {
   onAggParams?: (aggId: string, params: Record<string, unknown>) => void;
   /** In one chart of a split, its bucket: a click on a mark filters on it too, as the original's does */
   split?: SplitBucket;
+  /**
+   * A split, to a drawing that lays out its charts itself as vislib does: `data` is then the
+   * whole of it, and each chart draws the table of its part
+   */
+  splits?: VisSplits;
 }
 
 export interface SplitBucket {
@@ -29,6 +34,19 @@ export interface SplitBucket {
   key: unknown;
   /** The table before the split and the bucket's first row in it, as the original's click carries them */
   cell: BucketCell;
+}
+
+/** One chart of a split: its title, its rows without the split's column, and its bucket */
+export interface SplitPart {
+  label: string;
+  table: Table;
+  split: SplitBucket;
+}
+
+export interface VisSplits {
+  /** Whether the charts are rows, one under another, or columns side by side */
+  rows: boolean;
+  parts: SplitPart[];
 }
 
 export const bucketColumns = (table: Table, schema?: string): TableColumn[] =>
@@ -57,8 +75,13 @@ export function pointsAlong(points: XYPoint[], xValues: Array<number | string>, 
 
 /** The tables of a chart split into several: one per value of the `split` column */
 export function splitTables(table: Table): Array<{ label?: string; table: Table; split?: SplitBucket }> {
+  return splitParts(table) ?? [{ table }];
+}
+
+/** The charts of a split, one per value of the `split` column, in the order of the rows; none when not split */
+export function splitParts(table: Table): SplitPart[] | undefined {
   const split = table.columns.find((column) => column.kind === 'bucket' && column.schema === 'split');
-  if (!split) return [{ table }];
+  if (!split) return undefined;
   const groups = new Map<string, { label: string; key: unknown; first: TableRow; rows: TableRow[] }>();
   for (const row of table.rows) {
     const key = keyText(row[split.id]);
