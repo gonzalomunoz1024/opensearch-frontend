@@ -28,6 +28,7 @@ import { TagCloudVis } from './tag_cloud_vis';
 import { TileMapVis } from './tile_map/tile_map_vis';
 import { splitTables, visFailure, type VisFailure, type VisRenderProps } from './types';
 import type { TsvbData, TsvbTableData } from './tsvb/data';
+import { TimelineVis } from './timeline/timeline_vis';
 import { TsvbVis } from './tsvb/vis';
 import type { VegaDebugValues } from './vega/debug_view';
 import { VegaVis } from './vega/vega_vis';
@@ -84,7 +85,7 @@ const DRAWN: Record<string, (props: VisRenderProps) => ReactNode> = {
 
 /** Whether this product draws a kind of visualization */
 export const canDraw = (type: string) =>
-  type in DRAWN || type === 'markdown' || type === 'input_control_vis' || type === 'metrics' || type === 'vega';
+  type in DRAWN || type === 'markdown' || type === 'input_control_vis' || type === 'metrics' || type === 'vega' || type === 'timelion';
 
 /** Whether a kind of visualization takes colours from the page's memory, and so a turn */
 export const takesTurn = (type: string) => type in DRAWN;
@@ -216,6 +217,8 @@ export function Visualization(props: VisualizationProps) {
         onError={props.onError}
       />
     );
+  } else if (vis.type === 'timelion') {
+    body = <TimelineVis vis={vis} input={props.input} tick={props.tick} onTimeChange={props.onTimeChange} onData={props.onData} />;
   } else if (vis.type in DRAWN) body = <AggVisualization {...props} />;
   else {
     body = (

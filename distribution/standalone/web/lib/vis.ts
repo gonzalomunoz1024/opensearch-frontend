@@ -8,6 +8,7 @@
  */
 
 import type { SavedObjectReference } from '../../common/saved_objects';
+import type { IconName } from '../components/icon';
 import type { AggConfig } from './aggs';
 import { parseSearchSource, serializeSearchSource, type SearchSource } from './search_source';
 
@@ -148,7 +149,8 @@ export interface VisType {
   name: string;
   title: string;
   description: string;
-  icon: string;
+  /** OUI's icon for it, as the original draws it */
+  icon: IconName;
   /** Drawn from an index pattern's aggregations, so it has the Data tab */
   aggBased: boolean;
   /** The parts aggregations can play in it, in the order the editor lists them */
@@ -166,12 +168,12 @@ const XY_SCHEMAS: VisType['schemas'] = [
 ];
 
 export const VIS_TYPES: VisType[] = [
-  { name: 'area', title: 'Area', description: 'Emphasize the quantity beneath a line chart', icon: 'area', aggBased: true, schemas: XY_SCHEMAS },
+  { name: 'area', title: 'Area', description: 'Emphasize the quantity beneath a line chart', icon: 'visArea', aggBased: true, schemas: XY_SCHEMAS },
   {
     name: 'input_control_vis',
     title: 'Controls',
     description: 'Create interactive controls for easy dashboard manipulation',
-    icon: 'controls',
+    icon: 'controlsHorizontal',
     aggBased: false,
     stage: 'experimental',
   },
@@ -179,18 +181,18 @@ export const VIS_TYPES: VisType[] = [
     name: 'tile_map',
     title: 'Coordinate Map',
     description: 'Plot latitude and longitude coordinates on a map',
-    icon: 'map',
+    icon: 'visMapCoordinate',
     aggBased: true,
     schemas: [
       { name: 'metric', title: 'Value', group: 'metrics', min: 1, max: 1 },
-      { name: 'segment', title: 'Geo coordinates', group: 'buckets', max: 1 },
+      { name: 'segment', title: 'Geo coordinates', group: 'buckets', min: 1, max: 1 },
     ],
   },
   {
     name: 'table',
     title: 'Data Table',
     description: 'Display values in a table',
-    icon: 'table',
+    icon: 'visTable',
     aggBased: true,
     schemas: [
       { name: 'metric', title: 'Metric', group: 'metrics', min: 1 },
@@ -202,7 +204,7 @@ export const VIS_TYPES: VisType[] = [
     name: 'gauge',
     title: 'Gauge',
     description: 'Gauges indicate the status of a metric. Use it to show how a metric’s value relates to reference threshold values',
-    icon: 'gauge',
+    icon: 'visGauge',
     aggBased: true,
     schemas: [
       { name: 'metric', title: 'Metric', group: 'metrics', min: 1 },
@@ -213,7 +215,7 @@ export const VIS_TYPES: VisType[] = [
     name: 'goal',
     title: 'Goal',
     description: 'A goal chart indicates how close you are to your final goal',
-    icon: 'gauge',
+    icon: 'visGoal',
     aggBased: true,
     schemas: [
       { name: 'metric', title: 'Metric', group: 'metrics', min: 1 },
@@ -233,14 +235,14 @@ export const VIS_TYPES: VisType[] = [
       { name: 'split', title: 'Split chart', group: 'buckets', max: 1 },
     ],
   },
-  { name: 'horizontal_bar', title: 'Horizontal Bar', description: 'Assign a continuous variable to each axis', icon: 'visualize', aggBased: true, schemas: XY_SCHEMAS },
-  { name: 'line', title: 'Line', description: 'Emphasize trends', icon: 'line', aggBased: true, schemas: XY_SCHEMAS },
-  { name: 'markdown', title: 'Markdown', description: 'Create a document using markdown syntax', icon: 'text', aggBased: false },
+  { name: 'horizontal_bar', title: 'Horizontal Bar', description: 'Assign a continuous variable to each axis', icon: 'visBarHorizontal', aggBased: true, schemas: XY_SCHEMAS },
+  { name: 'line', title: 'Line', description: 'Emphasize trends', icon: 'visLine', aggBased: true, schemas: XY_SCHEMAS },
+  { name: 'markdown', title: 'Markdown', description: 'Create a document using markdown syntax', icon: 'visText', aggBased: false },
   {
     name: 'metric',
     title: 'Metric',
     description: 'Display a calculation as a single number',
-    icon: 'number',
+    icon: 'visMetric',
     aggBased: true,
     schemas: [
       { name: 'metric', title: 'Metric', group: 'metrics', min: 1 },
@@ -251,7 +253,7 @@ export const VIS_TYPES: VisType[] = [
     name: 'pie',
     title: 'Pie',
     description: 'Compare parts of a whole',
-    icon: 'pie',
+    icon: 'visPie',
     aggBased: true,
     schemas: [
       { name: 'metric', title: 'Slice size', group: 'metrics', min: 1, max: 1 },
@@ -263,30 +265,44 @@ export const VIS_TYPES: VisType[] = [
     name: 'region_map',
     title: 'Region Map',
     description: 'Show metrics on a thematic map. Use one of the provided base maps, or add your own',
-    icon: 'globe',
+    icon: 'visMapRegion',
     aggBased: true,
     schemas: [
       { name: 'metric', title: 'Value', group: 'metrics', min: 1, max: 1 },
-      { name: 'segment', title: 'Shape field', group: 'buckets', max: 1 },
+      { name: 'segment', title: 'Shape field', group: 'buckets', min: 1, max: 1 },
     ],
   },
   {
     name: 'tagcloud',
     title: 'Tag Cloud',
     description: 'A group of words, sized according to their importance',
-    icon: 'cloud',
+    icon: 'visTagCloud',
     aggBased: true,
     schemas: [
       { name: 'metric', title: 'Tag size', group: 'metrics', min: 1, max: 1 },
-      { name: 'segment', title: 'Tags', group: 'buckets', max: 1 },
+      { name: 'segment', title: 'Tags', group: 'buckets', min: 1, max: 1 },
     ],
   },
-  { name: 'timelion', title: 'Timeline', description: 'Build time-series using functional expressions', icon: 'clock', aggBased: false },
-  { name: 'metrics', title: 'TSVB', description: 'Build time-series using a visual pipeline interface', icon: 'line', aggBased: false },
-  { name: 'vega', title: 'Vega', description: 'Create custom visualizations using Vega and Vega-Lite', icon: 'code', aggBased: false },
-  { name: 'histogram', title: 'Vertical Bar', description: 'Assign a continuous variable to each axis', icon: 'visualize', aggBased: true, schemas: XY_SCHEMAS },
+  { name: 'timelion', title: 'Timeline', description: 'Build time-series using functional expressions', icon: 'timeline', aggBased: false },
+  { name: 'metrics', title: 'TSVB', description: 'Build time-series using a visual pipeline interface', icon: 'visVisualBuilder', aggBased: false },
+  { name: 'vega', title: 'Vega', description: 'Create custom visualizations using Vega and Vega-Lite', icon: 'visVega', aggBased: false },
+  { name: 'histogram', title: 'Vertical Bar', description: 'Assign a continuous variable to each axis', icon: 'visBarVertical', aggBased: true, schemas: XY_SCHEMAS },
 ];
 
 export const visType = (name: string): VisType | undefined => VIS_TYPES.find((type) => type.name === name);
 
-export const visIcon = (name: string): string => visType(name)?.icon ?? 'visualize';
+export const visIcon = (name: string): IconName => visType(name)?.icon ?? 'visualizeApp';
+
+/** The icon of a saved visualization's kind, read from its saved state; nothing for a state that cannot be read */
+export function visStateIcon(visState: unknown): IconName | undefined {
+  if (typeof visState !== 'string') return undefined;
+  try {
+    const state: unknown = JSON.parse(visState);
+    if (state && typeof state === 'object' && 'type' in state && typeof state.type === 'string') {
+      return visType(state.type)?.icon;
+    }
+  } catch {
+    // A state that cannot be read has no kind
+  }
+  return undefined;
+}

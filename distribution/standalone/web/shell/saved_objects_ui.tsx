@@ -8,6 +8,7 @@ import { Checkbox, FormRow, RadioGroup, SearchField, Switch, TextArea, TextField
 import { Icon, type IconName } from '../components/icon';
 import { Flyout, Modal, copyText } from '../components/overlay';
 import { Pagination } from '../components/table';
+import { visStateIcon } from '../lib/vis';
 import { useLocation } from '../router';
 import { services } from '../services';
 import { errorMessage } from '../services/http';
@@ -162,6 +163,16 @@ export interface FinderType {
   icon: IconName;
 }
 
+/**
+ * The icon the original's finder draws for an object: a visualization's is the icon of its kind,
+ * any other the icon of its type
+ */
+function finderIcon(object: SavedObject<{ title: string }>, byType: ReadonlyMap<string, IconName>): IconName {
+  const attributes: Record<string, unknown> = object.attributes;
+  const ofKind = object.type === 'visualization' ? visStateIcon(attributes.visState) : undefined;
+  return ofKind ?? byType.get(object.type) ?? 'document';
+}
+
 /** A searchable list of saved objects of some types: what "Open" shows */
 export function SavedObjectFinder({
   types,
@@ -191,7 +202,6 @@ export function SavedObjectFinder({
             fields: ['title', 'visState', 'description'],
             page: page + 1,
             perPage: pageSize,
-            sortField: search.trim() ? undefined : 'title',
           })
           .then((answer) => {
             if (live) setFound({ total: answer.total, objects: answer.saved_objects });
@@ -215,6 +225,7 @@ export function SavedObjectFinder({
   return (
     <div className="atlStack" data-test-subj="savedObjectFinder">
       <SearchField
+        compact
         value={search}
         onChange={(value) => {
           setSearch(value);
@@ -238,7 +249,7 @@ export function SavedObjectFinder({
               onClick={() => onChoose(object)}
               data-test-subj={`savedObjectTitle${(object.attributes.title ?? '').split(' ').join('-')}`}
             >
-              <Icon name={icons.get(object.type) ?? 'document'} />
+              <Icon name={finderIcon(object, icons)} app />
               <span className="atlGrow atlTruncate">{object.attributes.title || object.id}</span>
             </button>
           ))}
@@ -354,7 +365,6 @@ export function ShareModal({
       footer={
         <Button
           variant="primary"
-          icon="copy"
           disabled={creating}
           onClick={() => {
             copyText(shown, embed ? 'The embed code was copied' : 'The link was copied');

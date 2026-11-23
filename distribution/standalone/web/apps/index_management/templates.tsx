@@ -141,7 +141,7 @@ function AssociatedComponentsModal({
               name: 'Actions',
               align: 'right',
               render: (row) => (
-                <IconButton icon="link" label={`Unlink ${row.name}?`} onClick={() => setUnlinking(row.name)} />
+                <IconButton icon="unlink" label={`Unlink ${row.name}?`} onClick={() => setUnlinking(row.name)} />
               ),
             },
           ]}
@@ -272,7 +272,7 @@ export function Templates() {
       align: 'right',
       render: (row) => (
         <>
-          <IconButton icon="list" label="View associated index templates" onClick={() => setAssociated(row)} />
+          <IconButton icon="kqlSelector" label="View associated index templates" onClick={() => setAssociated(row)} />
           <IconButton icon="trash" label="Delete template" onClick={() => setDeleting([row.name])} />
         </>
       ),
@@ -405,7 +405,7 @@ function AssociatedTemplatesModal({
               name: 'Actions',
               align: 'right',
               render: (row) => (
-                <IconButton icon="link" label={`Unlink from ${row.name}?`} onClick={() => setUnlinking(row)} />
+                <IconButton icon="unlink" label={`Unlink from ${row.name}?`} onClick={() => setUnlinking(row)} />
               ),
             },
           ]}
@@ -611,7 +611,7 @@ export function ComposableTemplates() {
         render: (row) => (
           <>
             <IconButton
-              icon="list"
+              icon="kqlSelector"
               label="View associated index templates"
               onClick={() => setAssociated(row)}
               testId={`ViewAssociatedIndexTemplates-${row.name}`}

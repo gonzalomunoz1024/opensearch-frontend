@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Button, EmptyPrompt, IconButton, Link, Loading, PageHeader, Panel } from '../components/basic';
 import { SearchField } from '../components/form';
+import type { IconName } from '../components/icon';
 import { ConfirmModal } from '../components/overlay';
 import { DataTable, type Column } from '../components/table';
 import { formatDate } from '../lib/dates';
@@ -18,6 +19,15 @@ export interface ListedAttributes {
 }
 
 export type Listed = SavedObject<ListedAttributes>;
+
+/** The application's icon the original's empty list draws, by the kind of object listed */
+const EMPTY_ICONS: Record<string, IconName> = {
+  dashboard: 'dashboardApp',
+  visualization: 'visualizeApp',
+};
+
+export const emptyListIcon = (types: string[]): IconName =>
+  types.length > 0 && Object.prototype.hasOwnProperty.call(EMPTY_ICONS, types[0]) ? EMPTY_ICONS[types[0]] : 'plusCircle';
 
 export interface ListingProps {
   title: string;
@@ -33,6 +43,8 @@ export interface ListingProps {
   editTo?: (object: Listed) => string;
   extraColumns?: Array<Column<Listed>>;
   emptyBody?: ReactNode;
+  /** Which of the objects found are listed: all of them unless it says otherwise */
+  keep?: (object: Listed) => boolean;
   testId?: string;
 }
 
@@ -49,10 +61,11 @@ export function Listing({
   editTo,
   extraColumns = [],
   emptyBody,
+  keep,
   testId,
 }: ListingProps) {
   const [search, setSearch] = useState('');
-  const [found, setFound] = useState<{ total: number; objects: Listed[] }>();
+  const [found, setFound] = useState<{ objects: Listed[] }>();
   const [selected, setSelected] = useState<string[]>([]);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -73,10 +86,10 @@ export function Listing({
             fields: fieldKey.split(','),
             perPage: limit,
           })
-          .then((answer) => live && setFound({ total: answer.total, objects: answer.saved_objects }))
+          .then((answer) => live && setFound({ objects: answer.saved_objects.filter((object) => !keep || keep(object)) }))
           .catch((failure) => {
             if (!live) return;
-            setFound({ total: 0, objects: [] });
+            setFound({ objects: [] });
             services.toasts.error(failure, `The ${entities} could not be listed`);
           });
       },
@@ -86,7 +99,7 @@ export function Listing({
       live = false;
       window.clearTimeout(timer);
     };
-  }, [typeKey, fieldKey, search, limit, entities, tick]);
+  }, [typeKey, fieldKey, search, limit, entities, tick, keep]);
 
   const remove = useCallback(async () => {
     if (!found) return;
@@ -154,7 +167,7 @@ export function Listing({
         <Loading />
       ) : nothingAtAll ? (
         <Panel>
-          <EmptyPrompt icon="plusCircle" title={`Create your first ${entity}`} actions={createButton}>
+          <EmptyPrompt icon={emptyListIcon(types)} title={`Create your first ${entity}`} actions={createButton}>
             {emptyBody}
           </EmptyPrompt>
         </Panel>
@@ -170,11 +183,6 @@ export function Listing({
               <SearchField value={search} onChange={setSearch} placeholder="Search..." aria-label={`Search ${entities}`} testId="tableListSearchBox" />
             </div>
           </div>
-          {found.total > found.objects.length && (
-            <p className="atlSubdued atlSmall" style={{ marginBottom: 'var(--space-2)' }}>
-              Showing the first {found.objects.length} of {found.total} {entities}. Search to narrow the list.
-            </p>
-          )}
           <DataTable
             rows={found.objects}
             columns={columns}

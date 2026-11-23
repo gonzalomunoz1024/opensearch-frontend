@@ -290,9 +290,8 @@ function QuickMenu({
             options={UNITS.map((item) => ({ value: item, label: UNIT_NAMES[item][1] }))}
             aria-label="Time unit"
           />
+          {/* The original's small button, not filled: the kit's own size and look */}
           <Button
-            size="s"
-            variant="tint"
             onClick={() =>
               onApply(
                 tense === 'last'
@@ -360,8 +359,6 @@ function QuickMenu({
             aria-label="Refresh interval units"
           />
           <Button
-            size="s"
-            variant="tint"
             icon={refreshInterval.pause ? 'play' : 'stop'}
             onClick={() => onRefreshChange({ pause: !refreshInterval.pause, value: refreshMs })}
             testId="superDatePickerToggleRefreshButton"
@@ -447,8 +444,9 @@ export function TimePicker({
               onClick={() => setMenuOpen(!menuOpen)}
               data-test-subj="superDatePickerToggleQuickMenuButton"
             >
-              <Icon name={refreshInterval.pause ? 'calendar' : 'refresh'} />
-              <Icon name="chevronDown" />
+              {/* As the original's: a clock while the page refreshes itself */}
+              <Icon name={refreshInterval.pause ? 'calendar' : 'clock'} />
+              <Icon name="chevronDown" size="s" />
             </button>
           }
         >
@@ -477,7 +475,10 @@ export function TimePicker({
               roundUp={false}
               onChange={(value) => setDraft({ ...draft, from: value })}
             />
-            <Icon name="arrowRight" className="shlTime__arrow" />
+            {/* The original's delimiter is a character, not an icon */}
+            <span className="shlTime__arrow" aria-hidden="true">
+              →
+            </span>
             <DateButton
               label="End date"
               value={draft.to}
@@ -489,8 +490,8 @@ export function TimePicker({
       </div>
       {showUpdateButton && (
         <Button
-          variant={needsUpdate ? 'primary' : 'default'}
-          icon={needsUpdate ? 'arrowRight' : 'refresh'}
+          variant={needsUpdate ? 'healthyOutline' : 'default'}
+          icon="refresh"
           loading={loading && !needsUpdate}
           disabled={invalid}
           onClick={() => {

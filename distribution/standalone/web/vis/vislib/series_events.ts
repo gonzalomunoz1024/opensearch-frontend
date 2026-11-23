@@ -9,9 +9,8 @@
  * the buckets it takes.
  */
 
-import { bucketFilter, dateInterval, type AggContext, type Table, type TableColumn } from '../../lib/aggs';
+import { brushFilter, bucketFilter, dateInterval, type AggContext, type Table, type TableColumn } from '../../lib/aggs';
 import { addUnits, type TimeUnit } from '../../lib/dates';
-import { rangeFilter } from '../../lib/query';
 import type { Filter } from '../../lib/types';
 import { bucketColumns, type VisRenderProps } from '../types';
 import type { PointSeriesModel } from './point_series_model';
@@ -88,28 +87,20 @@ export function seriesEvents({ model, axis, context, onFilter, onTimeChange, spl
   const onBrush =
     xColumn?.fieldName && (onFilter || onTimeChange)
       ? (range: { from: number; to: number } | { values: Array<number | string> }) => {
-          const field = { name: xColumn.fieldName ?? '' };
           if ('from' in range) {
             if (isTimeField && onTimeChange) {
               onTimeChange({ from: new Date(range.from).toISOString(), to: new Date(range.to).toISOString() });
-            } else {
-              onFilter?.([
-                rangeFilter(
-                  field,
-                  { gte: new Date(range.from).toISOString(), lt: new Date(range.to).toISOString(), format: 'strict_date_optional_time' },
-                  context.indexPattern?.id
-                ),
-              ]);
+              return;
             }
+            const filter = brushFilter(xColumn, range.from, range.to, context);
+            if (filter) onFilter?.([filter]);
             return;
           }
           // The buckets taken: from the first, up to the last, which the filter leaves out
           const values = range.values;
           if (values.length <= 1) return;
-          const min = values[0];
-          const max = values[values.length - 1];
-          if (min === max) return;
-          onFilter?.([rangeFilter(field, { gte: Number(min), lt: Number(max) }, context.indexPattern?.id)]);
+          const filter = brushFilter(xColumn, Number(values[0]), Number(values[values.length - 1]), context);
+          if (filter) onFilter?.([filter]);
         }
       : undefined;
 

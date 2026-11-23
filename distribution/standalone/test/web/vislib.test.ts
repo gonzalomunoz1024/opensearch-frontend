@@ -619,7 +619,8 @@ describe('the buckets of a chart', () => {
       enabled: true,
       type: 'ip_range',
       schema: 'segment',
-      params: { field: 'clientip', ipRangeType },
+      // The buckets are those asked: here a range from one address on
+      params: { field: 'clientip', ipRangeType, ranges: { fromTo: [{ from: '0.0.0.0', to: '127.255.255.255' }, { from: '128.0.0.0' }] } },
     });
     const buckets = [
       { key: '0.0.0.0-127.255.255.255', from: '0.0.0.0', to: '127.255.255.255', doc_count: 1 },

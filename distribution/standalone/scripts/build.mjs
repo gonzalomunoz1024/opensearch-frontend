@@ -46,7 +46,8 @@ function write(path, content) {
   writeFileSync(path, content);
 }
 
-// Every TypeScript file of a source directory, as a CommonJS file at the same place under dist/
+// Every TypeScript file of a source directory, as a CommonJS file at the same place under dist/,
+// with the data files beside them (JSON, and the gzipped documents of the sample data sets)
 function transpileTree(name) {
   let count = 0;
   for (const file of walk(join(root, name))) {
@@ -56,7 +57,7 @@ function transpileTree(name) {
     if (extension === '.ts' || extension === '.tsx') {
       write(target.slice(0, -extension.length) + '.js', transpile(readFileSync(file, 'utf8'), file));
       count += 1;
-    } else if (extension === '.json') {
+    } else if (extension === '.json' || file.endsWith('.json.gz')) {
       write(target, readFileSync(file));
     }
   }
@@ -67,6 +68,11 @@ rmSync(dist, { recursive: true, force: true });
 
 // The server: run by Node as it is, with no packages of its own
 const serverFiles = transpileTree('server') + transpileTree('common');
+// The DQL parser of the browser side, which the server also reads the filter of a saved objects
+// search with
+for (const file of ['web/lib/kuery.ts']) {
+  write(join(dist, file.replace(/\.ts$/, '.js')), transpile(readFileSync(join(root, file), 'utf8'), join(root, file)));
+}
 write(
   join(dist, 'package.json'),
   JSON.stringify({ name: pkg.name, version: pkg.version, private: true, type: 'commonjs' }, null, 2)

@@ -108,6 +108,41 @@ export interface ColorPickerProps {
 /** A swatch that opens a colour picker */
 export function ColorPicker({ color, onChange, showAlpha, swatches = SWATCHES, label, testId }: ColorPickerProps) {
   const [open, setOpen] = useState(false);
+  return (
+    <Popover
+      open={open}
+      onClose={() => setOpen(false)}
+      button={
+        <button
+          type="button"
+          className="atlColorSwatch"
+          style={{ background: cssColor(color) }}
+          aria-label={label}
+          onClick={() => setOpen(!open)}
+          data-test-subj={testId}
+        />
+      }
+    >
+      <ColorPickerPanel color={color} onChange={onChange} showAlpha={showAlpha} swatches={swatches} onPicked={() => setOpen(false)} />
+    </Popover>
+  );
+}
+
+export interface ColorPickerPanelProps {
+  /** The colour as text */
+  color: string;
+  /** The new text, and the colour it reads as */
+  onChange: (text: string, output: ColorOutput) => void;
+  showAlpha?: boolean;
+  swatches?: string[];
+  /** Without a field for the text, when it is typed in the field the picker opens from */
+  showInput?: boolean;
+  /** A ready colour was chosen, and the picker may close */
+  onPicked?: () => void;
+}
+
+/** What a colour picker holds: the text, the square, the hues, the ready colours and the opacity */
+export function ColorPickerPanel({ color, onChange, showAlpha, swatches = SWATCHES, showInput = true, onPicked }: ColorPickerPanelProps) {
   const current = parseColor(color);
   // The hue is kept apart: a grey has none, and the strip should not jump back to red
   const [hsv, setHsv] = useState<Hsv>(() => (current ? rgbToHsv(current) : [0, 0, 0]));
@@ -154,21 +189,8 @@ export function ColorPicker({ color, onChange, showAlpha, swatches = SWATCHES, l
   const percent = Math.round(alpha * 100);
 
   return (
-    <Popover
-      open={open}
-      onClose={() => setOpen(false)}
-      button={
-        <button
-          type="button"
-          className="atlColorSwatch"
-          style={{ background: cssColor(color) }}
-          aria-label={label}
-          onClick={() => setOpen(!open)}
-          data-test-subj={testId}
-        />
-      }
-    >
-      <div className="atlColorPicker" data-test-subj="colorPickerPopover">
+    <div className="atlColorPicker" data-test-subj="colorPickerPopover">
+      {showInput && (
         <input
           className={cx('atlField', 'atlField--s', color !== '' && !current && 'atlField--invalid')}
           value={color}
@@ -176,76 +198,76 @@ export function ColorPicker({ color, onChange, showAlpha, swatches = SWATCHES, l
           onChange={(event) => typed(event.target.value)}
           data-test-subj="colorPickerInput"
         />
-        <div
-          ref={square}
-          className="atlColorPicker__square"
-          style={{ backgroundColor: `hsl(${shownHsv[0]}, 100%, 50%)` }}
-          role="slider"
-          tabIndex={0}
-          aria-label="Saturation and brightness"
-          aria-valuetext={`Saturation ${Math.round(shownHsv[1] * 100)}%, brightness ${Math.round(shownHsv[2] * 100)}%`}
-          onPointerDown={(event) => {
-            event.currentTarget.setPointerCapture(event.pointerId);
-            fromSquare(event);
-          }}
-          onPointerMove={(event) => {
-            if (event.currentTarget.hasPointerCapture(event.pointerId)) fromSquare(event);
-          }}
-          onKeyDown={squareKeys}
-        >
-          <span className="atlColorPicker__thumb" style={{ left: `${shownHsv[1] * 100}%`, top: `${(1 - shownHsv[2]) * 100}%` }} />
-        </div>
-        <input
-          type="range"
-          className="atlColorPicker__hue"
-          min={0}
-          max={359}
-          value={Math.round(shownHsv[0])}
-          aria-label="Hue"
-          onChange={(event) => pickHsv([Number(event.target.value), shownHsv[1], shownHsv[2]])}
-        />
-        <div className="atlColorPicker__swatches">
-          {swatches.map((swatch) => (
-            <button
-              key={swatch}
-              type="button"
-              className="atlColorSwatch"
-              style={{ background: swatch }}
-              aria-label={`Select ${swatch} as the color`}
-              onClick={() => {
-                typed(swatch);
-                setOpen(false);
-              }}
-            />
-          ))}
-        </div>
-        {showAlpha && (
-          <div className="atlColorPicker__alpha">
+      )}
+      <div
+        ref={square}
+        className="atlColorPicker__square"
+        style={{ backgroundColor: `hsl(${shownHsv[0]}, 100%, 50%)` }}
+        role="slider"
+        tabIndex={0}
+        aria-label="Saturation and brightness"
+        aria-valuetext={`Saturation ${Math.round(shownHsv[1] * 100)}%, brightness ${Math.round(shownHsv[2] * 100)}%`}
+        onPointerDown={(event) => {
+          event.currentTarget.setPointerCapture(event.pointerId);
+          fromSquare(event);
+        }}
+        onPointerMove={(event) => {
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) fromSquare(event);
+        }}
+        onKeyDown={squareKeys}
+      >
+        <span className="atlColorPicker__thumb" style={{ left: `${shownHsv[1] * 100}%`, top: `${(1 - shownHsv[2]) * 100}%` }} />
+      </div>
+      <input
+        type="range"
+        className="atlColorPicker__hue"
+        min={0}
+        max={359}
+        value={Math.round(shownHsv[0])}
+        aria-label="Hue"
+        onChange={(event) => pickHsv([Number(event.target.value), shownHsv[1], shownHsv[2]])}
+      />
+      <div className="atlColorPicker__swatches">
+        {swatches.map((swatch) => (
+          <button
+            key={swatch}
+            type="button"
+            className="atlColorSwatch"
+            style={{ background: swatch }}
+            aria-label={`Select ${swatch} as the color`}
+            onClick={() => {
+              typed(swatch);
+              onPicked?.();
+            }}
+          />
+        ))}
+      </div>
+      {showAlpha && (
+        <div className="atlColorPicker__alpha">
+          <input
+            type="range"
+            className="atlRange"
+            min={0}
+            max={100}
+            value={percent}
+            disabled={!current}
+            aria-label="Opacity"
+            onChange={(event) => pickAlpha(Number(event.target.value))}
+          />
+          <span className="atlField atlField--s atlFieldGroup atlColorPicker__percent">
             <input
-              type="range"
-              className="atlRange"
+              type="number"
               min={0}
               max={100}
               value={percent}
               disabled={!current}
-              aria-label="Opacity"
-              onChange={(event) => pickAlpha(Number(event.target.value))}
+              aria-label="Opacity, in percent"
+              onChange={(event) => event.target.value !== '' && pickAlpha(Number(event.target.value))}
             />
-            <span className="atlField atlField--s atlFieldGroup atlColorPicker__percent">
-              <input
-                type="number"
-                min={0}
-                max={100}
-                value={percent}
-                disabled={!current}
-                aria-label="Opacity, in percent"
-                onChange={(event) => event.target.value !== '' && pickAlpha(Number(event.target.value))}
-              />
-              <span>%</span>
-            </span>
-          </div>
-        )}
-      </div>
-    </Popover>
+            <span>%</span>
+          </span>
+        </div>
+      )}
+    </div>
   );
 }

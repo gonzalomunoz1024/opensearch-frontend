@@ -177,7 +177,7 @@ export function NotificationSettings() {
         <Panel className="ismNotificationDefaults">
           <h2 className="ismPanel__heading">Defaults for index operations</h2>
           {submitClicked && errorCount > 0 && (
-            <CallOut tone="critical" title="Address the following error(s) in the form">
+            <CallOut tone="critical" icon="info" title="Address the following error(s) in the form">
               <ul>
                 {errorLines(rows, errors).map((line) => (
                   <li key={line}>{line}</li>

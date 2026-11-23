@@ -32,8 +32,9 @@ import { resolveVisSource, visContext, type VisInput } from '../../vis/request';
 import type { TsvbData, TsvbTableData } from '../../vis/tsvb/data';
 import { specIndexPatterns } from '../../vis/vega/index_patterns';
 import { Visualization, canDraw, type VisInspectData } from '../../vis/visualization';
+import { serializeAggs } from './agg_params';
 import { DataTab } from './data_tab';
-import { defaultParams, newVis, syncParams, visProblems } from './defaults';
+import { defaultParams, newVis, syncParams, visProblems, withoutDisabledBuckets } from './defaults';
 import { canAutoApply, dragWidths, editorHeading, initialWidths, keyWidths, searchBarParts, type SplitWidths } from './editor_layout';
 import { optionTabs } from './options';
 import { setupRegionMap } from '../../vis/region_map/region_map_type';
@@ -44,6 +45,10 @@ import { withTsvbDefaults } from './tsvb/model';
 export const VISUALIZE = '/app/visualize';
 
 // The same text for the same state, whatever order its keys came in: the address sorts them
+// Aggregations as the original serializes them, without the time range a date histogram carries
+const comparable = (aggs: AggConfig[], indexPattern: IndexPattern | undefined): unknown =>
+  JSON.parse(JSON.stringify(serializeAggs(aggs, { indexPattern }), (key, value: unknown) => (key === 'timeRange' ? undefined : value)));
+
 const stable = (value: unknown): string =>
   JSON.stringify(value, (_key, item: unknown) =>
     item !== null && typeof item === 'object' && !Array.isArray(item)
@@ -107,6 +112,8 @@ export function VisEditor({ savedId }: { savedId?: string }) {
   const [collapsed, setCollapsed] = useState(false);
   const [tick, setTick] = useState(0);
   const [tried, setTried] = useState(false);
+  // Every aggregation in error has been touched: "Update" turns into an error as in the original
+  const [errorsTouched, setErrorsTouched] = useState(false);
   const [dialog, setDialog] = useState<'save' | 'share' | 'inspect'>();
   const lastData = useRef<VisInspectData>();
   const [autoApply, setAutoApply] = useState(false);
@@ -168,7 +175,8 @@ export function VisEditor({ savedId }: { savedId?: string }) {
   const appliedKey = useMemo(() => {
     if (!saved) return undefined;
     const fromUrl = urlState.vis && (urlState.vis.type === undefined || urlState.vis.type === saved.type) ? urlState.vis : undefined;
-    const aggs = fromUrl?.aggs ?? saved.aggs;
+    // As the original, a bucket type the advanced settings disable is not known to the editor
+    const aggs = withoutDisabledBuckets(fromUrl?.aggs ?? saved.aggs, (services.uiSettings.get('visualize:disableBucketAgg', []) ?? []) as string[]);
     let params = fromUrl?.params ? { ...(saved.id ? {} : defaultParams(saved.type)), ...fromUrl.params } : saved.params;
     if (fromUrl?.params && saved.type === 'metrics') params = withTsvbDefaults(params);
     return stable({ aggs, params: fromUrl ? syncParams({ type: saved.type, aggs, params }, {}) : params });
@@ -233,12 +241,12 @@ export function VisEditor({ savedId }: { savedId?: string }) {
     if (!saved || !applied) return false;
     if (!saved.id) return true;
     return (
-      stable({ aggs: saved.aggs, params: saved.params }) !== appliedKey ||
+      stable({ aggs: comparable(saved.aggs, indexPattern), params: saved.params }) !== stable({ aggs: comparable(applied.aggs, indexPattern), params: applied.params }) ||
       stable(uiState) !== stable(saved.uiState ?? {}) ||
       stable(query) !== stable(saved.source.query ?? { query: '', language: query.language }) ||
       stable(appFilters) !== stable(saved.source.filters)
     );
-  }, [saved, applied, appliedKey, uiState, query, appFilters]);
+  }, [saved, applied, uiState, query, appFilters, indexPattern]);
 
   useEffect(() => {
     if (!dirty && !tsvbPending && !(unsaved && saved?.id)) return undefined;
@@ -259,8 +267,11 @@ export function VisEditor({ savedId }: { savedId?: string }) {
       return;
     }
     setTried(false);
-    writeApp({ vis: { aggs: draft.aggs, params: draft.params, title: saved.title, type: saved.type } });
-  }, [saved, draft, dirty, hasProblems, writeApp]);
+    // As the original writes them: each aggregation serialized, the settings over the kind's defaults
+    const aggs = aggBased ? serializeAggs(draft.aggs, { indexPattern, timeRange: global.time, queryLanguage: defaultQueryLanguage() }) : draft.aggs;
+    const params = aggBased ? { ...defaultParams(saved.type), ...draft.params } : draft.params;
+    writeApp({ vis: { aggs, params, title: saved.title, type: saved.type } });
+  }, [saved, draft, dirty, hasProblems, writeApp, aggBased, indexPattern, global.time]);
 
   // Ctrl or Cmd with Enter applies the draft, wherever the cursor is in the sidebar
   const updateRef = useRef(update);
@@ -588,6 +599,9 @@ export function VisEditor({ savedId }: { savedId?: string }) {
                   context={context}
                   problems={problems}
                   showProblems={tried}
+                  params={draft.params}
+                  setParams={setParams}
+                  onTouched={setErrorsTouched}
                 />
               ) : (
                 optionTabs(saved.type)
@@ -597,7 +611,7 @@ export function VisEditor({ savedId }: { savedId?: string }) {
             </div>
             <SidebarControls
               dirty={dirty}
-              invalid={tried && hasProblems}
+              invalid={(tried || errorsTouched) && hasProblems}
               canAutoApply={canAutoApply(saved.type)}
               autoApply={autoApply}
               onAutoApply={setAutoApply}

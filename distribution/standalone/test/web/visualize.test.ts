@@ -86,35 +86,37 @@ describe('adding and changing aggregations', () => {
     assert.equal(nextAggId([count, { ...count, id: '7' }, { ...count, id: '3' }]), '8');
   });
 
-  it('adds a metric as a count and a bucket without a type', () => {
+  it('adds a metric and a bucket without a type, as the original adds one beside another', () => {
     const withMetric = addAgg([count], schemaOf('line', 'metric'));
-    assert.deepEqual(withMetric[1], { id: '2', enabled: true, type: 'count', schema: 'metric', params: {} });
+    assert.deepEqual(withMetric[1], { id: '2', enabled: true, type: '', schema: 'metric', params: {} });
     const withBucket = addAgg([count], schemaOf('line', 'segment'));
     assert.deepEqual(withBucket[1], { id: '2', enabled: true, type: '', schema: 'segment', params: {} });
   });
 
-  it('asks for a split chart before the other buckets', () => {
-    const terms: AggConfig = { id: '2', enabled: true, type: 'terms', schema: 'segment', params: { field: 'geo.dest', size: 5 } };
-    const next = addAgg([count, terms], schemaOf('line', 'split'));
+  it('adds a split chart after the other buckets, where a pie asks for it to come first', () => {
+    const terms: AggConfig = { id: '2', enabled: true, type: 'terms', schema: 'segment', params: { field: 'geo.dest', size: 5, orderBy: '1', order: 'desc' } };
+    const next = addAgg([count, terms], schemaOf('pie', 'split'));
     assert.deepEqual(
       next.map((agg) => agg.id),
-      ['1', '3', '2']
+      ['1', '2', '3']
     );
-    assert.deepEqual(next[1].params, { row: true });
+    const split = { ...next[2], type: 'terms', params: { field: 'geo.dest', size: 5, orderBy: '1', order: 'desc' } };
+    assert.equal(visProblems({ type: 'pie', aggs: [count, terms, split] }, logs)['3'], '"Split chart" aggs must run before all other buckets!');
+    assert.equal(visProblems({ type: 'line', aggs: [count, terms, split] }, logs)['3'], undefined);
   });
 
-  it('keeps the field and the label when the type changes and the field still fits', () => {
+  it('keeps the field when the type changes and the field still fits, and nothing else, as the original', () => {
     const average: AggConfig = { id: '1', enabled: true, type: 'avg', schema: 'metric', params: { field: 'bytes', customLabel: 'Size' } };
     const sum = changeAggType(average, 'sum', logs, [average]);
     assert.equal(sum.type, 'sum');
     assert.equal(sum.params?.field, 'bytes');
-    assert.equal(sum.params?.customLabel, 'Size');
+    assert.equal(sum.params?.customLabel, undefined);
   });
 
   it('drops a field the new type cannot be on', () => {
     const terms: AggConfig = { id: '2', enabled: true, type: 'terms', schema: 'segment', params: { field: 'geo.dest' } };
     const histogram = changeAggType(terms, 'histogram', logs, [count, terms]);
-    assert.equal(histogram.params?.field, 'bytes', 'the only number field is chosen');
+    assert.equal(histogram.params?.field, undefined, 'the field editor, not the type, picks the only field there is');
     const dates = changeAggType(terms, 'date_histogram', logs, [count, terms]);
     assert.equal(dates.params?.field, 'timestamp');
   });
@@ -133,14 +135,14 @@ describe('what keeps a chart from being drawn', () => {
     assert.equal(problems['3'], 'Select a field');
   });
 
-  it('leaves an aggregation that is switched off alone', () => {
+  it('names an aggregation without a type even when it is switched off, as the form of the original does', () => {
     const problems = visProblems({ type: 'line', aggs: [count, { id: '2', enabled: false, type: '', schema: 'segment', params: {} }] }, logs);
-    assert.deepEqual(problems, {});
+    assert.deepEqual(problems, { '2': 'Select an aggregation' });
   });
 
-  it('names a field the index pattern does not have', () => {
+  it('asks for a field the index pattern does not have to be chosen again', () => {
     const problems = visProblems({ type: 'line', aggs: [{ id: '1', enabled: true, type: 'avg', schema: 'metric', params: { field: 'gone' } }] }, logs);
-    assert.match(problems['1'], /gone/);
+    assert.equal(problems['1'], 'Select a field');
   });
 
   it('wants a histogram under a derivative', () => {
@@ -151,8 +153,8 @@ describe('what keeps a chart from being drawn', () => {
       schema: 'metric',
       params: { metricAgg: 'custom', customMetric: { id: '2-metric', enabled: true, type: 'count', params: {} } },
     };
-    const terms: AggConfig = { id: '3', enabled: true, type: 'terms', schema: 'segment', params: { field: 'geo.dest', size: 5 } };
-    assert.match(visProblems({ type: 'line', aggs: [derivative, terms] }, logs)['2'], /Date Histogram/);
+    const terms: AggConfig = { id: '3', enabled: true, type: 'terms', schema: 'segment', params: { field: 'geo.dest', size: 5, orderBy: '_key', order: 'desc' } };
+    assert.match(visProblems({ type: 'line', aggs: [derivative, terms] }, logs)['3'], /Date Histogram/);
     const dates: AggConfig = { id: '3', enabled: true, type: 'date_histogram', schema: 'segment', params: { field: 'timestamp', interval: 'auto' } };
     assert.deepEqual(visProblems({ type: 'line', aggs: [derivative, dates] }, logs), {});
   });

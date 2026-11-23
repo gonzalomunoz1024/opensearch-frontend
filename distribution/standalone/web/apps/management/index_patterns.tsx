@@ -163,7 +163,8 @@ const plural = (count: number, one: string, many: string) => (count === 1 ? one 
 function CreateWizard() {
   useBreadcrumbs([MANAGEMENT, LIST, { text: 'Create index pattern' }]);
   const [step, setStep] = useState<1 | 2>(1);
-  const [query, setQuery] = useState('');
+  // The pattern starts as the setting indexPattern:placeholder has it, and its indices are listed
+  const [query, setQuery] = useState(() => String(services.uiSettings.get<string>('indexPattern:placeholder', '') ?? ''));
   const [displayName, setDisplayName] = useState('');
   const [hidden, setHidden] = useState(false);
   const [all, setAll] = useState<MatchedItem[]>();
