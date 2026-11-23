@@ -280,34 +280,34 @@ describe('what the editor and a dashboard hand each other', () => {
   });
 
   it('goes back to where the dashboard was, with the time of now', () => {
-    const stored = (value: string | null) => ({ getItem: (key: string) => (key === 'lastUrl:/base:dashboard' ? value : null) });
-    const last = "#/view/d1?_g=(time:(from:now-15m,to:now))&_a=(description:'',viewMode:edit)";
+    const last = "/app/dashboards#/view/d1?_g=(time:(from:now-15m,to:now))&_a=(description:'',panels:!(),viewMode:edit)";
     const now = '(time:(from:now-7d,to:now))';
+    // Where the dashboards were last, what was not saved too, the time of now in its place
     assert.equal(
-      originatingAppUrl('dashboards', { containerInfo: container, globalParam: now, basePath: '/base', storage: stored(last) }),
-      "/app/dashboards#/view/d1?_g=(time:(from:now-7d,to:now))&_a=(description:'',viewMode:edit)"
+      originatingAppUrl('dashboards', { lastAddress: last, containerInfo: container, globalParam: now }),
+      "/app/dashboards#/view/d1?_g=(time:(from:now-7d,to:now))&_a=(description:'',panels:!(),viewMode:edit)"
     );
-    // Without a container, wherever the dashboards were last
     assert.equal(
-      originatingAppUrl('dashboards', { globalParam: now, basePath: '/base', storage: stored(last) }),
-      "/app/dashboards#/view/d1?_g=(time:(from:now-7d,to:now))&_a=(description:'',viewMode:edit)"
+      originatingAppUrl('dashboards', { lastAddress: last }),
+      "/app/dashboards#/view/d1?_g=(time:(from:now-15m,to:now))&_a=(description:'',panels:!(),viewMode:edit)"
     );
-    // The last address is another dashboard's, or there is none: the container is opened to be edited
-    for (const storage of [stored('#/view/d9?_g=()'), stored(null), undefined]) {
+    // An address without `_g` takes the time of now after what it has
+    assert.equal(
+      originatingAppUrl('dashboards', { lastAddress: '/app/dashboards#/create?_a=(viewMode:edit)', globalParam: now }),
+      '/app/dashboards#/create?_a=(viewMode:edit)&_g=(time:(from:now-7d,to:now))'
+    );
+    assert.equal(originatingAppUrl('dashboards', { lastAddress: '/app/dashboards', globalParam: now }), '/app/dashboards');
+    // Not where the dashboards were (the page was loaded again since): the container, to be edited
+    for (const lastAddress of [undefined, '/app/dashboardsx#/view/d9', '/app/visualize#/edit/v1']) {
       assert.equal(
-        originatingAppUrl('dashboards', { containerInfo: container, globalParam: now, basePath: '/base', storage }),
+        originatingAppUrl('dashboards', { lastAddress, containerInfo: container, globalParam: now }),
         '/app/dashboards#/view/d1?_g=(time:(from:now-7d,to:now))&_a=(viewMode:edit)'
       );
     }
     assert.equal(originatingAppUrl('dashboards', { containerInfo: { containerId: '' }, globalParam: now }), '/app/dashboards#/create?_g=(time:(from:now-7d,to:now))');
     assert.equal(originatingAppUrl('dashboards', { globalParam: now }), '/app/dashboards#/?_g=(time:(from:now-7d,to:now))');
-    assert.equal(originatingAppUrl('canvas'), '/app/canvas');
-    // A storage the browser refuses is no storage
-    const refusing = {
-      getItem: (): string | null => {
-        throw new Error('denied');
-      },
-    };
-    assert.equal(originatingAppUrl('dashboards', { containerInfo: container, storage: refusing }), '/app/dashboards#/view/d1?_a=(viewMode:edit)');
+    assert.equal(originatingAppUrl('dashboards', { containerInfo: container }), '/app/dashboards#/view/d1?_a=(viewMode:edit)');
+    // An application without a URL tracker opens at its start
+    assert.equal(originatingAppUrl('canvas', { lastAddress: '/app/canvas#/workpad/w1' }), '/app/canvas');
   });
 });

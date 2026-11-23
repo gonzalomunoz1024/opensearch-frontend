@@ -20,7 +20,7 @@ import { mergeFilters } from '../../lib/query';
 import type { Filter, IndexPattern, Query } from '../../lib/types';
 import { appUrl, buildHash, decodeState, encodeState } from '../../lib/url';
 import { visFromSavedObject, visToSavedObject, visType, type UiState, type Vis, type VisualizationAttributes } from '../../lib/vis';
-import { getLocation, href, navigate, setHashParams, setLeaveGuard, useLocation } from '../../router';
+import { getLocation, href, lastAddressOf, navigate, setHashParams, setLeaveGuard, useLocation } from '../../router';
 import { services } from '../../services';
 import { errorMessage } from '../../services/http';
 import { TopNav, type TopNavItem } from '../../shell/chrome';
@@ -129,15 +129,6 @@ function writeLoadedState({ vis, indexPattern }: Loaded): string {
   const encoded = encodeState(initialAppState(editorStateDefaults(vis, indexPattern, defaultQuery()), fromUrl));
   navigate(addressWith({ _a: encoded }), { replace: true, state: null });
   return encoded;
-}
-
-/** The session's storage, or none where the browser refuses it */
-function sessionStorageOrNone(): Storage | undefined {
-  try {
-    return window.sessionStorage;
-  } catch {
-    return undefined;
-  }
 }
 
 export function VisEditor({ savedId }: { savedId?: string }) {
@@ -428,7 +419,7 @@ export function VisEditor({ savedId }: { savedId?: string }) {
   // Where the editor goes back to: the dashboard it came from, where it was
   const returnUrl = () =>
     originatingApp
-      ? originatingAppUrl(originatingApp, { containerInfo, globalParam: currentGlobalParam(), basePath: href(''), storage: sessionStorageOrNone() })
+      ? originatingAppUrl(originatingApp, { lastAddress: lastAddressOf(originatingApp), containerInfo, globalParam: currentGlobalParam() })
       : appUrl(VISUALIZE, '/');
 
   // The original's `doSave`: the title into the address first, then the whole visualization

@@ -42,9 +42,18 @@ let leaveGuard: LeaveGuard | undefined;
 // What the browser's own question says when the tab is closed or reloaded; undefined asks nothing
 let unloadQuestion: (() => string | undefined) | undefined;
 
+// Where each application was last since the page loaded, as the original's URL tracker of an
+// application keeps it (in the session's storage, `lastUrl:<basePath>:dashboard` for the
+// dashboards): what opening the application again with no path opens
+const lastAddresses = new Map<string, string>();
+
+/** A path of this product without the base path a proxy may have put in front */
+const withoutBase = (pathname: string): string =>
+  basePath && pathname.startsWith(basePath) ? pathname.slice(basePath.length) : pathname;
+
 /** The application a path of this product is in: `dashboards` for `/app/dashboards` */
 function applicationOf(pathname: string): string {
-  const path = basePath && pathname.startsWith(basePath) ? pathname.slice(basePath.length) : pathname;
+  const path = withoutBase(pathname);
   const match = /^\/app\/([^/]+)/.exec(path);
   return match ? match[1] : path;
 }
@@ -54,6 +63,10 @@ function read() {
   if (key === currentKey) return;
   currentKey = key;
   current = parseLocation(basePath, window.location);
+  lastAddresses.set(
+    applicationOf(window.location.pathname),
+    `${withoutBase(window.location.pathname)}${window.location.search}${window.location.hash}`
+  );
 }
 
 function emit() {
@@ -99,6 +112,16 @@ export function startRouter(base: string) {
 export function setLeaveGuard(guard: LeaveGuard | undefined, onUnload?: () => string | undefined) {
   leaveGuard = guard;
   unloadQuestion = guard ? onUnload : undefined;
+}
+
+/**
+ * Where an application was last since the page loaded, as a path of this product
+ * (`/app/dashboards#/view/<id>?_g=…&_a=…`), undefined when it has not been open: what the
+ * original's `navigateToApp(app)` with no path opens, a dashboard with the changes its address
+ * carries and not saved yet
+ */
+export function lastAddressOf(app: string): string | undefined {
+  return lastAddresses.get(app);
 }
 
 /** The address of a path of this product, with the base path a proxy may have put in front */

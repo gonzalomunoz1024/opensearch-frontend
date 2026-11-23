@@ -4,12 +4,13 @@
  * What asks before a page is left, as the original's `onAppLeave` handlers are asked: it is told
  * whether the page goes to another application, may answer later (once a question it draws is
  * answered), is not asked for a move the page forces, and answers the browser's own question
- * when the tab is closed or reloaded.
+ * when the tab is closed or reloaded. And where each application was last, which an editor goes
+ * back to as the original's URL tracker has it.
  */
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { getLocation, locationState, navigate, setLeaveGuard, startRouter, type LeaveTarget } from '../../web/router';
+import { getLocation, lastAddressOf, locationState, navigate, setLeaveGuard, startRouter, type LeaveTarget } from '../../web/router';
 
 interface Entry {
   url: string;
@@ -178,5 +179,20 @@ describe('the question asked before a page is left', () => {
       // A guard of its own (the dashboard's) asks the browser nothing
       setLeaveGuard(() => true);
       assert.equal(browser.unload().prevented, false);
+    }));
+});
+
+describe('where each application was last', () => {
+  it('is the last address the application had, what was replaced in it too', () =>
+    withBrowser('/base/app/dashboards#/view/d1?_a=(viewMode:view)', '/base', () => {
+      assert.equal(lastAddressOf('dashboards'), '/app/dashboards#/view/d1?_a=(viewMode:view)', 'without the base path');
+      navigate('/app/dashboards#/view/d1?_a=(panels:!(),viewMode:edit)', { replace: true });
+      navigate('/app/visualize#/edit/v1', { state: { originatingApp: 'dashboards' } });
+      assert.equal(lastAddressOf('dashboards'), '/app/dashboards#/view/d1?_a=(panels:!(),viewMode:edit)');
+      assert.equal(lastAddressOf('visualize'), '/app/visualize#/edit/v1');
+      navigate('/app/visualize#/edit/v1?_a=(linked:!f)', { replace: true });
+      assert.equal(lastAddressOf('visualize'), '/app/visualize#/edit/v1?_a=(linked:!f)');
+      assert.equal(lastAddressOf('dashboards'), '/app/dashboards#/view/d1?_a=(panels:!(),viewMode:edit)', 'the dashboards stay where they were');
+      assert.equal(lastAddressOf('discover-never-opened'), undefined);
     }));
 });

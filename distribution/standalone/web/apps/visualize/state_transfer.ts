@@ -14,9 +14,11 @@
  * - A visualization saved new (or as a copy) goes back with the package `{ type: 'visualization',
  *   input: { savedObjectId }, containerInfo }`, which the dashboard adds as a panel; one saved in
  *   place, and Cancel, go back with nothing. Either goes to where the dashboard was: its last
- *   address, which the original's URL tracker keeps in the session's storage
- *   (`lastUrl:<basePath>:dashboard`), with the time of now. The by-reference editor never sends
- *   an `embeddableId` back, as the original's does not: the dashboard reloads the panel it had.
+ *   address, which the original's URL tracker keeps (`lastUrl:<basePath>:dashboard` in the
+ *   session's storage) and the router here (`lastAddressOf`), with the `_g` of now, so that what
+ *   was changed on the dashboard and not saved yet is still there. The by-reference editor never
+ *   sends an `embeddableId` back, as the original's does not: the dashboard draws the panel it
+ *   had again, from the visualization as it is now saved.
  */
 
 import { appUrl, buildHash, parseHash } from '../../lib/url';
@@ -71,46 +73,39 @@ export function visualizationPackage(savedObjectId: string, containerInfo?: Cont
   return { type: VISUALIZE_EMBEDDABLE_TYPE, input: { savedObjectId }, ...(containerInfo ? { containerInfo } : {}) };
 }
 
-/** The applications whose last address the original keeps, by the key of its URL tracker */
-const TRACKED: Record<string, { path: string; key: string }> = {
-  dashboards: { path: '/app/dashboards', key: 'dashboard' },
+/** The applications the original opens where they were last (those with a URL tracker), by their path */
+const TRACKED: Record<string, string> = {
+  dashboards: '/app/dashboards',
 };
 
-const readStored = (storage: Pick<Storage, 'getItem'> | undefined, key: string): string | undefined => {
-  try {
-    return storage?.getItem(key) ?? undefined;
-  } catch {
-    return undefined;
-  }
-};
-
-/** Whether a dashboard's address is that of the dashboard the editor came from */
-function isContainer(hashPath: string, containerId: string): boolean {
-  if (containerId === '') return hashPath === '/create';
-  return hashPath === `/view/${encodeURIComponent(containerId)}` || hashPath === `/view/${containerId}`;
-}
+/** Whether a path of this product is in the application at `path`: `/app/dashboards#/view/d1` in `/app/dashboards` */
+const isIn = (address: string, path: string): boolean =>
+  address === path || address.startsWith(`${path}#`) || address.startsWith(`${path}?`) || address.startsWith(`${path}/`);
 
 /**
- * The address the editor goes back to: the original's `navigateToApp(originatingApp)`, which
- * opens the application where it was last. `globalParam` is the `_g` of now.
+ * The address the editor goes back to: the original's `navigateToApp(originatingApp)`. The
+ * dashboards open where they were last, `lastAddress`, with the `_g` of now, which the original's
+ * URL tracker writes into that address while the application is not open; an application with no
+ * tracker opens at its start. Without a last address (the page was loaded again meanwhile, where
+ * the original's tracker still has it in the session's storage) the dashboard the editor came from
+ * opens to be edited.
  */
 export function originatingAppUrl(
   appId: string,
-  options: { containerInfo?: ContainerInfo; globalParam?: string; basePath?: string; storage?: Pick<Storage, 'getItem'> } = {}
+  options: { lastAddress?: string; containerInfo?: ContainerInfo; globalParam?: string } = {}
 ): string {
-  const tracked = TRACKED[appId];
-  if (!tracked) return `/app/${appId}`;
-  const { containerInfo, globalParam } = options;
-  const containerId = containerInfo?.containerId;
-  const stored = readStored(options.storage, `lastUrl:${options.basePath ?? ''}:${tracked.key}`);
-  if (stored?.startsWith('#')) {
-    const { hashPath, hashParams } = parseHash(stored);
-    if (containerId === undefined || isContainer(hashPath, containerId)) {
-      return `${tracked.path}${buildHash(hashPath, { ...hashParams, _g: globalParam ?? hashParams._g })}`;
-    }
+  const path = TRACKED[appId];
+  if (path === undefined) return `/app/${appId}`;
+  const { lastAddress, containerInfo, globalParam } = options;
+  if (lastAddress !== undefined && isIn(lastAddress, path)) {
+    const at = lastAddress.indexOf('#');
+    if (at < 0) return lastAddress;
+    const { hashPath, hashParams } = parseHash(lastAddress.slice(at));
+    return `${lastAddress.slice(0, at)}${buildHash(hashPath, { ...hashParams, _g: globalParam ?? hashParams._g })}`;
   }
-  if (containerId === undefined) return appUrl(tracked.path, '/', { _g: globalParam });
-  if (containerId === '') return appUrl(tracked.path, '/create', { _g: globalParam });
+  const containerId = containerInfo?.containerId;
+  if (containerId === undefined) return appUrl(path, '/', { _g: globalParam });
+  if (containerId === '') return appUrl(path, '/create', { _g: globalParam });
   // The dashboard was being edited: it opens in edit mode again
-  return appUrl(tracked.path, `/view/${encodeURIComponent(containerId)}`, { _g: globalParam, _a: { viewMode: 'edit' } });
+  return appUrl(path, `/view/${encodeURIComponent(containerId)}`, { _g: globalParam, _a: { viewMode: 'edit' } });
 }
