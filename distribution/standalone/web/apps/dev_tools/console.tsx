@@ -26,6 +26,7 @@ import {
   looksLikeCurl,
   outputOf,
   parseCurl,
+  placeActions,
   readConsole,
   requestAt,
   requestEdge,
@@ -33,6 +34,7 @@ import {
   requestsBetween,
   suggest,
   toCurl,
+  type ActionsPlace,
   type Answer,
   type ClusterNames,
   type ConsoleRequest,
@@ -726,7 +728,10 @@ export function Console() {
   const [panel, setPanel] = useState<Panel>();
   const [welcome, setWelcome] = useState(() => !storage.welcomeShown());
   const [scrollTop, setScrollTop] = useState(0);
-  const [actionsTop, setActionsTop] = useState<number>();
+  // Counts the editor's new layouts, after which the buttons are placed again
+  const [layouts, setLayouts] = useState(0);
+  // Shown from the start, at the top of the editor, as the original's are
+  const [actionsAt, setActionsAt] = useState<ActionsPlace>({ top: 0 });
   const [widths, setWidths] = useState(() => storage.widths());
   const [dragging, setDragging] = useState(false);
   const [menu, setMenu] = useState<(Suggestions & { active: number }) | undefined>();
@@ -766,19 +771,19 @@ export function Console() {
   const marked = useMemo(() => expandToRequests(doc, fromLine, toLine), [doc, fromLine, toLine]);
   const snippet = useMemo<[number, number] | undefined>(() => (marked ? [marked[0], marked[1]] : undefined), [marked?.[0], marked?.[1]]);
 
-  // The actions sit on the first line of the request; on the top edge while its end is still in sight
+  // The buttons follow the request under the cursor, and stay where they were while there is none
   useLayoutEffect(() => {
-    if (!snippet) {
-      setActionsTop(undefined);
-      return;
-    }
-    const top = editor.current?.lineTop(snippet[0]);
-    if (top !== undefined && top >= 0) setActionsTop(top);
-    else {
-      const bottom = editor.current?.lineBottom(snippet[1]);
-      setActionsTop(bottom !== undefined && bottom >= 0 ? 0 : undefined);
-    }
-  }, [snippet, text, settings.fontSize, settings.wrapMode, widths, panel, scrollTop]);
+    const view = editor.current;
+    if (!snippet || !view) return;
+    const place = placeActions(doc.lines, snippet, {
+      lineTop: view.lineTop,
+      lineBottom: view.lineBottom,
+      endTop: (line) => view.placeTop(doc.lines.slice(0, line + 1).reduce((sum, each) => sum + each.length + 1, -1)),
+      height: view.height(),
+      wrapLimit: view.wrapLimit(),
+    });
+    if (place) setActionsAt(place);
+  }, [snippet, doc, layouts, panel, scrollTop]);
 
   useLayoutEffect(() => {
     if (!menu) {
@@ -991,35 +996,37 @@ export function Console() {
       {running && <div className="dvtProgress" />}
       <div className="dvtPanes" ref={panes}>
         <div className="dvtPane" style={{ width: `${widths[0]}%` }}>
-          {actionsTop !== undefined && (
-            <div className="dvtActions" id="ConAppEditorActions" style={{ top: actionsTop }}>
-              <Tooltip content="Click to send request">
-                <button type="button" className="dvtActions__send" aria-label="Send request" onClick={() => void sendCurrent()} data-test-subj="sendRequestButton">
-                  <Icon name="play" />
+          <div
+            className="dvtActions"
+            id="ConAppEditorActions"
+            style={'bottom' in actionsAt ? { top: 'auto', bottom: actionsAt.bottom } : { top: actionsAt.top }}
+          >
+            <Tooltip content="Click to send request">
+              <button type="button" className="dvtActions__send" aria-label="Send request" onClick={() => void sendCurrent()} data-test-subj="sendRequestButton">
+                <Icon name="play" />
+              </button>
+            </Tooltip>
+            <Popover
+              open={actionsOpen}
+              onClose={() => setActionsOpen(false)}
+              className="dvtMenu"
+              button={
+                <button type="button" className="dvtActions__more" aria-label="Request options" onClick={() => setActionsOpen(!actionsOpen)} data-test-subj="toggleConsoleMenu">
+                  <Icon name="wrench" />
                 </button>
-              </Tooltip>
-              <Popover
-                open={actionsOpen}
-                onClose={() => setActionsOpen(false)}
-                className="dvtMenu"
-                button={
-                  <button type="button" className="dvtActions__more" aria-label="Request options" onClick={() => setActionsOpen(!actionsOpen)} data-test-subj="toggleConsoleMenu">
-                    <Icon name="wrench" />
-                  </button>
-                }
-              >
-                <p className="atlScreenReaderOnly">You are in a dialog. To close this dialog, hit escape.</p>
-                <RequestMenu
-                  items={[
-                    { label: 'Copy as cURL', id: 'ConCopyAsCurl', testId: 'copyAsCurl', onClick: copyAsCurl, disabled: !navigator.clipboard },
-                    { label: 'Open documentation', testId: 'consoleMenuOpenDocs', onClick: openDocs },
-                    { label: 'Auto indent', testId: 'consoleMenuAutoIndent', onClick: indentCurrent },
-                  ]}
-                  onChoose={() => setActionsOpen(false)}
-                />
-              </Popover>
-            </div>
-          )}
+              }
+            >
+              <p className="atlScreenReaderOnly">You are in a dialog. To close this dialog, hit escape.</p>
+              <RequestMenu
+                items={[
+                  { label: 'Copy as cURL', id: 'ConCopyAsCurl', testId: 'copyAsCurl', onClick: copyAsCurl, disabled: !navigator.clipboard },
+                  { label: 'Open documentation', testId: 'consoleMenuOpenDocs', onClick: openDocs },
+                  { label: 'Auto indent', testId: 'consoleMenuAutoIndent', onClick: indentCurrent },
+                ]}
+                onChoose={() => setActionsOpen(false)}
+              />
+            </Popover>
+          </div>
           <label className="atlScreenReaderOnly" htmlFor="ConAppInputTextarea">
             Dev Tools Console
           </label>
@@ -1042,6 +1049,7 @@ export function Console() {
             onKeyDown={onKeyDown}
             onPaste={onPaste}
             onScroll={setScrollTop}
+            onLayout={() => setLayouts((count) => count + 1)}
             snippet={snippet}
             wrap={settings.wrapMode}
             fontSize={settings.fontSize}

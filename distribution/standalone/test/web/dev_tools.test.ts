@@ -16,6 +16,7 @@ import {
   outputOf,
   parseCurl,
   parseRequests,
+  placeActions,
   readConsole,
   requestAt,
   requestEdge,
@@ -126,6 +127,43 @@ describe('the requests of a console', () => {
 
   it('do not start on a comment', () => {
     assert.deepEqual(parseRequests('# GET _search\n// POST x/_doc'), []);
+  });
+});
+
+describe("the request's buttons", () => {
+  // Rows of 18 pixels from the top of an editor 200 pixels high, scrolled by `scroll`
+  const layout = (scroll = 0, wrapLimit = 80) => ({
+    lineTop: (line: number) => line * 18 - scroll,
+    lineBottom: (line: number) => (line + 1) * 18 - scroll,
+    endTop: (line: number) => line * 18 + 18 - scroll,
+    height: 200,
+    wrapLimit,
+  });
+  const lines = ['GET a', '{', '  "b": 1', '}', '', 'GET c'];
+
+  it("sit on the request's first line while it is in sight", () => {
+    assert.deepEqual(placeActions(lines, [5, 5], layout()), { top: 90 });
+    assert.deepEqual(placeActions(lines, [0, 3], layout()), { top: 0 });
+  });
+
+  it('sit on the bottom edge while the first line is below the editor', () => {
+    assert.deepEqual(placeActions(lines, [5, 5], layout(-150)), { bottom: 0 });
+  });
+
+  it('sit on the top edge while only the end of the request is in sight, and stay once it is gone', () => {
+    assert.deepEqual(placeActions(lines, [0, 3], layout(30)), { top: 0 });
+    assert.equal(placeActions(lines, [0, 3], layout(80)), undefined);
+  });
+
+  it('move off a first line long enough to wrap: to the line before, or after the first line', () => {
+    const long = `GET ${'x'.repeat(80)}`;
+    assert.deepEqual(placeActions(['GET a', '', long], [2, 2], layout()), { top: 18 });
+    assert.deepEqual(placeActions([long, '{}'], [0, 1], layout()), { top: 18 });
+    // A line that is all there is: the row its end is on
+    assert.deepEqual(placeActions([long], [0, 0], layout()), { top: 18 });
+    // Five characters short of the limit is not long enough
+    assert.deepEqual(placeActions(['GET a', 'x'.repeat(75)], [1, 1], layout()), { top: 18 });
+    assert.deepEqual(placeActions(['GET a', 'x'.repeat(76)], [1, 1], layout()), { top: 0 });
   });
 });
 

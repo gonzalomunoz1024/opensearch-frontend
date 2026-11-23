@@ -203,6 +203,46 @@ export function requestEdge(doc: ConsoleText, row: number, direction: -1 | 1): n
   return Math.min(at, Math.max(0, doc.lines.length - 1));
 }
 
+/** Where the request's buttons are: so far from the top of the editor, or on its bottom edge */
+export type ActionsPlace = { top: number } | { bottom: number };
+
+/** The editor as it is laid out, from the top of its frame with the scrolling taken off */
+export interface ActionsLayout {
+  lineTop: (line: number) => number | undefined;
+  lineBottom: (line: number) => number | undefined;
+  /** The top of the row the end of a line is on */
+  endTop: (line: number) => number | undefined;
+  height: number;
+  /** Ace's wrap limit: the characters a row holds */
+  wrapLimit: number;
+}
+
+/**
+ * Where the buttons of the request on the lines `first` to `last` go, as the original places
+ * them (Ace's legacyUpdateUI): on the request's first line; on the bottom edge while that line is
+ * below the editor; when it has more characters than five short of the wrap limit, on the line
+ * before it, or for the first line on the line after it (Ace's place past the last line being
+ * the end of the last); on the top edge while only the end of the request is in sight. Nothing
+ * while the request is out of sight above: the buttons stay where they were.
+ */
+export function placeActions(lines: string[], [first, last]: [number, number], layout: ActionsLayout): ActionsPlace | undefined {
+  const top = layout.lineTop(first);
+  if (top === undefined) return undefined;
+  if (top >= 0) {
+    if (top > layout.height) return { bottom: 0 };
+    if (lines[first].length > layout.wrapLimit - 5) {
+      let other: number | undefined;
+      if (first > 0) other = layout.lineTop(first - 1);
+      else if (first + 1 < lines.length) other = layout.lineTop(first + 1);
+      else other = layout.endTop(first);
+      return { top: other ?? top };
+    }
+    return { top };
+  }
+  const bottom = layout.lineBottom(last);
+  return bottom !== undefined && bottom >= 0 ? { top: 0 } : undefined;
+}
+
 /** The offsets of the first character of a request and of the end of its last line */
 export function requestOffsets(text: string, request: ConsoleRequest): [number, number] {
   const lines = text.split('\n');

@@ -41,8 +41,17 @@ export interface ConsoleEditorHandle {
   lineTop: (line: number) => number | undefined;
   /** The bottom of a line from the top of the editor's frame, scrolling taken off */
   lineBottom: (line: number) => number | undefined;
+  /** The top of the row a place of the text is drawn on, from the top of the editor's frame */
+  placeTop: (offset: number) => number | undefined;
   /** Where a place of the text is on the page */
   coordinates: (offset: number) => { left: number; top: number; bottom: number } | undefined;
+  /** The height of the editor's frame */
+  height: () => number;
+  /**
+   * Ace's wrap limit: the characters a row holds, worked out from the width while lines wrap
+   * and kept when they stop; 80, Ace's own, until they have wrapped
+   */
+  wrapLimit: () => number;
 }
 
 export interface ConsoleEditorProps {
@@ -62,6 +71,8 @@ export interface ConsoleEditorProps {
   onKeyDown?: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   onPaste?: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
   onScroll?: (top: number) => void;
+  /** The rows were laid out anew: the font was measured, or the editor's size or wrapping changed */
+  onLayout?: () => void;
   /** Ace's keyboard mode of OpenSearch Dashboards: Enter starts editing and Escape stops */
   keyboardHint?: boolean;
   handle?: Ref<ConsoleEditorHandle>;
@@ -209,6 +220,7 @@ export function ConsoleEditor({
   onKeyDown,
   onPaste,
   onScroll,
+  onLayout,
   keyboardHint,
   handle,
   id,
@@ -294,6 +306,17 @@ export function ConsoleEditor({
   const lastShown = wrap ? lines.length + 1 : Math.min(lines.length, Math.floor((scrollTop + height) / Math.max(1, lineHeight)) + 1);
   const gutterLayer = Math.ceil(String(lastShown).length * charWidth + GUTTER_PADDING);
   const gutterWidth = gutterLayer + 1;
+
+  const wrapLimit = useRef(80);
+  const laidOut = useRef(onLayout);
+  laidOut.current = onLayout;
+  useLayoutEffect(() => {
+    if (wrap && charWidth > 0 && width > 0) {
+      const columns = Math.floor((width - gutterWidth - 2 * PADDING) / charWidth);
+      if (columns > 1) wrapLimit.current = columns;
+    }
+    laidOut.current?.();
+  }, [wrap, width, height, gutterWidth, charWidth, lineHeight]);
   const cursorRow = rowOf(selection.backward ? selection.start : selection.end);
 
   // Where a place of the text is drawn, from the top left of the text column
@@ -441,6 +464,15 @@ export function ConsoleEditor({
         const element = rowsBox.current?.children[line] as HTMLElement | undefined;
         return element ? element.offsetTop + element.offsetHeight - (frame.current?.scrollTop ?? 0) : undefined;
       },
+      placeTop: (offset) => {
+        const element = rowsBox.current?.children[rowOf(offset)] as HTMLElement | undefined;
+        const point = pointAt(offset);
+        const box = body.current?.getBoundingClientRect();
+        if (!element || !point || !box) return undefined;
+        // How far down its line the row of the place is
+        const within = point.top - (element.getBoundingClientRect().top - box.top);
+        return element.offsetTop + within - (frame.current?.scrollTop ?? 0);
+      },
       coordinates: (offset) => {
         const point = pointAt(offset);
         const box = body.current?.getBoundingClientRect();
@@ -448,6 +480,8 @@ export function ConsoleEditor({
         const left = box.left + gutterWidth + point.left;
         return { left, top: box.top + point.top, bottom: box.top + point.top + lineHeight };
       },
+      height: () => frame.current?.clientHeight ?? 0,
+      wrapLimit: () => wrapLimit.current,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [value, metrics, gutterWidth, readOnly, starts]
