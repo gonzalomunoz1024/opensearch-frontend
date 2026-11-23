@@ -1,13 +1,17 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
-/* Transform jobs: the list of them, with what each is doing. */
+/*
+ * Transform jobs: the list of them, with what each is doing, as the plugin draws it: the title and
+ * its buttons in one row, the search box, a line, and a table laid out on what its cells hold.
+ */
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Button } from '../../components/basic';
 import { Modal } from '../../components/overlay';
 import { useBreadcrumbs } from '../../shell/state';
-import { ActionsMenu, ContentPanel, DeleteModal, SearchRow, Table, go, ism, toasts, type TableColumn } from './common';
-import { useListQuery } from './common';
+import { Table, go, ism, to, toasts, useListQuery, type TableColumn } from './common';
+import { DeleteJobsModal, JobActionsMenu, JobsPanel, ListEmptyPrompt, ListSearch, Rule, useListLoad } from './job_parts';
+import { stillListed } from './policy_model';
 import { CRUMBS, ROUTES } from './routes';
 import { transformStatus, transformTime, type TransformDocument, type TransformMetadata } from './transform_model';
 
@@ -15,27 +19,33 @@ export interface TransformRow extends TransformDocument {
   metadata?: TransformMetadata | null;
 }
 
-/** What a job is doing: a dot in the colour of its state and a word. A job that failed says why when asked. */
+/**
+ * What a job is doing, as the plugin writes it: a small dot in the colour of its state and a word
+ * in the smallest text, 4 px apart, or a dash. A job that failed says why when the word is clicked.
+ */
 export function TransformStatusText({ metadata }: { metadata: TransformMetadata | null | undefined }) {
   const [reading, setReading] = useState(false);
   const status = transformStatus(metadata);
   if (!status) return <>-</>;
   return (
-    <span className="ismTransformStatus">
+    <div className="ismTransformStatus">
       <span className={`ismTransformStatus__dot ismTransformStatus__dot--${status.tone}`} />
-      {status.error === undefined ? (
-        status.text
-      ) : (
-        <button type="button" className="atlLinkButton" onClick={() => setReading(true)}>
-          {status.text}
-        </button>
-      )}
+      <div className="ismTransformStatus__text">
+        {status.error === undefined ? (
+          status.text
+        ) : (
+          <button type="button" className="atlLinkButton" onClick={() => setReading(true)}>
+            {status.text}
+          </button>
+        )}
+      </div>
       {reading && (
         <Modal
           title="Error"
+          className="ismMasked ismErrorModal"
           onClose={() => setReading(false)}
           footer={
-            <Button variant="primary" size="s" onClick={() => setReading(false)} testId="errorModalCloseButton">
+            <Button variant="primary" onClick={() => setReading(false)} testId="errorModalCloseButton">
               Close
             </Button>
           }
@@ -43,7 +53,7 @@ export function TransformStatusText({ metadata }: { metadata: TransformMetadata 
           {status.error}
         </Modal>
       )}
-    </span>
+    </div>
   );
 }
 
@@ -58,16 +68,10 @@ export function DeleteTransformModal({
   onDelete: () => void | Promise<void>;
 }) {
   return (
-    <DeleteModal
-      title="Delete job(s)"
-      label="Delete"
-      help="To confirm deletion, enter delete in the text field"
-      onClose={onClose}
-      onDelete={onDelete}
-    >
+    <DeleteJobsModal onClose={onClose} onDelete={onDelete}>
       By deleting <strong>{transformId}</strong>, all future scheduled executions will be canceled. However, your target
       index and data in it will remain intact.
-    </DeleteModal>
+    </DeleteJobsModal>
   );
 }
 
@@ -96,46 +100,49 @@ const EMPTY = {
   loading: 'Loading transform jobs...',
 };
 
-const text = (value: ReactNode) => <span className="atlTruncate">{value}</span>;
+// The plugin's `truncateText`: on one line, which the table makes room for
+const oneLine = (value: ReactNode) => <div className="atlTruncate">{value}</div>;
 
 const COLUMNS: Array<TableColumn<TransformRow>> = [
   {
     field: '_id',
     name: 'Name',
     sortable: true,
-    render: (row) => (
-      <a
-        href={`#${ROUTES.TRANSFORM_DETAILS}?id=${encodeURIComponent(row._id)}`}
-        className="ismNoWrap"
-        data-test-subj={`transformLink_${row._id}`}
-      >
-        {row._id}
-      </a>
-    ),
+    render: (row) =>
+      oneLine(
+        <button
+          type="button"
+          className="atlLinkButton ismTableLink"
+          onClick={() => go(ROUTES.TRANSFORM_DETAILS, { id: row._id })}
+          data-test-subj={`transformLink_${row._id}`}
+        >
+          {row._id}
+        </button>
+      ),
   },
   {
     field: 'transform.source_index',
     name: 'Source index',
     sortable: true,
-    render: (row) => text(row.transform.source_index),
+    render: (row) => oneLine(row.transform.source_index),
   },
   {
     field: 'transform.target_index',
     name: 'Target index',
     sortable: true,
-    render: (row) => text(row.transform.target_index),
+    render: (row) => oneLine(row.transform.target_index),
   },
   {
     field: 'transform.enabled',
     name: 'Job state',
     sortable: true,
-    render: (row) => (row.transform.enabled ? 'Enabled' : 'Disabled'),
+    render: (row) => oneLine(row.transform.enabled ? 'Enabled' : 'Disabled'),
   },
   {
     field: 'transform.continuous',
     name: 'Continuous',
     sortable: true,
-    render: (row) => (row.transform.continuous ? 'Yes' : 'No'),
+    render: (row) => oneLine(row.transform.continuous ? 'Yes' : 'No'),
   },
   {
     field: 'transform.updated_at',
@@ -169,55 +176,46 @@ export function Transforms() {
       sortDirection: query.sortDirection,
     });
     if (answer.ok && answer.response) {
-      const found = answer.response.transforms;
-      setTransforms(found);
+      const listed = answer.response.transforms;
+      setTransforms(listed);
       setTotal(answer.response.totalTransforms ?? 0);
-      // What was ticked stays ticked while it is still listed
-      setSelected((before) => found.filter((row) => before.some((was) => was._id === row._id)));
+      setSelected((ticked) => stillListed(ticked, listed, (row) => row._id));
     } else {
       toasts.danger(answer.error || 'There was problem loading transforms');
     }
     setLoading(false);
   };
-  useEffect(() => {
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query.from, query.size, query.search, query.sortField, query.sortDirection]);
+  const reload = useListLoad(load, [query.from, query.size, query.search, query.sortField, query.sortDirection]);
 
   // One job after the other, as the plugin does, and the list again when all are done
   const each = async (act: (transformId: string) => Promise<boolean>) => {
     for (const row of selected) await act(row._id);
-    await load();
+    reload();
+  };
+  // As the plugin's, the dialog closes once a job is deleted, and stays open while none is
+  const remove = async () => {
+    for (const row of selected) if (await deleteTransform(row._id)) setDeleting(false);
+    reload();
   };
 
   const none = selected.length === 0;
   const filtered = query.search !== '';
   return (
-    <ContentPanel
+    <JobsPanel
       title={`Transform jobs (${transforms.length})`}
+      titleSize="m"
       actions={
         <>
-          <Button size="s" icon="refresh" onClick={() => void load()} testId="refreshButton">
+          <Button icon="refresh" onClick={reload} testId="refreshButton">
             Refresh
           </Button>
-          <Button
-            size="s"
-            disabled={none}
-            onClick={() => void each((id) => switchTransform(id, false, 'stop'))}
-            testId="disableButton"
-          >
+          <Button disabled={none} onClick={() => void each((id) => switchTransform(id, false, 'stop'))} testId="disableButton">
             Disable
           </Button>
-          <Button
-            size="s"
-            disabled={none}
-            onClick={() => void each((id) => switchTransform(id, true, 'start'))}
-            testId="enableButton"
-          >
+          <Button disabled={none} onClick={() => void each((id) => switchTransform(id, true, 'start'))} testId="enableButton">
             Enable
           </Button>
-          <ActionsMenu
-            testId="actionButton"
+          <JobActionsMenu
             disabled={none}
             items={[
               {
@@ -227,69 +225,64 @@ export function Transforms() {
                 disabled: selected.length !== 1,
                 onClick: () => go(ROUTES.EDIT_TRANSFORM, { id: selected[0]._id }),
               },
-              { id: 'delete', label: 'Delete', testId: 'deleteButton', danger: true, disabled: none, onClick: () => setDeleting(true) },
+              {
+                id: 'delete',
+                label: 'Delete',
+                testId: 'deleteButton',
+                danger: true,
+                disabled: none,
+                onClick: () => setDeleting(true),
+              },
             ]}
           />
-          <Button
-            variant="primary"
-            size="s"
-            icon="plus"
-            onClick={() => go(ROUTES.CREATE_TRANSFORM)}
-            testId="createTransformButton"
-          >
+          <Button variant="primary" icon="plus" onClick={() => go(ROUTES.CREATE_TRANSFORM)} testId="createTransformButton">
             Create transform job
           </Button>
         </>
       }
     >
-      <SearchRow search={query.search} onSearch={(search) => setQuery({ search, from: 0 })} />
-      <Table
-        columns={COLUMNS}
-        rows={transforms}
-        total={total}
-        query={query}
-        onQuery={setQuery}
-        rowId={(row) => row._id}
-        selected={selected}
-        onSelect={setSelected}
-        loading={loading}
-        empty={
-          <div className="ismEmpty">
-            <p>{loading ? EMPTY.loading : filtered ? EMPTY.filtered : EMPTY.none}</p>
-            {!loading &&
-              (filtered ? (
-                <Button
-                  variant="primary"
-                  size="s"
-                  onClick={() => setQuery({ search: '' })}
-                  testId="transformEmptyPromptRestFilters"
-                >
-                  Reset Filters
-                </Button>
-              ) : (
-                <Button
-                  variant="primary"
-                  size="s"
-                  icon="plus"
-                  onClick={() => go(ROUTES.CREATE_TRANSFORM)}
-                  testId="emptyPromptCreateTransformButton"
-                >
-                  Create transform
-                </Button>
-              ))}
-          </div>
-        }
-      />
+      <ListSearch search={query.search} onSearch={(search) => setQuery({ search, from: 0 })} ariaLabel={null} />
+      <Rule />
+      <div className="ismJobsTable">
+        <Table
+          columns={COLUMNS}
+          rows={transforms}
+          total={total}
+          query={query}
+          onQuery={(changes) => {
+            // As the component library's table, a new sort or page unticks every row
+            setSelected([]);
+            setQuery(changes);
+          }}
+          rowId={(row) => row._id}
+          selected={selected}
+          onSelect={setSelected}
+          empty={
+            <ListEmptyPrompt
+              body={loading ? EMPTY.loading : filtered ? EMPTY.filtered : EMPTY.none}
+              actions={
+                loading ? null : filtered ? (
+                  // The plugin keeps the page it was on
+                  <Button variant="primary" onClick={() => setQuery({ search: '' })} testId="transformEmptyPromptRestFilters">
+                    Reset Filters
+                  </Button>
+                ) : (
+                  <Button variant="primary" icon="plus" to={to(ROUTES.CREATE_TRANSFORM)} testId="emptyPromptCreateTransformButton">
+                    Create transform
+                  </Button>
+                )
+              }
+            />
+          }
+        />
+      </div>
       {deleting && (
         <DeleteTransformModal
           transformId={selected.map((row) => row._id).join(', ')}
           onClose={() => setDeleting(false)}
-          onDelete={async () => {
-            setDeleting(false);
-            await each(deleteTransform);
-          }}
+          onDelete={remove}
         />
       )}
-    </ContentPanel>
+    </JobsPanel>
   );
 }

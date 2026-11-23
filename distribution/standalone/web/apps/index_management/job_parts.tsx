@@ -128,13 +128,32 @@ export function ListPanel({
 }
 
 /** The panel of the lists of rollup jobs and transform jobs: the title and the buttons in one row */
-export function JobsPanel({ title, actions, children }: { title: ReactNode; actions: ReactNode; children: ReactNode }) {
+export function JobsPanel({
+  title,
+  titleSize = 'l',
+  actions,
+  children,
+}: {
+  title: ReactNode;
+  /**
+   * 'm': as the list of transform jobs, a smaller title that is a third-level heading, a line
+   * under it, and nothing at the panel's sides, so that the lines and the table reach its edges
+   */
+  titleSize?: 'l' | 'm';
+  actions: ReactNode;
+  children: ReactNode;
+}) {
   return (
-    <section className="atlPanel ismJp">
+    <section className={cx('atlPanel ismJp', titleSize === 'm' && 'ismJp--wide')}>
       <div className="ismJp__header">
-        <h1 className="ismJp__title atlTitleL">{title}</h1>
+        {titleSize === 'm' ? (
+          <h3 className="ismJp__title atlTitleM">{title}</h3>
+        ) : (
+          <h1 className="ismJp__title atlTitleL">{title}</h1>
+        )}
         <div className="ismJp__actions">{actions}</div>
       </div>
+      {titleSize === 'm' && <hr className="ismRuleXs ismJp__rule" />}
       <div>{children}</div>
     </section>
   );
