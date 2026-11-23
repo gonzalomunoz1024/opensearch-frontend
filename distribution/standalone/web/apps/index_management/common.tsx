@@ -247,18 +247,21 @@ export function ActionsMenu({
   label = 'Actions',
   testId = 'moreAction',
   disabled,
+  size = 's',
 }: {
   items: MenuItem[];
   label?: string;
   testId?: string;
   disabled?: boolean;
+  /** 'm' for the theme's small button, the plugin's (32 px) */
+  size?: 's' | 'm';
 }) {
   return (
     <MenuButton
       align="right"
       items={items}
       button={(toggle) => (
-        <Button size="s" icon="chevronDown" iconSide="right" disabled={disabled} onClick={toggle} testId={testId}>
+        <Button size={size} icon="chevronDown" iconSide="right" disabled={disabled} onClick={toggle} testId={testId}>
           {label}
         </Button>
       )}
@@ -287,6 +290,8 @@ export interface TableColumn<Row> {
   render: (row: Row) => ReactNode;
   /** What a table sorted in the browser sorts by; the field of the row when left out */
   value?: (row: Row) => unknown;
+  /** On one line, cut with an ellipsis: the theme's `truncateText` (a `fixed` table only) */
+  truncate?: boolean;
 }
 
 export interface TableProps<Row> {
@@ -306,6 +311,8 @@ export interface TableProps<Row> {
   pageSizes?: number[];
   /** Whether the rows come in pages; a table that shows them all has no pager */
   paged?: boolean;
+  /** Laid out as the theme's tables are: the columns of fixed widths, the others sharing the rest */
+  fixed?: boolean;
 }
 
 export function Table<Row>({
@@ -323,6 +330,7 @@ export function Table<Row>({
   testId,
   pageSizes = PAGE_SIZES,
   paged = true,
+  fixed,
 }: TableProps<Row>) {
   const ids = new Set((selected ?? []).map(rowId));
   const tickable = rows.filter((row) => (selectable ? selectable(row) : true));
@@ -330,7 +338,7 @@ export function Table<Row>({
   const pages = Math.max(1, Math.ceil(total / query.size));
   const page = Math.min(Math.floor(query.from / query.size), pages - 1);
   return (
-    <div className={cx('ismTable', loading && 'ismTable--loading')}>
+    <div className={cx('ismTable', loading && 'ismTable--loading', fixed && 'ismTable--fixed')}>
       <div className="ismTable__scroll">
         <table className="atlTable" data-test-subj={testId}>
           <thead>
@@ -400,7 +408,11 @@ export function Table<Row>({
                     </td>
                   )}
                   {columns.map((column) => (
-                    <td key={column.field} style={{ textAlign: column.align }}>
+                    <td
+                      key={column.field}
+                      style={{ textAlign: column.align }}
+                      className={fixed && column.truncate ? 'ismTable__truncate' : undefined}
+                    >
                       {column.render(row)}
                     </td>
                   ))}
@@ -513,11 +525,14 @@ export function SearchRow({
   onSearch,
   placeholder = 'Search',
   children,
+  className,
 }: {
   search: string;
   onSearch: (text: string) => void;
   placeholder?: string;
   children?: ReactNode;
+  /** In the place of the row's own spacing and line under it */
+  className?: string;
 }) {
   // What is typed is shown at once and searched for a moment later
   const [text, setText] = useState(search);
@@ -538,7 +553,7 @@ export function SearchRow({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text]);
   return (
-    <div className="ismSearchRow">
+    <div className={className ?? 'ismSearchRow'}>
       <div className="atlGrow">
         <SearchField compact value={text} onChange={setText} placeholder={placeholder} aria-label={placeholder} />
       </div>
@@ -876,6 +891,7 @@ export function LocalTable<Row>({
   selected,
   onSelect,
   selectable,
+  fixed,
 }: {
   columns: Array<TableColumn<Row>>;
   rows: Row[];
@@ -889,6 +905,7 @@ export function LocalTable<Row>({
   selected?: Row[];
   onSelect?: (rows: Row[]) => void;
   selectable?: (row: Row) => boolean;
+  fixed?: boolean;
 }) {
   const [query, setQuery] = useState<Pick<ListQuery, 'from' | 'size' | 'sortField' | 'sortDirection'>>({
     from: 0,
@@ -914,6 +931,7 @@ export function LocalTable<Row>({
       selected={selected}
       onSelect={onSelect}
       selectable={selectable}
+      fixed={fixed}
     />
   );
 }

@@ -7,7 +7,8 @@ import { errorMessage } from './http';
 
 export interface Toast {
   id: number;
-  kind: 'healthy' | 'warning' | 'critical' | 'info';
+  /** 'plain': no colour and no icon, as the original's toasts.add of a text */
+  kind: 'healthy' | 'warning' | 'critical' | 'info' | 'plain';
   title: ReactNode;
   text?: ReactNode;
   /** While a message with a key shows, the same key adds no other */
@@ -57,8 +58,10 @@ export class Toasts {
     // The same message again replaces the one still showing
     const others = this.items.filter((item) => !(item.title === toast.title && item.text === toast.text));
     this.change([...others, { ...toast, id }].slice(-5));
-    // A timer cannot wait longer than some 24 days
-    window.setTimeout(() => this.dismiss(id), Math.min(lifetime ?? this.lifetimes[toast.kind], 2 ** 31 - 1));
+    // A plain message stays as long as one for information, as the original's. A timer cannot
+    // wait longer than some 24 days.
+    const kept = lifetime ?? this.lifetimes[toast.kind === 'plain' ? 'info' : toast.kind];
+    window.setTimeout(() => this.dismiss(id), Math.min(kept, 2 ** 31 - 1));
     return id;
   }
   dismiss(id: number) {
@@ -67,6 +70,10 @@ export class Toasts {
     }
   }
 
+  /** A message with no colour and no icon, as the original's toasts.add of a text */
+  plain(title: ReactNode, text?: ReactNode, lifetime?: number) {
+    return this.add('plain', title, text, lifetime);
+  }
   success(title: ReactNode, text?: ReactNode, lifetime?: number) {
     return this.add('healthy', title, text, lifetime);
   }

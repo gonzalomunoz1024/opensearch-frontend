@@ -28,6 +28,7 @@ import {
   nameForTemplate,
   newTemplate,
   ordered,
+  parsedObject,
   presetTemplate,
   priorityError,
   propertiesOf,
@@ -164,6 +165,16 @@ describe('the settings of an index', () => {
 
   it('are put in the order of the alphabet', () => {
     assert.deepEqual(Object.keys(ordered({ b: 1, a: 2, c: 3 })), ['a', 'b', 'c']);
+  });
+
+  it('are taken from their editor only when it holds a JSON object', () => {
+    assert.deepEqual(parsedObject('{ "index.number_of_replicas": "2" }'), { 'index.number_of_replicas': '2' });
+    assert.deepEqual(parsedObject('{}'), {});
+    assert.equal(parsedObject('{ "index": '), undefined);
+    assert.equal(parsedObject(''), undefined);
+    assert.equal(parsedObject('[]'), undefined);
+    assert.equal(parsedObject('2'), undefined);
+    assert.equal(parsedObject('null'), undefined);
   });
 
   it('are sent only where they changed', () => {
