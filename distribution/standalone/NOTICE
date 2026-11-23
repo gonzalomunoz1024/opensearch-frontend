@@ -26,7 +26,14 @@ keeps working, and parts of it are derived from it under the Apache License, Ver
     src/plugins/home/public/assets/common) and the shapes behind it (web/static/core_app/images,
     copied as they are from src/core/public/core_app/images),
   - the tokens that mark the kind of a field (web/components/field_token.tsx): the glyphs and
-    colours of the OpenSearch UI framework's tokens.
+    colours of the OpenSearch UI framework's tokens,
+  - the pictures of the overview of a new instance
+    (web/static/plugins/opensearchDashboardsOverview/assets, copied as they are from
+    src/plugins/opensearch_dashboards_overview/public/assets),
+  - the colours of the console and the reading of its requests
+    (web/apps/dev_tools/console_highlight.ts and console_model.ts): the rules of the console's
+    modes for the Ace editor (src/plugins/console/public/application/models/legacy_core_editor/mode
+    and packages/osd-ace) and of the RowParser that reads the requests from them.
 
 OpenSearch Dashboards
 Copyright OpenSearch Contributors
@@ -70,6 +77,13 @@ code under its licence:
   - the parameters of a data address (web/vis/vega/data_parsers.ts): the param function of
     jQuery 3.6.0, MIT License, Copyright OpenJS Foundation and other contributors
 
+The editors of the console are drawn after the Ace editor as brace 0.11.1 holds it, so that they
+look as they do there, and are derived from it under its licence: its styles, its pictures of
+the folding marks and of an error in the gutter, the way it draws the selection and the cursor
+(web/apps/dev_tools/console_editor.tsx and web/styles/dev_tools.css), and the way its tokenizer
+applies the rules of a mode (web/apps/dev_tools/console_highlight.ts); BSD 3-Clause License,
+Copyright (c) 2010, Ajax.org B.V.
+
 Their licence texts are in licenses/, and in dist/licenses/followed of a build.
 
 The drawing of Timeline charts (web/vis/timeline/plot.ts) is derived from Flot 0.8.3 and its
@@ -89,5 +103,9 @@ src/core/server/core_app/assets/fonts of OpenSearch Dashboards 3.9.0:
   - Roboto Mono 2.000985, Apache License, Version 2.0, Copyright 2015 Google Inc.
 
 Their licence texts are beside them, in the folder of each family.
+
+The pictures the URL format of an index pattern shows in its samples
+(web/static/plugins/indexPatternManagement/assets/icons) are those OpenSearch Dashboards ships for
+it, under the MIT License, Copyright (c) 2014 Steven Skelton (licenses/url-format-icons.txt).
 
 "OpenSearch" is a trademark of its owner. InfraDashboard is not an OpenSearch project.

@@ -6,7 +6,7 @@
  * same saved settings.
  */
 
-import { DEFAULT_DATE_FORMAT, UNIT_MS, formatDate, type ScaledDateRules } from './dates';
+import { DEFAULT_DATE_FORMAT, formatDate, type ScaledDateRules } from './dates';
 import { formatNumber } from './numeral';
 import type { Field, FieldFormatSpec, IndexPattern } from './types';
 
@@ -16,12 +16,12 @@ export interface FormatSettings {
   numberPattern: string;
   bytesPattern: string;
   percentPattern: string;
+  /** The setting dateNanosFormat: the pattern of the format date_nanos when it was given none */
+  dateNanosFormat?: string;
   /** The setting format:defaultTypeMap: the format of a kind of field that was given none */
   defaultTypeMap: Record<string, FieldFormatSpec>;
   /** The setting dateFormat:scaled: the format of a date bucket by its interval */
   scaledDateRules?: ScaledDateRules;
-  /** The setting dateNanosFormat: the format of a date_nanos field */
-  dateNanosFormat?: string;
 }
 
 export const DEFAULT_DATE_NANOS_FORMAT = 'MMM D, YYYY @ HH:mm:ss.SSSSSSSSS';
@@ -32,9 +32,13 @@ export const DEFAULT_DATE_NANOS_FORMAT = 'MMM D, YYYY @ HH:mm:ss.SSSSSSSSS';
  */
 export function formatDateNanos(raw: string, date: Date, pattern: string, timeZone?: string): string {
   const fraction = /S+/.exec(pattern)?.[0] ?? '';
-  if (fraction.length <= 3) return formatDate(date, pattern, timeZone);
-  const shown = formatDate(date, pattern.replace(fraction, `[${fraction}]`), timeZone);
-  const nanos = raw.substring(20, raw.length - 1).padEnd(9, '0').substring(0, fraction.length);
+  if (fraction.length <= 3) return formatDate(date, withLongFractions(pattern, date), timeZone);
+  const shown = formatDate(date, withLongFractions(pattern.replace(fraction, `[${fraction}]`), date), timeZone);
+  // The original's substr(20, length - 21): the digits between the dot and the zone's Z
+  const nanos = raw
+    .slice(20, 20 + Math.max(0, raw.length - 21))
+    .padEnd(9, '0')
+    .slice(0, fraction.length);
   return shown.replace(fraction, nanos);
 }
 
@@ -98,35 +102,171 @@ export function stringify(value: unknown): string {
   return String(value);
 }
 
-const DURATION_INPUT_MS: Record<string, number> = {
-  picoseconds: 1e-9,
-  nanoseconds: 1e-6,
-  microseconds: 1e-3,
-  milliseconds: 1,
-  seconds: 1000,
-  minutes: 60000,
-  hours: 3600000,
-  days: 86400000,
-  weeks: 604800000,
-  months: 2592000000,
-  years: 31536000000,
+/**
+ * A length of time as moment.js keeps it, with which OpenSearch Dashboards writes durations:
+ * milliseconds, days and months apart, since days and months have no fixed length
+ */
+interface Duration {
+  ms: number;
+  days: number;
+  months: number;
+}
+
+// Units under a second are given to moment in seconds
+const SUB_SECOND: Record<string, number> = { picoseconds: 1e-12, nanoseconds: 1e-9, microseconds: 1e-6 };
+
+/** moment.duration(value, unit) */
+function durationOf(value: number, unit: string): Duration {
+  const ratio = SUB_SECOND[unit];
+  const amount = value * (ratio ?? 1);
+  switch (ratio ? 'seconds' : unit) {
+    case 'milliseconds':
+      return { ms: amount, days: 0, months: 0 };
+    case 'seconds':
+      return { ms: amount * 1e3, days: 0, months: 0 };
+    case 'minutes':
+      return { ms: amount * 6e4, days: 0, months: 0 };
+    case 'hours':
+      return { ms: amount * 1000 * 60 * 60, days: 0, months: 0 };
+    case 'days':
+      return { ms: 0, days: amount, months: 0 };
+    case 'weeks':
+      return { ms: 0, days: amount * 7, months: 0 };
+    case 'months':
+      return { ms: 0, days: 0, months: amount };
+    case 'years':
+      return { ms: 0, days: 0, months: amount * 12 };
+    default:
+      return { ms: 0, days: 0, months: 0 };
+  }
+}
+
+/** duration.as(unit): a month is 146097 / 4800 days, as moment counts it */
+function durationAs({ ms, days, months }: Duration, unit: string): number {
+  if (unit === 'months' || unit === 'years') {
+    const allMonths = months + ((days + ms / 864e5) * 4800) / 146097;
+    return unit === 'months' ? allMonths : allMonths / 12;
+  }
+  const allDays = days + Math.round((months * 146097) / 4800);
+  switch (unit) {
+    case 'weeks':
+      return allDays / 7 + ms / 6048e5;
+    case 'days':
+      return allDays + ms / 864e5;
+    case 'hours':
+      return allDays * 24 + ms / 36e5;
+    case 'minutes':
+      return allDays * 1440 + ms / 6e4;
+    case 'seconds':
+      return allDays * 86400 + ms / 1000;
+    default:
+      return Math.floor(allDays * 864e5) + ms;
+  }
+}
+
+/** duration.humanize(): moment's words and thresholds, without "ago" or "in" */
+function humanizeDuration(duration: Duration): string {
+  const abs = { ms: Math.abs(duration.ms), days: Math.abs(duration.days), months: Math.abs(duration.months) };
+  const [seconds, minutes, hours, days, months, years] = ['seconds', 'minutes', 'hours', 'days', 'months', 'years'].map(
+    (unit) => Math.round(durationAs(abs, unit))
+  );
+  if (seconds <= 44) return 'a few seconds';
+  if (seconds < 45) return `${seconds} seconds`;
+  if (minutes <= 1) return 'a minute';
+  if (minutes < 45) return `${minutes} minutes`;
+  if (hours <= 1) return 'an hour';
+  if (hours < 22) return `${hours} hours`;
+  if (days <= 1) return 'a day';
+  if (days < 26) return `${days} days`;
+  if (months <= 1) return 'a month';
+  if (months < 11) return `${months} months`;
+  if (years <= 1) return 'a year';
+  return `${years} years`;
+}
+
+/** "3 hours", "a few seconds": a length of time in words, as moment writes it */
+export const humanize = (ms: number): string => humanizeDuration({ ms, days: 0, months: 0 });
+
+/** The names the duration format gives its outputs, which "Show suffix" writes after a value */
+const DURATION_OUTPUTS: Record<string, string> = {
+  humanize: 'Human Readable',
+  asMilliseconds: 'Milliseconds',
+  asSeconds: 'Seconds',
+  asMinutes: 'Minutes',
+  asHours: 'Hours',
+  asDays: 'Days',
+  asWeeks: 'Weeks',
+  asMonths: 'Months',
+  asYears: 'Years',
 };
 
-/** "3 hours", "a few seconds": a length of time in words, rounded to its largest unit */
-export function humanize(ms: number): string {
-  const abs = Math.abs(ms);
-  const say = (count: number, one: string, many: string) => (count <= 1 ? one : `${count} ${many}`);
-  if (abs < 45 * UNIT_MS.s) return 'a few seconds';
-  if (abs < 90 * UNIT_MS.s) return 'a minute';
-  if (abs < 45 * UNIT_MS.m) return say(Math.round(abs / UNIT_MS.m), 'a minute', 'minutes');
-  if (abs < 90 * UNIT_MS.m) return 'an hour';
-  if (abs < 22 * UNIT_MS.h) return say(Math.round(abs / UNIT_MS.h), 'an hour', 'hours');
-  if (abs < 36 * UNIT_MS.h) return 'a day';
-  if (abs < 26 * UNIT_MS.d) return say(Math.round(abs / UNIT_MS.d), 'a day', 'days');
-  if (abs < 46 * UNIT_MS.d) return 'a month';
-  if (abs < 320 * UNIT_MS.d) return say(Math.round(abs / UNIT_MS.M), 'a month', 'months');
-  if (abs < 548 * UNIT_MS.d) return 'a year';
-  return say(Math.round(abs / UNIT_MS.y), 'a year', 'years');
+/** A parameter as a format reads it: an empty text or null is the default */
+const param = (value: unknown, fallback: unknown) => (value || value === false || value === 0 ? value : fallback);
+
+/** moment writes a run of four to nine S as the milliseconds followed by zeros */
+function withLongFractions(pattern: string, date: Date): string {
+  return pattern.replace(/\[[^\]]*\]|S{4,9}/g, (token) =>
+    token.startsWith('[')
+      ? token
+      : `[${String(date.getUTCMilliseconds() * 10 ** (token.length - 3)).padStart(token.length, '0')}]`
+  );
+}
+
+const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+/** Base64 read as Node's Buffer reads it: other characters left out, the bytes read as UTF-8 */
+function decodeBase64(input: string): string {
+  const clean = input.split('=')[0].trim().replace(/[^+/0-9A-Za-z\-_]/g, '');
+  if (clean.length < 2) return '';
+  const value = (char: string) => (char === '-' ? 62 : char === '_' ? 63 : BASE64.indexOf(char));
+  const bytes: number[] = [];
+  const whole = clean.length - (clean.length % 4);
+  for (let index = 0; index < whole; index += 4) {
+    const bits =
+      (value(clean[index]) << 18) | (value(clean[index + 1]) << 12) | (value(clean[index + 2]) << 6) | value(clean[index + 3]);
+    bytes.push((bits >> 16) & 255, (bits >> 8) & 255, bits & 255);
+  }
+  const rest = clean.length % 4;
+  if (rest === 2) bytes.push(((value(clean[whole]) << 2) | (value(clean[whole + 1]) >> 4)) & 255);
+  if (rest === 3) {
+    const bits = (value(clean[whole]) << 10) | (value(clean[whole + 1]) << 4) | (value(clean[whole + 2]) >> 2);
+    bytes.push((bits >> 8) & 255, bits & 255);
+  }
+  // UTF-8; a byte that does not start a whole character is one U+FFFD
+  const tail = (byte: number) => (byte & 0xc0) === 0x80;
+  const points: number[] = [];
+  for (let index = 0; index < bytes.length; ) {
+    const first = bytes[index];
+    let size = first > 0xef ? 4 : first > 0xdf ? 3 : first > 0xbf ? 2 : 1;
+    let point: number | undefined;
+    if (index + size <= bytes.length) {
+      const [second, third, fourth] = [bytes[index + 1], bytes[index + 2], bytes[index + 3]];
+      if (size === 1 && first < 0x80) point = first;
+      if (size === 2 && tail(second)) {
+        const candidate = ((first & 0x1f) << 6) | (second & 0x3f);
+        if (candidate > 0x7f) point = candidate;
+      }
+      if (size === 3 && tail(second) && tail(third)) {
+        const candidate = ((first & 0xf) << 12) | ((second & 0x3f) << 6) | (third & 0x3f);
+        if (candidate > 0x7ff && (candidate < 0xd800 || candidate > 0xdfff)) point = candidate;
+      }
+      if (size === 4 && tail(second) && tail(third) && tail(fourth)) {
+        const candidate = ((first & 0xf) << 18) | ((second & 0x3f) << 12) | ((third & 0x3f) << 6) | (fourth & 0x3f);
+        if (candidate > 0xffff && candidate < 0x110000) point = candidate;
+      }
+    }
+    if (point === undefined) {
+      point = 0xfffd;
+      size = 1;
+    }
+    points.push(point);
+    index += size;
+  }
+  let decoded = '';
+  for (let index = 0; index < points.length; index += 4096) {
+    decoded += String.fromCodePoint(...points.slice(index, index + 4096));
+  }
+  return decoded;
 }
 
 export const fromNow = (date: Date, now = new Date()) => {
@@ -134,8 +274,34 @@ export const fromNow = (date: Date, now = new Date()) => {
   return difference <= 0 ? `${humanize(difference)} ago` : `in ${humanize(difference)}`;
 };
 
-const template = (text: string, value: string, raw: string) =>
-  text.replace(/\{\{\s*(value|rawValue)\s*\}\}/g, (_match, name: string) => (name === 'value' ? value : raw));
+/**
+ * A URL or label template, read as OpenSearch Dashboards reads it: `{{name}}` is that value,
+ * or nothing when there is no value of that name
+ */
+export function fillTemplate(template: string, values: Record<string, unknown>): string {
+  return template
+    .split(/{{([\s\S]+?)}}/g)
+    .map((part, index) => {
+      if (index % 2 === 0) return part;
+      const name = part.trim();
+      const value = Object.prototype.hasOwnProperty.call(values, name) ? values[name] : undefined;
+      return value === null || value === undefined ? '' : String(value);
+    })
+    .join('');
+}
+
+/** The URL a URL format makes of a value, and the label it shows for it: the URL itself if none */
+export function urlParts(params: Record<string, unknown>, value: unknown): { url: string; label: string } {
+  const shown = stringify(value);
+  const urlTemplate = param(params.urlTemplate, null);
+  const labelTemplate = param(params.labelTemplate, null);
+  const url =
+    typeof urlTemplate === 'string'
+      ? fillTemplate(urlTemplate, { value: encodeURIComponent(shown), rawValue: shown })
+      : shown;
+  const label = typeof labelTemplate === 'string' ? fillTemplate(labelTemplate, { value: shown, url }) : url;
+  return { url, label };
+}
 
 // Only links a page may safely open: a relative address, or http, https or mailto
 function safeUrl(url: string): string | undefined {
@@ -172,7 +338,7 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
       const zone = typeof params.timezone === 'string' && params.timezone ? params.timezone : settings.timeZone;
       return (value) => {
         const date = toDate(value);
-        return text(date ? formatDate(date, pattern, zone) : stringify(value));
+        return text(date ? formatDate(date, withLongFractions(pattern, date), zone) : stringify(value));
       };
     }
     case 'date_nanos': {
@@ -185,7 +351,7 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
       return (value) => {
         const date = toDate(value);
         if (!date) return text(stringify(value));
-        if (typeof value !== 'string') return text(formatDate(date, settings.dateFormat, zone));
+        if (typeof value !== 'string') return text(formatDate(date, withLongFractions(settings.dateFormat, date), zone));
         return text(formatDateNanos(value, date, pattern, zone));
       };
     }
@@ -195,17 +361,17 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
         return text(date ? fromNow(date) : stringify(value));
       };
     case 'duration': {
-      const input = DURATION_INPUT_MS[String(params.inputFormat ?? 'seconds')] ?? 1000;
-      const output = String(params.outputFormat ?? 'humanize');
-      const precision = typeof params.outputPrecision === 'number' ? params.outputPrecision : 2;
+      const input = String(param(params.inputFormat, 'seconds'));
+      const output = String(param(params.outputFormat, 'humanize'));
+      const precision = Number(param(params.outputPrecision, 2));
+      const suffix = params.showSuffix && DURATION_OUTPUTS[output] ? ` ${DURATION_OUTPUTS[output]}` : '';
       return (value) => {
         const number = toNumber(value);
         if (number === undefined) return text(stringify(value));
-        const ms = number * input;
-        if (output === 'humanize') return text(humanize(ms));
+        const duration = durationOf(number, input);
+        if (output === 'humanize') return text(`${number < 0 ? 'minus ' : ''}${humanizeDuration(duration)}${suffix}`);
         const unit = output.replace(/^as/, '').toLowerCase();
-        const divisor = DURATION_INPUT_MS[unit];
-        return text(divisor ? (ms / divisor).toFixed(precision) : String(ms));
+        return text(`${durationAs(duration, unit).toFixed(precision)}${suffix}`);
       };
     }
     case 'boolean':
@@ -222,10 +388,14 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
         return text([value >>> 24, (value >>> 16) & 255, (value >>> 8) & 255, value & 255].join('.'));
       };
     case 'truncate': {
-      const length = Number(params.fieldLength);
+      // lodash's truncate to the length and three more: the omission is not counted
+      const length = Number(param(params.fieldLength, 0));
       return (value) => {
         const full = stringify(value);
-        return text(length > 0 && full.length > length ? `${full.slice(0, length)}...` : full);
+        if (!(length > 0)) return text(full);
+        const symbols = Array.from(full);
+        const end = Math.trunc(length + 3) - 3;
+        return text(symbols.length <= Math.trunc(length + 3) ? full : `${symbols.slice(0, end).join('')}...`);
       };
     }
     case 'static_lookup': {
@@ -266,14 +436,11 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
     }
     case 'url': {
       const kind = String(params.type ?? 'a');
-      const urlTemplate = typeof params.urlTemplate === 'string' ? params.urlTemplate : undefined;
-      const labelTemplate = typeof params.labelTemplate === 'string' ? params.labelTemplate : undefined;
       return (value) => {
         const shown = stringify(value);
         if (isMissing(value)) return text(shown);
-        const encoded = encodeURIComponent(shown);
-        const url = safeUrl(urlTemplate ? template(urlTemplate, encoded, shown) : shown);
-        const label = labelTemplate ? template(labelTemplate, shown, shown) : shown;
+        const { url: formatted, label } = urlParts(params, value);
+        const url = safeUrl(formatted);
         if (!url) return text(label);
         if (kind === 'img') {
           return {
@@ -301,13 +468,9 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
           case 'title':
             return text(shown.replace(/\w\S*/g, (word) => word[0].toUpperCase() + word.slice(1).toLowerCase()));
           case 'short':
-            return text(shown.replace(/(\w)\w*\./g, '$1.'));
+            return text(shown.replace(/(.).+?\./g, '$1.'));
           case 'base64':
-            try {
-              return text(atob(shown));
-            } catch {
-              return text(shown);
-            }
+            return text(decodeBase64(shown));
           case 'urlparam':
             try {
               return text(decodeURIComponent(shown));
