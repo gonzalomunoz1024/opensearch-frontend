@@ -184,6 +184,23 @@ describe('numbers', () => {
     );
   });
 
+  it('writes a pattern with a colon as a time, as numeral does', () => {
+    // What the reference writes for a number field whose pattern is 00:00:00
+    const cases: Array<[number, string, string]> = [
+      [1, '00:00:00', '0:00:01'],
+      [0.5, '00:00:00', '0:00:01'],
+      [3725, '00:00:00', '1:02:05'],
+      [-3725, '00:00:00', '-1:02:05'],
+      [-1234.5678, '00:00:00', '-0:20:35'],
+      [86400, '00:00:00', '24:00:00'],
+      [1e21, '00:00:00', '277777777777777760:00:00'],
+    ];
+    assert.deepEqual(
+      cases.map(([value, pattern]) => formatNumber(value, pattern)),
+      cases.map(([, , expected]) => expected)
+    );
+  });
+
   it('formats a field by its format', () => {
     assert.equal(createFormatter({ id: 'number' })(1234.5).text, '1,234.5');
     assert.equal(createFormatter({ id: 'bytes' })(2048).text, '2KB');

@@ -130,6 +130,17 @@ function digits(value: number, parsed: Parsed): string {
   return fraction ? `${whole}.${fraction}` : whole;
 }
 
+// numeral's formatTime, for a pattern with a colon: the value as seconds, written as whole hours,
+// minutes and rounded seconds, whatever else the pattern says ("00:00:00" writes 3725 as 1:02:05)
+function timeOf(value: number): string {
+  const total = Math.abs(value);
+  const hours = Math.floor(total / 60 / 60);
+  const minutes = Math.floor((total - hours * 60 * 60) / 60);
+  const seconds = Math.round(total - hours * 60 * 60 - minutes * 60);
+  const twoDigits = (part: number) => (part < 10 ? `0${part}` : String(part));
+  return `${value < 0 ? '-' : ''}${hours}:${twoDigits(minutes)}:${twoDigits(seconds)}`;
+}
+
 // numeral's English ordinal, of the value as it is, not as it is rounded: 3.14 is "3th"
 function ordinalSuffix(value: number): string {
   if (Math.trunc((value % 100) / 10) === 1) return 'th';
@@ -140,6 +151,8 @@ function ordinalSuffix(value: number): string {
 export function formatNumber(value: number, pattern: string): string {
   if (typeof value !== 'number' || Number.isNaN(value)) return String(value);
   if (!Number.isFinite(value)) return value > 0 ? '∞' : '-∞';
+  // As numeral chooses: a currency or percent sign first, then a colon
+  if (pattern.includes(':') && !pattern.includes('$') && !pattern.includes('%')) return timeOf(value);
   const parsed = parsePattern(pattern);
   let scaled = value;
   let unit = '';
