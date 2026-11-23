@@ -16,7 +16,7 @@ import { describe, it } from 'node:test';
 import { hasLuceneSyntax, kueryToDsl, KuerySyntaxError, parseKuery } from '../../web/lib/kuery';
 import { buildQuery } from '../../web/lib/query';
 import { stringifyJson } from '../../web/services/http';
-import type { IndexPattern } from '../../web/lib/types';
+import type { Filter, IndexPattern } from '../../web/lib/types';
 
 interface Case {
   q: string;
@@ -163,5 +163,32 @@ describe('the query of a page, with DQL', () => {
       }).bool.must,
       [{ query_string: { query: 'a:b', analyze_wildcard: false, time_zone: 'Asia/Tokyo' } }]
     );
+  });
+
+  it('names the zone of the browser when dateFormat:tz says "Browser", as the original does', () => {
+    const browser = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    assert.deepEqual(buildQuery(pattern, { query: 'a:b', language: 'lucene' }, [], { dateFormatTZ: 'Browser' }).bool.must, [
+      { query_string: { query: 'a:b', analyze_wildcard: true, time_zone: browser } },
+    ]);
+  });
+
+  it('gives a Lucene query written as a query_string the options and the zone too', () => {
+    const config = { dateFormatTZ: 'Europe/Paris', queryStringOptions: { analyze_wildcard: true } };
+    assert.deepEqual(buildQuery(pattern, { query: { query_string: { query: 'a:b' } }, language: 'lucene' }, [], config).bool.must, [
+      { query_string: { query: 'a:b', analyze_wildcard: true, time_zone: 'Europe/Paris' } },
+    ]);
+    // The options go over the query's own; the zone it names stays
+    const own = { query_string: { query: 'a:b', analyze_wildcard: false, time_zone: 'Asia/Tokyo' } };
+    assert.deepEqual(buildQuery(pattern, { query: own, language: 'lucene' }, [], config).bool.must, [
+      { query_string: { query: 'a:b', analyze_wildcard: true, time_zone: 'Asia/Tokyo' } },
+    ]);
+    assert.equal(own.query_string.analyze_wildcard, false, 'the query handed in is not changed');
+    // Any other DSL is used as it is
+    assert.deepEqual(buildQuery(pattern, { query: { match_all: {} }, language: 'lucene' }, [], config).bool.must, [{ match_all: {} }]);
+  });
+
+  it('takes a filter that says nothing about itself, as the original does', () => {
+    const bare = { query: { match_phrase: { response: '200' } } } as unknown as Filter;
+    assert.deepEqual(buildQuery(pattern, undefined, [bare]).bool.filter, [{ match_phrase: { response: '200' } }]);
   });
 });

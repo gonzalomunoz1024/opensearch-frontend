@@ -9,6 +9,7 @@
  * `/api/console/proxy`), so that scripts and probes written for it keep working.
  */
 
+import { randomUUID } from 'node:crypto';
 import http from 'node:http';
 import { join } from 'node:path';
 import type { Config } from './config';
@@ -35,7 +36,7 @@ import { registerSavedObjects } from './saved_objects_routes';
 import { registerSampleData } from './sample_data/routes';
 import { registerShortUrls } from './short_urls';
 import { registerSqlConsole } from './sql_console';
-import { contentSecurityPolicy, readBuild, renderPage, serveStatic } from './static';
+import { contentSecurityPolicy, cspNonce, readBuild, renderPage, serveStatic } from './static';
 import { registerTsvbFields } from './tsvb_fields';
 import { registerTimeline } from './timeline';
 import { UiSettings } from './ui_settings';
@@ -236,13 +237,26 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
     if (!target) throw badRequest('[request query.path]: expected a path');
     if (!PROXY_METHODS.has(method)) throw badRequest(`Method ${method} is not allowed`);
     const body = await context.body();
+    let path = `/${target.replace(/^\/+/, '')}`;
+    // What is typed in Dev Tools is an address, in which "." and ".." are steps, as the console
+    // of OpenSearch Dashboards reads it. In a request of the pages they are names (the title of
+    // an index pattern), which the client sends as they are written.
+    if (context.path === '/api/console/proxy') {
+      const typed = new URL(`http://localhost${path}`);
+      path = typed.pathname + typed.search;
+    }
     const response = await client.raw({
       method,
-      path: `/${target.replace(/^\/+/, '')}`,
+      path,
       body: body.length ? body : undefined,
-      headers: body.length
-        ? { 'content-type': String(context.req.headers['content-type'] ?? 'application/json') }
-        : undefined,
+      // An id of its own for each request, as OpenSearch Dashboards sends: OpenSearch warns of a
+      // deprecated API once for each id, and the console shows the warning with every answer
+      headers: {
+        'x-opaque-id': randomUUID(),
+        ...(body.length
+          ? { 'content-type': String(context.req.headers['content-type'] ?? 'application/json') }
+          : {}),
+      },
     });
     const headers: Record<string, string> = {
       'content-type': String(response.headers['content-type'] ?? 'text/plain; charset=utf-8'),
@@ -298,11 +312,16 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
     } catch {
       // the page explains what is wrong once it is up
     }
-    const dark = await uiSettings.peek<boolean>('theme:darkMode', false);
+    // An OpenSearch that does not answer is not asked: the page would wait for the time limit
+    const dark =
+      health.state === 'green'
+        ? await uiSettings.peek<boolean>('theme:darkMode', false)
+        : config.uiSettings.overrides['theme:darkMode'] ?? config.uiSettings.defaults['theme:darkMode'];
+    const nonce = cspNonce();
     return {
       headers: {
         'content-type': 'text/html; charset=utf-8',
-        'content-security-policy': contentSecurityPolicy(config.map, config.csp),
+        'content-security-policy': contentSecurityPolicy(config.map, config.csp, nonce),
         'cache-control': 'no-store',
       },
       body: renderPage({
@@ -310,6 +329,7 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
         build,
         title: PRODUCT_NAME,
         dark: dark === true,
+        nonce,
         bootData: {
           basePath: config.server.basePath,
           version: build.version,
@@ -346,7 +366,16 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
 
   const handle = async (req: http.IncomingMessage): Promise<Reply> => {
     const method = req.method ?? 'GET';
-    const url = new URL(req.url ?? '/', 'http://localhost');
+    const target = req.url ?? '/';
+    // Nothing is at a path that starts with two slashes, as in OpenSearch Dashboards; new URL()
+    // would read what follows them as the name of another host, or fail to
+    if (target.startsWith('//')) return { status: 404, body: errorBody(404, 'Not Found') };
+    let url: URL;
+    try {
+      url = new URL(target, 'http://localhost');
+    } catch {
+      throw badRequest('The address of the request cannot be read');
+    }
     let path = url.pathname;
     const { basePath } = config.server;
     if (basePath && (path === basePath || path.startsWith(`${basePath}/`))) {
@@ -428,7 +457,10 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
       })
       .catch((error: unknown) => {
         logger.error('An answer could not be sent', { error: String(error) });
-        res.destroy();
+        // A header that cannot be sent (an address to go to with a character no header may
+        // hold) leaves nothing sent: the request is answered as a failure, not cut off
+        if (res.headersSent) res.destroy();
+        else sendReply(req, res, { status: 500, body: errorBody(500, 'An internal server error occurred.') });
       });
   });
   // Longer than the usual 60 seconds a load balancer keeps an idle connection, so that it is the

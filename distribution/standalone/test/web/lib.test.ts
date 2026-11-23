@@ -9,7 +9,7 @@ import {
   resolveInterval,
   resolveTimeRange,
 } from '../../web/lib/dates';
-import { createFormatter } from '../../web/lib/field_formats';
+import { createFormatter, DEFAULT_FORMAT_SETTINGS, fieldFormatter } from '../../web/lib/field_formats';
 import { formatNumber } from '../../web/lib/numeral';
 import { buildQuery, describeFilter, phraseFilter, rangeFilter } from '../../web/lib/query';
 import { decode, encode } from '../../web/lib/rison';
@@ -79,6 +79,39 @@ describe('dates', () => {
     assert.equal(range.to.getTime() - range.from.getTime(), 86400000 - 1);
   });
 
+  it('counts a year from 29 February to the last day of February, as the original does', () => {
+    const leapDay = new Date(2024, 1, 29, 12, 0, 0, 0);
+    const at = (expression: string) => parseDateMath(expression, { now: leapDay })?.getTime();
+    assert.equal(at('now-1y'), new Date(2023, 1, 28, 12).getTime());
+    assert.equal(at('now+1y'), new Date(2025, 1, 28, 12).getTime());
+    assert.equal(at('now-5y'), new Date(2019, 1, 28, 12).getTime());
+    assert.equal(at('now+4y'), new Date(2028, 1, 29, 12).getTime());
+    assert.equal(at('now-1y-1M'), new Date(2023, 0, 28, 12).getTime());
+    // and any other day of a year stays the day it is
+    assert.equal(parseDateMath('now-1y', { now })?.getTime(), new Date(2025, 10, 22, 3, 52, 10, 500).getTime());
+    assert.equal(parseDateMath('now+100y', { now })?.getTime(), new Date(2126, 10, 22, 3, 52, 10, 500).getTime());
+  });
+
+  it("writes moment's other tokens and its long formats as its English locale does", () => {
+    // Sunday 22 November 2026, the 326th day, in the 48th week from Sunday and the 47th ISO week
+    const date = new Date(Date.UTC(2026, 10, 22, 13, 7, 5, 9));
+    assert.equal(formatDate(date, 'LLL', 'UTC'), 'November 22, 2026 1:07 PM');
+    assert.equal(formatDate(date, 'LT LTS L LL', 'UTC'), '1:07 PM 1:07:05 PM 11/22/2026 November 22, 2026');
+    assert.equal(formatDate(date, 'l ll lll', 'UTC'), '11/22/2026 Nov 22, 2026 Nov 22, 2026 1:07 PM');
+    assert.equal(formatDate(date, 'LLLL | llll', 'UTC'), 'Sunday, November 22, 2026 1:07 PM | Sun, Nov 22, 2026 1:07 PM');
+    assert.equal(formatDate(date, 'Q Qo DDD DDDo DDDD d do dd e E', 'UTC'), '4 4th 326 326th 326 0 0th Su 0 7');
+    assert.equal(formatDate(date, 'w wo ww W Wo WW gggg GGGG gg GG', 'UTC'), '48 48th 48 47 47th 47 2026 2026 26 26');
+    assert.equal(formatDate(date, 'k kk Hmm hmmss SSSS', 'UTC'), '13 13 1307 10705 0090');
+    assert.equal(formatDate(date, 'Y YYYYYY N NNNN y yo Mo', 'UTC'), '2026 +002026 AD Anno Domini 2026 2026th 11th');
+    assert.equal(formatDate(date, '[LLL] \\Y \\[n', 'UTC'), 'LLL Y [n');
+    assert.equal(formatDate(date, 'Do [Do] \\D \\\\ D', 'UTC'), '22nd Do D  22');
+    // midnight is the 24th hour of k, and a year before the first one is counted backwards
+    assert.equal(formatDate(new Date(Date.UTC(2026, 0, 1)), 'k [W]W', 'UTC'), '24 W1');
+    const bc = new Date(Date.UTC(2000, 0, 1));
+    bc.setUTCFullYear(-43);
+    assert.equal(formatDate(bc, 'YYYY y N', 'UTC'), '-0043 44 BC');
+  });
+
   it('writes dates with the tokens of the date settings', () => {
     const date = new Date(Date.UTC(2026, 10, 22, 1, 37, 55, 7));
     assert.equal(formatDate(date, 'MMM D, YYYY @ HH:mm:ss.SSS', 'UTC'), 'Nov 22, 2026 @ 01:37:55.007');
@@ -125,6 +158,49 @@ describe('numbers', () => {
     assert.equal(formatNumber(141, '0'), '141');
   });
 
+  it('rounds as numeral 2.5.1 of the original rounds, and writes exponents and ordinals as it does', () => {
+    // What the reference's numeral writes for each
+    const cases: Array<[number, string, string]> = [
+      [-17.5, '0,0', '-17'],
+      [-0.5, '0', '0'],
+      [1.005, '0.00', '1.01'],
+      [2.675, '0.00', '2.68'],
+      [1.45, '0.0', '1.5'],
+      [-0.125, '0.00', '-0.12'],
+      [-0.05, '0.0', '0.0'],
+      [-1234.5675, '0,0.[000]', '-1,234.567'],
+      [0.0045, '0.0%', '0.5%'],
+      [-1.5, '(0)', '(1)'],
+      [-1.5, '+0', '-1'],
+      [1e-7, '0.000', '1e-7'],
+      [1e21, '0.0a', '1000000000t'],
+      [Number.MAX_VALUE, '0,0', '1.7,976,931,348,623,157e+308'],
+      [0.5, '0o', '1th'],
+      [10.5, '0o', '11th'],
+    ];
+    assert.deepEqual(
+      cases.map(([value, pattern]) => formatNumber(value, pattern)),
+      cases.map(([, , expected]) => expected)
+    );
+  });
+
+  it('writes a pattern with a colon as a time, as numeral does', () => {
+    // What the reference writes for a number field whose pattern is 00:00:00
+    const cases: Array<[number, string, string]> = [
+      [1, '00:00:00', '0:00:01'],
+      [0.5, '00:00:00', '0:00:01'],
+      [3725, '00:00:00', '1:02:05'],
+      [-3725, '00:00:00', '-1:02:05'],
+      [-1234.5678, '00:00:00', '-0:20:35'],
+      [86400, '00:00:00', '24:00:00'],
+      [1e21, '00:00:00', '277777777777777760:00:00'],
+    ];
+    assert.deepEqual(
+      cases.map(([value, pattern]) => formatNumber(value, pattern)),
+      cases.map(([, , expected]) => expected)
+    );
+  });
+
   it('formats a field by its format', () => {
     assert.equal(createFormatter({ id: 'number' })(1234.5).text, '1,234.5');
     assert.equal(createFormatter({ id: 'bytes' })(2048).text, '2KB');
@@ -138,9 +214,138 @@ describe('numbers', () => {
     assert.equal(createFormatter({ id: 'url' })('javascript:alert(1)').href, undefined);
     const coloured = createFormatter({
       id: 'color',
-      params: { fieldType: 'number', colors: [{ range: '500:', text: '#fff', background: '#f00' }] },
+      params: { fieldType: 'number', colors: [{ range: '500:Infinity', text: '#fff', background: '#f00' }] },
     })(503);
     assert.equal(coloured.background, '#f00');
+  });
+
+  it('makes no link a browser would run as a script', () => {
+    const url = createFormatter({ id: 'url' });
+    const raw = createFormatter({ id: 'url', params: { urlTemplate: '{{rawValue}}', labelTemplate: 'open' } });
+    // A browser drops tabs and line ends inside an address, and control characters and spaces around it
+    for (const value of [
+      'java\tscript:alert(1)',
+      'java\nscript:alert(1)',
+      'jav\r\nascript:alert(1)',
+      '\u0001javascript:alert(1)',
+      ' \u0000\u001f javascript:alert(1)',
+      'JaVaScRiPt:alert(1)',
+      'vbscript:x',
+      'data:text/html,<script>alert(1)</script>',
+    ]) {
+      assert.equal(url(value).href, undefined, JSON.stringify(value));
+      assert.equal(raw(value).href, undefined, JSON.stringify(value));
+      assert.equal(createFormatter({ id: 'url', params: { type: 'img' } })(value).image, undefined, JSON.stringify(value));
+    }
+    // What is no scheme stays a link
+    assert.equal(url(' https://x.test/a ').href, 'https://x.test/a');
+    assert.equal(raw(' https://x.test/a\tb ').href, 'https://x.test/ab');
+    assert.equal(raw('a/b:c').href, 'a/b:c');
+    assert.equal(raw('#/doc?x=java\tscript:1').href, '#/doc?x=javascript:1');
+  });
+
+  it('colours a value by the last rule that matches, as the original', () => {
+    const grey = { text: '#111', background: '#eee' };
+    const red = { text: '#f00', background: '#fee' };
+    const byNumber = createFormatter({
+      id: 'color',
+      params: { fieldType: 'number', colors: [{ range: '0:100000', ...grey }, { range: '5000:100000', ...red }] },
+    });
+    assert.equal(byNumber(7000).color, '#f00');
+    assert.equal(byNumber(7000).background, '#fee');
+    assert.equal(byNumber(100).color, '#111');
+    assert.equal(byNumber(-1).color, undefined);
+    const byText = createFormatter({
+      id: 'color',
+      params: { fieldType: 'string', colors: [{ regex: '^2', ...grey }, { regex: '0', ...red }] },
+    });
+    assert.equal(byText('200').color, '#f00');
+    assert.equal(byText('211').color, '#111');
+    assert.equal(byText('404').color, '#f00');
+    assert.equal(byText('311').color, undefined);
+    // An end left out is zero, as Number reads it, and a rule without a pattern matches every text
+    const ends = createFormatter({ id: 'color', params: { fieldType: 'number', colors: [{ range: ':100', ...red }] } });
+    assert.equal(ends(50).color, '#f00');
+    assert.equal(ends(-50).color, undefined);
+    assert.equal(createFormatter({ id: 'color', params: { fieldType: 'number', colors: [{ range: '500:', ...red }] } })(503).color, undefined);
+    assert.equal(createFormatter({ id: 'color', params: { fieldType: 'string', colors: [{ regex: '', ...red }] } })('any').color, '#f00');
+    assert.equal(createFormatter({ id: 'color', params: { fieldType: 'string', colors: [{ ...red }] } })('any').color, '#f00');
+    // Without the kind of field its editor saves with it, nothing is coloured
+    assert.equal(createFormatter({ id: 'color', params: { colors: [{ range: '0:100', ...red }] } })(50).color, undefined);
+  });
+
+  it('reads text as a boolean as the original: trimmed, in lower case, and not from "1" or "0"', () => {
+    const boolean = createFormatter({ id: 'boolean' });
+    assert.deepEqual(
+      [true, 1, 'true', 'yes', ' YES ', 'True'].map((value) => boolean(value).text),
+      ['true', 'true', 'true', 'true', 'true', 'true']
+    );
+    assert.deepEqual(
+      [false, 0, 'false', 'no', 'No', ' FALSE\n'].map((value) => boolean(value).text),
+      ['false', 'false', 'false', 'false', 'false', 'false']
+    );
+    assert.deepEqual(
+      ['1', '0', 'US', ' Maybe ', 2, -1].map((value) => boolean(value).text),
+      ['1', '0', 'us', 'maybe', '2', '-1']
+    );
+  });
+
+  it('looks a value up as the original: an empty answer is no answer', () => {
+    const entries = [{ key: 'css', value: 'Style sheet' }, { key: 'gz', value: '' }, { key: 'deb' }, { key: 404, value: 'Not found' }, {}];
+    // What the original's editor saves once the text for the others was typed and cleared
+    const cleared = createFormatter({ id: 'static_lookup', params: { lookupEntries: entries, unknownKeyValue: '' } });
+    assert.deepEqual(
+      ['css', 'gz', 'deb', 'png', 404, '404'].map((value) => cleared(value).text),
+      ['Style sheet', 'gz', 'deb', 'png', 'Not found', 'Not found']
+    );
+    const others = createFormatter({ id: 'static_lookup', params: { lookupEntries: entries, unknownKeyValue: 'other' } });
+    assert.deepEqual(
+      ['css', 'gz', 'deb', 'png'].map((value) => others(value).text),
+      ['Style sheet', 'other', 'other', 'other']
+    );
+    assert.equal(createFormatter({ id: 'static_lookup', params: { lookupEntries: entries, unknownKeyValue: null } })('png').text, 'png');
+    assert.equal(createFormatter({ id: 'static_lookup' })('png').text, 'png');
+  });
+
+  it('reads a value under a number format as parseFloat does, and writes nothing for what is no number', () => {
+    const number = createFormatter({ id: 'number' });
+    assert.deepEqual(
+      [Number.NaN, 'NaN', 'n/a', '3.14abc', '0x10', '1e3', true, { a: 1 }, ' '].map((value) => number(value).text),
+      ['', '', '', '3.14', '0', '1,000', '', '', '']
+    );
+    assert.equal(createFormatter({ id: 'bytes' })('2048').text, '2KB');
+    assert.equal(createFormatter({ id: 'percent' })(Number.NaN).text, '');
+    // and no value in a list is a dash still, as under every format
+    assert.deepEqual([number([null]).text, number([1, null, 'x']).text], ['-', '1, -, ']);
+  });
+
+  it('writes a list in a list value by value, as the original does', () => {
+    const string = createFormatter({ id: 'string' });
+    assert.equal(string([['a', 'b'], ['c']]).text, 'a, b, c');
+    assert.equal(string([[1, 2]]).text, '1, 2');
+    assert.equal(string([]).text, '');
+    assert.equal(createFormatter({ id: 'number' })([[1000, 2], [3]]).text, '1,000, 2, 3');
+  });
+
+  it('writes an empty text with its format, as the original does, and no value at all as a dash', () => {
+    // An empty term is a bucket of its own: its cell, its label and the pill of its filter
+    const others = createFormatter({ id: 'static_lookup', params: { lookupEntries: [{ key: 'css', value: 'Style sheet' }], unknownKeyValue: 'other' } });
+    assert.equal(others('').text, 'other');
+    assert.deepEqual(
+      ['string', 'number', 'bytes', 'date', 'boolean'].map((id) => createFormatter({ id })('').text),
+      ['', '', '', '', '']
+    );
+    assert.equal(createFormatter({ id: 'string' })(['a', '']).text, 'a, ');
+    const link = createFormatter({ id: 'url', params: { urlTemplate: 'http://example.com/{{value}}' } })('');
+    assert.deepEqual([link.text, link.href], ['http://example.com/', 'http://example.com/']);
+    assert.equal(createFormatter({ id: 'string' })(null).text, '-');
+  });
+
+  it("writes dates in the zone of the settings, as the original's formats do whatever zone they name", () => {
+    const settings = { ...DEFAULT_FORMAT_SETTINGS, timeZone: 'UTC' };
+    const params = { pattern: 'YYYY-MM-DD HH:mm', timezone: 'America/New_York' };
+    assert.equal(createFormatter({ id: 'date', params }, settings)(0).text, '1970-01-01 00:00');
+    assert.equal(createFormatter({ id: 'date_nanos', params }, settings)('1970-01-01T00:00:00.000Z').text, '1970-01-01 00:00');
   });
 });
 
@@ -164,6 +369,20 @@ const pattern: IndexPattern = {
     },
   ],
 };
+
+describe('the formatter of a field', () => {
+  it('follows the settings it is given, as the original reads them at each value', () => {
+    const before = { ...DEFAULT_FORMAT_SETTINGS };
+    const after = { ...DEFAULT_FORMAT_SETTINGS, numberPattern: '0.00', bytesPattern: '0.000b' };
+    assert.equal(fieldFormatter(pattern, 'machine.ram', before)(1234.5).text, '1,234.5');
+    // format:number:defaultPattern changed in the settings, the page not loaded again
+    assert.equal(fieldFormatter(pattern, 'machine.ram', after)(1234.5).text, '1234.50');
+    const typeMap = { ...DEFAULT_FORMAT_SETTINGS.defaultTypeMap, number: { id: 'bytes', params: {} } };
+    assert.equal(fieldFormatter(pattern, 'machine.ram', { ...after, defaultTypeMap: typeMap })(2048).text, '2.000KB');
+    // the same settings give the same formatter
+    assert.equal(fieldFormatter(pattern, 'machine.ram', after), fieldFormatter(pattern, 'machine.ram', after));
+  });
+});
 
 describe('the query of a page', () => {
   it('combines the search bar and the filters', () => {

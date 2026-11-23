@@ -39,4 +39,18 @@ describe('the advanced settings as stored', () => {
     const body = sent[0].body as { doc: { config: Record<string, unknown> } };
     assert.deepEqual(body.doc.config, { 'timelion:max_buckets': 100, 'csv:separator': ';' });
   });
+
+  it("takes the name of an object's own method for a setting like any other, as the original", async () => {
+    const { client, sent } = fakeClient({ constructor: 'stored' });
+    const settings = new UiSettings(client, '.kibana', '3.9.0', { overrides: { 'theme:darkMode': true }, defaults: {} });
+    // Not overridden: the original stores them and answers 200
+    await settings.setMany({ toString: 'a', valueOf: null });
+    assert.deepEqual((sent[0].body as { doc: { config: Record<string, unknown> } }).doc.config, { toString: 'a', valueOf: null });
+    await assert.rejects(settings.setMany({ 'theme:darkMode': false }), /Unable to update "theme:darkMode" because it is overridden/);
+    assert.deepEqual(await settings.getAll(), { constructor: { userValue: 'stored' }, 'theme:darkMode': { userValue: true, isOverridden: true } });
+    // Neither set nor overridden nor with a default here: the fallback, not what every object inherits
+    assert.equal(await settings.peek('toString', 'fallback'), 'fallback');
+    assert.equal(await settings.peek('hasOwnProperty', 'fallback'), 'fallback');
+    assert.equal(await settings.peek('constructor', 'fallback'), 'stored');
+  });
 });

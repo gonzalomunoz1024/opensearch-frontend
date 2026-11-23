@@ -13,15 +13,15 @@
  *   as the original's does: a reload or a step back then opens a plain editor.
  * - A visualization saved new (or as a copy) goes back with the package `{ type: 'visualization',
  *   input: { savedObjectId }, containerInfo }`, which the dashboard adds as a panel; one saved in
- *   place, and Cancel, go back with nothing. Either goes to where the dashboard was: its last
- *   address, which the original's URL tracker keeps (`lastUrl:<basePath>:dashboard` in the
- *   session's storage) and the router here (`lastAddressOf`), with the `_g` of now, so that what
- *   was changed on the dashboard and not saved yet is still there. The by-reference editor never
- *   sends an `embeddableId` back, as the original's does not: the dashboard draws the panel it
- *   had again, from the visualization as it is now saved.
+ *   place, and Cancel, go back with nothing. Either goes to where the dashboard was, as the
+ *   original's `navigateToApp(originatingApp)` does: its last address, which the original's URL
+ *   tracker keeps in the session's storage (`lastUrl:<basePath>:dashboard`) and the router here
+ *   under the same key (`lastAddressOf`), so that what was changed on the dashboard and not saved
+ *   yet is still there. The by-reference editor never sends an `embeddableId` back, as the
+ *   original's does not: the dashboard draws the panel it had again, from the visualization as it
+ *   is now saved.
  */
 
-import { appUrl, buildHash, parseHash } from '../../lib/url';
 import { locationState } from '../../router';
 
 /** Where the editor was opened from: the original's `ContainerInfo` */
@@ -71,41 +71,4 @@ export function editorStateFor(originatingApp: string | undefined, containerInfo
 /** What a visualization saved new goes back with, to be added to the dashboard */
 export function visualizationPackage(savedObjectId: string, containerInfo?: ContainerInfo): EmbeddablePackageState {
   return { type: VISUALIZE_EMBEDDABLE_TYPE, input: { savedObjectId }, ...(containerInfo ? { containerInfo } : {}) };
-}
-
-/** The applications the original opens where they were last (those with a URL tracker), by their path */
-const TRACKED: Record<string, string> = {
-  dashboards: '/app/dashboards',
-};
-
-/** Whether a path of this product is in the application at `path`: `/app/dashboards#/view/d1` in `/app/dashboards` */
-const isIn = (address: string, path: string): boolean =>
-  address === path || address.startsWith(`${path}#`) || address.startsWith(`${path}?`) || address.startsWith(`${path}/`);
-
-/**
- * The address the editor goes back to: the original's `navigateToApp(originatingApp)`. The
- * dashboards open where they were last, `lastAddress`, with the `_g` of now, which the original's
- * URL tracker writes into that address while the application is not open; an application with no
- * tracker opens at its start. Without a last address (the page was loaded again meanwhile, where
- * the original's tracker still has it in the session's storage) the dashboard the editor came from
- * opens to be edited.
- */
-export function originatingAppUrl(
-  appId: string,
-  options: { lastAddress?: string; containerInfo?: ContainerInfo; globalParam?: string } = {}
-): string {
-  const path = TRACKED[appId];
-  if (path === undefined) return `/app/${appId}`;
-  const { lastAddress, containerInfo, globalParam } = options;
-  if (lastAddress !== undefined && isIn(lastAddress, path)) {
-    const at = lastAddress.indexOf('#');
-    if (at < 0) return lastAddress;
-    const { hashPath, hashParams } = parseHash(lastAddress.slice(at));
-    return `${lastAddress.slice(0, at)}${buildHash(hashPath, { ...hashParams, _g: globalParam ?? hashParams._g })}`;
-  }
-  const containerId = containerInfo?.containerId;
-  if (containerId === undefined) return appUrl(path, '/', { _g: globalParam });
-  if (containerId === '') return appUrl(path, '/create', { _g: globalParam });
-  // The dashboard was being edited: it opens in edit mode again
-  return appUrl(path, `/view/${encodeURIComponent(containerId)}`, { _g: globalParam, _a: { viewMode: 'edit' } });
 }

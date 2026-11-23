@@ -32,7 +32,11 @@ export type ButtonVariant =
 
 export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'type'> {
   variant?: ButtonVariant;
-  size?: 's' | 'm';
+  /**
+   * 'm' is the original's small button (32 px), 's' the kit's own of 28 px, 'xs' the original's
+   * smallest empty button and icon button (24 px)
+   */
+  size?: 'xs' | 's' | 'm';
   icon?: IconName;
   /** 's' for the 12 px icon the original's smallest buttons draw */
   iconSize?: 's' | 'm';
@@ -41,6 +45,13 @@ export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement
   loading?: boolean;
   /** A path of this product (`/app/...`): the button is then a link */
   to?: string;
+  /** An address outside the product: the button is then a link to it, as the original's with `href` */
+  href?: string;
+  /**
+   * Where the link opens: `_blank` for a new tab, which, as the original's, does not let the page
+   * it opens reach this one (`rel="noopener noreferrer"`)
+   */
+  target?: '_blank';
   type?: 'button' | 'submit';
   testId?: string;
 }
@@ -54,6 +65,8 @@ export function Button({
   full,
   loading,
   to,
+  href,
+  target,
   type = 'button',
   className,
   children,
@@ -64,6 +77,7 @@ export function Button({
     'atlButton',
     variant !== 'default' && `atlButton--${variant}`,
     size === 's' && 'atlButton--s',
+    size === 'xs' && 'atlButton--xs',
     full && 'atlButton--full',
     !children && 'atlButton--icon',
     className
@@ -76,9 +90,18 @@ export function Button({
       {iconSide === 'right' && mark}
     </>
   );
-  if (to !== undefined && !rest.disabled) {
+  const link = href ?? (to === undefined ? undefined : toHref(to));
+  if (link !== undefined && !rest.disabled) {
     return (
-      <a className={classes} href={toHref(to)} data-test-subj={testId} title={rest.title} aria-label={rest['aria-label']}>
+      <a
+        className={classes}
+        href={link}
+        target={target}
+        rel={target === '_blank' ? 'noopener noreferrer' : undefined}
+        data-test-subj={testId}
+        title={rest.title}
+        aria-label={rest['aria-label']}
+      >
         {content}
       </a>
     );
@@ -96,13 +119,27 @@ export function Button({
   );
 }
 
-/** A button that is only an icon; `label` is what a screen reader and a hover say */
+/**
+ * A button that is only an icon, as the original's icon button: round in the theme, and pressed as
+ * a button is; `label` is what a screen reader and a hover say. An icon in a `Button` without text
+ * is the original's empty button instead, with its corners.
+ */
 export function IconButton({
   icon,
   label,
+  className,
   ...rest
 }: Omit<ButtonProps, 'children' | 'icon'> & { icon: IconName; label: string }) {
-  return <Button variant="ghost" {...rest} icon={icon} aria-label={label} title={rest.title ?? label} />;
+  return (
+    <Button
+      variant="ghost"
+      {...rest}
+      className={cx('atlButton--round', className)}
+      icon={icon}
+      aria-label={label}
+      title={rest.title ?? label}
+    />
+  );
 }
 
 /** A link to a path of this product */
@@ -218,7 +255,8 @@ export function EmptyPrompt({
   );
 }
 
-export function Spinner({ size }: { size?: 'l' }) {
+/** The original's spinner: 16 px, or its sizes "l" (24 px) and "xl" (32 px) */
+export function Spinner({ size }: { size?: 'l' | 'xl' }) {
   return <span className={cx('atlSpinner', size && `atlSpinner--${size}`)} role="progressbar" />;
 }
 
@@ -269,17 +307,21 @@ export interface TabItem {
   testId?: string;
 }
 
+/** Tabs as the theme draws the original's: pills, the one shown on the secondary surface */
 export function Tabs({
   tabs,
   selected,
   onSelect,
+  size = 'm',
 }: {
   tabs: TabItem[];
   selected: string;
   onSelect?: (id: string) => void;
+  /** The original's sizes: 'm', its own, and 's', a little tighter */
+  size?: 's' | 'm';
 }) {
   return (
-    <div className="atlTabs" role="tablist">
+    <div className={cx('atlTabs', size === 's' && 'atlTabs--s')} role="tablist">
       {tabs.map((tab) =>
         tab.to !== undefined ? (
           <a

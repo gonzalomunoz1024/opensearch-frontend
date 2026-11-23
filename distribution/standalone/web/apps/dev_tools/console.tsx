@@ -13,6 +13,7 @@ import { Icon } from '../../components/icon';
 import { ConfirmModal, Flyout, Modal, Popover, Portal, Tooltip, downloadFile } from '../../components/overlay';
 import { formatDate } from '../../lib/dates';
 import { services } from '../../services';
+import { trackLoading } from '../../shell/loading_count';
 import { ConsoleEditor, ConsoleSuggestions, type ConsoleEditorHandle } from './console_editor';
 import {
   autoIndent,
@@ -20,7 +21,9 @@ import {
   bodyOf,
   describePast,
   expandToRequests,
+  failedAnswer,
   formatAnswer,
+  historyKey,
   insertRequest,
   lineOf,
   looksLikeCurl,
@@ -34,6 +37,7 @@ import {
   requestsBetween,
   suggest,
   toCurl,
+  typedOnLine,
   type ActionsPlace,
   type Answer,
   type ClusterNames,
@@ -69,6 +73,15 @@ const REASONS: Record<number, string> = {
   504: 'Gateway Timeout',
 };
 
+/**
+ * A request to the console's proxy, read to its end. The header's loading indicator counts it
+ * until then, as the original's console asks through the http service, which counts its requests.
+ */
+export function askProxy(query: URLSearchParams, init: RequestInit): Promise<{ response: Response; text: string }> {
+  const asked = fetch(`${services.http.prepend('/api/console/proxy')}?${query.toString()}`, { ...init, credentials: 'same-origin' });
+  return trackLoading(asked.then(async (response) => ({ response, text: await response.text() })));
+}
+
 /** Sends one request through the console's proxy, as the original does */
 async function send(request: ConsoleRequest, several: boolean, signal: AbortSignal): Promise<Answer> {
   const data = bodyOf(request);
@@ -77,16 +90,16 @@ async function send(request: ConsoleRequest, several: boolean, signal: AbortSign
   const titled = (value: string) => (several ? `# ${request.method} ${request.url}\n${value}` : value);
   try {
     const query = new URLSearchParams({ path: request.url, method: request.method });
-    const response = await fetch(`${services.http.prepend('/api/console/proxy')}?${query.toString()}`, {
+    const asked = await askProxy(query, {
       method: 'POST',
       headers: { 'osd-xsrf': 'true', 'content-type': 'application/json' },
       body: data || undefined,
-      credentials: 'same-origin',
       signal,
     });
+    const response = asked.response;
     const status = response.status;
     const statusText = response.statusText || REASONS[status] || '';
-    let text = await response.text();
+    let text = asked.text;
     let contentType = response.headers.get('content-type') ?? 'text/plain';
     // OpenSearch Dashboards answers a HEAD request with its status as text
     if (request.method.toUpperCase() === 'HEAD') {
@@ -96,7 +109,7 @@ async function send(request: ConsoleRequest, several: boolean, signal: AbortSign
     const ok = status >= 200 && status < 300;
     const timeMs = Date.now() - started;
     if (!ok) {
-      const value = text ? text : `Request failed to get to the server (status code: ${status})`;
+      const value = failedAnswer(text, contentType, status);
       return { ...base, ok, statusCode: status, statusText, contentType: text ? contentType : 'text/plain', timeMs, value: titled(value) };
     }
     const warnings = response.headers.get('warning');
@@ -130,13 +143,12 @@ function fieldNames(properties: unknown, prefix = ''): string[] {
 
 async function systemGet<T>(path: string): Promise<T> {
   const query = new URLSearchParams({ path, method: 'GET' });
-  const response = await fetch(`${services.http.prepend('/api/console/proxy')}?${query.toString()}`, {
+  const { response, text } = await askProxy(query, {
     method: 'POST',
     headers: { 'osd-xsrf': 'true', 'osd-system-request': 'true' },
-    credentials: 'same-origin',
   });
   if (!response.ok) throw new Error(String(response.status));
-  return (await response.json()) as T;
+  return JSON.parse(text) as T;
 }
 
 function useClusterNames(settings: ConsoleSettings): [ClusterNames, () => void] {
@@ -632,14 +644,7 @@ function HistoryPanel({ settings, onApply, onClose }: { settings: ConsoleSetting
           className="dvtHistory__list"
           aria-label="History of sent requests"
           aria-activedescendant={`historyReq${selected}`}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              if (chosen) onApply(chosen);
-            } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-              event.preventDefault();
-              choose(selected + (event.key === 'ArrowUp' ? -1 : 1));
-            }
-          }}
+          onKeyDown={(event) => historyKey(event, selected, { choose, apply: () => chosen && onApply(chosen) })}
         >
           {requests.map((request, index) => {
             const description = describePast(request, now);
@@ -803,7 +808,7 @@ export function Console() {
     if (running) return;
     const requests = requestsBetween(doc, fromLine, toLine);
     if (requests.length === 0) {
-      services.toasts.info('No request selected. Select a request by placing the cursor inside it.');
+      services.toasts.plain('No request selected. Select a request by placing the cursor inside it.');
       return;
     }
     const controller = new AbortController();
@@ -852,7 +857,7 @@ export function Console() {
 
   const copyAsCurl = () => {
     const curl = toCurl(blocksBetween(doc, fromLine, toLine, true), host);
-    const done = () => services.toasts.info('Request copied as cURL');
+    const done = () => services.toasts.plain('Request copied as cURL');
     if (navigator.clipboard?.writeText) navigator.clipboard.writeText(curl).then(done, () => undefined);
   };
 
@@ -1037,8 +1042,8 @@ export function Console() {
             highlighted={doc.highlighted}
             onChange={(next) => {
               const [start, end] = editor.current?.selection() ?? [0, 0];
-              // Suggestions follow what is typed, and go when text is taken away
-              if (start === end && next.length > text.length) openMenu(next, start);
+              // Suggestions follow what is typed, and go when text is taken away or a line is begun
+              if (start === end && next.length > text.length && typedOnLine(next, start)) openMenu(next, start);
               else setMenu(undefined);
               setText(next);
             }}

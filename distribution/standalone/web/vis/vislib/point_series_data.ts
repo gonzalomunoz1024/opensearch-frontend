@@ -74,6 +74,11 @@ export interface PointSeriesOptions {
   bounds?: { min: number; max: number };
   /** Moves a moment on by whole intervals of the date histogram */
   addInterval?: (value: number, times: number) => number;
+  /**
+   * The keys that are not numbers or texts (ranges) by their texts: shared by the charts of a
+   * split, so that each writes the values along the axis of all of them
+   */
+  keys?: Map<string, unknown>;
 }
 
 const keyText = (key: unknown): string => (key !== null && typeof key === 'object' ? JSON.stringify(key) : String(key));
@@ -101,7 +106,7 @@ export function buildPointSeries(
 
   // A bucket's key that is not a number or a text (a range) is told apart by its text, and
   // written from the key itself
-  const keys = new Map<string, unknown>();
+  const keys = options.keys ?? new Map<string, unknown>();
   const xOf = (row: TableRow): number | string => {
     if (!xColumn) return '_all';
     const value = row[xColumn.id];
@@ -209,9 +214,15 @@ export function buildPointSeries(
 /**
  * The values along the category axis, as vislib orders them (orderXValues): by time or number
  * when the axis is ordered, else as the rows bring them, or by the sum of their values; on a
- * histogram the buckets it skips between two it has are put back, a step apart
+ * histogram the buckets it skips between two it has are put back, a step apart. The charts of a
+ * split are ordered as a whole that has no step of its own (`fillGaps` false): from the values of
+ * their series as they come, none put back.
  */
-export function orderXValues(data: Pick<PointSeriesData, 'xValues' | 'series' | 'ordered'>, bySum = false): Array<number | string> {
+export function orderXValues(
+  data: Pick<PointSeriesData, 'xValues' | 'series' | 'ordered'>,
+  bySum = false,
+  fillGaps = true
+): Array<number | string> {
   const keys = new Map<number | string, { index: number; sum: number }>();
   data.xValues.forEach((value, index) => keys.set(value, { index, sum: 0 }));
   for (const series of data.series) {
@@ -241,7 +252,7 @@ export function orderXValues(data: Pick<PointSeriesData, 'xValues' | 'series' | 
       result.push(key);
       return;
     }
-    const interval = data.ordered?.interval;
+    const interval = fillGaps ? data.ordered?.interval : undefined;
     const next = sorted[at + 1]?.pair[0];
     const gapEdge = typeof next === 'number' ? next : parseFloat(String(next));
     if (interval === undefined || interval === null || Number.isNaN(gapEdge) || next === undefined) {

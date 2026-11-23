@@ -1,0 +1,957 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/*
+ * The frame around every page, as the original's theme draws it: the header with its trail, its
+ * help menu and a page's actions, and the navigation. The sizes are the theme's, measured on
+ * OpenSearch Dashboards 3.9.0 with the Atlas theme.
+ */
+
+.shlApp {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  padding-top: var(--header-height);
+}
+
+.shlApp--docked {
+  padding-left: 320px;
+}
+
+/* Without the header, on a full screen dashboard or a page embedded in another */
+.shlApp--chromeHidden {
+  padding-top: 0;
+}
+
+.shlMain {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* --- The header ------------------------------------------------------------------------------ */
+
+.shlHeader {
+  /* What is in the header is as high as the header without its line */
+  --shl-header-content: calc(var(--header-height) - 1px);
+
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  display: flex;
+  justify-content: space-between;
+  height: var(--header-height);
+  border-bottom: 1px solid var(--color-border-light);
+  background-color: var(--color-surface);
+  line-height: 1;
+}
+
+/* Frosted, as the theme's header, where the browser can */
+@supports (backdrop-filter: blur(1px)) {
+  .shlHeader {
+    background-color: var(--material-background);
+    backdrop-filter: saturate(180%) blur(24px);
+  }
+}
+
+.shlHeader__section {
+  display: flex;
+  flex: 0 0 auto;
+}
+
+.shlHeader__item {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+/* The menu, the home link and the help menu: the theme's header buttons */
+.shlHeader__button {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--shl-header-content);
+  height: var(--shl-header-content);
+  padding: 0 var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background-color: transparent;
+  color: var(--color-text-primary);
+  font-size: 0;
+  font-weight: var(--font-weight-medium);
+  line-height: 0;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) ease-out,
+    border-color var(--duration-fast) ease-out,
+    color var(--duration-fast) ease-out;
+}
+
+/* Tinted under the pointer and while it has the focus, however it got it */
+.shlHeader__button:hover,
+.shlHeader__button:focus {
+  background-color: color-mix(in srgb, var(--color-text-secondary) var(--tint-opacity), transparent);
+  text-decoration: none;
+}
+
+.shlHeader__button:focus-visible,
+.shlCrumb:focus-visible,
+.shlCrumb__more:focus-visible,
+.shlHelp__link:focus-visible,
+.shlNav__close:focus-visible,
+.shlNavGroup__heading:focus-visible,
+.shlNavItem__button:focus-visible {
+  outline-offset: 2px;
+}
+
+.shlHeader__icon {
+  flex: none;
+  width: var(--space-4);
+  height: var(--space-4);
+  fill: currentcolor;
+}
+
+/* The logo and the spinner share one place; the spinner shows while something is loading */
+.shlHeader__homeContent {
+  display: grid;
+  min-width: var(--space-6);
+}
+
+.shlHeader__homeIcon,
+.shlHeader__loader {
+  grid-area: 1 / 1;
+  align-self: center;
+  justify-self: center;
+}
+
+.shlHeader__homeIcon > img {
+  display: block;
+  width: var(--space-6);
+  height: var(--space-6);
+}
+
+.shlHeader__loader > .atlSpinner {
+  display: block;
+}
+
+.shlHeader__spinner--hidden {
+  visibility: hidden;
+  animation-play-state: paused;
+}
+
+/* A page that hides the header shows what is loading as the theme's thinnest progress bar,
+   fixed across the top of the window */
+.shlLoadingBar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1001;
+  height: 2px;
+  overflow: hidden;
+}
+
+.shlLoadingBar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-color: var(--color-accent);
+  animation: shlLoadingBar 1s var(--ease-out-quint) infinite;
+}
+
+.shlLoadingBar--hidden {
+  visibility: hidden;
+}
+
+.shlLoadingBar--hidden::before {
+  animation-play-state: paused;
+}
+
+@keyframes shlLoadingBar {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* In a narrow window the theme's header buttons give up a quarter of their width */
+@media (max-width: 574px) {
+  .shlHeader__button,
+  .shlHeader__item {
+    min-width: calc(var(--space-8) + var(--space-1));
+  }
+}
+
+/* What a tooltip is about: as big as that, whatever it is in */
+.shlTipAnchor {
+  display: inline-flex;
+}
+
+.shlHeader__item > .shlHeaderPopoverAnchor {
+  position: relative;
+  display: flex;
+}
+
+/* Above everything of the page, as the theme's tooltips */
+.atlTooltip.shlHeaderTip {
+  z-index: 9000;
+  animation: shlFadeIn 90ms ease-out;
+}
+
+@keyframes shlFadeIn {
+  from {
+    opacity: 0;
+  }
+}
+
+/* --- The trail ------------------------------------------------------------------------------- */
+
+.shlCrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+.shlHeader__crumbs {
+  flex: 1 1 auto;
+  margin: 0 var(--space-3);
+}
+
+/* In the header a trail stays on its line and shortens its crumbs */
+.shlCrumbs--truncate {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.shlCrumbWrapper {
+  position: relative;
+  z-index: 0;
+}
+
+/* A crumb keeps room for three characters, and the next ones for their "/" too */
+.shlCrumbs--truncate .shlCrumbWrapper:not(.shlCrumbWrapper--collapsed) {
+  min-width: 3ch;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shlCrumbs--truncate .shlCrumbWrapper:not(.shlCrumbWrapper--first, .shlCrumbWrapper--collapsed) {
+  min-width: calc(3ch + var(--space-8) + var(--space-4));
+}
+
+.shlCrumbs--truncate .shlCrumbWrapper--last:not(.shlCrumbWrapper--collapsed) {
+  max-width: none;
+}
+
+.shlCrumbWall {
+  min-width: calc(3ch + var(--space-8) + var(--space-3));
+  overflow: hidden;
+}
+
+.shlCrumbWrapper:not(.shlCrumbWrapper--first)::before {
+  content: "/";
+  margin: 0 var(--space-2);
+  color: var(--color-text-tertiary);
+}
+
+/* A trail that starts with its "…" starts with that, not with a "/" */
+.shlCrumbs > .shlCrumbWrapper--collapsed:first-child::before {
+  content: none;
+}
+
+.shlCrumb {
+  display: inline-block;
+  color: var(--color-text-secondary);
+  font-weight: inherit;
+  line-height: inherit;
+  text-align: left;
+}
+
+.shlCrumb:hover {
+  color: var(--color-text-primary);
+}
+
+.shlCrumbs--truncate .shlCrumb:not(.shlCrumb--collapsed) {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
+}
+
+/* Where the page is: in the colour of the text, a little heavier */
+.shlCrumbs:not(.shlCrumbs--inPopover) .shlCrumbWrapper--last .shlCrumb {
+  color: inherit;
+  font-weight: var(--font-weight-medium);
+}
+
+.shlCrumb--collapsed {
+  flex-shrink: 0;
+  vertical-align: top;
+}
+
+.shlCrumb__more {
+  display: inline-block;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-secondary);
+  line-height: normal;
+  text-align: left;
+  cursor: pointer;
+}
+
+.shlCrumb__more:hover {
+  color: var(--color-text-primary);
+}
+
+a.shlCrumb:hover,
+a.shlCrumb:focus,
+.shlCrumb__more:hover,
+.shlCrumb__more:focus {
+  text-decoration: underline;
+}
+
+/* A link of the trail that has the focus, as the theme marks its links: on a wash of its own
+   colour, with a ring that draws in. The washes are the theme's own values. */
+a.shlCrumb:focus,
+.shlCrumb__more:focus {
+  background-color: #f1f1f1;
+  animation: shlFocusRing var(--duration-slow) var(--ease-out-quint) forwards;
+}
+
+.shlCrumbs:not(.shlCrumbs--inPopover) .shlCrumbWrapper--last a.shlCrumb:focus {
+  background-color: #e8e8e9;
+}
+
+:root.themeDark a.shlCrumb:focus,
+:root.themeDark .shlCrumb__more:focus {
+  background-color: #48484b;
+}
+
+:root.themeDark .shlCrumbs:not(.shlCrumbs--inPopover) .shlCrumbWrapper--last a.shlCrumb:focus {
+  background-color: #69696b;
+}
+
+@keyframes shlFocusRing {
+  from {
+    box-shadow: 0 0 0 6px transparent;
+  }
+
+  to {
+    box-shadow: 0 0 0 3px var(--color-focus-ring);
+  }
+}
+
+.shlCrumb__arrow {
+  display: inline-block;
+  width: var(--space-3);
+  height: var(--space-3);
+  vertical-align: middle;
+  fill: currentcolor;
+}
+
+/* --- A page's actions ------------------------------------------------------------------------ */
+
+.shlTopNav {
+  display: flex;
+  margin-right: var(--space-1);
+}
+
+.shlTopNav__list {
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.shlTopNav__list > * {
+  margin: 0 var(--space-1);
+}
+
+/* A page's links are the original's header links: small, in the accent colour */
+.shlTopNav__list .atlButton--empty {
+  height: var(--space-6);
+  padding: 0 9px;
+}
+
+/* Its main action is a button at least as wide as the original's, its icon as far from its text */
+.shlTopNav__list .atlButton:not(.atlButton--empty) {
+  gap: var(--space-2);
+  min-width: 112px;
+  border: 1px solid transparent;
+}
+
+/* An action a page hides in a narrow window, as the original's `eui-hideFor` classes do */
+@media (max-width: 574px) {
+  .shlTopNav__item--hideFor-xs {
+    display: none !important;
+  }
+}
+
+@media (min-width: 575px) and (max-width: 767px) {
+  .shlTopNav__item--hideFor-s {
+    display: none !important;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 991px) {
+  .shlTopNav__item--hideFor-m {
+    display: none !important;
+  }
+}
+
+/* --- What the header opens ------------------------------------------------------------------- */
+
+/* The kit's popover drawn as the theme's panel with an arrow: 8 pixels from its button, where it
+   settles from 16; as wide as what it holds, opaque, above the header by as much as the theme's */
+.atlPopover.shlHeaderPopover {
+  /* The curve the theme opens its popovers on */
+  --shl-popover-ease: cubic-bezier(0.34, 1.3, 0.64, 1);
+
+  z-index: 3000;
+  width: max-content;
+  min-width: 112px;
+  max-width: calc(100vw - var(--space-8));
+  max-height: none;
+  padding: var(--space-4);
+  overflow: visible;
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  backdrop-filter: none;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+.atlPopover.shlHeaderPopover--s {
+  padding: var(--space-2);
+}
+
+.atlPopover.shlHeaderPopover[data-placement="bottom"] {
+  animation:
+    shlFadeIn 90ms var(--shl-popover-ease),
+    shlPopoverFromBelow 190ms var(--shl-popover-ease);
+}
+
+.atlPopover.shlHeaderPopover[data-placement="top"] {
+  animation:
+    shlFadeIn 90ms var(--shl-popover-ease),
+    shlPopoverFromAbove 190ms var(--shl-popover-ease);
+}
+
+.atlPopover.shlHeaderPopover[data-placement="left"] {
+  animation:
+    shlFadeIn 90ms var(--shl-popover-ease),
+    shlPopoverFromLeft 190ms var(--shl-popover-ease);
+}
+
+.atlPopover.shlHeaderPopover[data-placement="right"] {
+  animation:
+    shlFadeIn 90ms var(--shl-popover-ease),
+    shlPopoverFromRight 190ms var(--shl-popover-ease);
+}
+
+@keyframes shlPopoverFromBelow {
+  from {
+    transform: translateY(var(--space-2));
+  }
+}
+
+@keyframes shlPopoverFromAbove {
+  from {
+    transform: translateY(calc(-1 * var(--space-2)));
+  }
+}
+
+@keyframes shlPopoverFromLeft {
+  from {
+    transform: translateX(calc(-1 * var(--space-2)));
+  }
+}
+
+@keyframes shlPopoverFromRight {
+  from {
+    transform: translateX(var(--space-2));
+  }
+}
+
+/* --- The help menu --------------------------------------------------------------------------- */
+
+/* The theme's popover title: from edge to edge of a panel padded by 8, a line under it */
+.shlHelp__title {
+  display: flex;
+  gap: var(--space-6);
+  margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) var(--space-2);
+  padding: var(--space-3) var(--space-2);
+  border-bottom: 1px solid var(--color-border-light);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+.shlHelp__title > h2 {
+  flex: 1 1 0;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.shlHelp__body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
+.shlHelp__space {
+  height: 0;
+}
+
+/* The theme's smallest empty button, flush with the left edge */
+.shlHelp__link {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  height: var(--space-6);
+  margin-right: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--color-accent-button-text);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+  transition: background-color var(--duration-fast) ease-out;
+}
+
+.shlHelp__link:hover,
+.shlHelp__link:focus {
+  background-color: var(--color-accent-tint);
+  text-decoration: none;
+}
+
+.shlHelp__linkText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shlHelp__mark {
+  flex: none;
+  width: var(--space-3);
+  height: var(--space-3);
+  margin-right: var(--space-2);
+  fill: currentcolor;
+}
+
+.shlHelp__rule {
+  align-self: stretch;
+  height: 1px;
+  margin: var(--space-3) 0;
+  border: 0;
+  background-color: var(--color-border-light);
+}
+
+.shlHelp__app {
+  align-self: stretch;
+  margin-bottom: var(--space-1);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+/* --- The navigation -------------------------------------------------------------------------- */
+
+/* While the navigation lies over the page, the page does not scroll */
+body.shlBody--masked {
+  overflow: hidden;
+}
+
+/* The theme's mask under the header: a scrim, and a blur that comes in once the scrim is there */
+.shlNavMask {
+  position: fixed;
+  top: var(--header-height);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  line-height: 1;
+  animation: shlFadeIn var(--duration-fast) ease-in;
+}
+
+.shlNavMask::before,
+.shlNavMask::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.shlNavMask::before {
+  background-color: var(--scrim);
+}
+
+.shlNavMask::after {
+  backdrop-filter: blur(4px);
+  animation:
+    shlScrimBlurShow 0s linear var(--duration-fast) backwards,
+    shlScrimBlurIn var(--duration-normal) var(--ease-out-quint) var(--duration-fast) backwards;
+}
+
+@keyframes shlScrimBlurShow {
+  from {
+    visibility: hidden;
+  }
+}
+
+@keyframes shlScrimBlurIn {
+  from {
+    backdrop-filter: blur(0);
+  }
+}
+
+/* The theme's flyout from the left, 320 pixels wide under the header; its button that closes it
+   stands outside it, which the clip leaves room for */
+.shlNav {
+  position: fixed;
+  top: var(--header-height);
+  left: 0;
+  bottom: 0;
+  z-index: 6000;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 320px;
+  border-right: 1px solid var(--color-border-light);
+  background-color: var(--color-surface);
+  line-height: 1;
+  clip-path: polygon(0 0, 150% 0, 150% 100%, 0 100%);
+  animation: shlNavIn var(--duration-normal) var(--ease-out-quint);
+}
+
+.shlNav:focus {
+  outline: none;
+}
+
+@keyframes shlNavIn {
+  0% {
+    opacity: 0;
+    transform: translateX(-100%);
+  }
+
+  75% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Docked beside the page: part of it, under the header, a heavier line at its edge */
+.shlNav--docked {
+  z-index: 999;
+  border-right-width: 2px;
+  clip-path: none;
+  animation: none;
+}
+
+@media (max-width: 767px) {
+  .shlNav {
+    max-width: 90vw;
+  }
+}
+
+/* The theme's small filled round button, 24 pixels from the navigation's edge */
+.shlNav__close {
+  position: absolute;
+  top: var(--space-2);
+  right: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  width: var(--space-6);
+  height: var(--space-6);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background-color: var(--color-text-secondary);
+  box-shadow: var(--shadow-sm);
+  color: var(--color-on-accent);
+  transform: translateX(calc(100% + var(--space-6)));
+  cursor: pointer;
+}
+
+/* In the dark theme the cross is drawn dark on the lighter gray, as the theme writes it */
+:root.themeDark .shlNav__close {
+  color: #1d1d1f;
+}
+
+.shlNav__close:hover,
+.shlNav__close:focus {
+  filter: brightness(1.1);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .shlNav__close {
+    transition:
+      background-color var(--duration-fast) ease-out,
+      border-color var(--duration-fast) ease-out,
+      color var(--duration-fast) ease-out,
+      filter var(--duration-fast) ease-out,
+      transform var(--duration-fast) ease-out;
+  }
+}
+
+@media (max-width: 767px) {
+  .shlNav__close {
+    transform: translateX(calc(100% + var(--space-1)));
+  }
+}
+
+.shlNav__closeIcon {
+  width: var(--space-4);
+  height: var(--space-4);
+  fill: currentcolor;
+}
+
+.shlNav__rule {
+  flex: none;
+  height: 1px;
+  margin: 0;
+  border: 0;
+  background-color: var(--color-border-light);
+  color: var(--color-border-light);
+}
+
+/* What is under "Recently viewed" scrolls on its own; the rest of the navigation as a whole */
+.shlNav__scroll {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden auto;
+  scrollbar-width: thin;
+}
+
+.shlNav__empty {
+  padding: 0 var(--space-2) var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+/* A group: its heading, which opens and closes it, and what it holds */
+.shlNavGroup {
+  flex: none;
+}
+
+.shlNavGroup:not(:first-child) {
+  border-top: 1px solid var(--color-border-light);
+}
+
+.shlNavGroup__trigger {
+  display: flex;
+  align-items: center;
+  padding: var(--space-4);
+}
+
+.shlNavGroup__heading {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: row-reverse;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-semibold);
+  line-height: 21px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.shlNavGroup__arrowBox {
+  flex: none;
+  width: var(--space-4);
+  height: var(--space-4);
+  margin: 0 var(--space-1) 0 var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.shlNavGroup__arrow {
+  display: inline-block;
+  vertical-align: top;
+  width: var(--space-4);
+  height: var(--space-4);
+  fill: currentcolor;
+  transition: transform var(--duration-normal) var(--ease-out-quint);
+}
+
+.shlNavGroup--open .shlNavGroup__arrow {
+  transform: rotate(90deg);
+}
+
+/* A heading that has the focus marks its arrow, as the theme's accordions do */
+.shlNavGroup__heading:focus .shlNavGroup__arrowBox {
+  color: var(--color-accent);
+  animation: shlFocusRing var(--duration-slow) var(--ease-out-quint) forwards;
+}
+
+.shlNavGroup__headingContent {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.shlNavGroup__icon {
+  display: flex;
+  flex: none;
+}
+
+.shlNavGroup__icon > img,
+.shlNavGroup__icon > svg {
+  display: block;
+  width: var(--space-6);
+  height: var(--space-6);
+}
+
+.shlNavGroup__title {
+  font-size: var(--font-size-s);
+  font-weight: inherit;
+  line-height: 20px;
+}
+
+/* What a group holds grows and shrinks as it opens and closes; closed, it is hidden at once */
+.shlNavGroup__region {
+  display: grid;
+  grid-template-rows: 0fr;
+  visibility: hidden;
+  opacity: 0;
+  transition:
+    grid-template-rows var(--duration-normal) var(--ease-out-quint),
+    opacity var(--duration-normal) var(--ease-out-quint);
+}
+
+.shlNavGroup--open > .shlNavGroup__region {
+  grid-template-rows: 1fr;
+  visibility: visible;
+  opacity: 1;
+}
+
+.shlNavGroup__region:focus {
+  outline: none;
+}
+
+.shlNavGroup__regionContent {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.shlNavGroup__children {
+  padding: var(--space-2);
+}
+
+.shlNavGroup--withHeading .shlNavGroup__children {
+  padding-top: 0;
+}
+
+/* The links: the theme's small list items, in the secondary colour, on a wash under the pointer
+   and while they have the focus */
+.shlNavList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.shlNavList--recents {
+  max-height: 160px;
+  margin-right: calc(-1 * var(--space-2));
+  overflow: hidden auto;
+  scrollbar-width: thin;
+}
+
+.shlNavItem {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  transition: background-color var(--duration-fast);
+}
+
+.shlNavItem:hover,
+.shlNavItem:focus-within {
+  background-color: var(--color-border-light);
+}
+
+.shlNavItem__button {
+  display: flex;
+  flex: 1 0 auto;
+  align-items: center;
+  max-width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  background: none;
+  color: var(--color-text-secondary);
+  font-weight: inherit;
+  line-height: var(--space-6);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.shlNavItem:hover .shlNavItem__button {
+  text-decoration: underline;
+}
+
+/* The application that is open */
+.shlNavItem--active,
+.shlNavItem--active:hover,
+.shlNavItem--active:focus-within {
+  background-color: var(--color-accent-tint);
+}
+
+.shlNavItem--active .shlNavItem__button {
+  color: var(--color-accent);
+  font-weight: var(--font-weight-medium);
+}
+
+.shlNavItem__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shlNavItem__icon {
+  flex: none;
+  align-self: flex-start;
+  width: var(--space-4);
+  height: var(--space-4);
+  margin-right: var(--space-3);
+  fill: currentcolor;
+}
+
+/* The button that docks the navigation: the theme's extra small item, flush, square */
+.shlNavItem--xSmall {
+  font-size: var(--font-size-xs);
+  line-height: var(--space-3);
+}
+
+.shlNavItem--xSmall .shlNavItem__button {
+  line-height: var(--space-4);
+}
+
+.shlNavList--flush .shlNavItem {
+  border-radius: 0;
+}
