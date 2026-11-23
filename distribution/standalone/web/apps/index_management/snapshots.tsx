@@ -326,12 +326,12 @@ function IndexList({
   return (
     <Flyout
       title={
-        <span className="ismIndexList__title">
+        <>
           <button type="button" className="ismIndexList__back" aria-label="Back" onClick={onBack}>
-            <Icon name="chevronLeft" />
+            <Icon name="chevronLeft" size="xl" />
           </button>{' '}
           {title} {snapshot} ({rows.length})
-        </span>
+        </>
       }
       onClose={onBack}
       hideClose
@@ -341,7 +341,6 @@ function IndexList({
         columns={columns}
         rows={rows}
         rowId={(row) => row.index}
-        sortField="index"
         pageSizes={SMALL_PAGE_SIZES}
         empty="No items found"
       />

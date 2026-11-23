@@ -2150,19 +2150,19 @@
   margin: 0;
 }
 
-.ismIndexList__title {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
+/* The title of a list of indices, as the plugin's: a large arrow back, a space, and the words */
 .ismIndexList__back {
   display: inline-flex;
+  vertical-align: middle;
   padding: 0;
   border: 0;
   background: none;
   color: var(--color-accent);
   cursor: pointer;
+}
+
+.ismIndexList__back .atlIcon {
+  padding-bottom: 5px;
 }
 
 .ismToastAction {
