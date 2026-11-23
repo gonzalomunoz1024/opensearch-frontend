@@ -68,6 +68,15 @@ export function documentFields(indexPattern: IndexPattern): Record<string, unkno
   };
 }
 
+/**
+ * The fields: ['*'] that the setting search:includeAllFields adds to every search the original
+ * makes through its search source (Discover's, a saved search's, the context view's; not the
+ * single document's)
+ */
+export function allFields(include = services.uiSettings.get<boolean>('search:includeAllFields', false)): Record<string, unknown> {
+  return include ? { fields: ['*'] } : {};
+}
+
 export function sortClause(indexPattern: IndexPattern, sort: SortPair[]): Array<Record<string, unknown>> {
   const options = services.uiSettings.get<Record<string, unknown>>('sort:options', { unmapped_type: 'boolean' });
   const pairs = sort.length
@@ -98,6 +107,7 @@ export function buildDiscoverRequest(request: DiscoverRequest): Record<string, u
   if (timeFilter) query.bool.filter.push(timeFilter);
   const body: Record<string, unknown> = {
     ...documentFields(indexPattern),
+    ...allFields(),
     size: request.size,
     sort: sortClause(indexPattern, request.sort),
     query,

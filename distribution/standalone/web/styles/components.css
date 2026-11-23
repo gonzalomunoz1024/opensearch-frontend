@@ -4,25 +4,53 @@
 
 /* --- Icons --------------------------------------------------------------------------------- */
 
+/* As the original's: shapes filled in the colour of the text, 16 pixels square */
 .atlIcon {
   flex: none;
+  display: inline-block;
   width: 16px;
   height: 16px;
-  fill: none;
-  stroke: currentcolor;
-  stroke-width: 1.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  vertical-align: middle;
+  fill: currentcolor;
+}
+
+.atlIcon--s {
+  width: 12px;
+  height: 12px;
 }
 
 .atlIcon--l {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
 }
 
 .atlIcon--xl {
   width: 32px;
   height: 32px;
+}
+
+.atlIcon--xxl {
+  width: 40px;
+  height: 40px;
+}
+
+/* An application's icon given no colour: the text's, and the healthy colour for its second */
+.atlIcon--app {
+  fill: var(--color-text-primary);
+}
+
+.atlIcon--app .atlIcon__secondary {
+  fill: var(--color-healthy-graphic);
+}
+
+/* A drawing in lines that a part makes for itself under the icons' class, not one of `Icon`'s
+   (which say they are images): drawn in strokes, as the kit drew its icons before */
+svg.atlIcon:not([role="img"]) {
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 /* --- Buttons ------------------------------------------------------------------------------- */
@@ -43,8 +71,10 @@
   white-space: nowrap;
   cursor: pointer;
   transition:
-    background var(--duration-fast) var(--ease-out-quint),
-    transform var(--duration-fast) var(--ease-out-quint);
+    background var(--duration-fast) ease-out,
+    color var(--duration-fast) ease-out,
+    filter var(--duration-fast) ease-out,
+    transform var(--duration-fast) ease-out;
   user-select: none;
 }
 
@@ -57,55 +87,80 @@
   transform: scale(0.97);
 }
 
+/* A filled button, as the theme's: its colour and the small shadow, brighter under the pointer */
 .atlButton--primary {
   background: var(--color-accent);
   color: var(--color-on-accent);
+  box-shadow: var(--shadow-sm);
 }
 
-.atlButton--primary:hover {
-  background: color-mix(in srgb, var(--color-accent) 88%, #000000);
+.atlButton--primary:hover,
+.atlButton--primary:focus-visible {
+  background: var(--color-accent);
+  filter: brightness(1.1);
 }
 
+/* The theme's icon button on a base of its colour */
 .atlButton--tint {
   background: var(--color-accent-tint);
-  color: var(--color-accent);
+  color: var(--color-accent-button-text);
 }
 
 .atlButton--tint:hover {
   background: color-mix(in srgb, var(--color-accent) 16%, transparent);
 }
 
-.atlButton--danger {
-  background: var(--color-critical-tint);
-  color: var(--color-critical-text);
+/* The theme's danger button, not filled: outlined in the critical colour, a soft fill on hover.
+   As an icon button it has no outline; empty, neither outline nor fill until hovered */
+.atlButton--danger,
+.atlButton--dangerOutline {
+  border: 1px solid var(--color-critical);
+  background: transparent;
+  color: var(--color-critical-button-text);
 }
 
-.atlButton--danger:hover {
-  background: color-mix(in srgb, var(--color-critical) 18%, transparent);
+.atlButton--danger:hover,
+.atlButton--dangerOutline:hover,
+.atlButton--dangerEmpty:hover {
+  background: var(--color-critical-tint);
+}
+
+.atlButton--danger.atlButton--icon {
+  border-color: transparent;
+}
+
+.atlButton--dangerEmpty {
+  background: transparent;
+  color: var(--color-critical-button-text);
+  padding: 0 var(--space-2);
 }
 
 .atlButton--dangerFill {
   background: var(--color-critical);
   color: var(--color-on-accent);
+  box-shadow: var(--shadow-sm);
 }
 
-.atlButton--dangerFill:hover {
-  background: color-mix(in srgb, var(--color-critical) 88%, #000000);
+.atlButton--dangerFill:hover,
+.atlButton--dangerFill:focus-visible {
+  background: var(--color-critical);
+  filter: brightness(1.1);
 }
 
-.atlButton--dangerOutline {
-  border: 1px solid var(--color-critical);
+/* The theme's success button, not filled: the original's "Update" of a search that changed */
+.atlButton--healthyOutline {
+  border: 1px solid var(--color-healthy);
   background: transparent;
-  color: color-mix(in srgb, var(--color-critical) 84%, #000000);
+  color: var(--color-healthy-button-text);
 }
 
-.atlButton--dangerOutline:hover {
-  background: var(--color-critical-tint);
+.atlButton--healthyOutline:hover {
+  background: var(--color-healthy-tint);
 }
 
 .atlButton--empty {
   background: transparent;
-  color: var(--color-accent);
+  color: var(--color-accent-button-text);
   padding: 0 var(--space-2);
 }
 
@@ -145,6 +200,7 @@
 
 .atlButton:disabled,
 .atlButton[aria-disabled="true"] {
+  border-color: transparent;
   background: var(--color-surface-secondary);
   color: var(--color-text-tertiary);
   cursor: not-allowed;
@@ -157,9 +213,13 @@
 .atlButton--dangerFill:disabled,
 .atlButton--dangerFill[aria-disabled="true"] {
   background: var(--color-border);
+  color: var(--color-disabled-fill-text);
+  box-shadow: none;
+  filter: none;
 }
 
 .atlButton--empty:disabled,
+.atlButton--dangerEmpty:disabled,
 .atlButton--ghost:disabled {
   background: transparent;
 }
@@ -207,11 +267,9 @@
   border-color: var(--color-critical);
 }
 
+/* The theme's compressed field: as tall as the kit's and in the same type, 8 px in from the sides */
 .atlField--s {
-  height: var(--control-height-s);
   padding: 0 var(--space-2);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-xs);
 }
 
 textarea.atlField {
@@ -222,14 +280,20 @@ textarea.atlField {
   line-height: 1.43;
 }
 
+/* The original's select: OUI's arrowDown, 12 pixels, 8 from the right, in the text's colour
+   (the primary text colour of each theme, written out: a picture cannot take a variable) */
 select.atlField {
-  padding-right: 28px;
+  padding-right: 32px;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%2386868b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%231d1d1f'%3E%3Cpath d='M13.069 5.157 8.384 9.768a.546.546 0 0 1-.768 0L2.93 5.158a.552.552 0 0 0-.771 0 .53.53 0 0 0 0 .759l4.684 4.61c.641.631 1.672.63 2.312 0l4.684-4.61a.53.53 0 0 0 0-.76.552.552 0 0 0-.771 0Z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 8px center;
-  background-size: 16px;
+  background-size: 12px;
   cursor: pointer;
+}
+
+:root.themeDark select.atlField {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23f5f5f7'%3E%3Cpath d='M13.069 5.157 8.384 9.768a.546.546 0 0 1-.768 0L2.93 5.158a.552.552 0 0 0-.771 0 .53.53 0 0 0 0 .759l4.684 4.61c.641.631 1.672.63 2.312 0l4.684-4.61a.53.53 0 0 0 0-.76.552.552 0 0 0-.771 0Z'/%3E%3C/svg%3E");
 }
 
 /* A field with something before or after the text: an icon, a button */
@@ -250,8 +314,13 @@ select.atlField {
   outline: none;
 }
 
-.atlFieldGroup > .atlIcon {
+.atlFieldGroup > input::placeholder {
   color: var(--color-text-tertiary);
+}
+
+/* As the theme's: a field's icon in the colour of the text */
+.atlFieldGroup > .atlIcon {
+  color: var(--color-text-primary);
 }
 
 .atlFormRow {
@@ -273,9 +342,16 @@ select.atlField {
   color: var(--color-text-secondary);
 }
 
+/* The label of a field in error, in the critical colour the theme writes for text */
+.atlFormRow__label--invalid {
+  color: var(--color-critical-button-text);
+}
+
+/* As the original's help under a field: the tertiary colour */
 .atlFormRow__help {
   font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
+  line-height: 18px;
+  color: var(--color-text-tertiary);
 }
 
 /* As the original's error under a field: the critical colour itself */
@@ -430,50 +506,64 @@ select.atlField {
   color: var(--color-critical-text);
 }
 
+/* The original's health: OUI's dot, 16 pixels, then the word 4 pixels after it */
 .atlHealth {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1);
 }
 
-.atlHealth::before {
-  content: "";
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-text-tertiary);
+.atlHealth > .atlIcon {
+  color: var(--color-text-secondary);
 }
 
-.atlHealth--healthy::before {
-  background: var(--color-healthy);
+.atlHealth--accent > .atlIcon {
+  color: var(--color-accent);
 }
 
-.atlHealth--warning::before {
-  background: var(--color-warning);
+.atlHealth--healthy > .atlIcon {
+  color: var(--color-healthy-graphic);
 }
 
-.atlHealth--critical::before {
-  background: var(--color-critical);
+.atlHealth--warning > .atlIcon {
+  color: var(--color-warning-graphic);
 }
 
+.atlHealth--critical > .atlIcon {
+  color: var(--color-critical);
+}
+
+/* As the theme's call-out: the fill of its kind, the icon and the title in the colour of the kind
+   on the first line, sitting on the title's baseline, and the text under them */
 .atlCallOut {
-  display: flex;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-4);
   border-radius: var(--radius-md);
-  background: var(--color-accent-tint);
+  background: var(--color-accent-callout-fill);
   color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  line-height: 21px;
 }
 
-.atlCallOut > .atlIcon {
-  margin-top: 2px;
-  color: var(--color-accent);
+.atlCallOut__header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  color: var(--color-accent-callout-text);
 }
 
-/* The title in the colour of its kind, as the original's */
+.atlCallOut__header > .atlIcon {
+  transform: translateY(2px);
+}
+
 .atlCallOut__title {
-  color: var(--color-accent);
+  min-width: 0;
+  font-size: var(--font-size-m);
   font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+.atlCallOut__header + .atlCallOut__body {
+  margin-top: var(--space-2);
 }
 
 /* The original's small call-out */
@@ -482,36 +572,36 @@ select.atlField {
 }
 
 .atlCallOut--s .atlCallOut__title {
-  margin-top: 1px;
   font-size: var(--font-size-s);
-  line-height: 20px;
+}
+
+.atlCallOut--s .atlCallOut__body {
+  font-size: var(--font-size-xs);
+  line-height: 18px;
 }
 
 .atlCallOut--healthy {
-  background: var(--color-healthy-tint);
+  background: var(--color-healthy-callout-fill);
 }
 
-.atlCallOut--healthy > .atlIcon,
-.atlCallOut--healthy .atlCallOut__title {
-  color: var(--color-healthy-text);
+.atlCallOut--healthy .atlCallOut__header {
+  color: var(--color-healthy-callout-text);
 }
 
 .atlCallOut--warning {
-  background: var(--color-warning-tint);
+  background: var(--color-warning-callout-fill);
 }
 
-.atlCallOut--warning > .atlIcon,
-.atlCallOut--warning .atlCallOut__title {
-  color: var(--color-warning-text);
+.atlCallOut--warning .atlCallOut__header {
+  color: var(--color-warning-callout-text);
 }
 
 .atlCallOut--critical {
-  background: var(--color-critical-tint);
+  background: var(--color-critical-callout-fill);
 }
 
-.atlCallOut--critical > .atlIcon,
-.atlCallOut--critical .atlCallOut__title {
-  color: var(--color-critical-text);
+.atlCallOut--critical .atlCallOut__header {
+  color: var(--color-critical-callout-text);
 }
 
 .atlEmpty {
@@ -525,6 +615,7 @@ select.atlField {
   text-align: center;
 }
 
+/* As the theme's empty prompt: its icon in the tertiary colour, whatever colour the page gives */
 .atlEmpty > .atlIcon {
   color: var(--color-text-tertiary);
 }
@@ -537,20 +628,23 @@ select.atlField {
   max-width: 480px;
 }
 
+/* As the theme's spinner: a ring in the border's colour, its top in the accent; 1 pixel at 16 */
 .atlSpinner {
   flex: none;
+  display: inline-block;
   width: 16px;
   height: 16px;
-  border: 2px solid var(--color-border-light);
+  border: 1px solid var(--color-border);
   border-top-color: var(--color-accent);
   border-radius: 50%;
-  animation: atlSpin 0.8s linear infinite;
+  animation: atlSpin 0.6s linear infinite;
 }
 
-.atlSpinner--l {
+.atlSpinner--l,
+.atlSpinner--xl {
   width: 32px;
   height: 32px;
-  border-width: 3px;
+  border-width: 2px;
 }
 
 @keyframes atlSpin {
@@ -711,6 +805,11 @@ select.atlField {
   color: var(--color-text-primary);
 }
 
+/* As the theme's sorted column of a table: its arrow in the accent colour */
+.atlTable__sort--sorted > .atlIcon {
+  color: var(--color-accent);
+}
+
 .atlTable__check {
   width: 32px;
 }
@@ -771,6 +870,11 @@ select.atlField {
 .atlPagination__page:disabled {
   color: var(--color-text-tertiary);
   cursor: default;
+}
+
+/* The arrows in the colour of the text, at the first and the last page too, as the original's */
+.atlPagination__page > .atlIcon {
+  color: var(--color-text-primary);
 }
 
 /* --- What floats: popovers, menus, dialogs, flyouts, toasts ---------------------------------- */
@@ -1154,6 +1258,10 @@ select.atlField {
   opacity: 1;
 }
 
+.atlToast--info .atlToast__header > .atlIcon {
+  color: var(--color-accent);
+}
+
 .atlToast--healthy .atlToast__header > .atlIcon {
   color: var(--color-healthy);
 }
@@ -1179,7 +1287,9 @@ select.atlField {
 .atlTooltip {
   position: fixed;
   z-index: 6000;
-  max-width: 320px;
+  /* As wide as the original's tooltips (EuiToolTip's max-width), breaking a longer word */
+  max-width: 256px;
+  overflow-wrap: break-word;
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
   color: var(--color-text-primary);
@@ -1395,102 +1505,368 @@ select.atlField {
 
 /* --- Combo box ----------------------------------------------------------------------------- */
 
+/*
+ * As the original's combo box (EuiComboBox): what is chosen 4 px inside the field, one value alone
+ * 8 px in, the text typed and what is asked for 4 px further, the caret 8 px from the right.
+ * The border is the field's 1 px, inside these.
+ */
 .atlCombo {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-1);
   min-height: var(--control-height);
   height: auto;
-  padding: 3px var(--space-2);
+  padding: 3px 31px 3px 3px;
   cursor: text;
 }
 
+/* As the original's: the ring while the list is open; focus alone leaves the field as it is */
+.atlCombo:focus-within:not(.atlCombo--open) {
+  box-shadow: none;
+}
+
+.atlCombo:focus-within:not(.atlCombo--open):not(.atlField--invalid) {
+  border-color: var(--color-border-light);
+}
+
+.atlCombo--open {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
+}
+
+.atlCombo--clearable {
+  padding-right: 55px;
+}
+
+.atlCombo--single {
+  flex-wrap: nowrap;
+  padding-left: 7px;
+}
+
 .atlCombo > input {
-  flex: 1 1 60px;
-  min-width: 60px;
-  height: 24px;
+  flex: 1 1 24px;
+  min-width: 24px;
+  height: 22px;
+  margin: 0 4px;
+  padding: 0;
   border: 0;
   background: transparent;
+  color: inherit;
   outline: none;
+}
+
+.atlCombo--single > input {
+  flex-basis: 2px;
+  min-width: 2px;
+}
+
+/* The one value chosen, written as plain text */
+.atlCombo__plain {
+  flex: 0 1 auto;
+  min-width: 0;
+  line-height: 22px;
+}
+
+/* What it asks for, drawn over the empty text where the text starts */
+.atlCombo__placeholder {
+  position: absolute;
+  top: 0;
+  right: 32px;
+  bottom: 0;
+  left: 7px;
+  display: flex;
+  align-items: center;
+  color: var(--color-text-tertiary);
+  pointer-events: none;
+  user-select: none;
+}
+
+.atlCombo--single > .atlCombo__placeholder {
+  left: 11px;
 }
 
 .atlCombo__pill {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  max-width: 100%;
+  gap: var(--space-1);
+  max-width: calc(100% - 18px);
   height: 22px;
-  padding: 0 2px 0 var(--space-2);
-  border-radius: 6px;
-  background: var(--color-surface);
-  box-shadow: 0 0 0 1px var(--color-border-light);
+  margin-top: 1px;
+  padding: 1px var(--space-2);
+  border: 1px solid var(--color-border-light);
+  border-radius: 999px;
+  color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 20px;
+  white-space: nowrap;
 }
 
 .atlCombo__pill button {
   display: inline-flex;
-  padding: 2px;
+  flex: none;
+  padding: 0;
   border: 0;
-  border-radius: 4px;
   background: none;
-  color: var(--color-text-tertiary);
+  color: inherit;
   cursor: pointer;
+}
+
+.atlCombo__pill button .atlIcon {
+  width: 12px;
+  height: 12px;
 }
 
 .atlCombo__pill button:hover {
   color: var(--color-text-primary);
 }
 
-.atlCombo__list {
-  max-height: 280px;
-  overflow: auto;
+/* The list under the field: as wide as it, attached to it, opaque and there at once as the
+   original's */
+.atlPopover.atlCombo__listPanel {
+  min-width: 0;
+  max-width: none;
+  overflow: hidden;
+  animation: none;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  background-color: var(--color-surface);
+}
+
+.atlPopover.atlCombo__listPanel[data-placement="top"] {
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.atlCombo__rows {
+  overflow-y: auto;
+}
+
+.atlCombo__option,
+.atlCombo__title {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 0;
+  border-bottom: 1px solid rgb(239 239 242);
+  background: none;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.atlCombo__option {
+  cursor: pointer;
+}
+
+.atlCombo__option:hover {
+  background: var(--color-surface-secondary);
+}
+
+/* The option the keys are on, which Enter takes */
+.atlCombo__option--active,
+.atlCombo__option--active:hover {
+  background: var(--color-accent-tint);
+  color: var(--color-accent);
+}
+
+.atlCombo__option:disabled {
+  color: var(--color-text-tertiary);
+  cursor: not-allowed;
+}
+
+.atlCombo__title {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.atlCombo__check {
+  display: inline-flex;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  /* Centred on the whole row, its bottom line too, as the original's */
+  transform: translateY(0.5px);
+}
+
+.atlCombo__label {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+/* The part of an option the text typed matches: it keeps the colour of the text */
+.atlCombo__mark {
+  border-radius: 3px;
+  background: none;
+  color: var(--color-text-primary);
+}
+
+.atlCombo__enter {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  height: 22px;
+  margin-left: auto;
+  padding: 1px var(--space-2);
+  border: 1px solid var(--color-border-light);
+  border-radius: 999px;
+  color: var(--color-text-secondary);
 }
 
 .atlCombo__empty {
-  padding: var(--space-2) var(--space-3);
-  color: var(--color-text-secondary);
+  padding: var(--space-2);
+  color: var(--color-text-primary);
   font-size: var(--font-size-xs);
+  line-height: 18px;
+  text-align: center;
+  overflow-wrap: break-word;
+}
+
+.atlCombo__empty strong {
+  font-weight: var(--font-weight-semibold);
+}
+
+.atlCombo__custom {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  text-align: left;
+}
+
+.atlCombo__loading {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 /* --- Field kind tokens ---------------------------------------------------------------------- */
 
+/* The component library's token as the original's theme draws it: 16 pixels, the colour of the
+   kind as a light fill inside a ring of it, the glyph in a darker shade of it */
 .atlToken {
+  --token: var(--token-gray);
+  --token-fill: var(--token-gray-fill);
+  --token-ring: var(--token-gray-ring);
+  --token-solid: var(--token-gray-solid);
+  --token-on: var(--token-on-gray-solid);
   display: inline-flex;
   flex: none;
   align-items: center;
   justify-content: center;
   width: 16px;
   height: 16px;
-  border-radius: 4px;
-  background: var(--color-surface-secondary);
-  color: var(--color-text-secondary);
-  font-family: var(--font-family-code);
-  font-size: 10px;
-  font-weight: var(--font-weight-semibold);
-  line-height: 1;
+  border-radius: calc(var(--radius-sm) - 1px);
+  background: var(--token-fill);
+  box-shadow: inset 0 0 0 1px var(--token-ring);
+  color: var(--token);
+}
+
+.atlToken--circle {
+  border-radius: 50%;
+}
+
+.atlToken--rectangle {
+  box-sizing: content-box;
+  padding: 0 var(--space-1);
+  border-radius: 0;
+}
+
+.atlToken--solid {
+  background: var(--token-solid);
+  box-shadow: none;
+  color: var(--token-on);
+}
+
+.atlToken__glyph {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  fill: currentcolor;
+}
+
+.atlToken__glyph--small {
+  width: 12px;
+  height: 12px;
 }
 
 .atlToken--number {
-  background: var(--color-healthy-tint);
-  color: var(--color-healthy-text);
+  --token: var(--token-number);
+  --token-fill: var(--token-number-fill);
+  --token-ring: var(--token-number-ring);
+  --token-solid: var(--token-number-solid);
+  --token-on: var(--token-on-solid);
+}
+
+.atlToken--string {
+  --token: var(--token-string);
+  --token-fill: var(--token-string-fill);
+  --token-ring: var(--token-string-ring);
+  --token-solid: var(--token-string-solid);
+  --token-on: var(--token-on-solid);
+}
+
+.atlToken--nested {
+  --token: var(--token-nested);
+  --token-fill: var(--token-nested-fill);
+  --token-ring: var(--token-nested-ring);
+  --token-solid: var(--token-nested-solid);
+  --token-on: var(--token-on-solid);
+}
+
+.atlToken--geo {
+  --token: var(--token-geo);
+  --token-fill: var(--token-geo-fill);
+  --token-ring: var(--token-geo-ring);
+  --token-solid: var(--token-geo-solid);
+  --token-on: var(--token-on-solid);
 }
 
 .atlToken--date {
-  background: var(--color-accent-tint);
-  color: var(--color-accent);
+  --token: var(--token-date);
+  --token-fill: var(--token-date-fill);
+  --token-ring: var(--token-date-ring);
+  --token-solid: var(--token-date-solid);
+  --token-on: var(--token-on-solid);
 }
 
-.atlToken--geo_point,
-.atlToken--geo_shape,
+.atlToken--boolean {
+  --token: var(--token-boolean);
+  --token-fill: var(--token-boolean-fill);
+  --token-ring: var(--token-boolean-ring);
+  --token-solid: var(--token-boolean-solid);
+  --token-on: var(--token-on-solid);
+}
+
 .atlToken--ip {
-  background: var(--color-warning-tint);
-  color: var(--color-warning-text);
+  --token: var(--token-ip);
+  --token-fill: var(--token-ip-fill);
+  --token-ring: var(--token-ip-ring);
+  --token-solid: var(--token-ip-solid);
+  --token-on: var(--token-on-solid);
 }
 
-.atlToken--conflict {
-  background: var(--color-critical-tint);
-  color: var(--color-critical-text);
+/* No fill and no ring, the glyph in gray: a field's kind in the original's document table */
+.atlToken--plain {
+  --token: var(--token-plain);
+  --token-fill: transparent;
+  --token-ring: transparent;
+}
+
+/* A conflict: the original names a colour the library does not know, so its token has no fill */
+.atlToken--none {
+  --token: var(--color-text-primary);
+  --token-fill: transparent;
+  --token-ring: transparent;
 }
 
 .atlDescriptionList {
@@ -1521,6 +1897,15 @@ select.atlField {
   font-weight: var(--font-weight-semibold);
   text-align: left;
   cursor: pointer;
+}
+
+/* The original's arrow of an accordion: pointing right, turned down while open */
+.atlAccordion__arrow {
+  transition: transform var(--duration-normal) var(--ease-out-quint);
+}
+
+.atlAccordion__button[aria-expanded="true"] > .atlAccordion__arrow {
+  transform: rotate(90deg);
 }
 
 .atlLinkButton {
@@ -1568,7 +1953,8 @@ mark,
 
 .atlCombo--s {
   min-height: var(--control-height-s);
-  padding: 1px var(--space-2);
+  padding-top: 2px;
+  padding-bottom: 2px;
   border-radius: var(--radius-sm);
   font-size: var(--font-size-xs);
 }
@@ -1578,24 +1964,57 @@ mark,
   cursor: not-allowed;
 }
 
-.atlCombo__clear {
+/* The buttons at the right of the field: the caret 8 px from its edge, what clears it before */
+.atlCombo__clear,
+.atlCombo__caret {
+  position: absolute;
+  top: 50%;
+  right: 7px;
   display: inline-flex;
-  flex: none;
-  padding: 2px;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
   border: 0;
-  border-radius: 4px;
   background: none;
-  color: var(--color-text-tertiary);
+  color: var(--color-text-primary);
+  transform: translateY(-50%);
   cursor: pointer;
 }
 
-.atlCombo__clear:hover {
-  color: var(--color-text-primary);
+.atlCombo__clear {
+  right: 31px;
+  border-radius: 50%;
+  background: var(--color-text-tertiary);
+  color: var(--color-surface);
 }
 
-.atlCombo__caret {
+.atlCombo__clear .atlIcon {
+  width: 10px;
+  height: 10px;
+  stroke-width: 2;
+}
+
+.atlCombo__clear:hover {
+  background: var(--color-text-secondary);
+}
+
+.atlCombo__caret:disabled,
+.atlCombo--disabled .atlCombo__caret {
   color: var(--color-text-tertiary);
-  pointer-events: none;
+  cursor: not-allowed;
+}
+
+.atlCombo > .atlSpinner {
+  position: absolute;
+  top: 50%;
+  right: 31px;
+  margin-top: -8px;
+}
+
+.atlCombo--clearable > .atlSpinner {
+  right: 55px;
 }
 
 /* Text written in Markdown */

@@ -30,14 +30,27 @@ export interface PopoverProps {
   children: ReactNode;
   /** Which edge of the button it lines up with; 'center' hangs it under the middle */
   align?: 'left' | 'right' | 'center';
+  /**
+   * Under the button (over it where there is more room), or beside it: to its right where the
+   * panel fits, its top 10 px above the button's, as the component library opens a panel "rightUp"
+   */
+  side?: 'below' | 'right';
   padded?: boolean;
   /** As wide as its button at least: a list under a field */
   matchWidth?: boolean;
+  /** As wide as its button exactly, as the list under a combo box */
+  fitWidth?: boolean;
   width?: number;
+  /** How far from its button it hangs; 4 px unless said otherwise */
+  offset?: number;
+  /** How far it keeps from the edges of the window; 8 px unless said otherwise */
+  buffer?: number;
   className?: string;
   /** How the span around the button is laid out */
   anchorStyle?: CSSProperties;
   anchorClassName?: string;
+  /** Above its button when there is room, as the original's `up` positions */
+  above?: boolean;
 }
 
 export function Popover({
@@ -46,16 +59,22 @@ export function Popover({
   onClose,
   children,
   align = 'left',
+  side = 'below',
   padded,
   matchWidth,
+  fitWidth,
   width,
+  offset = 4,
+  buffer = 8,
   className,
   anchorStyle,
   anchorClassName,
+  above: preferAbove = false,
 }: PopoverProps) {
   const anchor = useRef<HTMLSpanElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const [style, setStyle] = useState<CSSProperties>({ visibility: 'hidden' });
+  const [placement, setPlacement] = useState<'top' | 'bottom'>('bottom');
 
   const place = useCallback(() => {
     const anchorBox = anchor.current?.getBoundingClientRect();
@@ -63,8 +82,18 @@ export function Popover({
     if (!anchorBox || !panelElement) return;
     // Its size as laid out, which the opening animation's scale does not change
     const panelBox = { width: panelElement.offsetWidth, height: panelElement.offsetHeight };
-    const margin = 8;
-    const panelWidth = Math.max(panelBox.width, matchWidth ? anchorBox.width : 0);
+    const margin = buffer;
+    if (side === 'right') {
+      const fitsRight = anchorBox.right + margin + panelBox.width <= window.innerWidth - margin;
+      setStyle({
+        left: fitsRight ? anchorBox.right + margin : Math.max(margin, anchorBox.left - margin - panelBox.width),
+        top: Math.max(margin, Math.min(anchorBox.top - 10, window.innerHeight - panelBox.height - margin)),
+        width,
+        maxHeight: window.innerHeight - 2 * margin,
+      });
+      return;
+    }
+    const panelWidth = fitWidth ? anchorBox.width : Math.max(panelBox.width, matchWidth ? anchorBox.width : 0);
     let left =
       align === 'right'
         ? anchorBox.right - panelWidth
@@ -74,17 +103,20 @@ export function Popover({
     left = Math.max(margin, Math.min(left, window.innerWidth - panelWidth - margin));
     const below = window.innerHeight - anchorBox.bottom - margin;
     const above = anchorBox.top - margin;
-    const fitsBelow = panelBox.height + 4 <= below || below >= above;
+    const fitsBelow = preferAbove
+      ? panelBox.height + offset > above && below >= above
+      : panelBox.height + offset <= below || below >= above;
     const next: CSSProperties = {
       left,
       minWidth: matchWidth ? anchorBox.width : undefined,
-      width,
-      maxHeight: Math.max(120, (fitsBelow ? below : above) - 4),
+      width: fitWidth ? anchorBox.width : width,
+      maxHeight: Math.max(120, (fitsBelow ? below : above) - offset),
     };
-    if (fitsBelow) next.top = anchorBox.bottom + 4;
-    else next.bottom = window.innerHeight - anchorBox.top + 4;
+    if (fitsBelow) next.top = anchorBox.bottom + offset;
+    else next.bottom = window.innerHeight - anchorBox.top + offset;
     setStyle(next);
-  }, [align, matchWidth, width]);
+    setPlacement(fitsBelow ? 'bottom' : 'top');
+  }, [align, side, matchWidth, fitWidth, width, offset, buffer, preferAbove]);
 
   useLayoutEffect(() => {
     if (!open) {
@@ -96,10 +128,13 @@ export function Popover({
     if (panel.current) observer.observe(panel.current);
     window.addEventListener('resize', place);
     window.addEventListener('scroll', place, true);
+    // A popover opened inside one that is still appearing is placed again once that one is
+    document.addEventListener('animationend', place, true);
     return () => {
       observer.disconnect();
       window.removeEventListener('resize', place);
       window.removeEventListener('scroll', place, true);
+      document.removeEventListener('animationend', place, true);
     };
   }, [open, place]);
 
@@ -141,6 +176,7 @@ export function Popover({
             ref={panel}
             className={cx('atlPopover', 'atlMaterial', padded && 'atlPopover--padded', className)}
             style={style}
+            data-placement={placement}
             data-popover-depth={depthOf(anchor.current) + 1}
           >
             {children}
@@ -413,11 +449,12 @@ export function Flyout({
   );
 }
 
-// The original's icons: a check, an i, a question mark in a ring, and a triangle for what failed
+// The original's icons: a check, an i in a ring, OUI's `help` (a ring buoy) for a warning, and a
+// triangle for what failed
 const TOAST_ICONS: Record<string, IconName> = {
   healthy: 'check',
   info: 'info',
-  warning: 'help',
+  warning: 'lifebuoy',
   critical: 'warning',
 };
 
@@ -515,6 +552,9 @@ export function CopyableCode({ children, size = 'm' }: { children: string; size?
   );
 }
 
+/** How long the original's tooltips wait before they show: a quarter second, or five times it */
+const TOOLTIP_DELAYS = { regular: 250, long: 1250 };
+
 /** A short text shown over what the pointer or the focus is on */
 export function Tooltip({
   content,
@@ -522,6 +562,8 @@ export function Tooltip({
   testId,
   block,
   className,
+  position = 'top',
+  delay,
 }: {
   content: ReactNode;
   children: ReactNode;
@@ -530,34 +572,54 @@ export function Tooltip({
   block?: boolean;
   /** A class for the box of the text */
   className?: string;
+  /**
+   * Where it is drawn, as the original's `position`: above its anchor or under it, on the other
+   * side when there is no room, or on its right
+   */
+  position?: 'top' | 'bottom' | 'right';
+  /** Shown after the original's delay; at once when left out */
+  delay?: keyof typeof TOOLTIP_DELAYS;
 }) {
   const anchor = useRef<HTMLSpanElement>(null);
   const [place, setPlace] = useState<{ left: number; top: number }>();
   const box = useRef<HTMLDivElement>(null);
   const [shown, setShown] = useState(false);
+  const timer = useRef<number | undefined>(undefined);
   useLayoutEffect(() => {
     if (!shown || !anchor.current || !box.current) return;
     const target = anchor.current.getBoundingClientRect();
     const own = box.current.getBoundingClientRect();
+    if (position === 'right' && target.right + 16 + own.width <= window.innerWidth - 8) {
+      setPlace({ left: target.right + 16, top: Math.max(8, target.top + target.height / 2 - own.height / 2) });
+      return;
+    }
     const left = Math.max(8, Math.min(target.left + target.width / 2 - own.width / 2, window.innerWidth - own.width - 8));
-    // Above, as the original's, 16 px from its anchor, unless there is no room
-    const top = target.top - own.height - 16 >= 8 ? target.top - own.height - 16 : target.bottom + 16;
+    // 16 px from its anchor, as the original's, on the side asked unless there is no room
+    const above = target.top - own.height - 16;
+    const below = target.bottom + 16;
+    const fitsBelow = below + own.height <= window.innerHeight - 8;
+    const top = position === 'bottom' ? (fitsBelow || above < 8 ? below : above) : above >= 8 ? above : below;
     setPlace({ left, top });
-  }, [shown, content]);
+  }, [shown, content, position]);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  const show = () => {
+    window.clearTimeout(timer.current);
+    if (delay) timer.current = window.setTimeout(() => setShown(true), TOOLTIP_DELAYS[delay]);
+    else setShown(true);
+  };
+  const hide = () => {
+    window.clearTimeout(timer.current);
+    setShown(false);
+    setPlace(undefined);
+  };
   return (
     <span
       ref={anchor}
       className={block ? 'atlTooltipAnchor atlTooltipAnchor--block' : 'atlTooltipAnchor'}
-      onMouseEnter={() => setShown(true)}
-      onMouseLeave={() => {
-        setShown(false);
-        setPlace(undefined);
-      }}
-      onFocus={() => setShown(true)}
-      onBlur={() => {
-        setShown(false);
-        setPlace(undefined);
-      }}
+      onMouseEnter={show}
+      onMouseLeave={hide}
+      onFocus={show}
+      onBlur={hide}
     >
       {children}
       {shown && (

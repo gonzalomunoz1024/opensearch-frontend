@@ -6,8 +6,7 @@ import { useMemo } from 'react';
 import { valueAxisLabels } from '../charts/axis_labels';
 import { ChartMessage, assignColors, type LegendPosition, type ScaleKind } from '../charts/core';
 import { XYChart, type XYAxis, type XYCategoryAxis, type XYPoint, type XYSeries } from '../charts/xy';
-import { bucketFilter, type TableColumn } from '../lib/aggs';
-import { rangeFilter } from '../lib/query';
+import { brushFilter, bucketFilter, type TableColumn } from '../lib/aggs';
 import type { Filter } from '../lib/types';
 import { bucketColumns, keyText, metricColumns, numberOf, pointsAlong, type VisRenderProps } from './types';
 
@@ -204,16 +203,9 @@ export function XYVis({ vis, data, uiState, onFilter, onTimeChange }: VisRenderP
     if (!column?.fieldName) return;
     if (column.isDate && model.isTimeField && onTimeChange) {
       onTimeChange({ from: new Date(from).toISOString(), to: new Date(to).toISOString() });
-    } else if (column.isDate) {
-      onFilter?.([
-        rangeFilter(
-          { name: column.fieldName },
-          { gte: new Date(from).toISOString(), lt: new Date(to).toISOString(), format: 'strict_date_optional_time' },
-          context.indexPattern?.id
-        ),
-      ]);
     } else {
-      onFilter?.([rangeFilter({ name: column.fieldName }, { gte: from, lt: to }, context.indexPattern?.id)]);
+      const filter = brushFilter(column, from, to, context);
+      if (filter) onFilter?.([filter]);
     }
   };
 

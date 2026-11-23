@@ -67,7 +67,7 @@ export function Management() {
   let body: ReactNode;
   if (section === 'indexPatterns') body = <IndexPatternsSection rest={rest} />;
   else if (section === 'objects') body = <SavedObjectsSection rest={rest} />;
-  else if (section === 'settings') body = <AdvancedSettings />;
+  else if (section === 'settings') body = <AdvancedSettings query={rest[0]} />;
   else body = <Landing />;
 
   return (

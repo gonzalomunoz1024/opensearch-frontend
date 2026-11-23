@@ -1,0 +1,58 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/* The options of a Timeline visualization: its interval, and its expression filling what is left. */
+
+.tlvOptions {
+  flex: 1 1 auto;
+  min-height: 320px;
+}
+
+.timExpressionInput {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.timExpressionInput__editor {
+  position: relative;
+  flex: 1;
+  min-height: 240px;
+}
+
+.timExpressionInput__absolute {
+  position: absolute;
+  inset: 0;
+}
+
+.tlvHover {
+  position: fixed;
+  z-index: 3000;
+  max-width: 500px;
+  max-height: 250px;
+  margin-top: calc(-1 * var(--space-1));
+  padding: var(--space-1) var(--space-2);
+  overflow: auto;
+  transform: translateY(-100%);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xs);
+}
+
+.tlvHover__part + .tlvHover__part {
+  margin-top: var(--space-1);
+  padding-top: var(--space-1);
+  border-top: 1px solid var(--color-border-light);
+}
+
+@media (max-width: 900px) {
+  .timExpressionInput__editor {
+    flex: auto;
+    height: 240px;
+    max-height: 240px;
+  }
+}
