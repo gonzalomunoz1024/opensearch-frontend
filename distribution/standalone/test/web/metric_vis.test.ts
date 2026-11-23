@@ -369,4 +369,14 @@ describe('the metrics shown', () => {
       [' - Count']
     );
   });
+
+  it('names the bucket of an empty word by the format of its field, as a static lookup writes its value for unknown keys', () => {
+    const lookup = { id: 'static_lookup', params: { lookupEntries: [{ key: 'osx', value: 'macOS' }], unknownKeyValue: 'other' } };
+    const known: AggContext = { indexPattern: { ...logs, fieldFormatMap: { 'machine.os': lookup } } };
+    const table = tabify([count, os], { aggregations: { '3': { buckets: [{ key: '', doc_count: 7 }, { key: 'osx', doc_count: 3 }] } } }, known);
+    assert.deepEqual(
+      metricItems(table, config(), known).map((item) => item.label),
+      ['other - Count', 'macOS - Count']
+    );
+  });
 });
