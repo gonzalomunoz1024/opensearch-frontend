@@ -430,15 +430,15 @@ export function parseCurl(text: string): string {
           url = word;
         }
       }
-      // The address without its scheme and host, which the console does not write
-      const path =
-        url
-          .replace(/^[a-z]+:\/\/[^/]*\/?/i, '')
-          .replace(/^(?:localhost|[\w-]+(?:\.[\w-]+)+|[\w.-]+:\d+)(?::\d+)?(?:\/|$)/i, '')
-          .replace(/^\/+/, '') || '/';
+      // The address without its scheme and host, after a slash, as the original writes it
+      const path = url
+        .replace(/^[a-z]+:\/\/[^/]*\/?/i, '')
+        .replace(/^(?:localhost|[\w-]+(?:\.[\w-]+)+|[\w.-]+:\d+)(?::\d+)?(?:\/|$)/i, '')
+        .replace(/^\/+/, '');
       const body = bodies.join('\n').trim();
-      const verb = (method ?? (body ? 'POST' : 'GET')).toUpperCase();
-      return body ? `${verb} ${path}\n${body}` : `${verb} ${path}`;
+      // GET unless the command names a method, with a body too: the original reads only -X
+      const verb = (method ?? 'GET').toUpperCase();
+      return body ? `${verb} /${path}\n${body}` : `${verb} /${path}`;
     })
     .join('\n\n');
 }

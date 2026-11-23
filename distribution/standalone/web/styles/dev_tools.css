@@ -1538,3 +1538,101 @@
   align-items: center;
   min-height: 24px;
 }
+
+/* The file picker of the Import flyout: a zone a file is dropped on, as the original's */
+.dvtFilePicker {
+  position: relative;
+  height: 104px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  box-shadow: inset 0 0 0 1px var(--color-border-light);
+  color: var(--color-text-primary);
+}
+
+.dvtFilePicker:focus-within {
+  box-shadow:
+    inset 0 0 0 1px var(--color-accent),
+    0 0 0 2px var(--color-focus-ring);
+}
+
+.dvtFilePicker__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.dvtFilePicker__prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 0 var(--space-6);
+  pointer-events: none;
+  text-align: center;
+}
+
+.dvtFilePicker__prompt > .atlIcon {
+  width: 24px;
+  height: 24px;
+  margin-bottom: var(--space-4);
+}
+
+.dvtFilePicker__text {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: var(--font-size-s);
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dvtFilePicker__text strong {
+  font-weight: var(--font-weight-semibold);
+}
+
+.dvtFilePicker__remove {
+  position: relative;
+  z-index: 1;
+  height: 24px;
+  padding: 0 var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--color-accent);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+  font-weight: var(--font-weight-medium);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.dvtFilePicker__remove:hover {
+  text-decoration: underline;
+}
+
+/* The Import flyout's choice of merging or overwriting: a title of 15 px, each choice a line of 24 px */
+.dvtImportOptions {
+  margin-top: var(--space-1);
+}
+
+.dvtImportOptions__title {
+  display: block;
+  margin-bottom: var(--space-2);
+  font-size: var(--font-size-m);
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.dvtImportOptions .atlRadio {
+  height: 24px;
+  line-height: 24px;
+}
+
+/* The kit's group spaces its choices itself: the original's follow each other */
+.dvtImportOptions .atlRadio + .atlRadio {
+  margin-top: calc(-1 * var(--space-2));
+}

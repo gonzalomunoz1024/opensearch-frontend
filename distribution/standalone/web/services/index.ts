@@ -25,6 +25,8 @@ export interface BootData {
   map: MapConfig;
   /** vis_type_vega.enableExternalUrls of the server's settings */
   visTypeVega?: { enableExternalUrls: boolean };
+  /** console.enabled of the server's settings: whether Dev Tools has its console */
+  console?: { enabled: boolean };
   /** home.disableWelcomeScreen of the server's settings */
   home?: { disableWelcomeScreen: boolean };
   /** Where the browser builds of Vega and Vega-Lite are, loaded when a Vega visualization is drawn */
