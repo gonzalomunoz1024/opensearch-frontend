@@ -60,8 +60,8 @@ export interface PlacedSplitTitles {
   /** The size of every title's SVG: the room of the first title when the titles were drawn */
   width: number;
   height: number;
-  /** Where each title's SVG starts */
-  at: Array<{ x: number; y: number }>;
+  /** Each title's room, where its SVG starts: a share of the height of the rows or of the width of the columns */
+  boxes: Rect[];
 }
 
 export interface PointSeriesLayout {
@@ -193,9 +193,9 @@ export function layoutPointSeries(
       ? {
           width: SPLIT_TITLE_DEPTH,
           height: Math.max(SPLIT_TITLE_DEPTH, Math.round((inner - spacer.top - spacer.bottom) / count)),
-          at: [],
+          boxes: [],
         }
-      : { width: Math.max(SPLIT_TITLE_DEPTH, Math.round(centreWidth() / count)), height: SPLIT_TITLE_DEPTH, at: [] }
+      : { width: Math.max(SPLIT_TITLE_DEPTH, Math.round(centreWidth() / count)), height: SPLIT_TITLE_DEPTH, boxes: [] }
     : undefined;
 
   const placedAxes: PlacedAxis[] = [];
@@ -281,11 +281,12 @@ export function layoutPointSeries(
   place('bottom');
 
   if (splitTitles) {
+    const share = (split?.rows ? standRoom : centre) / count;
     for (let at = 0; at < count; at += 1) {
-      splitTitles.at.push(
+      splitTitles.boxes.push(
         split?.rows
-          ? { x: 0, y: standTop + at * (standRoom / count) }
-          : { x: left + at * (centre / count), y: WRAPPER_PADDING + inner - titlesBottom }
+          ? { x: 0, y: standTop + at * share, width: SPLIT_TITLE_DEPTH, height: share }
+          : { x: left + at * share, y: WRAPPER_PADDING + inner - titlesBottom, width: share, height: titlesBottom }
       );
     }
   }

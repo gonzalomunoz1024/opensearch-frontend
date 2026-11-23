@@ -6,11 +6,11 @@ import { bucketFilter, otherBucketTerms, tabify, type AggConfig, type AggContext
 import { DEFAULT_FORMAT_SETTINGS } from '../../web/lib/field_formats';
 import type { Filter, IndexPattern } from '../../web/lib/types';
 import { splitDrawing, splitParts, splitTables, splitTimeFilter } from '../../web/vis/types';
-import { axisConfig, keptTicks, placeTick, truncateLabel, type AxisScaleInfo } from '../../web/vis/vislib/axis';
+import { axisConfig, drawAxis, keptTicks, placeTick, truncateLabel, type AxisScaleInfo } from '../../web/vis/vislib/axis';
 import { heatmapColor } from '../../web/vis/vislib/color_maps';
 import { drawMeter, gaugeBucket, gaugeColors, gaugeLabels, gaugeSize, meterConfig } from '../../web/vis/vislib/gauge';
 import { seriesColors, standardizeColor } from '../../web/vis/vislib/colors';
-import { colorBucket, heatmapColors, heatmapLabels } from '../../web/vis/vislib/heatmap';
+import { buildSplitHeatmapModels, colorBucket, heatmapColors, heatmapLabels, type HeatmapParams } from '../../web/vis/vislib/heatmap';
 import { groupedCount, groupedNum, isColorDark } from '../../web/vis/vislib/point_series_chart';
 import {
   buildPointSeries,
@@ -21,7 +21,8 @@ import {
 } from '../../web/vis/vislib/point_series_data';
 import { layoutPointSeries } from '../../web/vis/vislib/point_series_layout';
 import { keptPieLabels } from '../../web/vis/vislib/pie_chart';
-import { cutSplitTitle, splitTitleText, splitTitleTooltip } from '../../web/vis/vislib/split';
+import { splitTooltipDetail } from '../../web/vis/vislib/series_events';
+import { cutSplitTitle, splitTitleRowHeight, splitTitleText, splitTitleTooltip } from '../../web/vis/vislib/split';
 import {
   buildSlices,
   convertToPercentage,
@@ -32,10 +33,13 @@ import {
 } from '../../web/vis/vislib/pie_data';
 import {
   VislibError,
+  axisPoints,
+  buildSplitPointSeriesModels,
   scaleValueAxis,
   seriesConfigOf,
   valueDomain,
   valueExtents,
+  type PointSeriesParams,
   type SeriesConfig,
 } from '../../web/vis/vislib/point_series_model';
 import { bandScale, linearNice, linearTicks, tickCount, utcTicks, zonedTimeTicks } from '../../web/vis/vislib/scales';
@@ -151,12 +155,19 @@ describe('the axes of the classic charts', () => {
     assert.deepEqual(keptTicks(ticks, scale, true, 100), [false, true, false, true, false, false]);
   });
 
+  it('make an axis as deep as its deepest tick and five pixels, and one with no tick left five pixels', () => {
+    const scale = (values: number[]): AxisScaleInfo => ({ values, at: () => 0, raw: () => 0, range: [0, 100], extent: [0, 100] });
+    const hidden = axisConfig({ labels: { show: false } }, 'value', { ordinal: false, title: '' });
+    assert.equal(drawAxis(hidden, scale([0]), String).size, 11);
+    assert.equal(drawAxis(hidden, scale([]), String).size, 5);
+  });
+
   it('lay out a chart with its value axis on the left and its categories under it', () => {
     const axis = (config: ReturnType<typeof axisConfig>) => ({
       config,
       format: String,
       scaleFor: (length: number): AxisScaleInfo => ({
-        values: [],
+        values: [0],
         at: () => 0,
         raw: () => 0,
         range: [0, length],
@@ -174,6 +185,66 @@ describe('the axes of the classic charts', () => {
     assert.equal(left.transform, 'translate(11,0)');
     assert.deepEqual(bottom.rects, [{ x: 12, y: 279, width: 487, height: 11 }]);
     assert.equal(layout.splitTitles, undefined);
+  });
+
+  const hiddenAxis = (config: ReturnType<typeof axisConfig>) => ({
+    config,
+    format: String,
+    scaleFor: (length: number): AxisScaleInfo => ({ values: [0], at: () => 0, raw: () => 0, range: [0, length], extent: [0, length] }),
+  });
+  const hiddenValue = () => hiddenAxis(axisConfig({ labels: { show: false } }, 'value', { ordinal: false, title: '' }));
+  const hiddenCategory = () => hiddenAxis(axisConfig({ labels: { show: false } }, 'category', { ordinal: false, title: '' }));
+
+  it('lay out the rows of a split one under another, a value axis beside each and their titles at the left', () => {
+    const layout = layoutPointSeries(500, 130, [hiddenValue()], [hiddenCategory()], { rows: true, count: 2 });
+    // The axis under the rows gives way to them: 11 of the 121 pixels asked for 110 is 10
+    assert.deepEqual(layout.charts, [
+      { x: 26, y: 10, width: 473, height: 45 },
+      { x: 26, y: 65, width: 473, height: 45 },
+    ]);
+    const [left, bottom] = layout.axes;
+    assert.deepEqual(left.rects, [
+      { x: 15, y: 10, width: 11, height: 45 },
+      { x: 15, y: 65, width: 11, height: 45 },
+    ]);
+    assert.deepEqual(left.title?.rects.map((rect) => rect.x), [14, 14]);
+    assert.deepEqual(bottom.rects, [{ x: 26, y: 110, width: 473, height: 11 }]);
+    // Each title's SVG is as high as the first one's room was, before the value axes were drawn
+    assert.equal(layout.splitTitles?.width, 14);
+    assert.equal(layout.splitTitles?.height, 50);
+    assert.deepEqual(layout.splitTitles?.boxes, [
+      { x: 0, y: 10, width: 14, height: 50 },
+      { x: 0, y: 60, width: 14, height: 50 },
+    ]);
+  });
+
+  it('lay out the columns of a split side by side, an axis of names under each and their titles under them', () => {
+    const layout = layoutPointSeries(500, 300, [hiddenValue()], [hiddenCategory()], { rows: false, count: 2, titleRow: 16 });
+    assert.deepEqual(layout.charts, [
+      { x: 12, y: 10, width: 238.5, height: 253 },
+      { x: 260.5, y: 10, width: 238.5, height: 253 },
+    ]);
+    const [left, bottom] = layout.axes;
+    assert.deepEqual(left.rects, [{ x: 1, y: 10, width: 11, height: 253 }]);
+    assert.deepEqual(bottom.rects, [
+      { x: 12, y: 263, width: 238.5, height: 11 },
+      { x: 260.5, y: 263, width: 238.5, height: 11 },
+    ]);
+    assert.equal(layout.splitTitles?.width, 249);
+    assert.equal(layout.splitTitles?.height, 14);
+    assert.deepEqual(layout.splitTitles?.boxes, [
+      { x: 12, y: 274, width: 243.5, height: 16 },
+      { x: 255.5, y: 274, width: 243.5, height: 16 },
+    ]);
+  });
+
+  it('make the row of titles under the columns as high as a line of their text, 16 pixels at most', () => {
+    // The SVG on the baseline, and under it the descent less the greater half of the leading:
+    // 3 less 1 of the -3 pixels a face of 17 leaves in a line of 14
+    assert.equal(splitTitleRowHeight({ ascent: 14, descent: 3 }), 16);
+    assert.equal(splitTitleRowHeight({ ascent: 14, descent: 2 }), 15);
+    assert.equal(splitTitleRowHeight({ ascent: 13, descent: 1 }), 15);
+    assert.equal(splitTitleRowHeight({ ascent: 9, descent: 2 }), 16);
   });
 });
 
@@ -565,6 +636,128 @@ describe('a heat map', () => {
   });
 });
 
+describe('the charts of a split', () => {
+  const day = columnOf('col-0-2', 'timestamp per day', aggOf('2', 'date_histogram', 'segment'), { isDate: true, interval: DAY });
+  const os = columnOf('col-0-3', 'machine.os', aggOf('3', 'terms', 'segment'));
+  const ext = columnOf('col-1-4', 'extension', aggOf('4', 'terms', 'group'));
+  const count = columnOf('col-2-1', 'Count', aggOf('1', 'count', 'metric'));
+  const stacked: PointSeriesParams = {
+    seriesParams: [{ data: { id: '1', label: 'Count' }, show: true, type: 'histogram', mode: 'stacked', valueAxis: 'ValueAxis-1' }],
+    valueAxes: [{ id: 'ValueAxis-1', type: 'value', scale: { mode: 'normal' } }],
+  };
+  const byDay = (rows: Array<[number, number]>) => ({
+    columns: [day, count],
+    rows: rows.map(([at, value]) => ({ 'col-0-2': at, 'col-2-1': value })),
+  });
+  const byName = (rows: Array<[string, string, number]>) => ({
+    columns: [os, ext, count],
+    rows: rows.map(([name, group, value]) => ({ 'col-0-3': name, 'col-1-4': group, 'col-2-1': value })),
+  });
+  const days = [
+    byDay([
+      [2 * DAY, 1],
+      [0, 3],
+    ]),
+    byDay([
+      [DAY, 5],
+      [4 * DAY, 2],
+    ]),
+  ];
+
+  it('share the values along the axis: those of every chart, ordered, none put back between them', () => {
+    const { frame, charts } = buildSplitPointSeriesModels({ params: stacked, tables: days, columnCount: 3, percentFormat: String });
+    assert.deepEqual(frame.xValues, [0, DAY, 2 * DAY, 4 * DAY]);
+    assert.equal(charts.length, 2);
+    assert.equal(charts[1].xValues, frame.xValues);
+    // With no time range about it, the time runs from the first value of all of them to the last
+    assert.deepEqual([charts[0].ordered?.min, charts[0].ordered?.max, charts[0].ordered?.endzones], [0, 4 * DAY, false]);
+    // A chart that is not split puts back the days it skips
+    assert.deepEqual(orderXValues(buildPointSeries(days[1].columns, days[1].rows)), [DAY, 2 * DAY, 3 * DAY, 4 * DAY]);
+    assert.deepEqual(orderXValues(buildPointSeries(days[1].columns, days[1].rows), false, false), [DAY, 4 * DAY]);
+  });
+
+  it('stack each chart over the values they share, its value axis reaching the values of all of them', () => {
+    const { frame, charts } = buildSplitPointSeriesModels({ params: stacked, tables: days, columnCount: 3, percentFormat: String });
+    assert.deepEqual(
+      charts[0].series[0].data.values.map((point) => [point.x, point.y]),
+      [
+        [0, 3],
+        [DAY, 0],
+        [2 * DAY, 1],
+        [4 * DAY, 0],
+      ]
+    );
+    assert.equal(frame.series.length, 2);
+    assert.equal(Math.max(...axisPoints(frame, 'ValueAxis-1')), 5);
+    assert.equal(Math.max(...axisPoints(charts[0], 'ValueAxis-1')), 3);
+    // The tooltip counts the columns of the whole table, the split's among them
+    assert.equal(charts[0].data.columnCount, 3);
+  });
+
+  it('order names as the charts bring them, chart after chart, and name the legend after the series of all of them', () => {
+    const { frame, charts } = buildSplitPointSeriesModels({
+      params: {},
+      tables: [
+        byName([
+          ['b', 'css', 1],
+          ['a', 'gif', 2],
+        ]),
+        byName([
+          ['c', 'png', 3],
+          ['a', 'css', 4],
+        ]),
+      ],
+      columnCount: 4,
+      percentFormat: String,
+    });
+    assert.deepEqual(frame.xValues, ['b', 'a', 'c']);
+    assert.deepEqual(frame.labels, ['css', 'gif', 'png']);
+    assert.deepEqual(
+      charts.map((chart) => chart.series.map((series) => series.data.label)),
+      [
+        ['css', 'gif'],
+        ['png', 'css'],
+      ]
+    );
+  });
+
+  it('give heat maps the names of every chart beside them and ranges over all their values, asking the first alone whether it has too many', () => {
+    const tables = [
+      byName([
+        ['win', 'css', 1],
+        ['win', 'gif', 2],
+      ]),
+      byName([['osx', 'png', 10]]),
+    ];
+    const params: HeatmapParams = {
+      type: 'heatmap',
+      colorsNumber: 4,
+      colorSchema: 'Greens',
+      valueAxes: [{ id: 'ValueAxis-1', type: 'value', show: false, scale: { type: 'linear', defaultYExtents: false }, labels: { show: false } }],
+    };
+    const { frame, charts } = buildSplitHeatmapModels({ params, tables, columnCount: 4, percentFormat: String, maxBuckets: 2, dark: false });
+    assert.equal(frame.error, undefined);
+    assert.deepEqual(charts[1].categoryAxes[1].values, ['css', 'gif', 'png']);
+    assert.deepEqual(charts[1].heatmap?.labels, ['0 - 2.5', '2.5 - 5', '5 - 7.5', '7.5 - 10']);
+    assert.deepEqual(frame.labels, ['0 - 2.5', '2.5 - 5', '5 - 7.5', '7.5 - 10']);
+    const tooMany = buildSplitHeatmapModels({ params, tables, columnCount: 4, percentFormat: String, maxBuckets: 1, dark: false });
+    assert.equal(tooMany.charts[1].error, 'There are too many series defined (2). The configured maximum is 1.');
+  });
+
+  it("end the tooltip with the split's name and the chart's key as it is", () => {
+    const cell = { table: { columns: [], rows: [] }, row: {} };
+    const range = { ...os, format: (value: unknown) => `range ${JSON.stringify(value)}` };
+    assert.deepEqual(splitTooltipDetail({ column: os, key: 'ios', cell }), { label: 'machine.os', value: 'ios' });
+    assert.deepEqual(splitTooltipDetail({ column: day, key: 3 * DAY, cell }), { label: 'timestamp per day', value: String(3 * DAY) });
+    assert.deepEqual(splitTooltipDetail({ column: os, key: null, cell }), { label: 'machine.os', value: '' });
+    // A range, which the original's tooltip fails on, as its bucket's text
+    assert.deepEqual(splitTooltipDetail({ column: range, key: { from: 0, to: 10 }, cell }), {
+      label: 'machine.os',
+      value: 'range {"from":0,"to":10}',
+    });
+  });
+});
+
 const logs: IndexPattern = {
   id: 'logs',
   title: 'logs-*',
@@ -668,6 +861,16 @@ describe('the buckets of a chart', () => {
     assert.deepEqual(parts[1].split?.cell.row, { 'col-0-4': 'osx', 'col-1-1': 2 });
   });
 
+  it('title the chart of an empty bucket by nothing before its name, as vislib writes it', () => {
+    const split = columnOf('col-0-4', 'extension.keyword', aggOf('4', 'terms', 'split'));
+    const count = columnOf('col-1-1', 'Count', aggOf('1', 'count', 'metric'));
+    const parts = splitTables({ columns: [split, count], rows: [{ 'col-0-4': '', 'col-1-1': 1 }] });
+    assert.deepEqual(
+      parts.map((part) => part.label),
+      [': extension.keyword']
+    );
+  });
+
   it('leave a chart that is not split whole', () => {
     const count = columnOf('col-0-1', 'Count', aggOf('1', 'count', 'metric'));
     const table = { columns: [count], rows: [{ 'col-0-1': 4 }] };
@@ -677,9 +880,13 @@ describe('the buckets of a chart', () => {
 
   it('leave the split of a data table to the table, which draws a table of each bucket from the whole', () => {
     assert.equal(splitDrawing('table'), 'whole');
-    // vislib's pies and gauges lay out their charts in its frame; the page draws the parts of the rest
+    // vislib's charts lay out their charts in its frame; the page draws the parts of the rest
     assert.deepEqual(['pie', 'gauge', 'goal'].map(splitDrawing), ['frame', 'frame', 'frame']);
-    assert.deepEqual(['histogram', 'metric', 'tagcloud'].map(splitDrawing), ['parts', 'parts', 'parts']);
+    assert.deepEqual(
+      ['area', 'line', 'histogram', 'horizontal_bar', 'heatmap'].map(splitDrawing),
+      ['frame', 'frame', 'frame', 'frame', 'frame']
+    );
+    assert.deepEqual(['metric', 'tagcloud', 'markdown'].map(splitDrawing), ['parts', 'parts', 'parts']);
   });
 
   it('cut the title of a chart of a split as vislib does: to the letters nine tenths of its room hold, less five', () => {

@@ -12,9 +12,10 @@
 import { brushFilter, bucketFilter, dateInterval, type AggContext, type Table, type TableColumn } from '../../lib/aggs';
 import { addUnits, type TimeUnit } from '../../lib/dates';
 import type { Filter } from '../../lib/types';
-import { bucketColumns, type VisRenderProps } from '../types';
+import { bucketColumns, type SplitBucket, type VisRenderProps } from '../types';
 import type { PointSeriesModel } from './point_series_model';
 import type { VislibPoint } from './point_series_data';
+import type { TooltipDetail } from './tooltip';
 
 export interface SeriesAxis {
   /** The bucket along the chart */
@@ -107,4 +108,18 @@ export function seriesEvents({ model, axis, context, table, onFilter, onTimeChan
       : undefined;
 
   return { onPointClick, onBrush };
+}
+
+/**
+ * The last line of the tooltip of a chart in a split, as vislib's writes it: the split's name and
+ * the chart's bucket as its key is, unformatted (a date as its time in milliseconds), and nothing
+ * for a key that is not a text or a number. A range's key, an object the original's tooltip fails
+ * on and shows nothing for, is written as the bucket's text.
+ */
+export function splitTooltipDetail({ column, key }: SplitBucket): TooltipDetail {
+  let value = '';
+  if (typeof key === 'string') value = key;
+  else if (typeof key === 'number') value = String(key);
+  else if (key !== null && typeof key === 'object') value = column.format(key);
+  return { label: column.name, value };
 }

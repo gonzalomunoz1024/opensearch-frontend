@@ -11,7 +11,7 @@
 
 import type { ReactNode } from 'react';
 import { useSize } from '../../charts/core';
-import { measureText, type TextFont } from './text';
+import { measureText, type TextFont, type TextSize } from './text';
 import type { TooltipState } from './tooltip';
 
 /** The titles of a split's charts: the theme's extra small size, less a pixel */
@@ -19,6 +19,23 @@ export const SPLIT_TITLE_FONT: TextFont = { size: '11px' };
 
 /** How deep an empty title is: its min-width beside rows, its min-height under columns */
 const TITLE_DEPTH = 14;
+
+/** The most the row of titles under the columns is high (its max-height) */
+const TITLE_ROW_MAX = 16;
+
+/**
+ * How high the row of titles under the columns of a split is, as the original's page lays it out:
+ * a title is a line of 14 pixel text with lines as high as the text (EUI's reset), whose SVG, 14
+ * pixels high, sits on the baseline; the face's box with its leading reaches under it, the browser
+ * giving the top the lesser half of the leading, rounded down, and the bottom the rest; and the
+ * row is 16 pixels at most
+ */
+export function splitTitleRowHeight(face: Pick<TextSize, 'ascent' | 'descent'> = measureText('x', { size: `${TITLE_DEPTH}px` })): number {
+  const leading = TITLE_DEPTH - face.ascent - face.descent;
+  const above = Math.floor(leading / 2);
+  const line = Math.max(TITLE_DEPTH, face.ascent + above) + Math.max(0, face.descent + leading - above);
+  return Math.min(TITLE_ROW_MAX, line);
+}
 
 /**
  * A title as vislib's ChartTitle cuts it: one longer than nine tenths of its room keeps as many
