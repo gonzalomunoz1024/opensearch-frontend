@@ -14,6 +14,7 @@ import {
   Legend,
   fitText,
   fontMetrics,
+  middleShift,
   classicDomain,
   classicTickCount,
   classicTimeTicks,
@@ -37,6 +38,16 @@ import {
   type AxisSide,
   type LabelPlacement,
 } from './axis_labels';
+import {
+  LEGEND_MEASURE_FONT,
+  axisTicks,
+  labelBox,
+  legendHeight,
+  legendWidth,
+  timeTicks as elasticTimeTicks,
+  valueTicks as elasticValueTicks,
+  type ElasticTick,
+} from './elastic';
 import '../styles/charts.css';
 
 export interface XYPoint {
@@ -44,6 +55,8 @@ export interface XYPoint {
   y: number | null;
   /** A third measure, drawn as the size of the point */
   z?: number;
+  /** Where the area or the bar of a band starts, below y, instead of at zero */
+  y0?: number | null;
 }
 
 export interface XYSeries {
@@ -54,16 +67,23 @@ export interface XYSeries {
   mode: 'stacked' | 'normal';
   axisId: string;
   points: XYPoint[];
-  interpolate?: 'linear' | 'cardinal' | 'step-after';
+  /** "step" changes value half way between two points, "step-after" at the next */
+  interpolate?: 'linear' | 'cardinal' | 'step' | 'step-after';
   showCircles?: boolean;
   drawLines?: boolean;
   lineWidth?: number;
-  /** How solid the fill of an area is, from 0 to 1 */
+  /** How solid the fill of an area or of a bar is, from 0 to 1 */
   fillOpacity?: number;
   /** The radius of the points, when they are all the same size */
   pointSize?: number;
+  /** The width of the ring round each point */
+  pointStroke?: number;
   /** Draw the line or area on through a place the series has no point at, instead of breaking */
   joinMissing?: boolean;
+  /** A band from each point's y0 up to its y: its two edges named in the legend and the tooltip, after its label */
+  band?: { upper: string; lower: string };
+  /** Drawn, but left out of the legend */
+  hideInLegend?: boolean;
 }
 
 export interface XYAxis {
@@ -100,6 +120,8 @@ export interface XYCategoryAxis {
   /** The whole stretch the axis covers when it is wider than the data: the time range */
   domain?: [number, number];
   format: (value: number | string) => string;
+  /** How the tooltip names a place, instead of by the axis's title and its label */
+  tooltipFormat?: (value: number | string) => string;
   title?: string;
   show?: boolean;
   showLabels?: boolean;
@@ -118,32 +140,58 @@ export interface XYChartProps {
   /** Bars lie on their side: the category axis is the vertical one */
   horizontal?: boolean;
   legend?: LegendPosition | false;
-  /** Show the legend for a single series too, and a figure beside each name */
-  legendValues?: Record<string, string>;
+  /** Show the legend for a single series too, and a figure beside each name: a band's two, for its upper and its lower edge */
+  legendValues?: Record<string, string | [string, string]>;
   grid?: { category?: boolean; value?: boolean };
   threshold?: { value: number; width?: number; style?: string; color?: string };
   /** A line at the present moment on a time axis */
   nowMarker?: boolean;
   /** Moments marked on a time axis */
-  /** Lines across the plot at given times, each marked under it with a dot or an icon of the 16 pixel grid */
-  annotations?: Array<{ x: number; color?: string; label: string; icon?: { d: string; filled?: boolean } }>;
+  /**
+   * Lines across the plot at given times, each marked under it with a dot or with a filled icon
+   * of the 16 pixel grid whose top meets the plot's bottom
+   */
+  annotations?: Array<{ x: number; color?: string; label: string; icon?: { d: string; evenOdd?: boolean } }>;
   tooltip?: boolean;
   onPointClick?: (series: XYSeries, point: XYPoint) => void;
   /** Called with the stretch of the category axis that was dragged over */
   onBrush?: (from: number, to: number) => void;
+  /** Bars take the whole of their bucket, with no room between buckets */
+  fillBuckets?: boolean;
   /**
    * Drawn as the classic charts of OpenSearch Dashboards draw: their ticks and ranges, square
    * bars that touch in a stack, a label under every bar, points sized by a third measure
    */
   classic?: { radiusRatio?: number };
+  /**
+   * Laid out and drawn as elastic-charts draws TSVB's time series in OpenSearch Dashboards: each
+   * axis as wide as its labels, the ticks whose labels fit, the time axis over the data alone, grid
+   * lines both ways, a line along each axis and a legend as wide as its names
+   */
+  elastic?: ElasticOptions;
   /** Colours someone picked are kept by the caller; hidden series are the chart's own */
   testId?: string;
 }
 
+export interface ElasticOptions {
+  /** Minutes east of UTC at a moment, in the zone the time axis counts its ticks in */
+  offset: (time: number) => number;
+  /** Stacked bars: the ticks of the time axis stand at the start of their bars, not in their middle */
+  histogram?: boolean;
+  /** The colour of the grid lines */
+  gridColor?: string;
+}
+
+// The room elastic-charts leaves inside and outside an axis's labels, and before its title
+const ELASTIC_LABEL_INNER = 10;
+const ELASTIC_LABEL_PADDING = 18;
+const ELASTIC_TITLE_FONT = 12;
+const ELASTIC_TITLE_ROOM = 22;
+
 interface Placed {
   series: XYSeries;
   /** Per place on the category axis: where the value starts and ends, in the axis's unit */
-  spans: Array<{ from: number; to: number; y: number | null; z?: number } | undefined>;
+  spans: Array<{ from: number; to: number; y: number | null; z?: number; y0?: number | null } | undefined>;
 }
 
 const FONT = 11;
@@ -153,7 +201,15 @@ function linePath(points: Array<[number, number] | undefined>, interpolate: stri
   let run: Array<[number, number]> = [];
   const flush = () => {
     if (run.length === 0) return;
-    if (interpolate === 'step-after') {
+    if (interpolate === 'step') {
+      let path = `M${run[0][0]},${run[0][1]}`;
+      for (let index = 1; index < run.length; index += 1) {
+        const [x0, y0] = run[index - 1];
+        const [x1, y1] = run[index];
+        path += horizontal ? `V${(y0 + y1) / 2}H${x1}V${y1}` : `H${(x0 + x1) / 2}V${y1}H${x1}`;
+      }
+      parts.push(path);
+    } else if (interpolate === 'step-after') {
       let path = `M${run[0][0]},${run[0][1]}`;
       for (let index = 1; index < run.length; index += 1) {
         path += horizontal
@@ -202,7 +258,9 @@ export function XYChart({
   tooltip = true,
   onPointClick,
   onBrush,
+  fillBuckets,
   classic,
+  elastic,
   testId,
 }: XYChartProps) {
   const [ref, size] = useSize<HTMLDivElement>();
@@ -253,7 +311,7 @@ export function XYChart({
           value = total === 0 ? 0 : value / total;
         }
         if (value === null || !stack) {
-          spans[at] = { from: 0, to: value ?? 0, y: point.y, z: point.z };
+          spans[at] = { from: point.y0 ?? 0, to: value ?? 0, y: point.y, z: point.z, y0: point.y0 };
         } else {
           const pile = value >= 0 ? stack.positive : stack.negative;
           spans[at] = { from: pile[at], to: pile[at] + value, y: point.y, z: point.z };
@@ -347,6 +405,37 @@ export function XYChart({
     return { labels: shown, turned, band: labelBand(side, shown.map(({ placement }) => placement.box)) };
   };
 
+  // elastic-charts measures labels in the face they are drawn in
+  const tickFont = useMemo(
+    () => (elastic && typeof document !== 'undefined' ? getComputedStyle(document.body).fontFamily : undefined),
+    [Boolean(elastic)]
+  );
+  const measureTick = (label: string) => textWidth(label, FONT, 400, tickFont);
+  // elastic-charts sets its labels and titles about their middle
+  const tickShift = elastic ? middleShift(FONT, 400, tickFont) : 0;
+  const titleShift = elastic ? middleShift(ELASTIC_TITLE_FONT, 700, tickFont) : 0;
+  const bars = series.some((item) => item.type === 'histogram');
+  const timeInterval = x.interval && x.interval > 0 ? x.interval : x.type === 'category' ? 1 : guessInterval(x.values as number[]);
+  // The time axis of an elastic chart covers the data alone
+  const elasticSpan: [number, number] | undefined =
+    elastic && x.type !== 'category' && x.values.length > 0
+      ? [x.values[0] as number, x.values[x.values.length - 1] as number]
+      : undefined;
+  const elasticTimes = (count: number) =>
+    elastic && elasticSpan ? elasticTimeTicks(elasticSpan, count, elastic.offset, bars ? timeInterval : 0) : [];
+  const valueFormat = (axis: XYAxis) =>
+    axis.mode === 'percentage' && !elastic ? (value: number) => `${Math.round(value * 100)}%` : axis.format;
+  const elasticValues = (axis: XYAxis, count: number) => {
+    const domain = model.domains.get(axis.id) ?? [0, 1];
+    return axis.scale === 'log' ? logTicks(domain) : elasticValueTicks(domain, count);
+  };
+  /** The room an axis of an elastic chart takes beside the plot: its labels, their padding and its title */
+  const elasticGirth = (axis: XYAxis) =>
+    (axis.showLabels === false
+      ? 0
+      : ELASTIC_LABEL_PADDING + labelBox(elasticValues(axis, axis.tickCount ?? 5).map(valueFormat(axis)), measureTick, FONT).width) +
+    (axis.title ? ELASTIC_TITLE_ROOM : 0);
+
   const { width, height } = size;
   const layout = useMemo(() => {
     if (width < 40 || height < 40) return undefined;
@@ -382,7 +471,17 @@ export function XYChart({
     let right = 12;
     let top = 8;
     let bottom = 6;
-    if (horizontal) {
+    if (elastic && !horizontal) {
+      // Each value axis as wide as its widest label, half a time label's room at either end, half
+      // a value label's above, and the time labels and title below
+      const xBox = labelBox(categoryLabels ? elasticTimes(10).map(x.format) : [], measureTick, FONT);
+      const labelled = valueAxes.some((axis) => axis.showLabels !== false);
+      const xGirth = categoryShown ? (categoryLabels ? ELASTIC_LABEL_PADDING + xBox.height : 0) + (x.title ? ELASTIC_TITLE_ROOM : 0) : 0;
+      left = Math.max(xBox.width / 2, before.reduce((sum, axis) => sum + elasticGirth(axis), 0));
+      right = Math.max(xBox.width / 2, after.reduce((sum, axis) => sum + elasticGirth(axis), 0));
+      top = labelled ? FONT / 2 : 0;
+      bottom = Math.max(xGirth, top);
+    } else if (horizontal) {
       left += categoryLabelWidth + (categoryLabels ? 8 : 0) + titleSpace(categoryShown ? x.title : undefined);
       const length = Math.max(10, width - left - right);
       for (const axis of before) bottom += labelRoom(axis, 'bottom', length) + titleSpace(axis.title);
@@ -400,7 +499,7 @@ export function XYChart({
       height: Math.max(10, height - top - bottom),
     };
     return { plot, before, after, labelRoom, categoryLabels, categoryShown, turned, turnedHeight, categoryLabelWidth };
-  }, [width, height, axes, horizontal, model.domains, x, Boolean(classic)]);
+  }, [width, height, axes, horizontal, model.domains, x, Boolean(classic), elastic, tickFont, bars]);
 
   const geometry = useMemo(() => {
     if (!layout) return undefined;
@@ -425,8 +524,9 @@ export function XYChart({
       const numbers = x.values as number[];
       const interval = x.interval && x.interval > 0 ? x.interval : guessInterval(numbers);
       let min = numbers[0];
-      let max = numbers[numbers.length - 1] + interval;
-      if (x.domain) {
+      // Bars take a bucket's width after the last; the lines of an elastic chart end at the last point
+      let max = numbers[numbers.length - 1] + (elastic && !bars ? 0 : interval);
+      if (x.domain && !elastic) {
         min = Math.min(min, x.domain[0]);
         max = Math.max(max, x.domain[1]);
       }
@@ -437,7 +537,15 @@ export function XYChart({
       if (classic) {
         barStart = 0;
         barSpan = band * 0.85;
+      } else if (elastic) {
+        // elastic-charts leaves a twentieth of a bucket between its bars, half on either side
+        barStart = band * 0.025;
+        barSpan = band * 0.95;
+      } else if (fillBuckets) {
+        barStart = 0;
+        barSpan = band;
       }
+      if (elastic && !bars) band = Math.max(1, interval * factor);
     }
     // On its side the first category is at the top, as a list reads
     const categoryAt = (at: number) => start(at);
@@ -450,7 +558,7 @@ export function XYChart({
       );
     }
     return { length, band, categoryAt, scales, domain, barStart, barSpan };
-  }, [layout, horizontal, x, axes, model.domains, Boolean(classic)]);
+  }, [layout, horizontal, x, axes, model.domains, Boolean(classic), fillBuckets, elastic, bars]);
 
   if (series.length === 0 || x.values.length === 0) {
     return (
@@ -460,13 +568,18 @@ export function XYChart({
     );
   }
 
-  const legendItems = series.map((item) => ({
-    id: item.id,
-    label: item.label,
-    color: item.color,
-    hidden: hidden.includes(item.id),
-    value: legendValues?.[item.id],
-  }));
+  // A band is named twice, by each of its edges; either hides or brings back the whole band
+  const lowerEdges = new Map(series.filter((item) => item.band).map((item) => [`${item.id}::lower`, item.id]));
+  const seriesOf = (id: string) => lowerEdges.get(id) ?? id;
+  const legendItems = series.filter((item) => !item.hideInLegend).flatMap((item) => {
+    const value = legendValues?.[item.id];
+    const entry = { id: item.id, label: item.label, color: item.color, hidden: hidden.includes(item.id), value: Array.isArray(value) ? value[0] : value };
+    if (!item.band) return [entry];
+    return [
+      { ...entry, label: `${item.label}${item.band.upper}` },
+      { ...entry, id: `${item.id}::lower`, label: `${item.label}${item.band.lower}`, value: Array.isArray(value) ? value[1] : undefined },
+    ];
+  });
   // The classic charts name a single series too
   const showLegend = legend !== false && (series.length > 1 || legendValues !== undefined || classic !== undefined);
 
@@ -488,7 +601,8 @@ export function XYChart({
     const padding = geometry.barStart ?? (band > 12 ? Math.min(band * 0.12, 8) : band > 4 ? 1 : 0);
     const slotWidth = Math.max(1, (geometry.barSpan ?? band - padding * 2) / Math.max(1, barSlots.length));
     // The middle of a place: of its bars in a classic chart, of its band otherwise
-    const middle = (at: number) => categoryAt(at) + (geometry.barSpan !== undefined ? geometry.barSpan / 2 : band / 2);
+    const middle = (at: number) =>
+      categoryAt(at) + (geometry.barSpan !== undefined ? (geometry.barStart ?? 0) + geometry.barSpan / 2 : band / 2);
 
     const marks: React.ReactNode[] = [];
     const lines: React.ReactNode[] = [];
@@ -511,10 +625,10 @@ export function XYChart({
           const b = scale(span.to);
           const along = categoryAt(at) + padding + slot * slotWidth;
           // A hairline of surface between the pieces of a stack keeps neighbours apart
-          const gap = !classic && item.mode === 'stacked' && Math.abs(a - b) > 3 ? 1 : 0;
+          const gap = !classic && !elastic && item.mode === 'stacked' && Math.abs(a - b) > 3 ? 1 : 0;
           const low = Math.min(a, b);
           const size = Math.max(Math.abs(a - b) - gap, span.to === span.from ? 0 : 1);
-          const across = classic ? slotWidth : slotWidth - (slotWidth > 6 ? 1 : 0);
+          const across = classic || fillBuckets ? slotWidth : slotWidth - (slotWidth > 6 ? 1 : 0);
           marks.push(
             <rect
               key={`${item.id}-${at}`}
@@ -524,13 +638,15 @@ export function XYChart({
               width={horizontal ? size : across}
               height={horizontal ? across : size}
               fill={item.color}
-              rx={classic ? 0 : Math.min(2, slotWidth / 4)}
+              fillOpacity={classic ? undefined : item.fillOpacity}
+              rx={classic || elastic ? 0 : Math.min(2, slotWidth / 4)}
             />
           );
         });
         continue;
       }
-      const centre = (at: number) => (x.type === 'category' ? middle(at) : categoryAt(at));
+      // Beside bars that fill their buckets, lines and areas go through the middle of each
+      const centre = (at: number) => (x.type === 'category' || (fillBuckets && barSlots.length > 0) ? middle(at) : categoryAt(at));
       const tops = spans.map((span, at) =>
         span && span.y !== null ? point(centre(at), scale(span.to)) : undefined
       );
@@ -543,9 +659,12 @@ export function XYChart({
           const lower = run
             .map((at) => point(centre(at), scale(spans[at]!.from)))
             .reverse();
-          const outline =
-            linePath(upper, item.interpolate, horizontal) +
-            `L${lower.map((place) => `${place[0]},${place[1]}`).join('L')}Z`;
+          // A step area steps along its foot too
+          const foot =
+            item.interpolate === 'step'
+              ? linePath(lower, 'step', horizontal).replace(/^M/, 'L')
+              : `L${lower.map((place) => `${place[0]},${place[1]}`).join('L')}`;
+          const outline = `${linePath(upper, item.interpolate, horizontal)}${foot}Z`;
           marks.push(
             <path
               key={`${item.id}-area-${run[0]}`}
@@ -605,7 +724,7 @@ export function XYChart({
           const radius =
             z !== undefined && maxZ > 0
               ? 3 + 14 * Math.sqrt(Math.max(0, z) / maxZ)
-              : hover === at
+              : hover === at && !elastic
                 ? Math.max(4, item.pointSize ?? 0)
                 : item.pointSize !== undefined
                   ? item.pointSize
@@ -620,10 +739,16 @@ export function XYChart({
               cx={place[0]}
               cy={place[1]}
               r={radius}
-              fill={item.pointSize !== undefined && hover !== at ? 'var(--color-surface)' : item.color}
+              fill={
+                item.pointSize !== undefined && hover !== at
+                  ? elastic
+                    ? 'var(--cht-elastic-point, var(--color-surface))'
+                    : 'var(--color-surface)'
+                  : item.color
+              }
               fillOpacity={z !== undefined ? 0.6 : 1}
               stroke={item.pointSize !== undefined ? item.color : 'var(--color-surface)'}
-              strokeWidth={z !== undefined ? 1 : 1.5}
+              strokeWidth={z !== undefined ? 1 : item.pointStroke ?? 1.5}
             />
           );
         });
@@ -633,7 +758,77 @@ export function XYChart({
     // --- Axes ---
     const axisParts: React.ReactNode[] = [];
     const gridParts: React.ReactNode[] = [];
+    const drawElasticAxis = (axis: XYAxis, side: 'before' | 'after', offset: number, hidden = false) => {
+      const scale = scales.get(axis.id);
+      if (!scale) return 0;
+      const ticks: ElasticTick[] =
+        axis.scale === 'log'
+          ? logTicks(model.domains.get(axis.id) ?? [1, 10]).map((value) => ({ value, position: scale(value), label: valueFormat(axis)(value) }))
+          : axisTicks({
+              ticks: (count) => elasticValues(axis, count),
+              count: axis.tickCount ?? 5,
+              position: scale,
+              format: valueFormat(axis),
+              measure: measureTick,
+              fontSize: FONT,
+              vertical: true,
+              time: false,
+            });
+      if (grid.value) {
+        for (const tick of ticks) {
+          gridParts.push(
+            <line
+              key={`g-${axis.id}-${tick.value}`}
+              className="chtElastic__grid"
+              style={elastic?.gridColor ? { stroke: elastic.gridColor } : undefined}
+              x1={0}
+              x2={plot.width}
+              y1={tick.position}
+              y2={tick.position}
+            />
+          );
+        }
+      }
+      if (hidden) return 0;
+      const girth = elasticGirth(axis);
+      const before = side === 'before';
+      // The line along the axis, at the plot's edge on its side of this axis
+      const lineAt = before ? -offset : plot.width + offset;
+      axisParts.push(<line key={`line-${axis.id}`} className="chtElastic__line" x1={lineAt} x2={lineAt} y1={0} y2={plot.height} />);
+      if (axis.showLabels !== false) {
+        for (const tick of ticks) {
+          if (!tick.label) continue;
+          axisParts.push(
+            <text
+              key={`t-${axis.id}-${tick.value}`}
+              x={before ? lineAt - ELASTIC_LABEL_INNER : lineAt + ELASTIC_LABEL_INNER}
+              y={tick.position + tickShift}
+              textAnchor={before ? 'end' : 'start'}
+            >
+              {tick.label}
+            </text>
+          );
+        }
+      }
+      if (axis.title) {
+        // The title stands at the outer edge of the axis's room, turned to read upwards
+        const at = before ? lineAt - girth + ELASTIC_TITLE_FONT / 2 : lineAt + girth - ELASTIC_TITLE_FONT / 2;
+        axisParts.push(
+          <text
+            key={`title-${axis.id}`}
+            className="chtAxisTitle"
+            textAnchor="middle"
+            y={titleShift}
+            transform={`translate(${at},${plot.height / 2}) rotate(-90)`}
+          >
+            {fitText(axis.title, plot.height, ELASTIC_TITLE_FONT)}
+          </text>
+        );
+      }
+      return girth;
+    };
     const drawValueAxis = (axis: XYAxis, side: 'before' | 'after', offset: number) => {
+      if (elastic && !horizontal) return drawElasticAxis(axis, side, offset);
       const edge: AxisSide = horizontal ? (side === 'before' ? 'bottom' : 'top') : side === 'before' ? 'left' : 'right';
       const length = horizontal ? plot.width : plot.height;
       const axisDomain = model.domains.get(axis.id) ?? [0, 1];
@@ -737,11 +932,67 @@ export function XYChart({
     for (const axis of layout.before) offset += drawValueAxis(axis, 'before', offset);
     offset = 0;
     for (const axis of layout.after) offset += drawValueAxis(axis, 'after', offset);
+    if (elastic && !horizontal) {
+      for (const axis of axes.filter((candidate) => candidate.show === false)) drawElasticAxis(axis, 'before', 0, true);
+    }
 
     // The category axis
     const categoryTicks: Array<{ at: number; label: string }> = [];
     const hiddenLabels = new Set<number>();
-    if (layout.categoryLabels) {
+    if (elastic && !horizontal && elasticSpan && domain) {
+      const factor = geometry.length / (domain[1] - domain[0] || 1);
+      // Unstacked bars carry their ticks in their middle
+      const shift = bars && !elastic.histogram ? band / 2 : 0;
+      const ticks = axisTicks({
+        ticks: elasticTimes,
+        count: 10,
+        position: (value) => (value - domain[0]) * factor + shift,
+        format: (value) => x.format(value),
+        measure: measureTick,
+        fontSize: FONT,
+        vertical: false,
+        time: true,
+      });
+      for (const tick of ticks) {
+        if (grid.category) {
+          gridParts.push(
+            <line
+              key={`cg-${tick.value}`}
+              className="chtElastic__grid"
+              style={elastic.gridColor ? { stroke: elastic.gridColor } : undefined}
+              x1={tick.position}
+              x2={tick.position}
+              y1={0}
+              y2={plot.height}
+            />
+          );
+        }
+        if (layout.categoryLabels && tick.label) {
+          axisParts.push(
+            <text key={`c-${tick.value}`} x={tick.position} y={plot.height + ELASTIC_LABEL_INNER + FONT / 2 + tickShift} textAnchor="middle">
+              {tick.label}
+            </text>
+          );
+        }
+      }
+      if (layout.categoryShown) {
+        axisParts.push(<line key="line-x" className="chtElastic__line" x1={0} x2={plot.width} y1={plot.height} y2={plot.height} />);
+        if (x.title) {
+          const labels = layout.categoryLabels ? ELASTIC_LABEL_PADDING + FONT : 0;
+          axisParts.push(
+            <text
+              key="category-title"
+              className="chtAxisTitle"
+              x={plot.width / 2}
+              y={plot.height + labels + ELASTIC_LABEL_INNER + ELASTIC_TITLE_FONT / 2 + titleShift}
+              textAnchor="middle"
+            >
+              {fitText(x.title, plot.width, ELASTIC_TITLE_FONT)}
+            </text>
+          );
+        }
+      }
+    } else if (layout.categoryLabels) {
       if (x.type === 'category') {
         // Turned labels take the height of a line each; flat ones their own width
         const room = horizontal ? 16 : layout.turned ? 14 : Math.min(layout.categoryLabelWidth, 96) + 12;
@@ -807,7 +1058,7 @@ export function XYChart({
         )
       );
     }
-    if (layout.categoryShown && x.title) {
+    if (layout.categoryShown && x.title && !(elastic && !horizontal)) {
       axisParts.push(
         horizontal ? (
           <text
@@ -868,17 +1119,18 @@ export function XYChart({
       setHover(at);
       if (!tooltip) return;
       tip.show({
-        title: `${x.title ? `${x.title}: ` : ''}${x.format(x.values[at])}`,
+        title: x.tooltipFormat ? x.tooltipFormat(x.values[at]) : `${x.title ? `${x.title}: ` : ''}${x.format(x.values[at])}`,
         rows: model.placed
           .filter(({ spans }) => spans[at] && spans[at]!.y !== null)
-          .map(({ series: item, spans }) => {
+          .flatMap(({ series: item, spans }) => {
             const axis = axes.find((candidate) => candidate.id === item.axisId) ?? axes[0];
-            return {
-              label: item.label,
-              value: axis.format(spans[at]!.y as number),
-              color: item.color,
-              active: emphasized === item.id,
-            };
+            const span = spans[at]!;
+            const row = { label: item.label, value: axis.format(span.y as number), color: item.color, active: emphasized === item.id };
+            if (!item.band) return [row];
+            return [
+              { ...row, label: `${item.label}${item.band.upper}` },
+              { ...row, label: `${item.label}${item.band.lower}`, value: axis.format(span.y0 ?? 0) },
+            ];
           }),
         x: event.clientX,
         y: event.clientY,
@@ -956,9 +1208,12 @@ export function XYChart({
             />
           ))}
           <g>{gridParts}</g>
-          {hover !== undefined && !brush && (
+          {hover !== undefined && !brush && elastic && !horizontal && !bars && (
+            <line className="chtElastic__crosshair" x1={categoryAt(hover)} x2={categoryAt(hover)} y1={0} y2={plot.height} />
+          )}
+          {hover !== undefined && !brush && !(elastic && !horizontal && !bars) && (
             <rect
-              className="chtBand"
+              className={elastic ? 'chtElastic__band' : 'chtBand'}
               x={horizontal ? 0 : categoryAt(hover)}
               y={horizontal ? categoryAt(hover) : 0}
               width={horizontal ? plot.width : geometry.barSpan ?? band}
@@ -968,7 +1223,7 @@ export function XYChart({
           <g>{marks}</g>
           <g>{lines}</g>
           <g>{circles}</g>
-          {horizontal ? (
+          {elastic && !horizontal ? null : horizontal ? (
             <line className="chtAxisLine" x1={0} x2={0} y1={0} y2={plot.height} />
           ) : (
             <line className="chtAxisLine" x1={0} x2={plot.width} y1={plot.height} y2={plot.height} />
@@ -1014,9 +1269,12 @@ export function XYChart({
                     <line x1={at} x2={at} y1={0} y2={plot.height} />
                     {mark.icon ? (
                       <path
-                        className={mark.icon.filled ? 'chtMarkLine__icon chtMarkLine__icon--filled' : 'chtMarkLine__icon'}
-                        transform={`translate(${at - 8} ${plot.height + 2})`}
+                        className="chtMarkLine__icon"
+                        // On whole pixels, as a browser lays out the product's icon, a little
+                        // below the plot as the icon sits in its line
+                        transform={`translate(${Math.round(plot.left + at - 8) - plot.left} ${Math.round(plot.top + plot.height + 0.72) - plot.top})`}
                         d={mark.icon.d}
+                        fillRule={mark.icon.evenOdd ? 'evenodd' : undefined}
                       />
                     ) : (
                       <circle cx={at} cy={plot.height} r={4} />
@@ -1033,7 +1291,7 @@ export function XYChart({
               height={horizontal ? Math.abs(brush.end - brush.start) : plot.height}
             />
           )}
-          <g className="chtAxis">{axisParts}</g>
+          <g className={elastic ? 'chtElastic' : 'chtAxis'}>{axisParts}</g>
           <rect
             x={0}
             y={0}
@@ -1058,19 +1316,36 @@ export function XYChart({
     );
   }
 
+  // elastic-charts sizes a legend beside the chart to its widest name with its value, in its own
+  // face; one under the chart takes one row, two or two and a half, by how many names fit in a
+  // row of 200 pixels each
+  const legendBeside = legend === 'left' || legend === 'right';
+  const elasticLegend =
+    elastic && showLegend
+      ? legendBeside
+        ? legendWidth(
+            legendItems.map((item) => `${item.label}${item.value ?? ''}`),
+            legendValues !== undefined,
+            height,
+            (text) => textWidth(text, 12, 400, LEGEND_MEASURE_FONT)
+          )
+        : legendHeight(legendItems.length, width)
+      : undefined;
   return (
     <ChartFrame
       position={legend || 'right'}
+      tight={elastic !== undefined}
       legend={
         showLegend ? (
           <Legend
             items={legendItems}
             position={legend || 'right'}
+            elasticSize={elasticLegend}
             classic={classic !== undefined}
-            onHover={setEmphasized}
+            onHover={(id) => setEmphasized(id === undefined ? undefined : seriesOf(id))}
             onToggle={(id) =>
               setHidden((current) =>
-                current.includes(id) ? current.filter((other) => other !== id) : [...current, id]
+                current.includes(seriesOf(id)) ? current.filter((other) => other !== seriesOf(id)) : [...current, seriesOf(id)]
               )
             }
           />

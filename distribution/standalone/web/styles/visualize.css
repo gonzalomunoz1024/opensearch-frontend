@@ -1652,3 +1652,11 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* The type of a visualization in the list: its icon before its name, as the original's */
+.vzeListType .atlIcon {
+  position: relative;
+  top: -1px;
+  margin-right: var(--space-2);
+  vertical-align: middle;
+}

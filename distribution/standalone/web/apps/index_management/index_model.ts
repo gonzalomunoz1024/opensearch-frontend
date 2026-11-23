@@ -205,6 +205,19 @@ export function flatten(value: unknown, prefix = '', into: Record<string, unknow
   return into;
 }
 
+/**
+ * What is typed in one of the JSON editors of the forms, when it is a JSON object: settings and mappings
+ * are objects, so a list or a single value is refused as text that is not JSON is.
+ */
+export function parsedObject(text: string): Record<string, unknown> | undefined {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return isObject(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** An object with its keys in the order of the alphabet */
 export function ordered<T>(value: Record<string, T>): Record<string, T> {
   return Object.fromEntries(Object.entries(value).sort(([left], [right]) => (left < right ? -1 : 1)));

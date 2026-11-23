@@ -121,8 +121,6 @@ export function ImportFlyout({ onClose, onDone }: { onClose: () => void; onDone:
           ),
         () => undefined
       );
-    // The close button has the focus when the flyout opens, as the original's
-    document.querySelector<HTMLElement>('.sobImportFlyout [data-test-subj=flyoutCloseButton]')?.focus();
     return () => {
       live = false;
     };
@@ -212,7 +210,7 @@ export function ImportFlyout({ onClose, onDone }: { onClose: () => void; onDone:
   // as the Import button once the import is done, the close button has it
   useEffect(() => {
     if (document.activeElement === document.body) {
-      document.querySelector<HTMLElement>('.sobImportFlyout [data-test-subj=flyoutCloseButton]')?.focus();
+      document.querySelector<HTMLElement>('.sobImportFlyout [data-test-subj=euiFlyoutCloseButton]')?.focus();
     }
   }, [status]);
 
@@ -332,8 +330,8 @@ export function ImportFlyout({ onClose, onDone }: { onClose: () => void; onDone:
   return (
     <Flyout
       title="Import saved objects"
-      // The flyout stays while a conflict is asked about: Escape answers the question
-      onClose={conflictingRecord ? () => undefined : onClose}
+      // While a conflict is asked about, its dialog is on top: Escape answers it, and the flyout stays
+      onClose={onClose}
       mask
       className="sobFlyout sobFlyout--s sobImportFlyout"
       footer={

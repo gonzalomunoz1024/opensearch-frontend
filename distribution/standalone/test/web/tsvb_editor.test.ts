@@ -25,7 +25,7 @@ import {
   type Metric,
   type Series,
 } from '../../web/apps/visualize/tsvb/model';
-import { colorOutput, cssColor, parseColor, toHex } from '../../web/components/color_picker';
+import { colorOutput, cssColor, isPercent, parseColor, toHex } from '../../web/components/color_picker';
 import { compileLess } from '../../web/apps/visualize/tsvb/less';
 import { renderTemplate, TemplateError } from '../../web/lib/template';
 import { HttpFetchError } from '../../web/services/http';
@@ -175,6 +175,15 @@ describe('the colours a TSVB colour picker reads', () => {
     assert.equal(toHex([0, 0, 0, 0.5]), '#00000080');
     assert.equal(cssColor('104,188,0,0.5'), 'rgba(104,188,0,0.5)');
     assert.equal(cssColor(null), 'transparent');
+  });
+
+  it('takes a typed opacity only once it is a percent from 0 to 100, as the original range checks it', () => {
+    assert.equal(isPercent('100'), true);
+    assert.equal(isPercent('0'), true);
+    assert.equal(isPercent('50.5'), true);
+    assert.equal(isPercent(''), false);
+    assert.equal(isPercent('101'), false);
+    assert.equal(isPercent('-1'), false);
   });
 });
 
