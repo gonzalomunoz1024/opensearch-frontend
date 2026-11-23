@@ -7,8 +7,8 @@
  * split into several series, the last value or the value over the whole time range.
  */
 
-import { resolveInterval, resolveTimeRange, UNIT_MS, parseInterval, type AbsoluteRange } from '../../lib/dates';
-import { DEFAULT_FORMAT_SETTINGS } from '../../lib/field_formats';
+import { resolveInterval, resolveTimeRange, scaledDateFormat, UNIT_MS, parseInterval, type AbsoluteRange } from '../../lib/dates';
+import { DEFAULT_FORMAT_SETTINGS, type FormatSettings } from '../../lib/field_formats';
 import { evaluateMath, type MathValue } from '../../lib/math_expression';
 import { formatNumber } from '../../lib/numeral';
 import { buildQuery, type BoolQuery } from '../../lib/query';
@@ -241,6 +241,18 @@ export function valueTemplate(template: string | undefined): (value: unknown) =>
       return String(value);
     }
   };
+}
+
+/**
+ * The format of the time axis, of its tooltips and of the annotations' times, as the original's
+ * createXaxisFormatter chooses it: the last rule of dateFormat:scaled that the interval reaches,
+ * and dateFormat when none does
+ */
+export function timeAxisPattern(
+  intervalMs: number,
+  settings: Pick<FormatSettings, 'scaledDateRules' | 'dateFormat'> = services ? services.formatSettings() : DEFAULT_FORMAT_SETTINGS
+): string {
+  return scaledDateFormat(intervalMs, settings.scaledDateRules, settings.dateFormat);
 }
 
 export function seriesFormatter(formatter: string | undefined, template?: string): (value: number | null) => string {

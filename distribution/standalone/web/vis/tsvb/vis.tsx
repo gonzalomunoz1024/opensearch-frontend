@@ -6,7 +6,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type 
 import { ChartMessage, SERIES_COLORS, assignColors, type LegendPosition } from '../../charts/core';
 import { XYChart, type XYAxis, type XYSeries } from '../../charts/xy';
 import { Icon } from '../../components/icon';
-import { formatDate, scaledDateFormat, utcOffset, type TimeRange } from '../../lib/dates';
+import { formatDate, utcOffset, type TimeRange } from '../../lib/dates';
 import { Markdown } from '../../lib/markdown';
 import type { UiState, Vis } from '../../lib/vis';
 import { href, navigate } from '../../router';
@@ -23,6 +23,7 @@ import {
   ruleFor,
   seriesFormatter,
   splitParts,
+  timeAxisPattern,
   topNRows,
   type TsvbData,
   type TsvbParams,
@@ -135,7 +136,7 @@ function useTemplateFault(fault: TemplateFault | undefined) {
 
 function TimeSeries({ params, data, onTimeChange }: { params: TsvbParams; data: TsvbData; onTimeChange?: (range: TimeRange) => void }) {
   const zone = services.timeZone();
-  const pattern = scaledDateFormat(data.interval.ms);
+  const pattern = timeAxisPattern(data.interval.ms);
   // Each mark is named after its latest document, under its time as the chart's tooltip writes it
   let fault: TemplateFault | undefined;
   const annotations = data.annotations.flatMap(({ annotation, marks }) => {

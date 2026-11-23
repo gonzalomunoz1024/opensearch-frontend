@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { metricAggs, seriesLines, termLabel, tooManyBuckets, topNRows, type TimeBucket, type TsvbMetric, type TsvbSeries, type TsvbSeriesData } from '../../web/vis/tsvb/data';
+import { metricAggs, seriesLines, termLabel, timeAxisPattern, tooManyBuckets, topNRows, type TimeBucket, type TsvbMetric, type TsvbSeries, type TsvbSeriesData } from '../../web/vis/tsvb/data';
 import { convertSeriesToVars } from '../../web/vis/tsvb/markdown_vars';
 
 const HOUR = 3600000;
@@ -173,5 +173,26 @@ describe('the panels the product does not ask for, as their interval makes too m
 
   it('never fails an automatic interval, one of at least so much, or one it cannot read', () => {
     for (const interval of [undefined, '', 'auto', '>=1s', 'often']) assert.equal(tooManyBuckets(interval, week, 1), false, interval);
+  });
+});
+
+describe('the format of the times of a TSVB time series, by the settings', () => {
+  const rules: Array<[string, string]> = [
+    ['', 'HH:mm:ss'],
+    ['PT1H', 'DD/MM HH[h]'],
+    ['P1DT', 'DD/MM'],
+  ];
+
+  it('takes the last rule of dateFormat:scaled that the interval reaches, as createXaxisFormatter', () => {
+    const settings = { dateFormat: 'MMM D, YYYY', scaledDateRules: rules };
+    assert.equal(timeAxisPattern(HOUR / 2, settings), 'HH:mm:ss');
+    assert.equal(timeAxisPattern(HOUR * 3, settings), 'DD/MM HH[h]');
+    assert.equal(timeAxisPattern(HOUR * 24, settings), 'DD/MM');
+  });
+
+  it('takes dateFormat when no rule fits, and the rules the setting starts with when it holds none', () => {
+    assert.equal(timeAxisPattern(HOUR, { dateFormat: 'YYYY', scaledDateRules: [['P1DT', 'DD']] }), 'YYYY');
+    assert.equal(timeAxisPattern(HOUR, { dateFormat: 'YYYY', scaledDateRules: [] }), 'YYYY');
+    assert.equal(timeAxisPattern(HOUR * 3, { dateFormat: 'YYYY', scaledDateRules: undefined }), 'YYYY-MM-DD HH:mm');
   });
 });

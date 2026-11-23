@@ -2128,13 +2128,15 @@ mark,
 
 /* --- A colour picker ------------------------------------------------------------------------ */
 
+/* As the original's EuiColorPickerSwatch: 24 px, its corners 4 px round */
 .atlColorSwatch {
   flex: 0 0 auto;
   width: 24px;
   height: 24px;
   padding: 0;
   border: 1px solid rgb(0 0 0 / 10%);
-  border-radius: var(--radius-xs);
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 5%);
   cursor: pointer;
 }
 
@@ -2143,59 +2145,145 @@ mark,
   outline-offset: 1px;
 }
 
+/* The swatch a picker opens from, held as the original's popover holds it: the swatch on a line
+   of its own, which is a pixel taller */
+.atlColorPicker__anchor {
+  height: 25px;
+}
+
+/* The popover of the original's colour picker: opaque, and as round as its popovers that are not
+   attached to a field */
+.atlPopover.atlColorPicker__popover {
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+}
+
+/* What EuiColorPicker holds: 152 px wide, with 8 px of padding around */
 .atlColorPicker {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
   width: 168px;
   padding: var(--space-2);
+}
+
+/* The colour as text, a compressed field in a row 8 px taller than it (and the error under the
+   row), 8 px over the square; its text 8 px from the field's edge, as the theme's field draws its
+   border inside it */
+.atlColorPicker__text {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: var(--space-2);
+}
+
+.atlColorPicker__text > .atlField {
+  margin-bottom: var(--space-2);
+  padding: 0 calc(var(--space-2) - 1px);
+}
+
+.atlColorPicker__text > .atlFormRow__error {
+  padding-top: var(--space-1);
 }
 
 /* The colour of the hue is the square's own; white to the left and black to the bottom over it */
 .atlColorPicker__square {
   position: relative;
+  flex: none;
   height: 152px;
-  border-radius: var(--radius-xs);
+  border-radius: 4px;
   background-image: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent);
   cursor: crosshair;
   touch-action: none;
 }
 
+.atlColorPicker__square:focus {
+  outline: none;
+}
+
+/* Where the colour is: a ring in the text's colour around one in the lightest shade */
 .atlColorPicker__thumb {
   position: absolute;
   width: 12px;
   height: 12px;
   margin: -6px 0 0 -6px;
-  border: 1px solid #fff;
+  border: 1px solid var(--color-text-primary);
   border-radius: 50%;
-  box-shadow: 0 0 0 1px rgb(0 0 0 / 60%);
   pointer-events: none;
 }
 
+.atlColorPicker__thumb::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--color-surface-secondary);
+  border-radius: 50%;
+}
+
+.atlColorPicker__square:focus .atlColorPicker__thumb {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
+}
+
+/* The hues: the original's gradient, 8 px of it in the middle of a row of 24, under a slider a
+   pixel wider on each side */
 .atlColorPicker__hue {
-  width: 100%;
-  height: 8px;
+  flex: none;
+  height: 24px;
   margin: var(--space-1) 0;
-  border-radius: 4px;
-  background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+  background: linear-gradient(90deg, #ff3232 0%, #fff130 20%, #45ff30 35%, #28fff0 52%, #282cff 71%, #ff28fb 88%, #ff0094 100%) 0 50% / 100% 8px no-repeat;
+}
+
+.atlColorPicker__hue > input {
+  display: block;
+  width: calc(100% + 2px);
+  height: 24px;
+  margin: 0 -1px;
+  background: none;
   appearance: none;
 }
 
-.atlColorPicker__hue::-webkit-slider-thumb {
-  width: 14px;
-  height: 14px;
-  border: 1px solid var(--color-border);
+.atlColorPicker__hue > input:focus {
+  outline: none;
+}
+
+/* The thumbs of the hues and of the opacity, as the original's: 16 px, white, in a grey ring */
+.atlColorPicker__hue > input::-webkit-slider-thumb,
+.atlColorPicker__alphaRange::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--color-text-secondary);
   border-radius: 50%;
-  background: #fff;
+  background: var(--color-surface);
+  cursor: pointer;
   appearance: none;
 }
 
-.atlColorPicker__hue::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  border: 1px solid var(--color-border);
+.atlColorPicker__hue > input::-moz-range-thumb,
+.atlColorPicker__alphaRange::-moz-range-thumb {
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--color-text-secondary);
   border-radius: 50%;
-  background: #fff;
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+.atlColorPicker__hue > input:focus::-webkit-slider-thumb,
+.atlColorPicker__alphaRange:focus::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
+}
+
+.atlColorPicker__hue > input:focus::-moz-range-thumb,
+.atlColorPicker__alphaRange:focus::-moz-range-thumb {
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
+}
+
+.atlColorPicker__hue > input:focus::-webkit-slider-thumb {
+  border-color: var(--color-accent);
+}
+
+.atlColorPicker__hue > input:focus::-moz-range-thumb {
+  border-color: var(--color-accent);
 }
 
 .atlColorPicker__swatches {
@@ -2205,17 +2293,89 @@ mark,
   gap: var(--space-2);
 }
 
+/* The opacity, as the original's compressed range with its number: the slider and the room after
+   it shrink together from the browser's 129 px and the original's 16 px */
 .atlColorPicker__alpha {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  height: 32px;
+  margin-top: var(--space-2);
 }
 
+.atlColorPicker__alphaRange {
+  flex: 1 1 129px;
+  min-width: 0;
+  height: 32px;
+  margin: 0;
+  background: none;
+  cursor: pointer;
+  appearance: none;
+}
+
+.atlColorPicker__alphaRange:focus {
+  outline: none;
+}
+
+.atlColorPicker__alphaRange::-webkit-slider-runnable-track {
+  height: 2px;
+  border-radius: 8px;
+  background: var(--color-text-secondary);
+}
+
+.atlColorPicker__alphaRange::-webkit-slider-thumb {
+  margin-top: -7px;
+}
+
+.atlColorPicker__alphaRange::-moz-range-track {
+  height: 2px;
+  border-radius: 8px;
+  background: var(--color-text-secondary);
+}
+
+.atlColorPicker__alphaRange:focus::-webkit-slider-runnable-track {
+  background: var(--color-accent);
+}
+
+.atlColorPicker__alphaRange:focus::-moz-range-track {
+  background: var(--color-accent);
+}
+
+.atlColorPicker__spacer {
+  flex: 0 1 16px;
+  min-width: 0;
+}
+
+/* The number and the "%" after it: a compressed group, the number as wide as EuiRangeInput makes
+   one of three digits (3 / 1.25 + 2 em) */
 .atlColorPicker__percent {
-  flex: 0 0 64px;
-  width: 64px;
+  display: flex;
+  flex: none;
+  height: 32px;
+  padding: 1px;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  box-shadow: inset 0 0 0 1px var(--color-border-light);
+}
+
+.atlColorPicker__percent > input {
+  width: 4.4em;
+  height: 30px;
+  padding: var(--space-2);
+  border: 0;
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  outline: none;
 }
 
 .atlColorPicker__percent > span {
-  color: var(--color-text-tertiary);
+  display: flex;
+  align-items: center;
+  padding: var(--space-2);
+  background: var(--color-border-light);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 14px;
 }

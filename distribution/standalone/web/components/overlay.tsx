@@ -17,6 +17,7 @@ import { services } from '../services';
 import type { Toast } from '../services/toasts';
 import { Button, CallOut, CodeBlock, IconButton, cx } from './basic';
 import { Icon, type IconName } from './icon';
+import type { PopoverSide } from './popover_place';
 
 export function Portal({ children }: { children: ReactNode }) {
   return createPortal(children, document.body);
@@ -45,6 +46,11 @@ export interface PopoverProps {
   offset?: number;
   /** How far it keeps from the edges of the window; 8 px unless said otherwise */
   buffer?: number;
+  /**
+   * Where it goes instead, from its button's box and its own size, in the window: one that hangs
+   * as the component library hangs a panel with an arrow, say. The same function on every render.
+   */
+  placeAt?: (anchor: DOMRect, panel: { width: number; height: number }) => { top: number; left: number; side: PopoverSide };
   className?: string;
   /** How the span around the button is laid out */
   anchorStyle?: CSSProperties;
@@ -64,6 +70,7 @@ export function Popover({
   width,
   offset = 4,
   buffer = 8,
+  placeAt,
   className,
   anchorStyle,
   anchorClassName,
@@ -71,7 +78,7 @@ export function Popover({
   const anchor = useRef<HTMLSpanElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const [style, setStyle] = useState<CSSProperties>({ visibility: 'hidden' });
-  const [placement, setPlacement] = useState<'top' | 'bottom'>('bottom');
+  const [placement, setPlacement] = useState<PopoverSide>('bottom');
 
   const place = useCallback(() => {
     const anchorBox = anchor.current?.getBoundingClientRect();
@@ -79,6 +86,12 @@ export function Popover({
     if (!anchorBox || !panelElement) return;
     // Its size as laid out, which the opening animation's scale does not change
     const panelBox = { width: panelElement.offsetWidth, height: panelElement.offsetHeight };
+    if (placeAt) {
+      const at = placeAt(anchorBox, panelBox);
+      setStyle({ top: at.top, left: at.left, width });
+      setPlacement(at.side);
+      return;
+    }
     const margin = buffer;
     if (side === 'right') {
       const fitsRight = anchorBox.right + margin + panelBox.width <= window.innerWidth - margin;
@@ -111,7 +124,7 @@ export function Popover({
     else next.bottom = window.innerHeight - anchorBox.top + offset;
     setStyle(next);
     setPlacement(fitsBelow ? 'bottom' : 'top');
-  }, [align, side, matchWidth, fitWidth, width, offset, buffer]);
+  }, [align, side, matchWidth, fitWidth, width, offset, buffer, placeAt]);
 
   useLayoutEffect(() => {
     if (!open) {
