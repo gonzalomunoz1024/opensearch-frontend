@@ -114,7 +114,7 @@ function DataFormatPicker({ value: given, onChange, label = 'Data Formatter' }: 
     const [from, to, decimals] = value.split(',');
     const output = DURATION_OUTPUTS.find((option) => option.value === to);
     return (
-      <Row gap="s">
+      <Row gap="s" responsive={false}>
         {formats}
         <Item grow={false}>
           <Field label="From">
@@ -137,7 +137,7 @@ function DataFormatPicker({ value: given, onChange, label = 'Data Formatter' }: 
     );
   }
   return (
-    <Row gap="s">
+    <Row gap="s" responsive={false}>
       {formats}
       {shown === 'custom' && (
         <Item grow={false}>
@@ -355,7 +355,7 @@ interface ConfigProps {
 /** Whether the series overrides the panel's index pattern, and the one it uses instead */
 function OverrideIndexPattern({ model, fields, onChange, indexModel }: { model: Series; fields: Fields; onChange: (part: Doc) => void; indexModel: Doc }) {
   return (
-    <Row gap="s">
+    <Row gap="s" wrap responsive={false}>
       <Item grow={false}>
         <Label>Override Index Pattern?</Label>
         <Spacer size="s" />
@@ -371,7 +371,9 @@ function OverrideIndexPattern({ model, fields, onChange, indexModel }: { model: 
 const templateHelp = (space: boolean) => (
   <span>
     eg.{space ? ' ' : ''}
-    <code className="tvbCode">{'{{value}}/s'}</code>
+    <span className="tvbCode">
+      <code>{'{{value}}/s'}</code>
+    </span>
   </span>
 );
 
@@ -459,7 +461,7 @@ function TimeseriesConfig({ model: given, panel, fields, onChange, seriesQuantit
       </Field>
       <Rule size="s" />
       {(model.chart_type === 'line' || model.chart_type === 'bar') && (
-        <Row gap="s" className="tvbRow--wrap">
+        <Row gap="s" wrap responsive={false}>
           {select('chart_type', CHART_TYPES, 'Chart type')}
           {select('stacked', stacked, 'Stacked')}
           {number('fill', 'Fill (0 to 1)', 0.1)}
@@ -475,7 +477,7 @@ function TimeseriesConfig({ model: given, panel, fields, onChange, seriesQuantit
         </Row>
       )}
       <Rule size="s" />
-      <Row className="tvbRow--wrap">
+      <Row wrap responsive={false}>
         <Item>
           <Field label="Offset series time by (1m, 1h, 1w, 1d)">
             <TextInput value={model.offset_time} label="Offset series time by (1m, 1h, 1w, 1d)" onChange={(text) => onChange({ offset_time: text })} testId="offsetTimeSeries" />
@@ -493,7 +495,7 @@ function TimeseriesConfig({ model: given, panel, fields, onChange, seriesQuantit
         </Item>
       </Row>
       <Rule size="s" />
-      <Row className="tvbRow--wrap">
+      <Row wrap responsive={false}>
         <Item grow={false}>
           <Label>Separate axis?</Label>
           <Spacer size="s" />
@@ -556,7 +558,7 @@ function TableSeriesConfig({ model: given, panel, fields, onChange }: ConfigProp
         </Item>
       </Row>
       <Rule size="s" />
-      <Row className="tvbRow--wrap">
+      <Row wrap responsive={false}>
         <Item>
           <Field label="Filter" full>
             <QueryBarWrapper
@@ -573,7 +575,7 @@ function TableSeriesConfig({ model: given, panel, fields, onChange }: ConfigProp
         </Item>
       </Row>
       <Rule size="s" />
-      <Row className="tvbRow--wrap">
+      <Row wrap responsive={false}>
         <Item>
           <Field label="Field">
             <FieldSelect fields={fields} indexPattern={str(panel, 'index_pattern')} value={model.aggregate_by} onChange={(field) => onChange({ aggregate_by: field })} />
