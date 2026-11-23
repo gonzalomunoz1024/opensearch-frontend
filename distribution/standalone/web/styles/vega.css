@@ -78,6 +78,7 @@
   margin: auto;
   padding: 0;
   list-style: none;
+  line-height: 1;
   opacity: 0.8;
 }
 
@@ -97,23 +98,23 @@
 /* The original's colours: the status colour tinted (shaded in dark mode) behind it, and the status
    colour made dark (light) enough to read on that */
 .vgaVis__message--warn .vgaVis__messageCode {
-  background-color: rgb(255 244.4 229.5);
-  color: rgb(157.5 97.3 13.4);
+  background-color: rgb(255 244 230);
+  color: rgb(158 97 13);
 }
 
 .vgaVis__message--err .vgaVis__messageCode {
-  background-color: rgb(255 235.4 234.3);
-  color: rgb(195.1 51.1 43.5);
+  background-color: rgb(255 235 234);
+  color: rgb(195 51 43);
 }
 
 .themeDark .vgaVis__message--warn .vgaVis__messageCode {
-  background-color: rgb(96.8 68 24.7);
-  color: rgb(255 163.8 22.3);
+  background-color: rgb(97 68 25);
+  color: rgb(255 164 22);
 }
 
 .themeDark .vgaVis__message--err .vgaVis__messageCode {
-  background-color: rgb(96.8 41 39.1);
-  color: hsl(3.35deg 100% 73.03%);
+  background-color: rgb(97 41 39);
+  color: rgb(255 125 117);
 }
 
 /* The tooltip of marks: one element on the page, placed beside the mark or the pointer, in the
@@ -232,9 +233,21 @@
   line-height: 1;
 }
 
-/* The original's small icon buttons, in the accent colour */
+/* The original's empty icon buttons: round, in the accent's text colour, its tint under the pointer */
 .vgaEditor__action.atlButton {
-  color: var(--color-accent);
+  border-radius: 50%;
+  color: var(--color-accent-button-text);
+}
+
+.vgaEditor__action.atlButton:hover {
+  background: var(--color-accent-tint);
+}
+
+/* The kit's menu marks the item under the pointer or with the focus with the secondary surface; in
+   dark the original's is rgb(44 44 46), the tertiary surface (light is the same) */
+.themeDark .vgaEditor__menu .atlContextMenu__item:hover,
+.themeDark .vgaEditor__menu .atlContextMenu__item:focus {
+  background: var(--color-surface-tertiary);
 }
 
 /* The editor takes the whole width and grows with the spec: the sidebar scrolls */
@@ -317,4 +330,785 @@
   height: 1lh;
   vertical-align: top;
   background: linear-gradient(to left, var(--vga-guide) 0, var(--vga-guide) 1px, transparent 1px, transparent 100%);
+}
+
+/* --- Inspect's Vega view: the data sets, the signal values, the spec ---------------------------- */
+
+/* The original's code editor draws these colours itself, in both modes, the theme names none: its
+   indent guides and the line at the left of its overview ruler */
+.vgaDebug {
+  --vga-spec-guide: rgb(211 211 211);
+  --vga-spec-ruler: rgb(127 127 127 / 30%);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Its tabs, the original's small tabs as the theme draws them: pills, the chosen one on the
+   secondary surface, with no line under them */
+.vgaDebug > .atlTabs {
+  gap: var(--space-1);
+  border-bottom: 0;
+}
+
+.vgaDebug .atlTab {
+  border-radius: var(--radius-sm);
+  line-height: 21px;
+}
+
+.vgaDebug .atlTab[aria-selected="true"] {
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  cursor: default;
+}
+
+.vgaDebug .atlTab[aria-selected="true"]::after {
+  content: none;
+}
+
+/* What a tab shows, 8 px under the tabs, its parts 8 px apart */
+.vgaDebug__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  padding-top: var(--space-2);
+}
+
+/* The spec: the button that copies it at the right, over the editor as the original's, white,
+   without a frame, its text 26 px in, with the guides of its indents and its overview ruler's line */
+.vgaDebug__copy {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.vgaDebug__spec .atlCodeEditor {
+  --code-gutter: 26px;
+  border: 0;
+  border-radius: 0;
+  background:
+    linear-gradient(
+      to left,
+      transparent 13px,
+      var(--vga-spec-ruler) 13px,
+      var(--vga-spec-ruler) 14px,
+      transparent 14px
+    ),
+    var(--color-surface);
+}
+
+.vgaDebug__spec .atlCodeEditor--readOnly:focus-visible {
+  box-shadow: none;
+}
+
+.vgaDebug__spec .atlCodeEditor__paint {
+  padding: 0;
+}
+
+.vgaDebug__spec .atlCodeEditor__line {
+  padding-right: 14px;
+  background: transparent;
+}
+
+.tokSpecGuide {
+  display: inline-block;
+  height: 1lh;
+  vertical-align: top;
+  box-shadow: inset 1px 0 0 0 var(--vga-spec-guide);
+}
+
+/* --- The grid: the original's data grid as the theme draws it -------------------------------- */
+
+.vgaGrid__wrap {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.vgaGrid {
+  --vga-cell-padding: 6px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--font-size-s);
+}
+
+/* Expanded cells have 8 px around what they show, compact ones 4 px and smaller type; the rows stay
+   34 px high, as the original's */
+.vgaGrid--expanded {
+  --vga-cell-padding: var(--space-2);
+}
+
+.vgaGrid--compact {
+  --vga-cell-padding: var(--space-1);
+}
+
+/* The toolbar: a frame of the light border, its buttons 2 px apart */
+.vgaGrid__controls {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 34px;
+  padding: var(--space-1) var(--space-1) var(--space-1) 6px;
+  border: 1px solid var(--color-border-light);
+  background: var(--color-surface);
+}
+
+/* An empty button of extra small size in the text's colour; the darkest shade once it hides or sorts */
+.vgaGrid__controlBtn {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 21px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.vgaGrid__controlBtn:hover,
+.vgaGrid__controlBtn:focus-visible,
+.vgaGrid__controlBtn[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--color-text-secondary) var(--tint-opacity), transparent);
+}
+
+.vgaGrid__controlBtn--active {
+  color: var(--color-full-shade);
+}
+
+.vgaGrid__controlText {
+  margin-left: var(--space-2);
+}
+
+.vgaGrid__scroll {
+  overflow: auto hidden;
+  background: var(--color-surface);
+}
+
+.vgaGrid__content {
+  position: relative;
+  z-index: 2;
+  min-width: 100%;
+  background: var(--color-surface);
+  line-height: 14px;
+  outline: none;
+}
+
+.vgaGrid__header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  background: var(--color-surface);
+}
+
+.vgaGrid__row {
+  display: flex;
+}
+
+/* Figures of one width in the cells, as the original's */
+.vgaGrid__headerCell,
+.vgaGrid__cell {
+  font-feature-settings: "tnum";
+}
+
+/* A header cell: the column's name in semibold on the secondary surface, the light border at its
+   right and under it, and at the left of the first */
+.vgaGrid__headerCell {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: calc(21px + 2 * var(--vga-cell-padding) + 1px);
+  padding: var(--vga-cell-padding);
+  border-right: 1px solid var(--color-border-light);
+  border-bottom: 1px solid var(--color-border-light);
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+  line-height: 21px;
+}
+
+.vgaGrid__headerCell--first,
+.vgaGrid__cell--first {
+  border-left: 1px solid var(--color-border-light);
+}
+
+.vgaGrid__headerAnchor {
+  flex: 1 1 auto;
+}
+
+.vgaGrid__headerBtn {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  line-height: normal;
+  text-align: left;
+  cursor: pointer;
+}
+
+.vgaGrid__headerText {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vgaGrid__headerIcon {
+  box-sizing: content-box;
+  padding-left: var(--space-1);
+}
+
+.vgaGrid__sortArrow {
+  margin-right: var(--space-1);
+}
+
+/* The edge that resizes a column: unseen until the pointer is on it, then a line of the accent */
+.vgaGrid__resizer {
+  position: absolute;
+  top: 0;
+  right: calc(-1 * var(--space-2));
+  bottom: 0;
+  z-index: 2;
+  width: var(--space-4);
+  opacity: 0;
+  cursor: ew-resize;
+}
+
+.vgaGrid__resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 7px;
+  width: 3px;
+  background: var(--color-accent);
+}
+
+.vgaGrid__resizer:hover,
+.vgaGrid__resizer:active {
+  opacity: 1;
+}
+
+/* A cell: 34 px high, a faint line at its right (the light border at the right of the last
+   column), the light border under it */
+.vgaGrid__cell {
+  position: relative;
+  display: flex;
+  flex: none;
+  height: 34px;
+  padding: var(--vga-cell-padding);
+  border-right: 1px solid color-mix(in srgb, var(--color-border-light) 40%, var(--color-surface));
+  border-bottom: 1px solid var(--color-border-light);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  line-height: 21px;
+  outline: none;
+}
+
+/* In dark mode the original's faint line is its border shaded, a colour the theme does not name */
+.themeDark .vgaGrid__cell {
+  border-right-color: rgb(40 40 42);
+}
+
+.vgaGrid__cell--last,
+.themeDark .vgaGrid__cell--last {
+  border-right-color: var(--color-border-light);
+}
+
+.vgaGrid--compact .vgaGrid__headerCell,
+.vgaGrid--compact .vgaGrid__cell {
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+.vgaGrid--compact .vgaGrid__headerCell {
+  height: calc(18px + 2 * var(--vga-cell-padding) + 1px);
+}
+
+/* The cell that has the focus: a ring of the focus colour, 1 px higher, its borders unseen */
+.vgaGrid__cell:focus-within {
+  z-index: 2;
+  margin-top: -1px;
+  padding-left: calc(var(--vga-cell-padding) - 1px);
+  border: 1px solid transparent;
+  border-radius: 1px;
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
+}
+
+.vgaGrid__cellAnchor {
+  flex: 1 1 auto;
+}
+
+.vgaGrid__cellContent {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+}
+
+.vgaGrid__truncate {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The button that opens a cell's whole value, at its right under the pointer and in the cell that
+   has the focus, over what the cell shows fading out under it */
+.vgaGrid__expandWrap {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  z-index: 1;
+  display: none;
+  padding: 6px 6px 6px 12px;
+  transform: translateY(-50%);
+}
+
+.vgaGrid__expandWrap::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background-image: linear-gradient(90deg, transparent 0, var(--color-surface) 12px);
+}
+
+.vgaGrid__cell:hover .vgaGrid__expandWrap,
+.vgaGrid__cell--focused .vgaGrid__expandWrap {
+  display: flex;
+}
+
+.vgaGrid__expand {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  margin-left: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  cursor: pointer;
+}
+
+/* The pages, right under the rows, 4 px in, as the original's */
+.vgaGrid__pagination {
+  display: flex;
+  flex-direction: column;
+}
+
+.vgaGrid__pagination .atlPagination {
+  margin-top: var(--space-1);
+}
+
+/* --- The grid's popovers: opaque panels of the large radius, 8 px in ------------------------ */
+
+.atlPopover.vgaGrid__popover {
+  min-width: 0;
+  max-height: none;
+  overflow: visible;
+  padding: var(--space-2);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  backdrop-filter: none;
+}
+
+.atlPopover.vgaGrid__columns {
+  width: 250px;
+}
+
+.atlPopover.vgaGrid__actions,
+.atlPopover.vgaGrid__fieldList {
+  padding: 0;
+}
+
+.atlPopover.vgaGrid__cellPopover {
+  max-width: 400px;
+}
+
+/* A title over the panel's list, from edge to edge, the light border under it */
+.vgaGrid__popoverTitle {
+  margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) var(--space-2);
+  padding: var(--space-3) var(--space-2);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+/* A list that scrolls, from edge to edge, its ends fading out */
+.vgaGrid__columnList,
+.vgaGrid__sortList,
+.vgaGrid__fieldOptions {
+  max-height: 400px;
+  overflow: hidden auto;
+  mask-image: linear-gradient(rgb(0 0 0 / 10%) 0, #000 7.5px, #000 calc(100% - 7.5px), rgb(0 0 0 / 10%) 100%);
+}
+
+.vgaGrid__columnList {
+  margin: calc(-1 * var(--space-2));
+  padding: var(--space-2);
+}
+
+.vgaGrid__sortList {
+  margin: calc(-1 * var(--space-2));
+  padding: 6px var(--space-2);
+}
+
+.vgaGrid__columnItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  height: 24px;
+  padding: 0 var(--space-1);
+  cursor: grab;
+}
+
+.vgaGrid__columnItem--dragged {
+  opacity: 0.5;
+}
+
+.vgaGrid__grab {
+  color: var(--color-text-secondary);
+}
+
+/* The theme's mini switch: 22 by 10, the accent when on, the border's grey when off */
+.vgaGrid__switch {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.vgaGrid__switchTrack {
+  position: relative;
+  flex: none;
+  width: 22px;
+  height: 10px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: var(--color-border);
+  cursor: pointer;
+}
+
+.vgaGrid__switchTrack::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  transition: left var(--duration-fast) var(--ease-out-quint);
+}
+
+.vgaGrid__switchTrack[aria-checked="true"] {
+  background: var(--color-accent);
+}
+
+.vgaGrid__switchTrack[aria-checked="true"]::after {
+  left: 13px;
+  border-color: var(--color-accent);
+}
+
+.vgaGrid__switchTrack:focus-visible {
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
+  outline: none;
+}
+
+.vgaGrid__switchLabel {
+  min-width: 0;
+  padding-left: var(--space-2);
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xs);
+  line-height: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The footer: from edge to edge, the light border over it, its buttons at its ends */
+.vgaGrid__popoverFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin: var(--space-2) calc(-1 * var(--space-2)) calc(-1 * var(--space-2));
+  padding: var(--space-3) var(--space-2);
+  border-top: 1px solid var(--color-border-light);
+  line-height: 21px;
+}
+
+/* An empty button flush with the footer's edge, in the accent's text colour */
+.vgaGrid__footerBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-accent-button-text);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 21px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.vgaGrid__footerBtn:hover,
+.vgaGrid__footerBtn:focus-visible {
+  background: var(--color-accent-tint);
+}
+
+.vgaGrid__footerBtn--end {
+  margin-left: auto;
+}
+
+/* A group of buttons, one of them pressed: the secondary surface, the pressed one raised on the
+   surface in semibold */
+.vgaGrid__group {
+  display: inline-grid;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+  min-width: 0;
+  margin: 0;
+  padding: 2px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+}
+
+.vgaGrid__groupBtn {
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 28px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.vgaGrid__groupBtn--icon {
+  display: flex;
+  align-items: center;
+  width: 36px;
+}
+
+.vgaGrid__groupBtn[aria-pressed="true"] {
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* raised on the tertiary surface in dark mode */
+.themeDark .vgaGrid__groupBtn[aria-pressed="true"] {
+  background: var(--color-surface-tertiary);
+}
+
+.vgaGrid__groupBtn:focus {
+  outline: 2px solid var(--color-focus-ring);
+}
+
+.vgaGrid__group--full {
+  margin-left: var(--space-6);
+}
+
+/* The sort: a line for each field, and the note that there is none */
+.vgaGrid__note {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+.vgaGrid__sortItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 36px;
+  cursor: grab;
+}
+
+.vgaGrid__sortName {
+  flex: 1 1 auto;
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+/* The token the sort gives a JSON field: the theme names no colour for it, these are the library's
+   fifth visualization colour as its light tokens tint it */
+.vgaGrid__token {
+  display: inline-flex;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgb(244 241 248);
+  box-shadow: inset 0 0 0 1px rgb(222 212 234);
+  color: rgb(123 97 156);
+}
+
+.themeDark .vgaGrid__token {
+  background: rgb(64 54 77);
+  box-shadow: inset 0 0 0 1px rgb(75 62 92);
+  color: rgb(178 155 205);
+}
+
+/* A round icon button in the text's colour: one that takes a field out of the sort, or copies a value */
+.vgaGrid__iconBtn {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.vgaGrid__iconBtn:hover,
+.vgaGrid__iconBtn:focus {
+  background: color-mix(in srgb, var(--color-text-secondary) var(--tint-opacity), transparent);
+  outline: none;
+}
+
+/* The fields to sort by: a list without padding at the sides, the callout's fill under the focus */
+.vgaGrid__fieldOptions {
+  min-width: 112px;
+  max-height: 300px;
+  padding: var(--space-1) 0;
+}
+
+.vgaGrid__field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  height: 26px;
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.vgaGrid__field:hover,
+.vgaGrid__field:focus {
+  background: var(--color-accent-callout-fill);
+  outline: none;
+}
+
+.vgaGrid__fieldName {
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+/* A header cell's menu: rows of the extra small size, the light border under the pointer */
+.vgaGrid__actionList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vgaGrid__action {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 24px;
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 16px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.vgaGrid__action .atlIcon {
+  margin-right: var(--space-3);
+}
+
+.vgaGrid__action:hover,
+.vgaGrid__action:focus {
+  background: var(--color-border-light);
+  outline: none;
+}
+
+/* A cell's whole value: JSON in the code face, coloured as the library's code block colours it, the
+   copy button at its top right */
+.vgaGrid__cellValue {
+  position: relative;
+}
+
+.vgaGrid__cellCode {
+  margin: 0;
+  padding: 0 28px 0 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-family: var(--font-family-code);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.vgaGrid__cellValue > .vgaGrid__iconBtn {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+.vgaJson__punctuation {
+  opacity: 0.7;
+}
+
+.vgaJson__string {
+  color: var(--code-block-string);
+}
+
+.vgaJson__number {
+  color: var(--code-block-number);
+}
+
+.vgaJson__keyword {
+  color: var(--code-block-keyword);
 }

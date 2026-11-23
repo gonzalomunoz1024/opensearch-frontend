@@ -8,10 +8,32 @@
  * %dashboard_context-…% clauses) worked out as the original works them out, with its messages.
  */
 
-import type { BoolQuery } from '../../lib/query';
+import { buildQuery, type BoolQuery, type QueryConfig } from '../../lib/query';
+import type { Filter, Query } from '../../lib/types';
+import { contextFilters, uniqueQueries } from '../request';
 import { isPlainObject } from './utils';
 
 export type SpecObject = Record<string, unknown>;
+
+/**
+ * The page's queries and filters as one boolean query: what %context% and the dashboard clauses
+ * stand for, as the original's request handler builds it. An empty query in the query language is
+ * one match_all among the filter clauses, as the original parses it. A query or a filter that
+ * repeats an earlier one asks once (the context's uniqBy and uniqFilters).
+ */
+export function contextQuery(queries: Array<Query | undefined>, filters: Filter[], config: QueryConfig): BoolQuery {
+  return buildQuery(undefined, uniqueQueries(queries), contextFilters(filters), config);
+}
+
+/**
+ * A search's answer as the original's search route hands it on (shimHitsTotal): the total of hits
+ * a number, where OpenSearch answers { value, relation }
+ */
+export function shimHitsTotal<T extends { hits?: unknown }>(response: T): T {
+  const hits = response.hits as { total?: unknown } | undefined;
+  const total = (hits?.total as { value?: unknown } | null | undefined)?.value ?? hits?.total;
+  return { ...response, hits: { ...hits, total } };
+}
 
 /** A data object of the spec, and its `url` taken out of it */
 export interface DataRequest {

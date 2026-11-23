@@ -8,8 +8,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { resolveTimeRange, type TimeRange } from '../../lib/dates';
-import { buildQuery, type BoolQuery } from '../../lib/query';
-import type { Filter, Query } from '../../lib/types';
+import type { BoolQuery } from '../../lib/query';
+import type { Filter } from '../../lib/types';
 import type { Vis } from '../../lib/vis';
 import { getServiceSettings } from '../../maps/service_settings';
 import { services } from '../../services';
@@ -17,7 +17,7 @@ import { errorMessage } from '../../services/http';
 import type { RequestRecord } from '../../services/search';
 import type { VisInput } from '../request';
 import { visFailure, type VisFailure } from '../types';
-import { TimeCache, type VegaSearchApi, type VegaSearchRequest } from './data_parsers';
+import { TimeCache, contextQuery, shimHitsTotal, type VegaSearchApi, type VegaSearchRequest } from './data_parsers';
 import type { VegaDebugValues } from './debug_view';
 import { loadVega } from './library';
 import { VegaParser } from './parser';
@@ -80,7 +80,9 @@ function createSearchApi(records: RequestRecord[], signal: AbortSignal): VegaSea
               throw failure;
             }
           }
-          const rawResponse = await services.search.search(indexText, body, { signal, record });
+          // the total of hits a number, in the spec and in Inspect, as the original's search route gives it
+          const rawResponse = shimHitsTotal(await services.search.search(indexText, body, { signal, record }));
+          record.response = rawResponse;
           return { name, rawResponse };
         })
       );
@@ -89,33 +91,6 @@ function createSearchApi(records: RequestRecord[], signal: AbortSignal): VegaSea
       records.length = 0;
     },
   };
-}
-
-/** The page's queries without repeats, as the original merges them */
-function uniqueQueries(queries: Array<Query | undefined>): Query[] {
-  const seen = new Set<string>();
-  const result: Query[] = [];
-  for (const query of queries) {
-    if (!query) continue;
-    const key = JSON.stringify(query.query);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    result.push(query);
-  }
-  return result;
-}
-
-/** The page's query and filters as one boolean query: what %context% and the dashboard clauses stand for */
-export function contextQuery(vis: Vis, input: VisInput): BoolQuery {
-  const queries = uniqueQueries([input.query, vis.source.query]);
-  const filters = [...input.filters, ...vis.source.filters].filter((filter) => !filter.meta?.disabled);
-  const query = buildQuery(undefined, queries, filters, services.queryConfig());
-  // An empty query in the query language is a match_all in the original, as it parses one
-  const emptyKuery = queries.filter((item) => item.language !== 'lucene' && typeof item.query === 'string' && item.query.trim() === '');
-  if (emptyKuery.length) {
-    query.bool.filter = [...emptyKuery.map(() => ({ match_all: {} })), ...query.bool.filter];
-  }
-  return query;
 }
 
 export function VegaVis({ vis, input, tick, onFilter, onFiltersChange, onTimeChange, onData, onError }: VegaVisProps) {
@@ -140,7 +115,7 @@ export function VegaVis({ vis, input, tick, onFilter, onFiltersChange, onTimeCha
     // a query that cannot be read fails the visualization, which keeps what it drew
     let filters: BoolQuery;
     try {
-      filters = contextQuery(vis, input);
+      filters = contextQuery([input.query, vis.source.query], [...input.filters, ...vis.source.filters], services.queryConfig());
     } catch (error) {
       setLoading(false);
       const report = callbacks.current.onError;

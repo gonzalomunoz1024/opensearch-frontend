@@ -320,12 +320,12 @@ export function StylePanel({ state, update }: StylePanelProps) {
       </div>
       <div className="vbdSide__style">{options}</div>
       {confirm && (
-        // The original's confirmation, at most 300 px wide
+        // The original's confirmation dialog, which takes the focus itself
         <Modal
           title="Change visualization type"
           onClose={() => setConfirm(undefined)}
           testId="confirmVisChangeModal"
-          className="vbdConfirm"
+          className="atlModal--confirm"
           footer={
             <>
               <Button variant="empty" onClick={() => setConfirm(undefined)} testId="confirmModalCancelButton">
@@ -338,7 +338,6 @@ export function StylePanel({ state, update }: StylePanelProps) {
                   setConfirm(undefined);
                   update((current) => withType(current, target.name, target.aggs));
                 }}
-                data-autofocus
                 testId="confirmModalConfirmButton"
               >
                 Change type
