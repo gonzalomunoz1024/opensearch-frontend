@@ -2062,6 +2062,8 @@
 .ismSnapshotForm__accordion .atlAccordion__button {
   gap: var(--space-2);
   padding: 0;
+  font-weight: var(--font-weight-regular);
+  line-height: 1.5;
 }
 
 .ismSnapshotForm__accordion .atlAccordion__arrow {
@@ -2077,24 +2079,6 @@
 .ismSnapshotForm__repository > .ismSnapField {
   flex: 0 1 400px;
   min-width: 0;
-}
-
-.ismSnapshotForm__small {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  max-width: 400px;
-}
-
-.ismSnapshotForm__label {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-}
-
-.ismSnapshotForm__minor {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
 }
 
 .ismTickLabel {
@@ -2336,30 +2320,16 @@
   display: none;
 }
 
-.ismSnapshotForm__minor .ismLabeled {
-  max-width: 400px;
-}
-
 /* --- A snapshot policy: its form and what it shows ------------------------------------------------- */
 
-.ismSnapshotPolicy .ismSnapshotForm h3 {
-  font-size: var(--font-size-l);
-  line-height: 1.3;
-}
-
-.ismSnapshotPolicy .ismLabeled__title i,
-.ismSnapshotFlyout .ismLabeled__title i {
-  font-size: var(--font-size-s);
-  font-weight: var(--font-weight-regular);
-  color: var(--color-text-secondary);
-}
-
-.ismCron {
+/* Radios one under the other, as the plugin's radio group */
+.ismRadioStack {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  align-items: flex-start;
 }
 
+/* When a policy runs: the time and the time zone side by side, 24 px apart */
 .ismCron__row {
   display: flex;
   align-items: flex-start;
@@ -2380,20 +2350,36 @@
 
 .ismCron__text {
   margin: 0;
-  font-size: var(--font-size-s);
 }
 
+/* A schedule at the end of an accordion keeps 12 px under it: the bottom margin of the plugin's flex
+   group, which EUI's accordion measures into its height */
+.ismSnapshotForm__accordion .ismCron__row:last-child {
+  margin-bottom: var(--space-3);
+}
+
+/* What a cron expression is, under its field: the plugin's help text around a paragraph of small
+   text, whose line is the 21 px of text at 14 px */
+.ismCron__help {
+  margin: 0;
+  padding: calc(var(--space-1) + 5px) 0 5px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 200;
+  line-height: calc(var(--font-size-s) * 1.5);
+}
+
+/* The days of the week on one line, running past the 400 px of the time as the plugin's do */
 .ismCron__days {
   display: flex;
   gap: var(--space-3);
-  margin-top: var(--space-2);
   white-space: nowrap;
 }
 
 .ismCron__monthly {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-3);
+  gap: var(--space-4);
   width: 100%;
 }
 
@@ -2407,20 +2393,15 @@
   color: var(--color-surface);
 }
 
+/* The maximum age, a number as wide as the plugin's beside a unit of 100 px, 24 px apart */
 .ismSnapshotPolicy__age {
   display: grid;
-  grid-template-columns: 236px 100px;
+  grid-template-columns: 234px 100px;
   gap: var(--space-6);
-  width: 100%;
-}
-
-.ismSnapshotPolicy__more {
-  padding-top: var(--space-3);
 }
 
 .ismSnapshotPolicy__text {
   margin: 0;
-  font-size: var(--font-size-s);
 }
 
 .ismSnapshotPolicy__counts {
@@ -2429,41 +2410,52 @@
   gap: var(--space-6);
 }
 
-.ismSnapshotPolicy__counts > .ismLabeled {
-  flex: 0 0 236px;
+.ismSnapshotPolicy__counts > .ismSnapField {
+  flex: 0 0 234px;
 }
 
+.ismSnapshotPolicy__counts .ismSnapField__body > .atlField {
+  max-width: none;
+}
+
+/* "Configure when to check…": the plugin's span, grey in its own words, in a line of 14 px */
+.ismSnapshotPolicy__note {
+  display: block;
+  color: grey;
+  font-size: var(--font-size-xs);
+  font-weight: 200;
+  line-height: 14px;
+}
+
+/* The channel, its refresh and the channels' page, 8 px apart on the plugin's 600 px less the
+   margins of its flex group */
 .ismSnapshotPolicy__channels {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  width: 100%;
+  max-width: calc(600px - var(--space-2));
 }
 
+.ismSnapshotPolicy__channels > .atlSelect,
 .ismSnapshotPolicy__channels > select {
   flex: 1 1 auto;
   min-width: 0;
 }
 
-.ismSnapshotPolicy__channels > button {
-  flex: 0 0 auto;
-  min-width: 32px;
+.ismSnapshotPolicy__channels > .atlButton {
+  flex: none;
 }
 
-.ismPage--form.ismSnapshotPolicy .ismLabeled:has(.ismSnapshotPolicy__channels) > .ismLabeled__body {
-  max-width: 600px;
+/* The refresh is the plugin's button with only an icon in it, not a square icon button */
+.ismSnapshotPolicy__channels > .atlButton--icon {
+  width: auto;
+  padding: 0 var(--space-3);
 }
 
+/* "Advanced settings – optional" beside the button that opens them */
 .ismSnapshotPolicy__fold {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
-}
-
-.ismSnapshotPolicy .ismDetail dt {
-  color: inherit;
-  font-size: var(--font-size-s);
-  font-weight: var(--font-weight-semibold);
 }
 
 /* The page of a policy, as the plugin's: 5 px and 50 px in from the page, its panels 24 px apart */
@@ -2493,6 +2485,30 @@
 .ismPolicyPage__actions {
   display: flex;
   align-items: center;
+  gap: var(--space-2);
+}
+
+/* The page that makes or changes a policy: its parts one under the other, as the plugin's spacers
+   set them */
+.ismPolicyPage--form {
+  display: block;
+}
+
+.ismPolicyPage--form > h1 {
+  margin: 0;
+}
+
+.ismPolicyPage__subtitle {
+  margin: 0;
+  padding: 5px 0;
+  color: var(--color-text-secondary);
+  font-weight: 200;
+  line-height: 1.5;
+}
+
+.ismPolicyPage__footer {
+  display: flex;
+  justify-content: flex-end;
   gap: var(--space-2);
 }
 
@@ -2564,7 +2580,7 @@
 }
 
 /* "Advanced settings" opens as the plugin's accordion: a plain line with the arrow 4 px in */
-.ismPolicyPanel .atlAccordion {
+.ismPolicyPanel .ismPolicyFacts + .atlAccordion {
   margin-top: var(--space-2);
 }
 

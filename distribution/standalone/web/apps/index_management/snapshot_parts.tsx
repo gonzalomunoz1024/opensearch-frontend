@@ -6,7 +6,7 @@
  * and where it goes, and the three switches of a snapshot.
  */
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Accordion, Button, CallOut, cx } from '../../components/basic';
 import { ComboBox, type ComboOption } from '../../components/combo_box';
 import { Checkbox, NumberField, Select, TextField } from '../../components/form';
@@ -182,6 +182,37 @@ export function GroupFilter({
 /** The plugin's spacer: an empty line of 4, 8, 16, 24 or 40 px between the parts of a form */
 export function Spacer({ size = 'l' }: { size?: 'xs' | 's' | 'm' | 'l' | 'xxl' }) {
   return <div className={`ismSpacer ismSpacer--${size}`} />;
+}
+
+/**
+ * Radios one under the other with no space between them, as the plugin's radio group draws
+ * them (the kit's group puts 8 px between them)
+ */
+export function RadioStack<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: Array<{ id: T; label: ReactNode }>;
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  const name = useId();
+  return (
+    <div className="ismRadioStack">
+      {options.map((option) => (
+        <label key={option.id} className="atlRadio">
+          <input
+            type="radio"
+            name={name}
+            checked={option.id === value}
+            onChange={() => onChange(option.id)}
+          />
+          <span>{option.label}</span>
+        </label>
+      ))}
+    </div>
+  );
 }
 
 /**
@@ -737,7 +768,7 @@ export function CronSchedule({
   }, []);
 
   return (
-    <div className="ismCron">
+    <>
       <Field title={title}>
         <Select
           id="creationCronScheduleType"
@@ -753,31 +784,31 @@ export function CronSchedule({
           }}
         />
       </Field>
+      <Spacer size="m" />
       <div className="ismCron__row">
         <div className="ismCron__start">
           {frequencyType === 'custom' ? (
-            <Field
-              title="Cron expression"
-              help={
-                <>
-                  Use Cron expression to define complex schedule. <ExternalLink href={CRON_DOCS} />
-                </>
-              }
-            >
+            <Field title="Cron expression">
               <TextField value={expression} onChange={onExpression} compact disabled={disabled} />
+              <p className="ismCron__help">
+                Use Cron expression to define complex schedule. <ExternalLink href={CRON_DOCS} />
+              </p>
             </Field>
           ) : (
-            <Field title="Start time">
-              {frequencyType === 'hourly' ? (
-                <p className="ismCron__text">Starts at the beginning of the hour.</p>
-              ) : (
-                <TimeSelect
-                  hour={parts.hour}
-                  minute={parts.minute}
-                  disabled={disabled}
-                  onChange={(hour, minute) => change(frequencyType, { hour, minute })}
-                />
-              )}
+            <>
+              <Field title="Start time">
+                {frequencyType === 'hourly' ? (
+                  <p className="ismCron__text">Starts at the beginning of the hour.</p>
+                ) : (
+                  <TimeSelect
+                    hour={parts.hour}
+                    minute={parts.minute}
+                    disabled={disabled}
+                    onChange={(hour, minute) => change(frequencyType, { hour, minute })}
+                  />
+                )}
+              </Field>
+              <Spacer size="s" />
               {frequencyType === 'weekly' && (
                 <div className="ismCron__days">
                   {WEEK_DAYS.map((day) => (
@@ -792,8 +823,7 @@ export function CronSchedule({
                 </div>
               )}
               {frequencyType === 'monthly' && (
-                <>
-                  <h3>On the</h3>
+                <Field title="On the">
                   <div className="ismCron__monthly">
                     <Select
                       value="day"
@@ -817,9 +847,9 @@ export function CronSchedule({
                       }
                     />
                   </div>
-                </>
+                </Field>
               )}
-            </Field>
+            </>
           )}
         </div>
         {onTimezone && (
@@ -839,6 +869,6 @@ export function CronSchedule({
           </div>
         )}
       </div>
-    </div>
+    </>
   );
 }
