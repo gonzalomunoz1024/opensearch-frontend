@@ -2,7 +2,7 @@
 
 /* The dialogs every page that saves something shares: save, open, share. */
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button, CallOut, EmptyPrompt, Loading } from '../components/basic';
 import { FormRow, SearchField, Switch, TextArea, TextField } from '../components/form';
 import { Icon, type IconName } from '../components/icon';
@@ -17,6 +17,20 @@ export interface SaveResult {
   description: string;
   /** Save a copy under the new title and leave the original as it is */
   asNew: boolean;
+}
+
+/**
+ * Runs a save unless one is running already, as the original's save modal ignores what is asked
+ * while it saves (`isLoading`): Enter pressed twice in the title saved two objects
+ */
+export async function saveOnce(running: { current: boolean }, save: () => Promise<void>): Promise<void> {
+  if (running.current) return;
+  running.current = true;
+  try {
+    await save();
+  } finally {
+    running.current = false;
+  }
 }
 
 export function SaveModal({
@@ -63,8 +77,9 @@ export function SaveModal({
   const [asNew, setAsNew] = useState(Boolean(initialAsNew));
   const [busy, setBusy] = useState(false);
   const [duplicate, setDuplicate] = useState(false);
+  const saving = useRef(false);
 
-  const save = async (confirmed: boolean) => {
+  const run = async (confirmed: boolean) => {
     if (title.trim() === '') return;
     setBusy(true);
     try {
@@ -92,6 +107,7 @@ export function SaveModal({
       setBusy(false);
     }
   };
+  const save = (confirmed: boolean) => saveOnce(saving, () => run(confirmed));
 
   return (
     <Modal

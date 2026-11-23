@@ -6,9 +6,16 @@
  * same saved settings.
  */
 
-import { DEFAULT_DATE_FORMAT, formatDate, type ScaledDateRules } from './dates';
+import { addUnits, DEFAULT_DATE_FORMAT, formatDate, readMoment, utcOffset, type ScaledDateRules } from './dates';
 import { formatNumber } from './numeral';
 import type { Field, FieldFormatSpec, IndexPattern } from './types';
+
+/** Where the page was loaded, and the base path of the server */
+export interface ParsedUrl {
+  origin: string;
+  pathname: string;
+  basePath: string;
+}
 
 export interface FormatSettings {
   dateFormat: string;
@@ -22,6 +29,12 @@ export interface FormatSettings {
   defaultTypeMap: Record<string, FieldFormatSpec>;
   /** The setting dateFormat:scaled: the format of a date bucket by its interval */
   scaledDateRules?: ScaledDateRules;
+  /**
+   * Where the page was loaded, as the original tells its formats (the meta parameter parsedUrl): a
+   * link of the URL format that is not to an http or https address is made absolute from it, as
+   * the original makes it. Without it such a link is kept only when it is safe to follow.
+   */
+  parsedUrl?: ParsedUrl;
 }
 
 export const DEFAULT_DATE_NANOS_FORMAT = 'MMM D, YYYY @ HH:mm:ss.SSSSSSSSS';
@@ -58,41 +71,39 @@ export const DEFAULT_FORMAT_SETTINGS: FormatSettings = {
   },
 };
 
-/** A value ready to show: text, and what some formats add to it */
+/**
+ * A value ready to show: its text, as a text is made of it (a chart's label, a filter's), and what
+ * some formats draw of it instead or around it
+ */
 export interface Formatted {
   text: string;
   href?: string;
   newTab?: boolean;
-  image?: { src: string; width?: number; height?: number };
+  /** A picture, drawn in place of the text; `alt` tells what it shows */
+  image?: { src: string; alt?: string; width?: number; height?: number };
+  /** A sound, drawn as a player in place of the text */
+  audio?: { src: string };
   color?: string;
   background?: string;
+  /** A list of values: each as its format draws it, between them `separator` */
+  parts?: Formatted[];
+  separator?: string;
 }
 
 export type Formatter = (value: unknown) => Formatted;
 
 export const MISSING = '-';
+// What the original writes for no value in a list
+const MISSING_IN_LIST = ' - ';
 
 // An empty text is a value, which each format writes as the original's does: mostly as nothing
 const isMissing = (value: unknown) => value === null || value === undefined;
 
-function toNumber(value: unknown): number | undefined {
-  if (typeof value === 'number') return value;
-  if (typeof value === 'string' && value.trim() !== '') {
-    const parsed = Number(value);
-    return Number.isNaN(parsed) ? undefined : parsed;
-  }
-  if (typeof value === 'boolean') return value ? 1 : 0;
-  return undefined;
-}
-
-function toDate(value: unknown): Date | undefined {
-  if (value instanceof Date) return value;
-  if (typeof value === 'number') return new Date(value);
-  if (typeof value === 'string') {
-    const date = /^-?\d+$/.test(value) ? new Date(Number(value)) : new Date(value);
-    return Number.isNaN(date.getTime()) ? undefined : date;
-  }
-  return undefined;
+/** A value as text, as lodash's toString writes it, which the original's formats escape: -0 is "-0" */
+function asText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (isMissing(value)) return '';
+  return Object.is(value, -0) ? '-0' : String(value);
 }
 
 export function stringify(value: unknown): string {
@@ -261,10 +272,25 @@ function decodeBase64(input: string): string {
   return decoded;
 }
 
-export const fromNow = (date: Date, now = new Date()) => {
-  const difference = date.getTime() - now.getTime();
-  return difference <= 0 ? `${humanize(difference)} ago` : `in ${humanize(difference)}`;
-};
+/**
+ * How long ago a date was or how far ahead it is, as moment's fromNow says it: the whole months
+ * between the two on the clock of the zone, and the milliseconds left over. Where a date cannot be
+ * that many months away, moment's "Invalid date".
+ */
+export function fromNow(date: Date, now = new Date(), timeZone?: string): string {
+  const future = now.getTime() < date.getTime();
+  const [base, other] = future ? [now, date] : [date, now];
+  const clock = (moment: Date) => new Date(moment.getTime() + utcOffset(moment, timeZone) * 60000);
+  const [baseClock, otherClock] = [clock(base), clock(other)];
+  let months =
+    otherClock.getUTCMonth() - baseClock.getUTCMonth() + (otherClock.getUTCFullYear() - baseClock.getUTCFullYear()) * 12;
+  if (addUnits(base, months, 'M').getTime() > other.getTime()) months -= 1;
+  const ms = other.getTime() - addUnits(base, months, 'M').getTime();
+  if (Number.isNaN(ms)) return 'Invalid date';
+  const words = humanizeDuration({ ms, days: 0, months });
+  // A difference of nothing is in the past, as moment has it
+  return future ? `in ${words}` : `${words} ago`;
+}
 
 /**
  * A URL or label template, read as OpenSearch Dashboards reads it: `{{name}}` is that value,
@@ -282,17 +308,32 @@ export function fillTemplate(template: string, values: Record<string, unknown>):
     .join('');
 }
 
-/** The URL a URL format makes of a value, and the label it shows for it: the URL itself if none */
+/**
+ * The URL a URL format makes of a value, and the label it shows for it: the URL itself if none.
+ * The value is read as the original reads it: as JavaScript writes it into a template, and as
+ * lodash's toString writes it without one ("-0", "[object Object]").
+ */
 export function urlParts(params: Record<string, unknown>, value: unknown): { url: string; label: string } {
-  const shown = stringify(value);
   const urlTemplate = param(params.urlTemplate, null);
   const labelTemplate = param(params.labelTemplate, null);
   const url =
     typeof urlTemplate === 'string'
-      ? fillTemplate(urlTemplate, { value: encodeURIComponent(shown), rawValue: shown })
-      : shown;
-  const label = typeof labelTemplate === 'string' ? fillTemplate(labelTemplate, { value: shown, url }) : url;
+      ? fillTemplate(urlTemplate, { value: encodeURIComponent(String(value)), rawValue: value })
+      : asText(value);
+  const label = typeof labelTemplate === 'string' ? fillTemplate(labelTemplate, { value, url }) : url;
   return { url, label };
+}
+
+/**
+ * The address a link of the URL format goes to, as the original makes it from where the page was
+ * loaded: an http or https address as it is; "#/..." on the page; a path under the base path on
+ * the server; anything else under the base path's /app/. Each is safe to follow.
+ */
+function absoluteHref(url: string, { origin, pathname, basePath }: ParsedUrl): string {
+  if (url.indexOf('http://') === 0 || url.indexOf('https://') === 0) return url;
+  if (url[0] === '#') return `${origin}${pathname}${url}`;
+  if (url.indexOf(basePath || '/') === 0) return `${origin}${url}`;
+  return `${origin}${basePath || ''}/app${url[0] === '/' ? '' : '/'}${url}`;
 }
 
 // Only links a page may safely open: a relative address, or http, https or mailto. The address is
@@ -309,6 +350,21 @@ function safeUrl(url: string): string | undefined {
     return undefined;
   }
 }
+
+interface ColorRule {
+  range?: unknown;
+  regex?: unknown;
+  text?: string;
+  background?: string;
+}
+
+// The rule of the original's colour format when none is saved
+const DEFAULT_COLOR_RULE: ColorRule = {
+  range: '-Infinity:Infinity',
+  regex: '<insert regex>',
+  text: '#000000',
+  background: '#ffffff',
+};
 
 function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknown) => Formatted {
   const params = spec.params ?? {};
@@ -338,9 +394,10 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
       const pattern = typeof params.pattern === 'string' && params.pattern ? params.pattern : settings.dateFormat;
       // In the zone of the settings, as the original's date formats write whatever timezone they name
       const zone = settings.timeZone;
+      // A value moment finds no date in is written as it is, as the original writes it
       return (value) => {
-        const date = toDate(value);
-        return text(date ? formatDate(date, pattern, zone) : stringify(value));
+        const date = readMoment(value, zone);
+        return text(date ? formatDate(date, pattern, zone) : asText(value));
       };
     }
     case 'date_nanos': {
@@ -351,16 +408,16 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
           : settings.dateNanosFormat || DEFAULT_DATE_NANOS_FORMAT;
       const zone = settings.timeZone;
       return (value) => {
-        const date = toDate(value);
-        if (!date) return text(stringify(value));
+        const date = readMoment(value, zone);
+        if (!date) return text(asText(value));
         if (typeof value !== 'string') return text(formatDate(date, settings.dateFormat, zone));
         return text(formatDateNanos(value, date, pattern, zone));
       };
     }
     case 'relative_date':
       return (value) => {
-        const date = toDate(value);
-        return text(date ? fromNow(date) : stringify(value));
+        const date = readMoment(value, settings.timeZone);
+        return text(date ? fromNow(date, new Date(), settings.timeZone) : asText(value));
       };
     case 'duration': {
       const input = String(param(params.inputFormat, 'seconds'));
@@ -368,10 +425,14 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
       const precision = Number(param(params.outputPrecision, 2));
       const suffix = params.showSuffix && DURATION_OUTPUTS[output] ? ` ${DURATION_OUTPUTS[output]}` : '';
       return (value) => {
-        const number = toNumber(value);
-        if (number === undefined) return text(stringify(value));
+        // As the original multiplies it: an empty text is 0, other text that is no number is no
+        // length of time, which moment writes as "Invalid date" in words and NaN as a number
+        const number = Number(value);
         const duration = durationOf(number, input);
-        if (output === 'humanize') return text(`${number < 0 ? 'minus ' : ''}${humanizeDuration(duration)}${suffix}`);
+        if (output === 'humanize') {
+          const words = Number.isNaN(number) ? 'Invalid date' : humanizeDuration(duration);
+          return text(`${number < 0 ? 'minus ' : ''}${words}${suffix}`);
+        }
         const unit = output.replace(/^as/, '').toLowerCase();
         return text(`${durationAs(duration, unit).toFixed(precision)}${suffix}`);
       };
@@ -387,15 +448,18 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
       };
     case 'ip':
       return (value) => {
-        if (typeof value !== 'number') return text(stringify(value));
+        // What isFinite reads as a number is written as an address, as the original writes it: an
+        // empty text is 0.0.0.0, "42" is 0.0.0.42; anything else as it is
+        const number = Number(value);
+        if (!Number.isFinite(number)) return text(asText(value));
         // eslint-disable-next-line no-bitwise
-        return text([value >>> 24, (value >>> 16) & 255, (value >>> 8) & 255, value & 255].join('.'));
+        return text([number >>> 24, (number >>> 16) & 255, (number >>> 8) & 255, number & 255].join('.'));
       };
     case 'truncate': {
       // lodash's truncate to the length and three more: the omission is not counted
       const length = Number(param(params.fieldLength, 0));
       return (value) => {
-        const full = stringify(value);
+        const full = asText(value);
         if (!(length > 0)) return text(full);
         const symbols = Array.from(full);
         const end = Math.trunc(length + 3) - 3;
@@ -406,60 +470,68 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
       const entries = Array.isArray(params.lookupEntries)
         ? (params.lookupEntries as Array<{ key: unknown; value: unknown }>)
         : [];
-      const lookup = new Map(entries.map((entry) => [String(entry.key), entry.value]));
+      const lookup = new Map(entries.map((entry) => [String(entry?.key), entry?.value]));
       // An entry without an answer and an empty text for the other values are none, as the original
       // reads them: the value itself is shown
-      return (value) => text(stringify(lookup.get(String(value)) || params.unknownKeyValue || value));
+      return (value) => text(asText(lookup.get(String(value)) || params.unknownKeyValue || value));
     }
     case 'color': {
-      const rules = Array.isArray(params.colors)
-        ? (params.colors as Array<{ range?: string; regex?: string; text?: string; background?: string }>)
-        : [];
+      // No rules saved: the original's one, black on white for any number
+      const saved = param(params.colors, null);
+      const rules = (Array.isArray(saved) ? saved : saved ? [] : [DEFAULT_COLOR_RULE]) as ColorRule[];
       // By the kind of field its editor saves with it: without one nothing is coloured
-      const { fieldType } = params;
+      const fieldType = param(params.fieldType, null);
       return (value) => {
         const shown = stringify(value);
         // The last rule that matches is the one drawn, as the original's findLast
         for (let index = rules.length - 1; index >= 0; index -= 1) {
           const rule = rules[index];
           let matches = false;
+          if (!rule) continue;
           if (fieldType === 'string') {
             try {
-              // A rule without a pattern matches every text
-              matches = new RegExp(rule.regex ?? '').test(shown);
+              // The value as text; a rule without a pattern matches every value
+              matches = (rule.regex === undefined ? /(?:)/ : new RegExp(String(rule.regex))).test(String(value));
             } catch {
               matches = false;
             }
           } else if (fieldType === 'number' && rule.range) {
-            const number = toNumber(value);
-            // An end left out is zero, as Number reads it
-            const [low, high] = rule.range.split(':').map(Number);
-            matches = number !== undefined && number >= low && number <= high;
+            // The value as JavaScript compares it with a number: an empty text is 0; an end left
+            // out is 0 too, and one not given at all no number
+            const number = Number(value);
+            const [low, high] = String(rule.range).split(':');
+            matches = number >= Number(low) && number <= Number(high);
           }
-          if (matches) return { text: shown, color: rule.text, background: rule.background };
+          if (matches) return { text: shown, color: rule.text || undefined, background: rule.background || undefined };
         }
         return text(shown);
       };
     }
     case 'url': {
-      const kind = String(params.type ?? 'a');
+      const kind = param(params.type, 'a');
+      const { parsedUrl } = settings;
+      // A size in pixels: the number at the start of the parameter, as parseInt reads it
+      const size = (key: string) => {
+        const parsed = parseInt(String(param(params[key], null)), 10);
+        return Number.isNaN(parsed) ? undefined : parsed;
+      };
+      const width = size('width');
+      const height = size('height');
+      const newTab = !params.openLinkInCurrentTab;
       return (value) => {
-        const shown = stringify(value);
-        if (isMissing(value)) return text(shown);
-        const { url: formatted, label } = urlParts(params, value);
-        const url = safeUrl(formatted);
-        if (!url) return text(label);
+        const { url, label } = urlParts(params, value);
+        // A sound or a picture only from an address that is safe to load
+        if (kind === 'audio') return safeUrl(url) === undefined ? text(label) : { text: label, audio: { src: url } };
         if (kind === 'img') {
-          return {
-            text: label,
-            image: {
-              src: url,
-              width: Number(params.width) || undefined,
-              height: Number(params.height) || undefined,
-            },
-          };
+          if (safeUrl(url) === undefined) return text(label);
+          // A picture with nothing to say what it shows says where it comes from, as the original
+          // tells screen readers
+          const alt = label === url ? `A dynamically-specified image located at ${url}` : label;
+          return { text: label, image: { src: url, alt, width, height } };
         }
-        return { text: label, href: url, newTab: params.openLinkInCurrentTab !== true };
+        if (parsedUrl) return { text: label, href: absoluteHref(url, parsedUrl), newTab };
+        const href = safeUrl(url);
+        return href ? { text: label, href, newTab } : text(label);
       };
     }
     case 'string': {
@@ -467,20 +539,21 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
       return (value) => {
         const shown = stringify(value);
         if (isMissing(value)) return text(shown);
+        // Each as the original reads a value that is no text: as JavaScript writes it, or as it is
         switch (transform) {
           case 'lower':
-            return text(shown.toLowerCase());
+            return text(String(value).toLowerCase());
           case 'upper':
-            return text(shown.toUpperCase());
+            return text(String(value).toUpperCase());
           case 'title':
             return text(shown.replace(/\w\S*/g, (word) => word[0].toUpperCase() + word.slice(1).toLowerCase()));
           case 'short':
-            return text(shown.replace(/(.).+?\./g, '$1.'));
+            return text(typeof value === 'string' ? value.replace(/(.).+?\./g, '$1.') : asText(value));
           case 'base64':
-            return text(decodeBase64(shown));
+            return text(typeof value === 'string' ? decodeBase64(value) : shown);
           case 'urlparam':
             try {
-              return text(decodeURIComponent(shown));
+              return text(decodeURIComponent(String(value)));
             } catch {
               return text(shown);
             }
@@ -494,21 +567,32 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
   }
 }
 
-/** The formatter of a format. A list of values is written value by value, joined by commas. */
+// Whether what the original draws of a value holds a line end: its text, or its link's, picture's or
+// sound's address
+function breaksLine(part: Formatted): boolean {
+  if (part.parts) return part.separator === ',\n';
+  const drawn = part.image ? [part.image.src, part.image.alt] : part.audio ? [part.audio.src] : [part.text, part.href];
+  return drawn.some((text) => text !== undefined && text.includes('\n'));
+}
+
+/**
+ * The formatter of a format. A list of values is written as the original's lists are: value by
+ * value, each drawn as its format draws it (a link, a picture, a colour), joined by commas.
+ */
 export function createFormatter(spec: FieldFormatSpec | undefined, settings = DEFAULT_FORMAT_SETTINGS): Formatter {
   const format = single(spec ?? { id: 'string' }, settings);
-  // No value, alone or in a list, is a dash whatever the format, as the original's lists write it
-  const one = (value: unknown): Formatted => (isMissing(value) ? { text: MISSING } : format(value));
-  // As the original writes a list: each value, a list in it value by value too
-  const write = (value: unknown): Formatted => {
-    if (!Array.isArray(value)) return one(value);
-    if (value.length === 1) return write(value[0]);
-    const parts = value.map(write);
-    // As the original joins a list: a line to each value when one of them takes several
-    const separator = parts.some((part) => part.text.includes('\n')) ? ',\n' : ', ';
-    return { ...parts[0], text: parts.map((part) => part.text).join(separator), href: undefined, image: undefined };
+  const write = (value: unknown, inList: boolean): Formatted => {
+    // No value is a dash whatever the format; in a list with a space each side, as the original writes it
+    if (isMissing(value)) return { text: inList ? MISSING_IN_LIST : MISSING };
+    if (!Array.isArray(value)) return format(value);
+    // A list in it value by value too
+    const parts = value.map((item) => write(item, true));
+    if (parts.length === 1) return parts[0];
+    // A line to each value when what is drawn of one of them takes several
+    const separator = parts.some(breaksLine) ? ',\n' : ', ';
+    return { text: parts.map((part) => part.text).join(separator), parts, separator };
   };
-  return write;
+  return (value) => write(value, false);
 }
 
 export function formatSpecOf(

@@ -77,7 +77,7 @@ registerRoute({ paths: ['/app/dashboards', '/app/dashboard'], render: () => <Das
 registerRoute({ paths: ['/app/discover'], render: () => <Discover basePath="/app/discover" /> });
 registerRoute({ paths: ['/app/visualize'], render: () => <Visualize /> });
 registerRoute({ paths: ['/app/vis-builder'], render: () => <VisBuilder /> });
-registerRoute({ paths: ['/app/management', '/app/indexPatterns', '/app/objects', '/app/settings'], render: () => <Management /> });
+registerRoute({ paths: ['/app/management', '/app/settings'], render: () => <Management /> });
 registerRoute({ paths: ['/app/dev_tools'], render: () => <DevTools /> });
 registerRoute({ paths: ['/app/opensearch-query-workbench'], render: () => <QueryWorkbench /> });
 registerRoute({

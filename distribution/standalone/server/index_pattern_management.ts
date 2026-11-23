@@ -8,8 +8,23 @@
 
 import { badRequest, HttpError, type Router } from './http';
 import { OpenSearchError, type OpenSearchClient } from './opensearch';
+import { arrayOf, literal, maybe, object, oneOf, queryObject, string, validateRequestPart } from './route_validation';
 
-const EXPAND_WILDCARDS = new Set(['all', 'open', 'closed', 'hidden', 'none']);
+/** The query of resolve_index, with the original's schema (resolve_index.ts) */
+const RESOLVE_QUERY = object({
+  expand_wildcards: maybe(oneOf(['all', 'open', 'closed', 'hidden', 'none'].map((value) => literal(value)))),
+  data_source: maybe(string()),
+});
+
+/** The body and the query of a preview, with the original's schemas (preview_scripted_field.ts) */
+const PREVIEW_BODY = object({
+  index: string(),
+  name: string(),
+  script: string(),
+  query: maybe(object({}, { unknowns: 'allow' })),
+  additionalFields: maybe(arrayOf(string())),
+});
+const PREVIEW_QUERY = object({ dataSourceId: maybe(string()) });
 
 /** The languages a scripted field may be written in, as the original lists them */
 export const SCRIPTING_LANGUAGES = ['painless', 'expression'];
@@ -46,36 +61,16 @@ interface PreviewRequest {
   additionalFields?: string[];
 }
 
-/** The body of a preview, checked as the original's schema checks it */
+/** The body of a preview, checked as the original's schema checks it, in its words */
 export function previewRequestOf(body: unknown): PreviewRequest {
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    throw badRequest('[request body]: expected a plain object value, but found [null] instead.');
-  }
-  const record = body as Record<string, unknown>;
-  for (const key of ['index', 'name', 'script']) {
-    const value = record[key];
-    if (typeof value !== 'string') {
-      throw badRequest(
-        `[request body.${key}]: expected value of type [string] but got [${value === null ? 'null' : typeof value}]`
-      );
-    }
-  }
-  const { query, additionalFields } = record;
-  if (query !== undefined && (query === null || typeof query !== 'object' || Array.isArray(query))) {
-    throw badRequest('[request body.query]: expected a plain object value, but found [null] instead.');
-  }
-  if (
-    additionalFields !== undefined &&
-    (!Array.isArray(additionalFields) || additionalFields.some((field) => typeof field !== 'string'))
-  ) {
-    throw badRequest('[request body.additionalFields]: expected value of type [array]');
-  }
+  // An empty body is null to hapi
+  const checked = validateRequestPart(PREVIEW_BODY, body ?? null, 'body');
   return {
-    index: record.index as string,
-    name: record.name as string,
-    script: record.script as string,
-    query: query as Record<string, unknown> | undefined,
-    additionalFields: additionalFields as string[] | undefined,
+    index: checked.index,
+    name: checked.name,
+    script: checked.script,
+    query: checked.query === undefined ? undefined : { ...checked.query },
+    additionalFields: checked.additionalFields,
   };
 }
 
@@ -101,11 +96,10 @@ export function previewSearchOf(request: PreviewRequest) {
 
 export function registerIndexPatternManagement(router: Router, client: OpenSearchClient) {
   router.get('/internal/index-pattern-management/resolve_index/{query}', async ({ params, query }) => {
-    const expand = query.get('expand_wildcards');
-    if (expand !== null && !EXPAND_WILDCARDS.has(expand)) {
-      throw badRequest(
-        `[request query.expand_wildcards]: types that failed validation:\n- [request query.expand_wildcards.0]: expected value to equal [all]`
-      );
+    const { expand_wildcards: expand, data_source: dataSource } = validateRequestPart(RESOLVE_QUERY, queryObject(query), 'query');
+    // The original asks the data source plugin, which is not there (data_source.enabled), and fails
+    if (dataSource !== undefined) {
+      throw badRequest('[request query.data_source]: there are no data sources: data_source.enabled is off');
     }
     try {
       const body = await client.request({
@@ -119,6 +113,8 @@ export function registerIndexPatternManagement(router: Router, client: OpenSearc
   });
 
   router.post('/internal/index-pattern-management/preview_scripted_field', async (context) => {
+    // A dataSourceId is not used: the original asks its own OpenSearch then, as data_source is off
+    validateRequestPart(PREVIEW_QUERY, queryObject(context.query), 'query');
     const request = previewRequestOf(await context.json());
     try {
       const body = await client.request(previewSearchOf(request));

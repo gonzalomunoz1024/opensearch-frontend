@@ -39,7 +39,9 @@ with it keeps working, and parts of it are derived from it under the Apache Lice
     and packages/osd-ace) and of the RowParser that reads the requests from them,
   - the way Markdown is read and drawn (web/lib/markdown.tsx): the settings of markdown-it and
     the rule for links that open a new tab of the Markdown component of opensearch_dashboards_react,
-    with the getSecureRelForTarget and isDomainSecure functions of OUI 1.24.2 that rule uses.
+    with the getSecureRelForTarget and isDomainSecure functions of OUI 1.24.2 that rule uses,
+  - the console's knowledge of the OpenSearch APIs (server/console_api_server.json): the answer
+    OpenSearch Dashboards 3.9.0 gives at /api/console/api_server, copied as it is.
 
 OpenSearch Dashboards
 Copyright OpenSearch Contributors
@@ -120,6 +122,12 @@ Their licence texts are in licenses/, and in dist/licenses/followed of a build.
 The drawing of Timeline charts (web/vis/timeline/plot.ts) is derived from Flot 0.8.3 and its
 time, stack, symbol, crosshair, selection, canvas and axis-label plug-ins, under the MIT License,
 Copyright (c) 2007-2014 IOLA and Ole Laursen.
+
+The names of the time zones that dates are written with (web/lib/zone_names.ts, made by
+scripts/zone_names.mjs) are taken from the data of moment-timezone 0.5.37, with which OpenSearch
+Dashboards writes dates, under the MIT License, Copyright (c) JS Foundation and other contributors
+(licenses/moment-timezone.txt). That data comes from the IANA Time Zone Database, which is in the
+public domain.
 
 The server serves the web fonts of OpenSearch Dashboards at the addresses it serves them from
 (/ui/fonts; web/static/ui/fonts), the files its pages declare, copied as they are from

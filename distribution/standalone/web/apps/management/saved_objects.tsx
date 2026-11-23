@@ -20,6 +20,7 @@ import {
   BasicTable,
   Callout,
   MANAGEMENT_CRUMB,
+  OBJECTS_CRUMB,
   errorText,
   Check,
   IMPORT_ICON,
@@ -31,6 +32,7 @@ import {
   type Column,
   type FieldFilter,
   type SearchChange,
+  allowedObjectTypes,
 } from './saved_objects_parts';
 import { filterQuery, readSearchQuery, type Clause } from './saved_objects_query';
 import '../../styles/saved_objects.css';
@@ -75,12 +77,12 @@ export function SavedObjectsSection({ rest }: { rest: string[] }) {
 }
 
 function ObjectsTablePage() {
-  useBreadcrumbs([MANAGEMENT_CRUMB, { text: 'Saved objects' }]);
+  useBreadcrumbs([MANAGEMENT_CRUMB, OBJECTS_CRUMB]);
   const [allowedTypes, setAllowedTypes] = useState<string[]>();
   useEffect(() => {
     let live = true;
-    services.http.get<{ types: string[] }>(`${API}/_allowed_types`).then(
-      (answer) => live && setAllowedTypes(answer.types),
+    allowedObjectTypes().then(
+      (types) => live && setAllowedTypes(types),
       (error) => live && services.toasts.danger('Unable find saved objects', errorText(error))
     );
     return () => {

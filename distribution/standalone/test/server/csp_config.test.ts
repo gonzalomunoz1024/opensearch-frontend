@@ -93,6 +93,16 @@ describe('the csp.* settings', () => {
     assert.deepEqual(config.csp, { ...DEFAULT_CSP });
   });
 
+  it('refuse to start with a key the original does not know, in its words', () => {
+    assert.throws(() => fromYaml('csp.strcit: true\n'), {
+      message: '[config validation of [csp].strcit]: definition for this key is missing',
+    });
+    assert.throws(() => fromYaml('csp:\n  rules: []\n  x:\n    y: 1\n'), {
+      message: '[config validation of [csp].x]: definition for this key is missing',
+    });
+    assert.equal(fromYaml('csp: {}\n').config.csp.enable, true);
+  });
+
   it('are read from the settings file and from the environment', () => {
     const { config, ignored } = fromYaml(`
 csp.rules: ["script-src 'self'", "style-src 'self'"]

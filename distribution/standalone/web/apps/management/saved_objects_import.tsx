@@ -26,7 +26,7 @@ import {
   type RetryObject,
   type UnmatchedReference,
 } from './saved_objects_lib';
-import { Callout, IMPORT_ICON, InMemoryTable, TypeIcon, type Column } from './saved_objects_parts';
+import { Callout, IMPORT_ICON, InMemoryTable, TypeIcon, allowedObjectTypes, type Column } from './saved_objects_parts';
 
 interface ImportMode {
   createNewCopies: boolean;
@@ -39,10 +39,12 @@ interface IndexPatternChoice {
   displayTitle: string;
 }
 
-interface FlyoutState {
+export interface FlyoutState {
   status: 'idle' | 'loading' | 'success' | 'error';
   error?: string;
   file?: File;
+  /** The file the picker shows: the one chosen, until the picker goes and comes back empty */
+  pickerFile?: File;
   isLegacyFile: boolean;
   importMode: ImportMode;
   importCount: number;
@@ -51,6 +53,25 @@ interface FlyoutState {
   unmatchedReferences?: UnmatchedReference[];
   /** What a legacy (JSON) file imported, said as the original's call-outs say it */
   legacy?: { importCount: number; failed: string[] };
+}
+
+/**
+ * What a chosen file, or the removal of it, makes of the flyout: the file to import, shown in the
+ * picker, and a `.json` one read as the legacy format
+ */
+export function fileChosen(chosen: File | undefined): Pick<FlyoutState, 'file' | 'pickerFile' | 'isLegacyFile'> {
+  return chosen
+    ? { file: chosen, pickerFile: chosen, isLegacyFile: /\.json$/i.test(chosen.name) || chosen.type === 'application/json' }
+    : { file: undefined, pickerFile: undefined, isLegacyFile: false };
+}
+
+/**
+ * The flyout while it imports or resolves. The spinner takes the picker's place, and the original's
+ * picker, drawn anew after an import that failed, shows no file; the flyout keeps the file, and
+ * Import sends it again.
+ */
+export function importStarted(): Pick<FlyoutState, 'status' | 'error' | 'pickerFile'> {
+  return { status: 'loading', error: undefined, pickerFile: undefined };
 }
 
 /** The sentence of a failed import, as the original writes it */
@@ -139,7 +160,7 @@ export function ImportFlyout({ onClose, onDone }: { onClose: () => void; onDone:
   };
 
   const resolveErrors = async () => {
-    setState({ error: undefined, status: 'loading' });
+    setState(importStarted());
     const { file } = current.current;
     try {
       const resolved = await resolveImportErrors({
@@ -156,7 +177,7 @@ export function ImportFlyout({ onClose, onDone }: { onClose: () => void; onDone:
 
   const startImport = async () => {
     const { file, importMode } = current.current;
-    setState({ status: 'loading', error: undefined });
+    setState(importStarted());
     try {
       const response = await sendFile(
         '/api/saved_objects/_import',
@@ -174,11 +195,10 @@ export function ImportFlyout({ onClose, onDone }: { onClose: () => void; onDone:
 
   const legacyImport = async () => {
     const { file, importMode } = current.current;
-    setState({ status: 'loading', error: undefined });
+    setState(importStarted());
     void services.http.post('/api/saved_objects/_log_legacy_import').catch(() => undefined);
-    const allowed = await services.http
-      .get<{ types: string[] }>('/api/opensearch-dashboards/management/saved_objects/_allowed_types')
-      .then((answer) => answer.types, () => []);
+    // The types the section asked for when it was opened, as the original's
+    const allowed = await allowedObjectTypes().catch((): string[] => []);
     const read = await legacyObjects(file, allowed);
     if ('error' in read) {
       setState({ status: 'error', error: read.error });
@@ -203,7 +223,7 @@ export function ImportFlyout({ onClose, onDone }: { onClose: () => void; onDone:
     }
   };
 
-  const { status, error, file, isLegacyFile, importMode, unmatchedReferences, legacy } = state;
+  const { status, error, isLegacyFile, importMode, unmatchedReferences, legacy } = state;
   const hasUnmatchedReferences = (unmatchedReferences?.length ?? 0) > 0;
 
   // As the original's flyout, which keeps the focus in it: when the button that had it is gone,
@@ -286,16 +306,7 @@ export function ImportFlyout({ onClose, onDone }: { onClose: () => void; onDone:
       <div className="sobForm">
         <div className="sobFormRow">
           <span className="sobLabel">Select file</span>
-          <FilePicker
-            file={file}
-            onChange={(chosen) =>
-              setState(
-                chosen
-                  ? { file: chosen, isLegacyFile: /\.json$/i.test(chosen.name) || chosen.type === 'application/json' }
-                  : { file: undefined, isLegacyFile: false }
-              )
-            }
-          />
+          <FilePicker file={state.pickerFile} onChange={(chosen) => setState(fileChosen(chosen))} />
         </div>
         <ImportModeControl isLegacyFile={isLegacyFile} importMode={importMode} onChange={(next) => setState({ importMode: next })} />
       </div>

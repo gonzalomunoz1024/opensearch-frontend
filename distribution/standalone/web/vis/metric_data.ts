@@ -158,7 +158,9 @@ function valueFormatter(column: TableColumn, config: MetricConfig, context: AggC
     const text = formatValue(column, value);
     if (!rich) return { text };
     const formatted = rich(value);
-    return { ...formatted, text: formatted.href || formatted.image ? formatted.text : text };
+    // What the format draws keeps its own text: a link, a picture, a player, a list
+    const drawn = formatted.href || formatted.image || formatted.audio || formatted.parts;
+    return { ...formatted, text: drawn ? formatted.text : text };
   };
 }
 

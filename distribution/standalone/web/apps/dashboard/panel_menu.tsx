@@ -43,6 +43,7 @@ export function PanelMenu({ editing, items }: { editing: boolean; items: Context
       onClose={close}
       position="downRight"
       width={256}
+      anchorClassName="dshPanel__menuAnchor"
       button={
         <IconButton
           icon={editing ? 'gear' : 'dots'}
