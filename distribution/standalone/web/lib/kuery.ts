@@ -928,12 +928,21 @@ function isQuery(node: FunctionNode, indexPattern: IndexPattern | undefined, con
     Boolean(indexPattern && fields.length === indexPattern.fields.length);
   if (isExistsQuery && isAllFieldsQuery) return { match_all: {} };
 
-  const queries: Dsl[] = [];
+  let queries: Dsl[] = [];
+  // The original gathers the queries field by field and, for a scripted field asked whether it
+  // exists, hands on nothing instead of what it had gathered: when only scripted fields follow,
+  // the query asks for nothing and so finds nothing, and the next plain field fails on it
+  let dropped = false;
   for (const field of fields) {
     const wrap = wrapper(fieldNode, field, context);
     if (field.scripted) {
-      // an exists query means nothing for a scripted field
       if (!isExistsQuery) queries.push({ script: { ...phraseScript(field, value) } });
+      else {
+        dropped = true;
+        queries = [];
+      }
+    } else if (dropped) {
+      throw new TypeError('accumulator is not iterable');
     } else if (isExistsQuery) {
       queries.push(wrap({ exists: { field: field.name } }));
     } else if (valueArg.type === 'wildcard') {

@@ -95,6 +95,34 @@ describe('DQL, as OpenSearch Dashboards reads it', () => {
     }
   });
 
+  it('asks scripted fields whether they exist as the original does', () => {
+    // What the original's own functions give for a_*:* over these fields, in these orders
+    const field = (name: string, scripted = false) => ({
+      name,
+      type: 'string',
+      searchable: true,
+      aggregatable: true,
+      ...(scripted ? { scripted: true, lang: 'painless', script: "doc['x'].value" } : {}),
+    });
+    const ask = (...fields: Array<ReturnType<typeof field>>) => {
+      const indexPattern = { fields: [...fields, field('zzz')] } as unknown as IndexPattern;
+      try {
+        return kueryToDsl(parseKuery('a_*:*'), indexPattern);
+      } catch (error) {
+        return `${(error as Error).name} ${(error as Error).message}`;
+      }
+    };
+    const nothing = { bool: { should: [], minimum_should_match: 1 } };
+    assert.deepEqual(ask(field('a_one'), field('a_two', true)), nothing);
+    assert.deepEqual(ask(field('a_one'), field('a_two', true), field('a_four', true)), nothing);
+    assert.equal(ask(field('a_one'), field('a_two', true), field('a_three')), 'TypeError accumulator is not iterable');
+    assert.equal(ask(field('a_two', true), field('a_one')), 'TypeError accumulator is not iterable');
+    // without a scripted field nothing is lost
+    assert.deepEqual(ask(field('a_one'), field('a_three')), {
+      bool: { should: [{ exists: { field: 'a_one' } }, { exists: { field: 'a_three' } }], minimum_should_match: 1 },
+    });
+  });
+
   it('reads words without quotes as one value, spaces included', () => {
     assert.deepEqual(kueryToDsl(parseKuery('zz-agent short')), {
       multi_match: { type: 'best_fields', query: 'zz-agent short', lenient: true },
