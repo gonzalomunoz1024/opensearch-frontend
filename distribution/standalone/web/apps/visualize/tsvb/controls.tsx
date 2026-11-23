@@ -744,6 +744,7 @@ export function QueryBarWrapper({ query, onChange, indexPatterns }: { query: Que
   return (
     <div className="tvbQueryBar">
       <QueryBar
+        appName="VisEditor"
         value={text}
         language={query.language}
         onChange={(next) => onChange({ query: next, language: query.language })}

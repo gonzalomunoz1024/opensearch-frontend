@@ -929,6 +929,8 @@ function DashboardPage({ savedId }: { savedId?: string }) {
           requests={panelData.current[inspected.panelIndex]?.requests ?? []}
           table={panelData.current[inspected.panelIndex]?.table}
           vega={panelData.current[inspected.panelIndex]?.vega}
+          context={panelData.current[inspected.panelIndex]?.context}
+          onFilter={addFilters}
           onClose={() => setDialog(undefined)}
         />
       )}
