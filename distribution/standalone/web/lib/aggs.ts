@@ -98,6 +98,7 @@ export const BUCKET_TYPES = [
   'filters',
   'significant_terms',
   'geohash_grid',
+  'geotile_grid',
 ] as const;
 
 const SIBLING_PIPELINES = new Set(['avg_bucket', 'sum_bucket', 'min_bucket', 'max_bucket']);
@@ -135,6 +136,7 @@ export const AGG_TITLES: Record<string, string> = {
   filters: 'Filters',
   significant_terms: 'Significant Terms',
   geohash_grid: 'Geohash',
+  geotile_grid: 'Geotile',
 };
 
 const param = <T>(agg: AggConfig, name: string, fallback: T): T => {
@@ -367,6 +369,9 @@ export function aggTypeLabel(agg: AggConfig, context: AggContext): string {
     case 'geohash_grid':
       // makeLabel of the geohash_grid
       return 'Geohash';
+    case 'geotile_grid':
+      // It has no makeLabel of its own: the original then says the type's name
+      return 'geotile_grid';
     default:
       return field || agg.type;
   }
@@ -582,6 +587,11 @@ function bucketClause(agg: AggConfig, context: AggContext): Dsl {
       return {
         geohash_grid: { ...field, precision: Math.min(12, Math.max(1, param(agg, 'precision', 2))) },
       };
+    case 'geotile_grid': {
+      // As the original's default writer: a precision of 0, its default, is not asked
+      const precision = agg.params?.precision;
+      return { geotile_grid: { ...field, ...(precision ? { precision } : {}) } };
+    }
     default:
       return { [agg.type]: field };
   }
@@ -714,9 +724,12 @@ export function buildAggsDsl(aggs: AggConfig[], context: AggContext, options: Bu
     }
     return out;
   };
+  // As the original, the centroid a grid asks for is one more metric: under the last bucket only
+  const centroids: Dsl = {};
+  for (const grid of buckets.filter(asksCentroid)) centroids[geoCentroidId(aggs)] = { geo_centroid: { field: fieldNameOf(grid) } };
 
   const nest = (level: number, insideHistogram: boolean): Dsl => {
-    if (level === buckets.length) return metricsDsl(insideHistogram);
+    if (level === buckets.length) return { ...metricsDsl(insideHistogram), ...centroids };
     const agg = buckets[level];
     const isHistogram = agg.type === 'date_histogram' || agg.type === 'histogram';
     const deeper = nest(level + 1, isHistogram);
@@ -725,9 +738,6 @@ export function buildAggsDsl(aggs: AggConfig[], context: AggContext, options: Bu
     const clause = withJson(agg, bucketClause(agg, context));
 
     if (agg.type === 'terms') orderTerms(agg, clause.terms as Dsl, own, context, metrics);
-    if (agg.type === 'geohash_grid' && agg.params?.useGeocentroid !== false) {
-      own[geoCentroidId(aggs)] = { geo_centroid: { field: fieldNameOf(agg) } };
-    }
     const dsl = { [agg.id]: { ...clause, ...(Object.keys(own).length ? { aggs: own } : {}) } };
     return agg.type === 'geohash_grid' ? withGeoCollar(agg, dsl) : dsl;
   };
@@ -735,7 +745,10 @@ export function buildAggsDsl(aggs: AggConfig[], context: AggContext, options: Bu
   return nest(0, false);
 }
 
-/** The id the original gives the geo_centroid it asks for beside a geohash_grid: the next free one */
+/** Whether a geohash_grid or a geotile_grid asks for the centroid of each of its buckets */
+const asksCentroid = (agg: AggConfig) => (agg.type === 'geohash_grid' || agg.type === 'geotile_grid') && agg.params?.useGeocentroid !== false;
+
+/** The id the original gives the geo_centroid it asks for beside a geohash_grid or geotile_grid: the next free one */
 export const geoCentroidId = (aggs: AggConfig[]) => String(aggs.reduce((max, agg) => Math.max(max, Number(agg.id) || 0), 0) + 1);
 
 /** What a geohash_grid that is filtered by the collar asks before the map's size is known */
@@ -1107,9 +1120,10 @@ export function tabify(
         index += made.length;
         return made;
       });
-      if (agg.type === 'geohash_grid' && agg.params?.useGeocentroid !== false) {
-        const centroid: AggConfig = { id: geoCentroidId(aggs), type: 'geo_centroid', schema: 'geo_centroid', params: { field: fieldNameOf(agg) } };
-        own.push({ id: `col-${index}-${centroid.id}`, name: 'Geo Centroid', kind: 'metric', agg: centroid, schema: 'geo_centroid', fieldName: fieldNameOf(agg), format: (value) => JSON.stringify(value) });
+      // The centroid of a grid is read as the metric it is asked as: after the others, wherever they are
+      for (const grid of buckets.filter(asksCentroid)) {
+        const centroid: AggConfig = { id: geoCentroidId(aggs), type: 'geo_centroid', schema: 'geo_centroid', params: { field: fieldNameOf(grid) } };
+        own.push({ id: `col-${index}-${centroid.id}`, name: 'Geo Centroid', kind: 'metric', agg: centroid, schema: 'geo_centroid', fieldName: fieldNameOf(grid), format: (value) => JSON.stringify(value) });
         index += 1;
       }
       metricsByLevel[level] = own;

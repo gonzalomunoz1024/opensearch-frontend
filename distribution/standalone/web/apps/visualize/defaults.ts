@@ -370,6 +370,7 @@ export const FIELD_TYPES: Record<string, string[] | '*'> = {
   terms: ['number', 'boolean', 'date', 'ip', 'string'],
   significant_terms: ['string'],
   geohash_grid: ['geo_point'],
+  geotile_grid: ['geo_point'],
 };
 
 /** Whether an aggregation is on a field at all: a count and the pipelines are not */
