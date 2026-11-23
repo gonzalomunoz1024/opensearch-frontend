@@ -22,6 +22,7 @@ import {
   stackSeries,
   type VislibSeries,
 } from '../../web/vis/vislib/point_series_data';
+import { hoverAfter } from '../../web/vis/vislib/legend';
 import { layoutPointSeries } from '../../web/vis/vislib/point_series_layout';
 import { keptPieLabels, pieTooSmall } from '../../web/vis/vislib/pie_chart';
 import { splitTooltipDetail } from '../../web/vis/vislib/series_events';
@@ -1191,5 +1192,21 @@ describe('the interval of a date histogram over a long time range', () => {
     assert.deepEqual(over(7305, 'w'), { fixed: '30d', calendar: undefined, label: 'timestamp per 30 days' });
     assert.deepEqual(over(1096, 'M'), { fixed: undefined, calendar: '1M', label: 'timestamp per month' });
     assert.deepEqual(over(21915, 'y'), { fixed: undefined, calendar: '1y', label: 'timestamp per year' });
+  });
+});
+
+describe('pointing at a series of a chart or its legend', () => {
+  it('lights up the series pointed at, and leaves every mark its whole opacity when the pointer goes', () => {
+    assert.deepEqual(hoverAfter({ touched: false }, 'css'), { label: 'css', touched: true });
+    assert.deepEqual(hoverAfter({ label: 'css', touched: true }, undefined), { touched: true });
+  });
+
+  it('dims nothing for a series without a name, an empty term, as vislib returns at an empty data-label', () => {
+    const untouched = { touched: false };
+    assert.equal(hoverAfter(untouched, ''), untouched);
+    const left = { touched: true };
+    assert.equal(hoverAfter(left, ''), left);
+    // vislib's unHighlight sets the opacity of every mark even when its highlight did nothing
+    assert.deepEqual(hoverAfter(hoverAfter(untouched, ''), undefined), { touched: true });
   });
 });

@@ -25,6 +25,23 @@ export const LEGEND_COLORS = [
 
 export type LegendPosition = 'top' | 'bottom' | 'left' | 'right';
 
+/** The series pointed at in a chart or its legend, by its name */
+export interface Hover {
+  label?: string;
+  /** Once a series has been pointed at, the marks keep the opacity it left them */
+  touched: boolean;
+}
+
+/**
+ * The series pointed at after the pointer goes to a series' name, or away (undefined). A series
+ * without a name, an empty term, lights nothing up, as vislib's highlight returns at an empty
+ * data-label; going away gives every mark its opacity all the same, as its unHighlight does
+ */
+export function hoverAfter(current: Hover, label: string | undefined): Hover {
+  if (label === '') return current;
+  return label === undefined ? { touched: true } : { label, touched: true };
+}
+
 /** The side the popover of a name opens to, from the side the legend is on: below it when the chart says none */
 const anchorOf = (position: LegendPosition | undefined) =>
   position === 'bottom' ? 'upCenter' : position === 'left' ? 'rightUp' : position === 'right' ? 'leftUp' : 'downCenter';
