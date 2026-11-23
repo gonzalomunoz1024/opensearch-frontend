@@ -3,9 +3,10 @@
 /* The one page of the product, as server/static.ts writes it. */
 
 import assert from 'node:assert/strict';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { describe, it } from 'node:test';
 import { createApp } from '../../server/app';
 import { loadConfig } from '../../server/config';
@@ -17,6 +18,7 @@ interface Answer {
   status: number;
   headers: http.IncomingHttpHeaders;
   body: string;
+  bytes: Buffer;
 }
 
 /** The server as it is built, with the given settings, asked for each target in turn */
@@ -37,9 +39,10 @@ async function served(targets: string[], settings: Record<string, string> = {}):
           const request = http.request({ host: '127.0.0.1', port, path: target, agent: false }, (response) => {
             const chunks: Buffer[] = [];
             response.on('data', (chunk: Buffer) => chunks.push(chunk));
-            response.on('end', () =>
-              done({ status: response.statusCode ?? 0, headers: response.headers, body: Buffer.concat(chunks).toString('utf8') })
-            );
+            response.on('end', () => {
+              const bytes = Buffer.concat(chunks);
+              done({ status: response.statusCode ?? 0, headers: response.headers, body: bytes.toString('utf8'), bytes });
+            });
           });
           request.on('error', failed);
           request.end();
@@ -102,5 +105,59 @@ describe("the page's nonce", () => {
     // and the header of each page lets that nonce's style elements apply
     assert.ok(String(first.headers['content-security-policy']).includes(`; style-src-elem 'self' 'nonce-${one.meta}'; `));
     assert.ok(String(second.headers['content-security-policy']).includes(`; style-src-elem 'self' 'nonce-${two.meta}'; `));
+  });
+});
+
+/**
+ * The icons of OpenSearch Dashboards' page (src/core/server/rendering/views/template.tsx), as the
+ * fork's build writes them at /app/home, with the type it sends each file with
+ */
+const ICONS: readonly { tag: string; type: string }[] = [
+  { tag: '<link rel="apple-touch-icon" sizes="180x180" href="/ui/favicons/apple-touch-icon.png">', type: 'image/png' },
+  { tag: '<link rel="icon" type="image/png" sizes="32x32" href="/ui/favicons/favicon-32x32.png">', type: 'image/png' },
+  { tag: '<link rel="icon" type="image/png" sizes="16x16" href="/ui/favicons/favicon-16x16.png">', type: 'image/png' },
+  { tag: '<link rel="manifest" href="/ui/favicons/manifest.json">', type: 'application/json; charset=utf-8' },
+  { tag: '<link rel="mask-icon" color="#003553" href="/ui/favicons/safari-pinned-tab.svg">', type: 'image/svg+xml' },
+  { tag: '<link rel="shortcut icon" href="/ui/favicons/favicon.ico">', type: 'image/x-icon' },
+  { tag: '<meta name="msapplication-config" content="/ui/favicons/browserconfig.xml">', type: 'text/xml; charset=utf-8' },
+];
+const addressOf = (tag: string) => /(?:href|content)="([^"]*)"/.exec(tag)?.[1] ?? '';
+/** Where the build takes the favicons from, and where the fork keeps those of its own build */
+const STATIC_FAVICONS = join('web', 'static', 'ui', 'favicons');
+const FORK_FAVICONS = join('..', '..', 'src', 'core', 'server', 'core_app', 'assets', 'favicons');
+
+describe("the page's icons", () => {
+  it('are named as the original names them, and no others', () => {
+    const html = page();
+    const tags = html.match(/<link rel="(?:apple-touch-icon|icon|shortcut icon|manifest|mask-icon)"[^>]*>|<meta name="msapplication-config"[^>]*>/g);
+    assert.deepEqual(tags, ICONS.map(({ tag }) => tag));
+  });
+
+  it('are under the base path', () => {
+    const html = page({ basePath: '/base' });
+    for (const { tag } of ICONS) {
+      assert.ok(html.includes(tag.replace('"/ui/favicons/', '"/base/ui/favicons/')), tag);
+    }
+  });
+
+  it('are served, as the files the build copies, with the type the original sends', async () => {
+    const answers = await served(ICONS.map(({ tag }) => addressOf(tag)));
+    ICONS.forEach(({ tag, type }, index) => {
+      const answer = answers[index];
+      assert.equal(answer?.status, 200, tag);
+      assert.equal(answer?.headers['content-type'], type, tag);
+      const file = join(STATIC_FAVICONS, addressOf(tag).slice('/ui/favicons/'.length));
+      assert.ok(answer?.bytes.equals(readFileSync(file)), tag);
+    });
+  });
+
+  it("are the fork's own, byte for byte (made from distribution/branding/brand.json)", {
+    skip: existsSync(FORK_FAVICONS) ? false : "the fork's tree is not beside the standalone",
+  }, () => {
+    const names = readdirSync(FORK_FAVICONS).sort();
+    assert.deepEqual(readdirSync(STATIC_FAVICONS).sort(), names);
+    for (const name of names) {
+      assert.ok(readFileSync(join(STATIC_FAVICONS, name)).equals(readFileSync(join(FORK_FAVICONS, name))), name);
+    }
   });
 });

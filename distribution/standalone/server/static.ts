@@ -24,6 +24,8 @@ const TYPES: Record<string, string> = {
   '.ttf': 'font/ttf',
   '.md': 'text/markdown; charset=utf-8',
   '.map': 'application/json; charset=utf-8',
+  // The favicons' browserconfig.xml under /ui/favicons, as the original sends it
+  '.xml': 'text/xml; charset=utf-8',
 };
 
 export interface Build {
@@ -246,13 +248,22 @@ export function renderPage({ basePath, build, title, dark, bootData, nonce }: Pa
   // Where the original writes them: the nonce after the viewport, and on its own <style> elements
   const nonceMeta = nonce === undefined ? '' : `\n<meta name="csp-nonce" content="${escapeHtml(nonce)}">`;
   const nonceAttribute = nonce === undefined ? '' : ` nonce="${escapeHtml(nonce)}"`;
+  // The favicons of the fork (made from distribution/branding/brand.json), named as the original's
+  // template names them (src/core/server/rendering/views/template.tsx)
+  const favicons = `${basePath}/ui/favicons`;
   return `<!doctype html>
 <html lang="en" class="${dark ? 'themeDark' : 'themeLight'}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">${nonceMeta}
 <title>${escapeHtml(title)}</title>
-<link rel="icon" type="image/svg+xml" href="${basePath}/favicon.svg">
+<link rel="apple-touch-icon" sizes="180x180" href="${favicons}/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="${favicons}/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="${favicons}/favicon-16x16.png">
+<link rel="manifest" href="${favicons}/manifest.json">
+<link rel="mask-icon" color="#003553" href="${favicons}/safari-pinned-tab.svg">
+<link rel="shortcut icon" href="${favicons}/favicon.ico">
+<meta name="msapplication-config" content="${favicons}/browserconfig.xml">
 <style${nonceAttribute}>
 ${fontFaceRules(`${basePath}/ui`)}
 </style>
