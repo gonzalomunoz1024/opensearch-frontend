@@ -2,10 +2,11 @@
 
 /*
  * The home page and the overview as the original's home plugin keeps them: the address its hash
- * router gives them.
+ * router gives them, and the headings that are only read aloud.
  */
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import { slashHash } from '../../web/apps/home_address';
 import { getLocation, startRouter } from '../../web/router';
@@ -62,5 +63,13 @@ describe('the address of the home page and of the overview', () => {
       slashHash();
       assert.deepEqual(entries, ['/app/home#/tutorial_directory']);
     });
+  });
+});
+
+describe('the headings of the home page that are only read aloud', () => {
+  it('take the font around them, as the original\'s reset gives every heading', () => {
+    const css = readFileSync('web/styles/home.css', 'utf8');
+    const rule = /\.homScreenReaderOnly \{([^}]*)\}/.exec(css)?.[1] ?? '';
+    assert.match(rule, /font: inherit;/);
   });
 });
