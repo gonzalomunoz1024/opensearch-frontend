@@ -302,6 +302,140 @@
   }
 }
 
+/* What only a narrow screen shows: the head over the cards, and each cell's small header */
+.shlListing__mobileHead,
+.shlListing__mobileHeader {
+  display: none;
+}
+
+/*
+ * On a narrow screen, as the original's table: its header gives way to a head with the box that
+ * ticks every row and a menu that sorts them, and each row is a card whose cells wrap, half its
+ * width or more each, each under the name of its column; the tick and the pencil stand in its
+ * corners. The page's heading and its create button stack, as wide as the panel.
+ */
+@media (max-width: 767px) {
+  /* The original's items stacked: 16 px under one and 12 over the next */
+  .shlListing__top {
+    flex-direction: column;
+    align-items: stretch;
+    gap: calc(var(--space-4) + var(--space-3));
+    margin-bottom: var(--space-5);
+  }
+
+  .shlListing__tools {
+    margin-bottom: var(--space-8);
+  }
+
+  .shlListing__mobileHead {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: var(--space-2) 0;
+  }
+
+  /* As the original's tick box with a label: the box 3 px down the label's line, the words 24 px
+     in, which is what lines them up with the menu's word */
+  .shlListing__selectAll {
+    position: relative;
+    display: inline-block;
+    padding-left: var(--space-6);
+    line-height: 24px;
+    cursor: pointer;
+  }
+
+  .shlListing__selectAll .shlListing__tick {
+    position: absolute;
+    top: 3px;
+    left: 0;
+  }
+
+  /* The menu's button stands 1.2 px lower than the tick box's line, where the original's lining
+     up of the two by their baselines puts it (which makes the head 41.2 px high) */
+  .shlListing__sorting {
+    padding-top: 1.2px;
+  }
+
+  /* The original's empty button flush with the panel's edge: no room at its sides */
+  .shlListing__sorting .atlButton {
+    padding: 0;
+  }
+
+  /* Its height takes in the last card's margin, as the original's table does */
+  .shlListing__table {
+    display: flow-root;
+  }
+
+  .shlListing__table tbody {
+    display: block;
+  }
+
+  .shlListing__table thead {
+    display: none;
+  }
+
+  .shlListing__table .shlListing__row {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    margin-bottom: var(--space-2);
+    padding: var(--space-2) var(--space-2) var(--space-2) 36px;
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-card);
+  }
+
+  .shlListing__table .shlListing__row--actions {
+    padding-right: 40px;
+  }
+
+  .shlListing__table .shlListing__row > td {
+    display: block;
+    min-width: 50%;
+    border: 0;
+  }
+
+  .shlListing__table .shlListing__row > .shlListing__checkCell {
+    position: absolute;
+    top: var(--space-2);
+    left: var(--space-1);
+    width: 32px;
+    min-width: 0;
+  }
+
+  .shlListing__table .shlListing__row > .shlListing__actionsCell {
+    position: absolute;
+    top: var(--space-4);
+    right: var(--space-2);
+    width: 24px;
+    min-width: 0;
+  }
+
+  .shlListing__actionsCell .shlListing__cell {
+    flex-direction: column;
+    padding: 0;
+  }
+
+  .shlListing__actionsCell .shlListing__hoverItem {
+    margin-bottom: var(--space-2);
+  }
+
+  /* The name of a cell's column: the original's smallest size (11 px) at seven eighths */
+  .shlListing__mobileHeader {
+    display: block;
+    min-height: 24px;
+    margin-bottom: calc(-1 * var(--space-2));
+    padding: var(--space-2) var(--space-2) 0;
+    overflow: hidden;
+    color: var(--color-text-secondary);
+    font-size: calc(var(--font-size-chart) * 0.875);
+    line-height: 1.5;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
 /* The original's check box: a square of the theme, the accent once ticked */
 .shlListing__tick {
   position: relative;

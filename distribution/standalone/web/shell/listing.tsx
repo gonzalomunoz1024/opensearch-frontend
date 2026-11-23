@@ -15,7 +15,7 @@ import { formatDate } from '../lib/dates';
 import { services } from '../services';
 import { errorMessage } from '../services/http';
 import type { SavedObject } from '../services/saved_objects';
-import { compareAsOriginal, pageSizeOptions } from './listing_model';
+import { compareAsOriginal, compareListed, pageSizeOptions } from './listing_model';
 import '../styles/listing.css';
 
 export interface ListedAttributes {
@@ -30,8 +30,8 @@ export interface ListingColumn {
   /** The field the original's column shows, which names it in its test ids */
   field: string;
   name: string;
-  /** What the column shows and sorts by */
-  value: (object: Listed) => string;
+  /** What the column shows and sorts by; nothing where the object has none, which sorts last */
+  value: (object: Listed) => string | undefined;
   render?: (object: Listed) => ReactNode;
 }
 
@@ -174,7 +174,7 @@ export function Listing({
       {
         field: 'title',
         name: 'Title',
-        value: (object) => object.attributes.title ?? '',
+        value: (object) => object.attributes.title,
         render: (object) => (
           <Link
             to={linkTo(object)}
@@ -186,11 +186,11 @@ export function Listing({
         ),
       },
       typeColumn,
-      { field: 'description', name: 'Description', value: (object) => object.attributes.description ?? '' },
+      { field: 'description', name: 'Description', value: (object) => object.attributes.description },
       {
         field: 'updated_at',
         name: 'Last updated',
-        value: (object) => object.updated_at ?? '',
+        value: (object) => object.updated_at,
         render: (object) =>
           object.updated_at ? formatDate(new Date(object.updated_at), dateFormat, services.timeZone()) : '',
       },
@@ -203,7 +203,7 @@ export function Listing({
     const column = sort && columns.find((candidate) => candidate.field === sort.field);
     if (!sort || !column) return objects;
     const direction = sort.direction === 'asc' ? 1 : -1;
-    return [...objects].sort((a, b) => compareAsOriginal(column.value(a), column.value(b)) * direction);
+    return [...objects].sort((a, b) => compareListed(column.value(a), column.value(b)) * direction);
   }, [objects, columns, sort]);
 
   // New results start on the first page, as the original's do
@@ -256,6 +256,22 @@ export function Listing({
 
   const table = (
     <div className={cx('shlListing__tableWrap', fetching && 'shlListing__tableWrap--loading')}>
+      {/* On a narrow screen, as the original's: over the rows, which are cards, the box that ticks
+          them all and the menu that sorts them; the table's header is not shown there */}
+      <div className="shlListing__mobileHead">
+        <label className="shlListing__selectAll">
+          <Tick
+            checked={allTicked}
+            indeterminate={someTicked}
+            disabled={visibleIds.length === 0}
+            label="Select all rows"
+            testId="checkboxSelectAll"
+            onChange={(checked) => setSelected(checked ? visibleIds : [])}
+          />
+          <span>Select all rows</span>
+        </label>
+        <SortingMenu columns={columns} sort={sort} onSort={changeSort} />
+      </div>
       {/* The pages under it name it as what they turn, and hand it the focus when they do */}
       <table id={tableId} tabIndex={-1} className="shlListing__table" data-test-subj="itemsInMemTable">
         <caption className="shlListing__caption">
@@ -318,7 +334,10 @@ export function Listing({
             const id = idOf(object);
             const ticked = selected.includes(id);
             return (
-              <tr key={id} className={cx('shlListing__row', ticked && 'shlListing__row--selected')}>
+              <tr
+                key={id}
+                className={cx('shlListing__row', ticked && 'shlListing__row--selected', editTo && 'shlListing__row--actions')}
+              >
                 <td className="shlListing__checkCell">
                   <div className="shlListing__cell">
                     <Tick
@@ -333,6 +352,7 @@ export function Listing({
                 </td>
                 {columns.map((column) => (
                   <td key={column.field} data-test-subj={column.field === 'updated_at' ? 'updated-at' : undefined}>
+                    <div className="shlListing__mobileHeader">{column.name}</div>
                     <div className="shlListing__cell">
                       {column.render ? column.render(object) : <span className="shlListing__text">{column.value(object)}</span>}
                     </div>
@@ -550,6 +570,57 @@ function Tick({
       />
       <span className="shlListing__square">{checked && <Icon name="check" />}</span>
     </span>
+  );
+}
+
+/**
+ * How the rows are sorted on a narrow screen, as the original's: a menu of the columns, the one they
+ * are sorted by marked with its arrow, which stays open as a choice is made
+ */
+function SortingMenu({
+  columns,
+  sort,
+  onSort,
+}: {
+  columns: ListingColumn[];
+  sort?: Sort;
+  onSort: (field: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  return (
+    <div className="shlListing__sorting">
+      <Popover
+        open={open}
+        onClose={close}
+        position="downRight"
+        width={200}
+        button={
+          <Button variant="empty" size="xs" icon="chevronDown" iconSize="s" iconSide="right" onClick={() => setOpen(!open)}>
+            Sorting
+          </Button>
+        }
+      >
+        <ContextMenu
+          panels={[
+            {
+              id: 'sorting',
+              items: columns.map((column) => {
+                const sorted = sort?.field === column.field;
+                const ascending = sorted && sort?.direction === 'asc';
+                return {
+                  id: column.field,
+                  label: column.name,
+                  icon: sorted ? (ascending ? 'sortUp' : 'sortDown') : 'empty',
+                  ariaLabel: `Sort ${column.name} ${ascending ? 'descending' : 'ascending'}`,
+                  onClick: () => onSort(column.field),
+                };
+              }),
+            },
+          ]}
+        />
+      </Popover>
+    </div>
   );
 }
 

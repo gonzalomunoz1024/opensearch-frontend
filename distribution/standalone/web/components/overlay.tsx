@@ -348,6 +348,8 @@ export interface MenuItem {
   /** A line above this item */
   separated?: boolean;
   title?: string;
+  /** What a screen reader says of it, where the original says more than its label */
+  ariaLabel?: string;
   testId?: string;
 }
 
@@ -547,6 +549,7 @@ export function ContextMenu({
             className="atlContextMenu__item"
             href={toHref(item.to)}
             title={item.title}
+            aria-label={item.ariaLabel}
             data-test-subj={item.testId}
             onClick={(event) => {
               const plain = event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
@@ -567,6 +570,7 @@ export function ContextMenu({
             className={cx('atlContextMenu__item', item.danger && 'atlContextMenu__item--danger')}
             disabled={item.disabled}
             title={item.title}
+            aria-label={item.ariaLabel}
             data-test-subj={item.testId}
             onClick={choose}
           >
