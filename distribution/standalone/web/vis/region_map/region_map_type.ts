@@ -10,6 +10,7 @@
 import { ORIGIN } from '../../maps/config';
 import { getServiceSettings, type FileLayer, type TmsService } from '../../maps/service_settings';
 import { services } from '../../services';
+import { wmsSetting } from '../tile_map/defaults';
 
 export const DEFAULT_MAP_CHOICE = 'default';
 export const CUSTOM_MAP_CHOICE = 'custom';
@@ -37,24 +38,6 @@ export interface RegionMapParams {
   selectedCustomLayer?: VectorLayer;
   selectedCustomJoinField?: FileLayerField | null;
   [param: string]: unknown;
-}
-
-const WMS_FALLBACK = {
-  enabled: false,
-  url: '',
-  options: { version: '', layers: '', format: 'image/png', transparent: true, attribution: '', styles: '' },
-};
-
-function wmsSetting(): Record<string, unknown> {
-  const value = services.uiSettings.get<unknown>('visualization:tileMap:WMSdefaults', undefined);
-  if (typeof value === 'string') {
-    try {
-      return JSON.parse(value) as Record<string, unknown>;
-    } catch {
-      return WMS_FALLBACK;
-    }
-  }
-  return value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : WMS_FALLBACK;
 }
 
 /** visConfig.defaults of the region map */
