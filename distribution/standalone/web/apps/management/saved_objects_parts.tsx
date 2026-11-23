@@ -9,7 +9,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { cx } from '../../components/basic';
 import { Icon, type IconName } from '../../components/icon';
-import { Popover, Tooltip } from '../../components/overlay';
+import { ContextMenu, Popover, Tooltip } from '../../components/overlay';
 import { HttpFetchError } from '../../services/http';
 import { getSavedObjectLabel } from './saved_objects_lib';
 import {
@@ -277,37 +277,13 @@ function FilterSelect({ filter, clauses, onChange }: { filter: FieldFilter; clau
   const onCount = ordered.filter((option) => states.get(option.value) === 'on').length;
   const searchable = filter.options.length >= (filter.searchThreshold ?? 10);
 
-  // As the original's popover: the first thing that takes the focus has it when the list opens,
-  // the search field when there is one, else the first value. It waits a frame: until the popover
-  // is placed it is hidden, and nothing in it can take the focus.
-  const title = useRef<HTMLDivElement>(null);
-  const list = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const frame = requestAnimationFrame(() => {
-      const target = searchable
-        ? title.current?.querySelector<HTMLElement>('input')
-        : list.current?.querySelector<HTMLElement>('.sobFilterItem');
-      target?.focus({ preventScroll: true });
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [open, searchable]);
-  // As the original's: when the list is closed from inside it, by Escape, the focus goes back to
-  // its button. A click elsewhere puts the focus where it clicks.
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const close = () => {
-    setOpen(false);
-    if (document.activeElement?.closest('.sobFilterPopover')) buttonRef.current?.focus();
-  };
-  // The arrows go from the search field down the values and back, and Tab goes round what is in
-  // the popover, as the original's, which holds the focus
+  // As the original's popover, the kit's holds the focus: the first thing that takes it has it when
+  // the list opens (the search field when there is one, else the first value), Tab goes round what
+  // is in it, and Escape gives the focus back to the button. A click elsewhere puts it where it clicks.
+  const close = () => setOpen(false);
+  // The arrows go from the search field down the values and back
   const moveFocus = (event: KeyboardEvent<HTMLElement>, index: number) => {
-    if (closeOnEscape(event, close)) return;
     const panel = event.currentTarget.closest('.atlPopover');
-    if (event.key === 'Tab') {
-      holdFocus(event, [...(panel?.querySelectorAll<HTMLElement>('input, button') ?? [])]);
-      return;
-    }
     const items = [...(panel?.querySelectorAll<HTMLElement>('.sobFilterItem') ?? [])];
     let target: HTMLElement | null | undefined;
     if (event.key === 'ArrowDown') target = items[index + 1];
@@ -320,7 +296,6 @@ function FilterSelect({ filter, clauses, onChange }: { filter: FieldFilter; clau
 
   const button = (
     <button
-      ref={buttonRef}
       type="button"
       className={cx('sobFilterButton', active && 'sobFilterButton--active')}
       onClick={() => {
@@ -353,7 +328,7 @@ function FilterSelect({ filter, clauses, onChange }: { filter: FieldFilter; clau
       anchorClassName="sobFilterGroup__item"
     >
       {searchable && (
-        <div ref={title} className="sobFilterPopover__title" onKeyDown={(event) => moveFocus(event, -1)}>
+        <div className="sobFilterPopover__title" onKeyDown={(event) => moveFocus(event, -1)}>
           <SearchFieldUncontrolled key={listKey} onSearch={setTyped} />
         </div>
       )}
@@ -363,7 +338,7 @@ function FilterSelect({ filter, clauses, onChange }: { filter: FieldFilter; clau
           <p>No options found</p>
         </div>
       ) : (
-        <div ref={list} className="sobFilterPopover__items" role="listbox">
+        <div className="sobFilterPopover__items" role="listbox">
           {shown.map((option, index) => {
             const state = states.get(option.value);
             return (
@@ -385,29 +360,6 @@ function FilterSelect({ filter, clauses, onChange }: { filter: FieldFilter; clau
       )}
     </Popover>
   );
-}
-
-/**
- * Escape closes the popover the focus is in, and only it, as the original's: not the flyout it is
- * drawn over, which the shared flyout would close too, since both listen on the document.
- */
-export function closeOnEscape(event: KeyboardEvent<HTMLElement>, close: () => void): boolean {
-  if (event.key !== 'Escape') return false;
-  event.stopPropagation();
-  close();
-  return true;
-}
-
-/**
- * As the original's popovers, which hold the focus: Tab from the last of `items` goes to the first,
- * and back. `items` are what takes the focus in the popover, in order.
- */
-export function holdFocus(event: KeyboardEvent<HTMLElement>, items: HTMLElement[]) {
-  if (event.key !== 'Tab' || items.length === 0) return;
-  const index = items.findIndex((item) => item === document.activeElement);
-  if (index >= 0 && (event.shiftKey ? index > 0 : index < items.length - 1)) return;
-  event.preventDefault();
-  items[event.shiftKey ? items.length - 1 : 0].focus();
 }
 
 function SearchFieldUncontrolled({ onSearch }: { onSearch: (value: string) => void }) {
@@ -644,33 +596,10 @@ function TablePagination({
 }: Paging & { onChange: (page: { index: number; size: number }) => void }) {
   const [open, setOpen] = useState(false);
   const pageCount = Math.ceil(totalItemCount / pageSize);
-  // As the original's menu: its first item has the focus when it opens, the arrows and Tab go round
-  // the items, and the focus goes back to the button when it closes from inside
-  const sizeButton = useRef<HTMLButtonElement>(null);
-  const menu = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const frame = requestAnimationFrame(() => menu.current?.querySelector<HTMLElement>('[role=menuitem]')?.focus({ preventScroll: true }));
-    return () => cancelAnimationFrame(frame);
-  }, [open]);
-  const close = () => {
-    setOpen(false);
-    if (menu.current?.contains(document.activeElement)) sizeButton.current?.focus();
-  };
-  const onMenuKey = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (closeOnEscape(event, close)) return;
-    const items = [...event.currentTarget.querySelectorAll<HTMLElement>('[role=menuitem]')];
-    if (event.key === 'Tab') {
-      holdFocus(event, items);
-      return;
-    }
-    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-    event.preventDefault();
-    const index = items.findIndex((item) => item === document.activeElement);
-    const step = event.key === 'ArrowDown' ? 1 : -1;
-    const next = index < 0 ? (step > 0 ? 0 : items.length - 1) : (index + step + items.length) % items.length;
-    items[next]?.focus();
-  };
+  // As the original's menu, in the kit's popover that holds the focus: its first item has the focus
+  // when it opens, Tab and the arrows go round the items, and the focus goes back to the button when
+  // it closes from inside
+  const close = () => setOpen(false);
   // A page that is not there any more, after objects went: the last one is shown
   useEffect(() => {
     if (pageCount < pageIndex + 1) onChange({ index: pageCount - 1, size: pageSize });
@@ -681,36 +610,29 @@ function TablePagination({
       <Popover
         open={open}
         onClose={close}
-        align="right"
-        above
-        offset={8}
-        buffer={16}
-        className="sobPagination__sizes"
+        position="upRight"
         button={
-          <button ref={sizeButton} type="button" className="sobPagination__size" onClick={() => setOpen(!open)} data-test-subj="tablePaginationPopoverButton">
+          <button type="button" className="sobPagination__size" onClick={() => setOpen(!open)} data-test-subj="tablePaginationPopoverButton">
             Rows per page: {pageSize}
             <Icon name="chevronDown" />
           </button>
         }
       >
-        <div ref={menu} role="menu" onKeyDown={onMenuKey}>
-          {pageSizeOptions.map((size) => (
-            <button
-              key={size}
-              type="button"
-              role="menuitem"
-              className="sobPagination__sizeItem"
-              onClick={() => {
-                close();
-                onChange({ index: 0, size });
-              }}
-              data-test-subj={`tablePagination-${size}-rows`}
-            >
-              <span className="sobPagination__sizeMark">{size === pageSize && <Icon name="check" />}</span>
-              {size} rows
-            </button>
-          ))}
-        </div>
+        <ContextMenu
+          onDone={close}
+          panels={[
+            {
+              id: 'sizes',
+              items: pageSizeOptions.map((size) => ({
+                id: String(size),
+                label: `${size} rows`,
+                icon: size === pageSize ? 'check' : 'empty',
+                onClick: () => onChange({ index: 0, size }),
+                testId: `tablePagination-${size}-rows`,
+              })),
+            },
+          ]}
+        />
       </Popover>
       <nav className="sobPagination__pages" aria-label="Pagination">
         <button

@@ -4,6 +4,7 @@
 
 import { Markdown } from '../lib/markdown';
 import type { Vis } from '../lib/vis';
+import '../styles/vis_basic.css';
 
 interface MarkdownParams {
   markdown?: string;

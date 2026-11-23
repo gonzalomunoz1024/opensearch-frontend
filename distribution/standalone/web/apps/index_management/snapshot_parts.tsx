@@ -6,12 +6,13 @@
  * and where it goes, and the three switches of a snapshot.
  */
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Accordion, Button, CallOut } from '../../components/basic';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { Accordion, Button, CallOut, cx } from '../../components/basic';
 import { ComboBox, type ComboOption } from '../../components/combo_box';
 import { Checkbox, NumberField, Select, TextField } from '../../components/form';
-import { Flyout, Popover } from '../../components/overlay';
-import { ExternalLink, JsonEditor, Labeled, ism, toasts } from './common';
+import { Icon } from '../../components/icon';
+import { Flyout, MenuButton, Popover, type MenuItem } from '../../components/overlay';
+import { ExternalLink, JsonEditor, ism, toasts } from './common';
 import { loadNames } from './job_parts';
 import {
   CUSTOM_CONFIGURATION_TEXT,
@@ -48,7 +49,177 @@ const FS_REPOSITORY_DOCS =
 const S3_REPOSITORY_DOCS =
   'https://opensearch.org/docs/latest/opensearch/snapshots/snapshot-restore/#amazon-s3';
 
-/** A field under its name, the name set as a heading */
+/** Facts of a policy or a snapshot, three in a row as the plugin's grid has them, or two, or one */
+export function Facts({
+  items,
+  columns = 3,
+}: {
+  items: Array<[string, ReactNode]>;
+  columns?: 1 | 2 | 3;
+}) {
+  return (
+    <dl
+      className={cx(
+        'ismPolicyFacts',
+        columns === 2 && 'ismPolicyFacts--two',
+        columns === 1 && 'ismPolicyFacts--one'
+      )}
+    >
+      {items.map(([name, value]) => (
+        <div key={name}>
+          <dt>{name}</dt>
+          <dd>{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** A panel of the page of a policy, as the plugin's: its title, and a rule over what it holds */
+export function PolicyPanel({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="ismPolicyPanel">
+      <div className={cx('ismPolicyPanel__header', action !== undefined && 'ismPolicyPanel__header--action')}>
+        <h2 className="atlTitleS">{title}</h2>
+        {action}
+      </div>
+      <hr className="ismPolicyPanel__rule" />
+      {children}
+    </section>
+  );
+}
+
+/**
+ * The panel around a list of Snapshot Management, drawn as the plugin's: the title and what it
+ * says on the left, the buttons on the right, a rule under them and the list 16 px in.
+ */
+export function ListPanel({
+  title,
+  description,
+  actions,
+  children,
+}: {
+  title: string;
+  description?: ReactNode;
+  actions: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="ismListPanel">
+      <header className="ismListPanel__header">
+        <div className="ismListPanel__heading">
+          <h1 className="atlTitleL">{title}</h1>
+          {description && <p className="ismListPanel__description">{description}</p>}
+        </div>
+        <div className="ismListPanel__actions">{actions}</div>
+      </header>
+      <hr className="ismListPanel__rule" />
+      <div className="ismListPanel__body">{children}</div>
+    </section>
+  );
+}
+
+/** The filters beside the search box of a list, joined in one group as the plugin's */
+export function FilterGroup({ children }: { children: ReactNode }) {
+  return <div className="ismFilterGroup">{children}</div>;
+}
+
+/** One filter of a group: a list of values, any of which a row may have */
+export function GroupFilter({
+  name,
+  options,
+  selected,
+  onChange,
+}: {
+  name: string;
+  options: string[];
+  selected: string[];
+  onChange: (selected: string[]) => void;
+}) {
+  const items: MenuItem[] =
+    options.length > 0
+      ? options.map((option) => ({
+          id: option,
+          label: option,
+          selected: selected.includes(option),
+          testId: `FilterGroupSelectItem-${option}`,
+          onClick: () =>
+            onChange(
+              selected.includes(option)
+                ? selected.filter((value) => value !== option)
+                : [...selected, option]
+            ),
+        }))
+      : [{ id: 'none', label: 'No options found', disabled: true }];
+  return (
+    <MenuButton
+      align="right"
+      items={items}
+      button={(toggle, open) => (
+        <button
+          type="button"
+          className={cx('ismFilterGroup__button', selected.length > 0 && 'ismFilterGroup__button--active')}
+          aria-expanded={open}
+          onClick={toggle}
+        >
+          <span className="ismFilterGroup__name">{name}</span>
+          {selected.length > 0 && <span className="ismFilterCount">{selected.length}</span>}
+          <Icon name="chevronDown" />
+        </button>
+      )}
+    />
+  );
+}
+
+/** The plugin's spacer: an empty line of 4, 8, 16, 24 or 40 px between the parts of a form */
+export function Spacer({ size = 'l' }: { size?: 'xs' | 's' | 'm' | 'l' | 'xxl' }) {
+  return <div className={`ismSpacer ismSpacer--${size}`} />;
+}
+
+/**
+ * Radios one under the other with no space between them, as the plugin's radio group draws
+ * them (the kit's group puts 8 px between them)
+ */
+export function RadioStack<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: Array<{ id: T; label: ReactNode }>;
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  const name = useId();
+  return (
+    <div className="ismRadioStack">
+      {options.map((option) => (
+        <label key={option.id} className="atlRadio">
+          <input
+            type="radio"
+            name={name}
+            checked={option.id === value}
+            onChange={() => onChange(option.id)}
+          />
+          <span>{option.label}</span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * A field under its name, as the plugin's label draws it: the name as a heading with, when the
+ * field may be left empty, "x – optional" beside it (the "x" is the plugin's), what it means in
+ * small light letters, and 8 px under them the field with what is wrong with it.
+ */
 export function Field({
   title,
   help,
@@ -63,27 +234,29 @@ export function Field({
   children?: ReactNode;
 }) {
   return (
-    <Labeled
-      title={
-        <h3>
-          {title}
-          {optional && <i> – optional</i>}
-        </h3>
-      }
-      help={help}
-      error={error || undefined}
-    >
-      {children}
-    </Labeled>
+    <div className="ismSnapField">
+      <div className="ismSnapField__label">
+        <h3 className="atlTitleS">{title}</h3>
+        {optional && (
+          <span className="ismSnapField__optional">
+            x<i> – optional</i>
+          </span>
+        )}
+      </div>
+      {help && <span className="ismSnapField__help">{help}</span>}
+      <Spacer size="s" />
+      <div className="ismSnapField__body">{children}</div>
+      {error && <div className="ismSnapField__error">{error}</div>}
+    </div>
   );
 }
 
-/** The label of a tick: what it does, and under it what that means */
+/** The label of a tick, as the plugin's: what it does, and under it in light letters what that means */
 export function TickLabel({ title, help }: { title: string; help?: string }) {
   return (
     <span className="ismTickLabel">
-      <span>{title}</span>
-      {help && <small>{help}</small>}
+      <span className="ismTickLabel__title">{title}</span>
+      {help && <span className="ismTickLabel__help">{help}</span>}
     </span>
   );
 }
@@ -104,12 +277,16 @@ export function FlyoutFooter({
 }) {
   return (
     <div className="atlRow ismFlyoutFooter">
-      <Button variant="empty" size="s" onClick={onCancel} testId="flyout-footer-cancel-button">
+      <Button
+        variant="empty"
+        className="ismFlyoutFooter__cancel"
+        onClick={onCancel}
+        testId="flyout-footer-cancel-button"
+      >
         Cancel
       </Button>
       <Button
         variant="primary"
-        size="s"
         disabled={disabled}
         loading={busy}
         onClick={onAction}
@@ -352,8 +529,11 @@ export function IndicesRepositoryInput({
   repository: string;
   onRepository: (repository: string) => void;
   repositoryError?: string;
-  /** Called once a repository was registered from here, for the list to be read again */
-  onRepositoryCreated: () => void | Promise<void>;
+  /**
+   * Called once a repository was registered from here, for the list to be read again. Without
+   * it there is no "Create repository" button, as in the plugin's flyout that takes a snapshot.
+   */
+  onRepositoryCreated?: () => void | Promise<void>;
 }) {
   const [creating, setCreating] = useState(false);
   return (
@@ -372,6 +552,7 @@ export function IndicesRepositoryInput({
           testId="indicesComboBoxInput"
         />
       </Field>
+      <Spacer size="m" />
       <div className="ismSnapshotForm__repository">
         <Field title="Select a repository for snapshots" error={repositoryError}>
           <Select
@@ -383,11 +564,13 @@ export function IndicesRepositoryInput({
             aria-label="Select a repository"
           />
         </Field>
-        <Button size="s" icon="plus" onClick={() => setCreating(true)}>
-          Create repository
-        </Button>
+        {onRepositoryCreated && (
+          <Button icon="plus" onClick={() => setCreating(true)}>
+            Create repository
+          </Button>
+        )}
       </div>
-      {creating && (
+      {creating && onRepositoryCreated && (
         <CreateRepositoryFlyout
           onClose={() => setCreating(false)}
           onCreated={async () => {
@@ -425,6 +608,7 @@ export function AdvancedSnapshotSettings({
         label={<TickLabel title="Include cluster state in snapshots" />}
         testId="include_global_state"
       />
+      <Spacer size="m" />
       <Checkbox
         checked={ignoreUnavailable}
         onChange={(value) => onChange('ignore_unavailable', value)}
@@ -436,6 +620,7 @@ export function AdvancedSnapshotSettings({
         }
         testId="ignore_unavailable"
       />
+      <Spacer size="m" />
       <Checkbox
         checked={partial}
         onChange={(value) => onChange('partial', value)}
@@ -583,7 +768,7 @@ export function CronSchedule({
   }, []);
 
   return (
-    <div className="ismCron">
+    <>
       <Field title={title}>
         <Select
           id="creationCronScheduleType"
@@ -599,31 +784,31 @@ export function CronSchedule({
           }}
         />
       </Field>
+      <Spacer size="m" />
       <div className="ismCron__row">
         <div className="ismCron__start">
           {frequencyType === 'custom' ? (
-            <Field
-              title="Cron expression"
-              help={
-                <>
-                  Use Cron expression to define complex schedule. <ExternalLink href={CRON_DOCS} />
-                </>
-              }
-            >
+            <Field title="Cron expression">
               <TextField value={expression} onChange={onExpression} compact disabled={disabled} />
+              <p className="ismCron__help">
+                Use Cron expression to define complex schedule. <ExternalLink href={CRON_DOCS} />
+              </p>
             </Field>
           ) : (
-            <Field title="Start time">
-              {frequencyType === 'hourly' ? (
-                <p className="ismCron__text">Starts at the beginning of the hour.</p>
-              ) : (
-                <TimeSelect
-                  hour={parts.hour}
-                  minute={parts.minute}
-                  disabled={disabled}
-                  onChange={(hour, minute) => change(frequencyType, { hour, minute })}
-                />
-              )}
+            <>
+              <Field title="Start time">
+                {frequencyType === 'hourly' ? (
+                  <p className="ismCron__text">Starts at the beginning of the hour.</p>
+                ) : (
+                  <TimeSelect
+                    hour={parts.hour}
+                    minute={parts.minute}
+                    disabled={disabled}
+                    onChange={(hour, minute) => change(frequencyType, { hour, minute })}
+                  />
+                )}
+              </Field>
+              <Spacer size="s" />
               {frequencyType === 'weekly' && (
                 <div className="ismCron__days">
                   {WEEK_DAYS.map((day) => (
@@ -638,8 +823,7 @@ export function CronSchedule({
                 </div>
               )}
               {frequencyType === 'monthly' && (
-                <>
-                  <h3>On the</h3>
+                <Field title="On the">
                   <div className="ismCron__monthly">
                     <Select
                       value="day"
@@ -663,9 +847,9 @@ export function CronSchedule({
                       }
                     />
                   </div>
-                </>
+                </Field>
               )}
-            </Field>
+            </>
           )}
         </div>
         {onTimezone && (
@@ -685,6 +869,6 @@ export function CronSchedule({
           </div>
         )}
       </div>
-    </div>
+    </>
   );
 }

@@ -6,6 +6,7 @@ import { useMemo } from 'react';
 import { ChartMessage, ChartTooltip, ordinalColors, textWidth, useSize, useTooltip } from '../charts/core';
 import { bucketFilter } from '../lib/aggs';
 import { bucketColumns, metricColumns, numberOf, type VisRenderProps } from './types';
+import '../styles/vis_basic.css';
 
 interface TagCloudParams {
   scale?: 'linear' | 'log' | 'square root';

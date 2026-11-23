@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button, Segments, cx } from '../components/basic';
 import { NumberField, Select, Switch } from '../components/form';
 import { Icon } from '../components/icon';
-import { Popover } from '../components/overlay';
+import { Popover, Tooltip } from '../components/overlay';
 import {
   UNIT_NAMES,
   formatDate,
@@ -384,6 +384,8 @@ export interface TimePickerProps {
   /** What the Update button applies besides the dates */
   onUpdate?: () => void;
   showUpdateButton?: boolean;
+  /** Out of the way while the query is typed, as the original's are: the button stays */
+  hidden?: boolean;
 }
 
 export function TimePicker({
@@ -396,6 +398,7 @@ export function TimePicker({
   dirty,
   onUpdate,
   showUpdateButton = true,
+  hidden,
 }: TimePickerProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [draft, setDraft] = useState(time);
@@ -429,6 +432,7 @@ export function TimePicker({
   const needsUpdate = changed || Boolean(dirty);
   return (
     <>
+      <div className={cx('shlSearchBar__dates', hidden && 'shlSearchBar__dates--hidden')}>
       <div className={cx('atlField', 'shlTime', invalid && 'atlField--invalid')} data-test-subj="superDatePickerToggleQuickMenuButtonWrapper">
         <Popover
           open={menuOpen}
@@ -488,23 +492,59 @@ export function TimePicker({
           </>
         )}
       </div>
+      </div>
       {showUpdateButton && (
-        <Button
-          variant={needsUpdate ? 'healthyOutline' : 'default'}
-          icon="refresh"
-          loading={loading && !needsUpdate}
+        <SuperUpdateButton
+          needsUpdate={needsUpdate}
+          loading={loading}
           disabled={invalid}
           onClick={() => {
             onUpdate?.();
             if (changed) apply(draft);
             else if (!dirty) onRefresh();
           }}
-          className="shlTime__submit"
-          testId="querySubmitButton"
-        >
-          {needsUpdate ? 'Update' : 'Refresh'}
-        </Button>
+        />
       )}
     </>
+  );
+}
+
+/**
+ * The button that applies what waits and searches again, as `EuiSuperUpdateButton` draws it:
+ * "Refresh", "Update" in the success colour once something waits, "Updating" while the page
+ * searches; its tooltip says whether it can apply. Narrow, it is its icon alone.
+ */
+export function SuperUpdateButton({
+  needsUpdate,
+  loading,
+  disabled,
+  onClick,
+}: {
+  needsUpdate: boolean;
+  loading?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  const tip = disabled ? 'Cannot update' : needsUpdate && !loading ? 'Click to apply' : undefined;
+  const button = (
+    <Button
+      variant={needsUpdate || loading ? 'healthyOutline' : 'default'}
+      icon="refresh"
+      loading={loading}
+      disabled={disabled}
+      onClick={onClick}
+      className="shlUpdateButton"
+      aria-label="Submit query"
+      testId="querySubmitButton"
+    >
+      <span className="shlUpdateButton__text">{loading ? 'Updating' : needsUpdate ? 'Update' : 'Refresh'}</span>
+    </Button>
+  );
+  return tip ? (
+    <Tooltip content={tip} position="bottom">
+      {button}
+    </Tooltip>
+  ) : (
+    button
   );
 }
