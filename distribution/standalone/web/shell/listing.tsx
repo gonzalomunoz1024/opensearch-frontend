@@ -103,7 +103,7 @@ export function Listing({
   titleAsButton,
 }: ListingProps) {
   const [filter, setFilter] = useState(initialFilter);
-  const [found, setFound] = useState<{ total: number; objects: Listed[] }>();
+  const [found, setFound] = useState<{ objects: Listed[] }>();
   const [fetching, setFetching] = useState(true);
   const [fetchError, setFetchError] = useState<string>();
   const [selected, setSelected] = useState<string[]>([]);
@@ -122,7 +122,10 @@ export function Listing({
   const started = useRef(false);
   const tableId = useId();
 
-  // The original waits 300ms after the last key before it searches; the first list comes at once
+  // The original waits 300ms after the last key before it searches; the first list comes at once.
+  // It finds at most `listingLimit` objects and, for both its dashboards and its visualizations,
+  // counts those it found (`total: list.length`, `total: hits.length`): its "Listing limit
+  // exceeded" call-out never shows there, so there is none here.
   useEffect(() => {
     let live = true;
     setFetching(true);
@@ -146,13 +149,13 @@ export function Listing({
               : [...kept].sort((a, b) =>
                   compareAsOriginal(a.attributes.title ?? '', b.attributes.title ?? '')
                 );
-            setFound({ total: answer.total, objects });
+            setFound({ objects });
             setFetchError(undefined);
             setFetching(false);
           })
           .catch((failure) => {
             if (!live) return;
-            setFound({ total: 0, objects: [] });
+            setFound({ objects: [] });
             setFetchError(errorMessage(failure));
             setFetching(false);
           });
@@ -388,17 +391,6 @@ export function Listing({
                   {createLabel}
                 </Button>
               </div>
-              {found.total > limit && (
-                <div className="shlListing__callout">
-                  <CallOut tone="warning" icon="help" title="Listing limit exceeded">
-                    <p>
-                      You have {found.total} {entities}, but your <strong>listingLimit</strong> setting prevents the table
-                      below from displaying more than {limit}. You can change this setting under{' '}
-                      <Link to="/app/management/opensearch-dashboards/settings">Advanced Settings</Link>.
-                    </p>
-                  </CallOut>
-                </div>
-              )}
               {fetchError && (
                 <div className="shlListing__callout">
                   <CallOut tone="critical" icon="warning" title="Fetching listing failed">
