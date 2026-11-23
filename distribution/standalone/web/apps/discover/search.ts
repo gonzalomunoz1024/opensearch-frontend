@@ -3,7 +3,7 @@
 /* The request Discover sends: the documents, newest first, and how many fall in each stretch of time. */
 
 import { buildAggsDsl, type AggConfig } from '../../lib/aggs';
-import type { AbsoluteRange } from '../../lib/dates';
+import { resolveTimeRange, type AbsoluteRange, type TimeRange } from '../../lib/dates';
 import { HIGHLIGHT_POST, HIGHLIGHT_PRE } from '../../lib/docs';
 import { buildQuery, timeRangeFilter } from '../../lib/query';
 import type { Filter, IndexPattern, Query } from '../../lib/types';
@@ -110,6 +110,16 @@ export function sortClause(
       }
       return { [name]: { order: direction, ...(name === '_score' ? scoreOptions : options) } };
     });
+}
+
+/**
+ * The time range Discover searches a pattern in: none for a pattern without a time field; for one
+ * with a time field, the range of the time picker, or `null` when that cannot be read, which the
+ * original's Discover does not search in at all (it says the time range is invalid)
+ */
+export function searchTimeRange(indexPattern: IndexPattern, time: TimeRange, weekStart?: number): AbsoluteRange | null | undefined {
+  if (!indexPattern.timeFieldName) return undefined;
+  return resolveTimeRange(time, { weekStart }) ?? null;
 }
 
 export function buildDiscoverRequest(request: DiscoverRequest): Record<string, unknown> {
