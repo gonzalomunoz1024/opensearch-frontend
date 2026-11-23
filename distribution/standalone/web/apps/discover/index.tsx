@@ -14,7 +14,7 @@ import { existsFilter, mergeFilters } from '../../lib/query';
 import { parseSearchSource, serializeSearchSource } from '../../lib/search_source';
 import type { Field, Filter, IndexPattern, Query } from '../../lib/types';
 import { appUrl, decodeState, encodeState } from '../../lib/url';
-import { href, navigate, navigateHash, setHashParams, useLocation } from '../../router';
+import { getLocation, href, navigate, navigateHash, setHashParams, useLocation } from '../../router';
 import { services } from '../../services';
 import type { IndexPatternSummary } from '../../services/index_patterns';
 import type { SavedObject } from '../../services/saved_objects';
@@ -28,7 +28,7 @@ import { OpenFlyout, SaveModal, ShareModal } from '../../shell/saved_objects_ui'
 import { pageFiltersOf, savedQueryGlobalParam, type SavedQueryChange } from '../../shell/saved_query';
 import { SearchBar } from '../../shell/search_bar';
 import { showSearchError } from '../../shell/search_error';
-import { addRecentlyAccessed, currentGlobalParam, useAutoRefresh, useBreadcrumbs, useGlobalState } from '../../shell/state';
+import { addRecentlyAccessed, currentGlobalParam, useAutoRefresh, useBreadcrumbs, useGlobalState, writeStored } from '../../shell/state';
 import { DocDetails } from './doc_viewer';
 import { DocTable, filterColumns, toggledColumns, type SortPair } from './doc_table';
 import { DownloadCsv } from './download_csv';
@@ -38,6 +38,7 @@ import { Histogram } from './histogram';
 import { bucketSpan, parseBucketInterval, shortestBucket } from './histogram_scale';
 import { aggContext, buildDiscoverRequest, histogramAgg, searchTimeRange } from './search';
 import { Sidebar } from './sidebar';
+import { openingQueryState } from './open_state';
 import { normalizeSort } from './sort';
 import '../../styles/discover.css';
 
@@ -293,6 +294,31 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
     };
   }, [savedId, basePath]);
 
+  // As the original's loadSavedSearch: when the page opens, and another saved search with it, the
+  // query is chosen again (one with no text is the saved search's or the default, in the language
+  // chosen last), the address is given it in place, and its language becomes the user's. Nothing
+  // is searched before.
+  const openKey = savedId ?? '';
+  const [openedKey, setOpenedKey] = useState<string>();
+  const opened = openedKey === openKey;
+  useEffect(() => {
+    if (opened || (savedId !== undefined && saved?.id !== savedId)) return;
+    const params = getLocation().hashParams;
+    const app = decodeState<UrlAppState>(params._a);
+    const fromQ = decodeState<UrlQueryState>(params._q);
+    const hasQueryState = params._q !== undefined || app.query !== undefined || app.filters !== undefined;
+    const source = saved ? parseSearchSource(saved.attributes.kibanaSavedObjectMeta?.searchSourceJSON, saved.references) : undefined;
+    const { query: chosen, filters: chosenFilters } = openingQueryState(
+      { query: fromQ.query ?? app.query, filters: fromQ.filters ?? app.filters, hasQueryState },
+      source,
+      defaultQueryLanguage()
+    );
+    const next = encodeState({ filters: chosenFilters, query: chosen });
+    if (next !== params._q) setHashParams({ _q: next }, { replace: true });
+    if (typeof chosen.language === 'string') writeStored('queryLanguage', chosen.language);
+    setOpenedKey(openKey);
+  }, [opened, openKey, savedId, saved]);
+
   const waitingForSaved = Boolean(savedId) && !saved && !savedError;
   useEffect(() => {
     if (!indexPatternId || waitingForSaved) return undefined;
@@ -325,12 +351,15 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
     () => services.uiSettings.get<boolean>('discover:searchOnPageLoad', true) || Boolean(savedId) || !global.refreshInterval.pause
   );
   const startKey = JSON.stringify([queryKey, global.time.from, global.time.to, tick]);
-  const firstStartKey = useRef(startKey);
+  // Taken once the page has opened: the query it opens with is not a search asked for
+  const firstStartKey = useRef<string>();
   useEffect(() => {
-    if (!searchStarted && startKey !== firstStartKey.current) setSearchStarted(true);
-  }, [startKey, searchStarted]);
+    if (!opened) return;
+    if (firstStartKey.current === undefined) firstStartKey.current = startKey;
+    else if (!searchStarted && startKey !== firstStartKey.current) setSearchStarted(true);
+  }, [startKey, searchStarted, opened]);
   useEffect(() => {
-    if (!searchStarted || !indexPattern || indexPattern.id !== indexPatternId) return undefined;
+    if (!opened || !searchStarted || !indexPattern || indexPattern.id !== indexPatternId) return undefined;
     const controller = new AbortController();
     const range = searchTimeRange(indexPattern, global.time, services.weekStart());
     if (range === null) {
@@ -373,7 +402,7 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
       });
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchStarted, indexPattern, indexPatternId, queryKey, global.time.from, global.time.to, sampleSize, tick]);
+  }, [opened, searchStarted, indexPattern, indexPatternId, queryKey, global.time.from, global.time.to, sampleSize, tick]);
 
   const refresh = useCallback(() => setTick((count) => count + 1), []);
   useAutoRefresh(global.refreshInterval, refresh);
