@@ -28,7 +28,8 @@ export interface PopoverProps {
   open: boolean;
   onClose: () => void;
   children: ReactNode;
-  align?: 'left' | 'right';
+  /** Which edge of the button it lines up with; 'center' hangs it under the middle */
+  align?: 'left' | 'right' | 'center';
   padded?: boolean;
   /** As wide as its button at least: a list under a field */
   matchWidth?: boolean;
@@ -58,11 +59,18 @@ export function Popover({
 
   const place = useCallback(() => {
     const anchorBox = anchor.current?.getBoundingClientRect();
-    const panelBox = panel.current?.getBoundingClientRect();
-    if (!anchorBox || !panelBox) return;
+    const panelElement = panel.current;
+    if (!anchorBox || !panelElement) return;
+    // Its size as laid out, which the opening animation's scale does not change
+    const panelBox = { width: panelElement.offsetWidth, height: panelElement.offsetHeight };
     const margin = 8;
     const panelWidth = Math.max(panelBox.width, matchWidth ? anchorBox.width : 0);
-    let left = align === 'right' ? anchorBox.right - panelWidth : anchorBox.left;
+    let left =
+      align === 'right'
+        ? anchorBox.right - panelWidth
+        : align === 'center'
+          ? anchorBox.left + (anchorBox.width - panelWidth) / 2
+          : anchorBox.left;
     left = Math.max(margin, Math.min(left, window.innerWidth - panelWidth - margin));
     const below = window.innerHeight - anchorBox.bottom - margin;
     const above = anchorBox.top - margin;
@@ -513,12 +521,15 @@ export function Tooltip({
   children,
   testId,
   block,
+  className,
 }: {
   content: ReactNode;
   children: ReactNode;
   testId?: string;
   /** The anchor a block as wide as its line, as the original's `eui-displayBlock` anchors */
   block?: boolean;
+  /** A class for the box of the text */
+  className?: string;
 }) {
   const anchor = useRef<HTMLSpanElement>(null);
   const [place, setPlace] = useState<{ left: number; top: number }>();
@@ -553,7 +564,7 @@ export function Tooltip({
         <Portal>
           <div
             ref={box}
-            className="atlTooltip atlMaterial"
+            className={cx('atlTooltip', 'atlMaterial', className)}
             role="tooltip"
             data-test-subj={testId}
             style={{ left: place?.left ?? -9999, top: place?.top ?? -9999 }}

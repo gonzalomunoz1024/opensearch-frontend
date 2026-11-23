@@ -73,3 +73,17 @@ describe('vis_type_vega.enableExternalUrls', () => {
     assert.equal(env.config.visTypeVega.enableExternalUrls, true);
   });
 });
+
+describe('home.disableWelcomeScreen', () => {
+  it('leaves the welcome screen on unless it is set, as in OpenSearch Dashboards', () => {
+    assert.deepEqual(loadConfig({ env: {} }).config.home, { disableWelcomeScreen: false });
+  });
+
+  it('is read from the settings file and from the environment', () => {
+    const { config, ignored } = fromYaml('home:\n  disableWelcomeScreen: true\n');
+    assert.deepEqual(ignored, []);
+    assert.equal(config.home.disableWelcomeScreen, true);
+    const env = loadConfig({ env: { HOME_DISABLEWELCOMESCREEN: 'true' } });
+    assert.equal(env.config.home.disableWelcomeScreen, true);
+  });
+});
