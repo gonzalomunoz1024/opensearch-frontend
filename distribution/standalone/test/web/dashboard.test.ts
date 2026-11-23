@@ -51,7 +51,7 @@ import { PanelTitle } from '../../web/apps/dashboard/panel_title';
 import { existsFilter, phraseFilter, uniqueFilters } from '../../web/lib/query';
 import type { Filter, Query } from '../../web/lib/types';
 import { decodeState, encodeState } from '../../web/lib/url';
-import { editorStateFor as newVisEditorState, originatingAppUrl } from '../../web/apps/visualize/state_transfer';
+import { editorStateFor as newVisEditorState } from '../../web/apps/visualize/state_transfer';
 import { makeTurns, waitTurn } from '../../web/vis/turns';
 
 const at = (items: GridItem[], id: string) => {
@@ -837,9 +837,6 @@ describe('the round trip to an editor', () => {
     const { originatingApp, containerInfo } = createNewState(container);
     // What the New Visualization dialog then opens the editor with, which goes back to this dashboard
     assert.deepEqual(newVisEditorState(originatingApp, containerInfo), { originatingApp: 'dashboards', containerInfo: container });
-    assert.equal(originatingAppUrl(originatingApp, { containerInfo }), '/app/dashboards#/view/mine?_a=(viewMode:edit)');
-    // A dashboard not saved yet is gone back to as a new one
-    assert.equal(originatingAppUrl(originatingApp, createNewState({ containerName: '', containerId: '' })), '/app/dashboards#/create');
   });
 
   it('reads as a panel handed back only a type and an input that is an object', () => {

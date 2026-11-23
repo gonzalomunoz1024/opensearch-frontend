@@ -11,6 +11,7 @@ import {
   buildHash,
   decodeState,
   encodeState,
+  parseHash,
   parseLocation,
   type AppLocation,
 } from './lib/url';
@@ -42,31 +43,103 @@ let leaveGuard: LeaveGuard | undefined;
 // What the browser's own question says when the tab is closed or reloaded; undefined asks nothing
 let unloadQuestion: (() => string | undefined) | undefined;
 
-// Where each application was last since the page loaded, as the original's URL tracker of an
-// application keeps it (in the session's storage, `lastUrl:<basePath>:dashboard` for the
-// dashboards): what opening the application again with no path opens
-const lastAddresses = new Map<string, string>();
+/**
+ * The applications that open where they were last: those the original gives a URL tracker
+ * (`createOsdUrlTracker`), each with the name it has there, which is part of the key its place is
+ * kept under in the session's storage (`lastUrl:<basePath>:<name>`), and with the place it opens
+ * at before it has been open
+ */
+const TRACKED = new Map<string, { name: string; start: string }>([
+  ['dashboards', { name: 'dashboard', start: '#/list' }],
+  ['visualize', { name: 'visualize', start: '#/' }],
+  ['vis-builder', { name: 'vis-builder', start: '#/' }],
+  ['data-explorer', { name: 'data-explorer', start: '#/' }],
+]);
+
+// The places as they were last written, for a browser whose storage keeps nothing
+const places = new Map<string, string>();
+// The `_g` the places of the applications that are not open were last given
+let trackedGlobal: string | undefined;
 
 /** A path of this product without the base path a proxy may have put in front */
 const withoutBase = (pathname: string): string =>
   basePath && pathname.startsWith(basePath) ? pathname.slice(basePath.length) : pathname;
 
+// An application this product also opens under a second name, which the original does not have
+const SECOND_NAMES = new Map<string, string>([['dashboard', 'dashboards']]);
+
 /** The application a path of this product is in: `dashboards` for `/app/dashboards` */
 function applicationOf(pathname: string): string {
   const path = withoutBase(pathname);
   const match = /^\/app\/([^/]+)/.exec(path);
-  return match ? match[1] : path;
+  return match ? SECOND_NAMES.get(match[1]) ?? match[1] : path;
 }
+
+/** The place a tracked application was last at, as its fragment: `#/view/<id>?_g=…&_a=…` */
+function placeOf(app: string): string | undefined {
+  const tracked = TRACKED.get(app);
+  if (!tracked) return undefined;
+  try {
+    const kept = window.sessionStorage.getItem(`lastUrl:${basePath}:${tracked.name}`);
+    if (kept) return kept;
+  } catch {
+    // no storage: what this page has seen
+  }
+  return places.get(app);
+}
+
+function setPlace(app: string, place: string) {
+  const tracked = TRACKED.get(app);
+  if (!tracked) return;
+  places.set(app, place);
+  try {
+    window.sessionStorage.setItem(`lastUrl:${basePath}:${tracked.name}`, place);
+  } catch {
+    // a browser that keeps nothing: the place lasts as long as the page
+  }
+}
+
+/**
+ * Keeps where the tracked applications are, as the original's URL trackers do: the one that is
+ * open is at the fragment of the address; the others take the `_g` of the address when it has
+ * changed, so that each opens again where it was with the time range, the refresh interval and
+ * the pinned filters of now
+ */
+function track() {
+  const app = applicationOf(window.location.pathname);
+  if (window.location.hash) setPlace(app, window.location.hash);
+  const globalParam = current.hashParams._g;
+  if (globalParam === undefined || globalParam === trackedGlobal) return;
+  trackedGlobal = globalParam;
+  for (const [other, { start }] of TRACKED) {
+    if (other === app) continue;
+    const { hashPath, hashParams } = parseHash(placeOf(other) ?? start);
+    setPlace(other, buildHash(hashPath, { ...hashParams, _g: globalParam }));
+  }
+}
+
+// The application of the address read last, and whether the address before it was in another one
+let lastApplication: string | undefined;
+let enteredApplication = true;
 
 function read() {
   const key = `${window.location.pathname}${window.location.search}${window.location.hash}`;
   if (key === currentKey) return;
   currentKey = key;
   current = parseLocation(basePath, window.location);
-  lastAddresses.set(
-    applicationOf(window.location.pathname),
-    `${withoutBase(window.location.pathname)}${window.location.search}${window.location.hash}`
-  );
+  const app = applicationOf(window.location.pathname);
+  enteredApplication = app !== lastApplication;
+  lastApplication = app;
+  track();
+}
+
+/**
+ * Whether the address now read is the first of its application, after another application's or as
+ * the page loaded: when the original's chrome sets the document's title back to the product's name
+ * (`docTitle.reset()` on every change of application)
+ */
+export function enteredAnotherApplication(): boolean {
+  return enteredApplication;
 }
 
 function emit() {
@@ -76,6 +149,10 @@ function emit() {
 
 export function startRouter(base: string) {
   basePath = base;
+  currentKey = '';
+  trackedGlobal = undefined;
+  lastApplication = undefined;
+  places.clear();
   read();
   window.addEventListener('popstate', emit);
   window.addEventListener('hashchange', emit);
@@ -115,13 +192,14 @@ export function setLeaveGuard(guard: LeaveGuard | undefined, onUnload?: () => st
 }
 
 /**
- * Where an application was last since the page loaded, as a path of this product
- * (`/app/dashboards#/view/<id>?_g=…&_a=…`), undefined when it has not been open: what the
- * original's `navigateToApp(app)` with no path opens, a dashboard with the changes its address
- * carries and not saved yet
+ * Where an application opens when it is gone to with no place in it named, as a path of this
+ * product: what the original's `navigateToApp(app)` with no path opens. A tracked application
+ * opens where it was last in this session (`/app/dashboards#/view/<id>?_g=…&_a=…`: a dashboard
+ * with the changes its address carries and not saved yet), or at its start when it has not been
+ * open; any other at its root.
  */
-export function lastAddressOf(app: string): string | undefined {
-  return lastAddresses.get(app);
+export function lastAddressOf(app: string): string {
+  return `/app/${app}${placeOf(app) ?? TRACKED.get(app)?.start ?? ''}`;
 }
 
 /** The address of a path of this product, with the base path a proxy may have put in front */

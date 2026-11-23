@@ -824,8 +824,8 @@ function DashboardPage({ savedId }: { savedId?: string }) {
         />
       )}
       {dialog?.kind === 'create' && (
-        // As the original's visualization factory opens it from a dashboard: the editor is told where
-        // it came from, to go back there with what it saves
+        // As the original's visualization factory opens it from a dashboard: the editor is told the
+        // application and the dashboard it came from, to go back there with what it saves
         <NewVisModal onClose={() => setDialog(undefined)} {...createNewState(container)} />
       )}
       {dialog?.kind === 'discard' && (

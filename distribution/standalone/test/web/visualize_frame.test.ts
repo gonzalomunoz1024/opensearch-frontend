@@ -18,17 +18,19 @@ import {
 } from '../../web/apps/visualize/app_state';
 import { newVis } from '../../web/apps/visualize/defaults';
 import { editorHeading } from '../../web/apps/visualize/editor_layout';
+import { INDEX_PATTERNS_LINK, SavedObjectNotFound, found, loadFailure } from '../../web/apps/visualize/load_failure';
 import {
   editorStateFor,
   incomingEditorState,
   isEmbeddableEditorState,
-  originatingAppUrl,
   visualizationPackage,
 } from '../../web/apps/visualize/state_transfer';
 import { LEAVE_TEXT, LEAVE_TITLE, confirmsLeave, returnSwitch, visualizeTopNav } from '../../web/apps/visualize/top_nav';
+import { withBaseMap } from '../../web/apps/visualize/type_setup';
 import type { Filter } from '../../web/lib/types';
 import { encodeState } from '../../web/lib/url';
 import { visFromSavedObject } from '../../web/lib/vis';
+import { HttpFetchError } from '../../web/services/http';
 
 const KUERY = { query: '', language: 'kuery' };
 
@@ -248,6 +250,33 @@ describe('leaving the editor', () => {
   });
 });
 
+describe('what a coordinate map is given as the editor loads it', () => {
+  const roadMap = { origin: 'elastic_maps_service', id: 'road_map', minZoom: 0, maxZoom: 10 };
+  const darkMap = { origin: 'elastic_maps_service', id: 'dark_map', minZoom: 0, maxZoom: 10 };
+
+  it('is the first base map of the maps service, when it has chosen none', () => {
+    const params = { mapType: 'Scaled Circle Markers', wms: { enabled: false, options: { format: 'image/png' } } };
+    assert.deepEqual(withBaseMap(params, [roadMap, darkMap]), {
+      mapType: 'Scaled Circle Markers',
+      wms: { enabled: false, options: { format: 'image/png' }, selectedTmsLayer: roadMap },
+    });
+    // what was loaded is not written to
+    assert.deepEqual(params.wms, { enabled: false, options: { format: 'image/png' } });
+  });
+
+  it('keeps the base map it has chosen', () => {
+    const params = { wms: { enabled: false, selectedTmsLayer: darkMap } };
+    assert.equal(withBaseMap(params, [roadMap, darkMap]), params);
+  });
+
+  it('is left as it is when the maps service has no base map, or it has no map settings', () => {
+    const params = { wms: { enabled: false } };
+    assert.equal(withBaseMap(params, []), params);
+    const none = { mapType: 'Heatmap' };
+    assert.equal(withBaseMap(none, [roadMap]), none);
+  });
+});
+
 describe('what the editor and a dashboard hand each other', () => {
   const container = { containerId: 'd1', containerName: '[Logs] Web Traffic' };
 
@@ -278,36 +307,69 @@ describe('what the editor and a dashboard hand each other', () => {
     assert.deepEqual(visualizationPackage('v2', container), { type: 'visualization', input: { savedObjectId: 'v2' }, containerInfo: container });
     assert.deepEqual(visualizationPackage('v2'), { type: 'visualization', input: { savedObjectId: 'v2' } });
   });
+});
 
-  it('goes back to where the dashboard was, with the time of now', () => {
-    const last = "/app/dashboards#/view/d1?_g=(time:(from:now-15m,to:now))&_a=(description:'',panels:!(),viewMode:edit)";
-    const now = '(time:(from:now-7d,to:now))';
-    // Where the dashboards were last, what was not saved too, the time of now in its place
+describe('what the editor does with what cannot be loaded', () => {
+  const G = '(filters:!(),refreshInterval:(pause:!t,value:0),time:(from:now-7d,to:now))';
+  // The address as the browser keeps it once it is gone to, as the reference's was read
+  const asKept = (to: string) => {
+    const url = new URL(to, 'http://localhost');
+    return `${url.pathname}${url.search}${url.hash}`;
+  };
+
+  it('says a missing visualization is missing, and the landing page takes its place', () => {
+    const failure = loadFailure(new SavedObjectNotFound('visualization', 'frame-no-such-vis'), 'frame-no-such-vis', G);
+    assert.equal(failure.title, 'Saved object is missing');
+    assert.equal(failure.text, 'Could not locate that visualization (id: frame-no-such-vis)');
+    assert.equal(failure.replace, true);
     assert.equal(
-      originatingAppUrl('dashboards', { lastAddress: last, containerInfo: container, globalParam: now }),
-      "/app/dashboards#/view/d1?_g=(time:(from:now-7d,to:now))&_a=(description:'',panels:!(),viewMode:edit)"
+      asKept(failure.to),
+      `/app/visualize#/?notFound=visualization&notFoundMessage=Could%20not%20locate%20that%20visualization%20(id:%20frame-no-such-vis)&_g=${G}`
     );
+  });
+
+  it("sends a missing saved search or index pattern to the visualization's page among the saved objects", () => {
+    const search = loadFailure(new SavedObjectNotFound('search', 'frame-gone-search'), 'frame-fail-nosearch', G);
+    assert.deepEqual([search.title, search.text, search.replace], ['Saved object is missing', 'Could not locate that search (id: frame-gone-search)', false]);
     assert.equal(
-      originatingAppUrl('dashboards', { lastAddress: last }),
-      "/app/dashboards#/view/d1?_g=(time:(from:now-15m,to:now))&_a=(description:'',panels:!(),viewMode:edit)"
+      asKept(search.to),
+      '/app/management/opensearch-dashboards/objects/savedVisualizations/frame-fail-nosearch?notFound=search&notFoundMessage=Could%20not%20locate%20that%20search%20(id:%20frame-gone-search)'
     );
-    // An address without `_g` takes the time of now after what it has
+    // A new one has no id: the original writes `undefined`
+    const pattern = loadFailure(new SavedObjectNotFound('index-pattern', 'frame-gone-pattern', INDEX_PATTERNS_LINK), undefined, G);
+    assert.equal(pattern.text, 'Could not locate that index-pattern (id: frame-gone-pattern), [click here to re-create it](management/opensearch-dashboards/indexPatterns)');
     assert.equal(
-      originatingAppUrl('dashboards', { lastAddress: '/app/dashboards#/create?_a=(viewMode:edit)', globalParam: now }),
-      '/app/dashboards#/create?_a=(viewMode:edit)&_g=(time:(from:now-7d,to:now))'
+      asKept(pattern.to),
+      '/app/management/opensearch-dashboards/objects/savedVisualizations/undefined?notFound=index-pattern&notFoundMessage=Could%20not%20locate%20that%20index-pattern%20(id:%20frame-gone-pattern),%20[click%20here%20to%20re-create%20it](management/opensearch-dashboards/indexPatterns)'
     );
-    assert.equal(originatingAppUrl('dashboards', { lastAddress: '/app/dashboards', globalParam: now }), '/app/dashboards');
-    // Not where the dashboards were (the page was loaded again since): the container, to be edited
-    for (const lastAddress of [undefined, '/app/dashboardsx#/view/d9', '/app/visualize#/edit/v1']) {
-      assert.equal(
-        originatingAppUrl('dashboards', { lastAddress, containerInfo: container, globalParam: now }),
-        '/app/dashboards#/view/d1?_g=(time:(from:now-7d,to:now))&_a=(viewMode:edit)'
-      );
-    }
-    assert.equal(originatingAppUrl('dashboards', { containerInfo: { containerId: '' }, globalParam: now }), '/app/dashboards#/create?_g=(time:(from:now-7d,to:now))');
-    assert.equal(originatingAppUrl('dashboards', { globalParam: now }), '/app/dashboards#/?_g=(time:(from:now-7d,to:now))');
-    assert.equal(originatingAppUrl('dashboards', { containerInfo: container }), '/app/dashboards#/view/d1?_a=(viewMode:edit)');
-    // An application without a URL tracker opens at its start
-    assert.equal(originatingAppUrl('canvas', { lastAddress: '/app/canvas#/workpad/w1' }), '/app/canvas');
+  });
+
+  it('says any other failure as a failed load, and the landing page takes its place', () => {
+    const failure = loadFailure(new Error('Invalid visualization type "frame_no_such_kind"'), 'frame-fail-badtype', G);
+    assert.deepEqual(failure, {
+      title: 'Failed to load the visualization',
+      text: 'Invalid visualization type "frame_no_such_kind"',
+      to: `/app/visualize#/?_g=${G}`,
+      replace: true,
+    });
+    assert.equal(loadFailure(new Error('You must provide a valid visualization type'), undefined, undefined).to, '/app/visualize');
+  });
+
+  it('tells a saved object the server does not have as missing, and any other failure as it is', async () => {
+    const failureOf = async (fetch: () => Promise<unknown>) => {
+      try {
+        await found('search', 's1', fetch);
+      } catch (error) {
+        return error;
+      }
+      return undefined;
+    };
+    const missing = await failureOf(() => Promise.reject(new HttpFetchError(404, 'Not Found')));
+    assert.ok(missing instanceof SavedObjectNotFound);
+    assert.equal(missing instanceof SavedObjectNotFound && missing.savedObjectType, 'search');
+    assert.equal(missing instanceof Error && missing.message, 'Could not locate that search (id: s1)');
+    const refused = new HttpFetchError(500, 'Internal Server Error');
+    assert.equal(await failureOf(() => Promise.reject(refused)), refused);
+    assert.equal(await found('search', 's1', () => Promise.resolve('loaded')), 'loaded');
   });
 });
