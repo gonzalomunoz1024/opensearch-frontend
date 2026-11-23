@@ -219,7 +219,7 @@ export function legacyRequest(endpoint: string, params: Params = {}): LegacyRequ
     };
   }
 
-  const known = ENDPOINTS[endpoint];
+  const known = Object.hasOwn(ENDPOINTS, endpoint) ? ENDPOINTS[endpoint] : undefined;
   if (!known) throw new Error(`called with an invalid endpoint: ${endpoint}`);
   const given = (name: string) => params[name] !== undefined && params[name] !== null;
   const path = known.paths.find((candidate) => partNames(candidate).every(given));
