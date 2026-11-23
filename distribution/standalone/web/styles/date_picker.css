@@ -11,8 +11,6 @@
 .shlDatePicker,
 .shlQuickMenu__panel,
 .shlDatePopover {
-  /* The component library's own tint of a button (a tenth of the accent in both themes) */
-  --shl-dp-tint: color-mix(in srgb, var(--color-accent) 10%, transparent);
   /* An end of the range that cannot be applied */
   --shl-dp-invalid-text: #c3332b;
   --shl-dp-invalid-fill: #ffebea;
@@ -38,6 +36,21 @@
   --shl-dp-preselected: #01070e;
   --shl-dp-selected-hover: #0077f0;
   --shl-dp-on-accent-ink: #000000;
+}
+
+/*
+ * The original's ring of the focus: its base style draws it round what has the focus and no class
+ * of the component library (the calendar's parts), the library round a link and a switch. It
+ * closes in from six pixels to three in 0.4 s, on any focus, the pointer's too.
+ */
+@keyframes shlFocusRingIn {
+  from {
+    box-shadow: 0 0 0 6px transparent;
+  }
+
+  to {
+    box-shadow: 0 0 0 3px var(--color-focus-ring);
+  }
 }
 
 /* --- The group: the quick menu's button, then the range --------------------------------------- */
@@ -88,7 +101,7 @@
 
 .shlDatePicker__quick:hover,
 .shlDatePicker__quick:focus {
-  background-color: var(--shl-dp-tint);
+  background-color: var(--color-accent-tint);
 }
 
 .shlDatePicker__range {
@@ -266,7 +279,7 @@ span.shlDatePicker__pretty {
 
 .shlQuickMenu__step:hover,
 .shlQuickMenu__step:focus {
-  background-color: var(--shl-dp-tint);
+  background-color: var(--color-accent-tint);
 }
 
 .shlQuickMenu__step:active {
@@ -279,7 +292,8 @@ span.shlDatePicker__pretty {
   margin-top: var(--space-2);
 }
 
-.shlQuickMenu__fields > .atlField {
+.shlQuickMenu__field,
+.shlRefreshEvery__field {
   flex: 1 1 0;
   min-width: 0;
 }
@@ -378,10 +392,7 @@ span.shlDatePicker__pretty {
 
 .shlQuickMenu__link:focus {
   background-color: var(--shl-dp-link-focus-fill);
-}
-
-.shlQuickMenu__link:focus-visible {
-  box-shadow: 0 0 0 3px var(--color-focus-ring);
+  animation: 0.4s var(--ease-out-quint) forwards shlFocusRingIn;
 }
 
 /* "Refresh every": the number and the unit share what the button leaves */
@@ -389,11 +400,6 @@ span.shlDatePicker__pretty {
   display: flex;
   gap: var(--space-2);
   margin-top: var(--space-2);
-}
-
-.shlRefreshEvery > .atlField {
-  flex: 1 1 0;
-  min-width: 0;
 }
 
 .shlRefreshEvery__toggle {
@@ -535,9 +541,10 @@ span.shlDatePicker__pretty {
   min-width: 0;
 }
 
+/* A row as tall as the switch, with no line around it */
 .shlDatePopover__switch {
+  display: flex;
   margin: var(--space-4) 0;
-  line-height: 20px;
 }
 
 /*
@@ -614,8 +621,8 @@ span.shlDatePicker__pretty {
   transform: scale(0.95);
 }
 
-.shlDatePopover__switch .atlSwitch__track:focus-visible {
-  box-shadow: 0 0 0 3px var(--color-focus-ring);
+.shlDatePopover__switch .atlSwitch__track:focus {
+  animation: 0.4s var(--ease-out-quint) forwards shlFocusRingIn;
 }
 
 .shlDatePopover__switch .atlSwitch > span {
@@ -697,13 +704,11 @@ span.shlDatePicker__pretty {
   box-shadow: 0 0 0 2px var(--color-surface-secondary);
 }
 
+/* Its fill, and over the fill's edge the ring of the original's base style */
 .shlCalendar__nav:focus {
   background-color: var(--color-accent-callout-fill);
   box-shadow: 0 0 0 2px var(--color-accent-callout-fill);
-}
-
-.shlCalendar__nav:focus-visible {
-  box-shadow: 0 0 0 3px var(--color-focus-ring);
+  animation: 0.4s var(--ease-out-quint) forwards shlFocusRingIn;
 }
 
 .shlCalendar__header {
@@ -743,11 +748,11 @@ span.shlDatePicker__pretty {
   text-decoration: underline;
 }
 
-.shlCalendar__read:focus-visible,
-.shlCalendar__month:focus-visible,
-.shlCalendar__timeBox:focus-visible,
-.shlCalendar__timeList:focus-visible {
-  box-shadow: 0 0 0 3px var(--color-focus-ring);
+.shlCalendar__read:focus,
+.shlCalendar__month:focus,
+.shlCalendar__timeBox:focus,
+.shlCalendar__timeList:focus {
+  animation: 0.4s var(--ease-out-quint) forwards shlFocusRingIn;
 }
 
 .shlCalendar__dayNames,
@@ -833,9 +838,9 @@ span.shlDatePicker__pretty {
   animation: shlFadeIn var(--duration-fast) ease-in;
 }
 
+/* Focused as it opens, it has the ring in place of its fade, as the original's */
 .shlCalendar__dropdown:focus {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--color-focus-ring);
+  animation: 0.4s var(--ease-out-quint) forwards shlFocusRingIn;
 }
 
 .shlCalendar__dropdown--year {
@@ -894,12 +899,18 @@ span.shlDatePicker__pretty {
   background: var(--color-accent-callout-fill);
 }
 
-.shlCalendar__timeBox {
+.shlCalendar__timeColumn {
   position: relative;
   display: flex;
   flex-direction: column;
   flex-grow: 1;
   padding-left: var(--space-1);
+}
+
+.shlCalendar__timeBox {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
 }
 
 .shlCalendar__timeList {

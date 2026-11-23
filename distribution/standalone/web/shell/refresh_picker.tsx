@@ -46,25 +46,29 @@ export function RefreshEvery({
         Refresh every
       </legend>
       <div className="shlRefreshEvery">
-        <NumberField
-          compact
-          value={value}
-          onChange={(next) => apply(next ?? '', units)}
-          onKeyDown={onKeyDown}
-          aria-label="Refresh interval value"
-          aria-describedby={described}
-          testId="superDatePickerRefreshIntervalInput"
-        />
-        <Select
-          compact
-          value={units}
-          onChange={(next) => apply(value, next as RefreshUnit)}
-          onKeyDown={onKeyDown}
-          options={REFRESH_UNITS.map((unit) => ({ value: unit.value, label: unit.label }))}
-          aria-label="Refresh interval units"
-          aria-describedby={described}
-          testId="superDatePickerRefreshIntervalUnitsSelect"
-        />
+        <div className="shlRefreshEvery__field">
+          <NumberField
+            compact
+            value={value}
+            onChange={(next) => apply(next ?? '', units)}
+            onKeyDown={onKeyDown}
+            aria-label="Refresh interval value"
+            aria-describedby={described}
+            testId="superDatePickerRefreshIntervalInput"
+          />
+        </div>
+        <div className="shlRefreshEvery__field">
+          <Select
+            compact
+            value={units}
+            onChange={(next) => apply(value, next as RefreshUnit)}
+            onKeyDown={onKeyDown}
+            options={REFRESH_UNITS.map((unit) => ({ value: unit.value, label: unit.label }))}
+            aria-label="Refresh interval units"
+            aria-describedby={described}
+            testId="superDatePickerRefreshIntervalUnitsSelect"
+          />
+        </div>
         <Button
           className="shlRefreshEvery__toggle"
           icon={refreshInterval.pause ? 'play' : 'stop'}

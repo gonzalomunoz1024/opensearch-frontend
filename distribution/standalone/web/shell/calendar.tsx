@@ -461,31 +461,35 @@ function TimeList({
           </p>
         )}
       </span>
-      <div
-        className="shlCalendar__timeBox"
-        tabIndex={0}
-        onKeyDown={onKeyDown}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-      >
-        <ul ref={list} className="shlCalendar__timeList" role="listbox">
-          {Array.from({ length: SLOTS }, (_, slot) => (
-            <li
-              key={slot}
-              className={cx(
-                'shlCalendar__time',
-                slot === activeSlot
-                  ? 'shlCalendar__time--selected'
-                  : slot === marked && 'shlCalendar__time--preselected'
-              )}
-              role="option"
-              aria-selected={slot === activeSlot}
-              onClick={() => onChoose(slot)}
-            >
-              {slotLabel(slot)}
-            </li>
-          ))}
-        </ul>
+      <div className="shlCalendar__timeColumn">
+        <div
+          className="shlCalendar__timeBox"
+          tabIndex={0}
+          onKeyDown={onKeyDown}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+        >
+          {/* Tab stops at the list as at the original's, which the browser lets the keyboard
+              scroll; said here, so that the popover's hold of Tab knows it */}
+          <ul ref={list} className="shlCalendar__timeList" role="listbox" tabIndex={0}>
+            {Array.from({ length: SLOTS }, (_, slot) => (
+              <li
+                key={slot}
+                className={cx(
+                  'shlCalendar__time',
+                  slot === activeSlot
+                    ? 'shlCalendar__time--selected'
+                    : slot === marked && 'shlCalendar__time--preselected'
+                )}
+                role="option"
+                aria-selected={slot === activeSlot}
+                onClick={() => onChoose(slot)}
+              >
+                {slotLabel(slot)}
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
     </div>
   );

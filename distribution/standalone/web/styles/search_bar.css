@@ -369,8 +369,15 @@
   overflow: hidden;
 }
 
+/* As the original's small button: 8 px between the icon and the text, and at rest a line of
+   nothing round it where the success outline is drawn */
 .shlUpdateButton {
+  gap: var(--space-2);
   min-width: 118px;
+}
+
+.shlUpdateButton:not(.atlButton--healthyOutline) {
+  border: 1px solid transparent;
 }
 
 /* Narrow, the button is its icon */

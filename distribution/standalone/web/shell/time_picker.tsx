@@ -146,37 +146,44 @@ function QuickSelectFields({
         </div>
       </div>
       <div className="shlQuickMenu__fields">
-        <Select
-          compact
-          value={state.timeTense}
-          onChange={(next) => setState({ ...state, timeTense: next === 'next' ? 'next' : 'last' })}
-          onKeyDown={onKeyDown}
-          options={TENSES}
-          aria-label="Time tense"
-          aria-describedby={described}
-        />
-        <input
-          type="number"
-          className="atlField atlField--s"
-          value={state.timeValue}
-          onChange={(event) => {
-            // Read as the original reads it: the whole number it starts with, nothing for the rest
-            const value = parseInt(event.target.value, 10);
-            setState({ ...state, timeValue: Number.isNaN(value) ? 0 : value });
-          }}
-          onKeyDown={onKeyDown}
-          aria-label="Time value"
-          aria-describedby={described}
-        />
-        <Select
-          compact
-          value={state.timeUnits}
-          onChange={(next) => setState({ ...state, timeUnits: isRelativeUnit(next) ? next : state.timeUnits })}
-          onKeyDown={onKeyDown}
-          options={UNITS}
-          aria-label="Time unit"
-          aria-describedby={described}
-        />
+        {/* Each in an item of its own, so that the three share the room whatever their padding */}
+        <div className="shlQuickMenu__field">
+          <Select
+            compact
+            value={state.timeTense}
+            onChange={(next) => setState({ ...state, timeTense: next === 'next' ? 'next' : 'last' })}
+            onKeyDown={onKeyDown}
+            options={TENSES}
+            aria-label="Time tense"
+            aria-describedby={described}
+          />
+        </div>
+        <div className="shlQuickMenu__field">
+          <input
+            type="number"
+            className="atlField atlField--s"
+            value={state.timeValue}
+            onChange={(event) => {
+              // Read as the original reads it: the whole number it starts with, nothing for the rest
+              const value = parseInt(event.target.value, 10);
+              setState({ ...state, timeValue: Number.isNaN(value) ? 0 : value });
+            }}
+            onKeyDown={onKeyDown}
+            aria-label="Time value"
+            aria-describedby={described}
+          />
+        </div>
+        <div className="shlQuickMenu__field">
+          <Select
+            compact
+            value={state.timeUnits}
+            onChange={(next) => setState({ ...state, timeUnits: isRelativeUnit(next) ? next : state.timeUnits })}
+            onKeyDown={onKeyDown}
+            options={UNITS}
+            aria-label="Time unit"
+            aria-describedby={described}
+          />
+        </div>
         <Button className="shlQuickMenu__apply" disabled={state.timeValue <= 0} onClick={apply} aria-describedby={described}>
           Apply
         </Button>
