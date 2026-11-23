@@ -5,7 +5,7 @@
  * panels, titles and spaces of the plugin's pages, and the parts the two kinds of job share.
  */
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Button, Panel, cx } from '../../components/basic';
 import { CodeEditor } from '../../components/code_editor';
 import { SearchField, TextArea, TextField } from '../../components/form';
@@ -15,7 +15,7 @@ import { Pagination } from '../../components/table';
 import { LocalTable, ism, toasts, type Answer, type TableColumn } from './common';
 import { useSpaced } from './index_select';
 import { leadingDebounce } from './jobs';
-import { aceActiveLine, aceJsonTokens } from './policy_model';
+import { aceActiveLine, aceGutterWidth, aceJsonTokens } from './policy_model';
 import { wildcardOption, type FieldItem } from './rollup_model';
 
 // --- The panels and spaces of the plugin's pages ------------------------------------------------------
@@ -217,6 +217,10 @@ export function FormButtons({ children }: { children: ReactNode }) {
  * with its grey gutter, or its dark one in the dark theme, and the line of the cursor on a band.
  * The cursor starts where the plugin's editor leaves it: at the start of a text that arrives after
  * the editor is drawn, at the end of one it is drawn with (`cursorAtEnd`).
+ *
+ * As the plugin's, the text is reached through a hint that lies over it: a click on it, or Enter
+ * once the Tab key has come to it and shown it, starts the editing where the cursor was left, and
+ * Escape goes back to the hint without closing what the editor is in.
  */
 export function AceJsonEditor({
   value,
@@ -234,19 +238,75 @@ export function AceJsonEditor({
   const [cursor, setCursor] = useState<[number, number]>(() =>
     cursorAtEnd ? [value.length, value.length] : [0, 0]
   );
+  const [editing, setEditing] = useState(false);
+  const [scrolled, setScrolled] = useState(0);
+  const [lineHeight, setLineHeight] = useState(16);
+  const box = useRef<HTMLDivElement>(null);
+  const hint = useRef<HTMLButtonElement>(null);
+  const area = () => box.current?.querySelector<HTMLTextAreaElement>('textarea');
+  useEffect(() => {
+    // The Tab key stops at the hint, never in the text
+    const text = area();
+    if (text) text.tabIndex = -1;
+    const line = box.current?.querySelector('.atlCodeEditor__line');
+    if (line) setLineHeight(line.getBoundingClientRect().height || 16);
+  }, []);
+  const start = () => {
+    setEditing(true);
+    const text = area();
+    if (!text) return;
+    text.focus({ preventScroll: true });
+    text.setSelectionRange(Math.min(cursor[0], value.length), Math.min(cursor[1], value.length));
+  };
   const active = aceActiveLine(value, cursor[0], cursor[1]);
+  const gutter = aceGutterWidth(value.split('\n').length, height, lineHeight, scrolled);
   return (
-    <CodeEditor
-      value={value}
-      onChange={onChange}
-      height={height}
-      tokenize={aceJsonTokens}
-      ariaLabel="Code Editor"
-      testId={testId}
-      className="ismAce"
-      markedLines={active === undefined ? undefined : [active, active]}
-      onCursor={(start, end) => setCursor([start, end])}
-    />
+    <div
+      ref={box}
+      className="ismAceBox"
+      style={{ '--ace-gutter-width': `${gutter}px` } as CSSProperties}
+      onBlur={(event) => {
+        if (event.target instanceof HTMLTextAreaElement) setEditing(false);
+      }}
+      data-test-subj="codeEditorContainer"
+    >
+      <button
+        ref={hint}
+        type="button"
+        className={cx('ismAceHint', editing && 'ismAceHint--inactive')}
+        tabIndex={editing ? -1 : 0}
+        onClick={start}
+        onKeyDown={(event) => {
+          if (event.key !== 'Enter') return;
+          event.preventDefault();
+          start();
+        }}
+        data-test-subj="codeEditorHint"
+      >
+        <p>Press Enter to start editing.</p>
+        <p>When you&apos;re done, press Escape to stop editing.</p>
+      </button>
+      <CodeEditor
+        value={value}
+        onChange={onChange}
+        height={height}
+        tokenize={aceJsonTokens}
+        ariaLabel="Code Editor"
+        testId={testId}
+        className="ismAce"
+        markedLines={active === undefined ? undefined : [active, active]}
+        onCursor={(from, to) => setCursor([from, to])}
+        onScroll={setScrolled}
+        onKeyDown={(event) => {
+          if (event.key !== 'Escape') return;
+          // The key leaves the text and nothing else hears it
+          event.preventDefault();
+          event.stopPropagation();
+          setEditing(false);
+          hint.current?.focus();
+        }}
+      />
+    </div>
   );
 }
 

@@ -458,11 +458,233 @@
   margin: var(--space-2) 0;
 }
 
-.ismIndent {
+/* The flyout that writes a state of a policy, as the plugin's: half the window, between 424 and
+   600 px wide, under the header, 24 px around its title and its form, no cross, and its form
+   fading into its edges */
+.ismSf.atlFlyout {
+  top: var(--header-height);
+  width: 50vw;
+  min-width: 424px;
+  max-width: 600px;
+}
+
+.ismSf .atlFlyout__header {
+  padding: var(--space-6);
+}
+
+.ismSf .atlFlyout__header h2 {
+  overflow: visible;
+  white-space: normal;
+  text-overflow: clip;
+}
+
+.ismSf .atlFlyout__body {
+  padding: var(--space-6);
+  font-size: var(--font-size-s);
+  mask-image: linear-gradient(to bottom, rgb(255 0 0 / 10%) 0%, red 7.5px, red calc(100% - 7.5px), rgb(255 0 0 / 10%) 100%);
+}
+
+.ismSf .atlFlyout__footer {
+  padding: var(--space-4) var(--space-6);
+}
+
+/* What is under the flyout: one button at each end, or both at the right; Cancel has no padding,
+   as the plugin's flush button */
+.ismSfFoot {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ismSfFoot--end {
+  justify-content: flex-end;
+}
+
+.ismSfFoot__cancel.atlButton {
+  padding-inline: 0;
+}
+
+.ismSfFoot--end .ismSfFoot__cancel.atlButton {
+  margin-right: var(--space-4);
+}
+
+/* The headings in the flyout: 17 px, and 7 px over a field of the state itself */
+.ismSfTitle {
+  margin: 0;
+  font-size: var(--font-size-l);
+  font-weight: var(--font-weight-semibold);
+  line-height: 22px;
+}
+
+.ismSfTitle--field {
+  margin-bottom: 7px;
+}
+
+/* What an action or a transition is, in the thin 12 px type the plugin writes it in */
+.ismSfIntro {
+  font-size: var(--font-size-xs);
+  font-weight: 200;
+  line-height: 18px;
+}
+
+.ismSfRow__error {
+  padding-top: var(--space-1);
+  color: var(--color-critical);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+/* A switch alone on its line, which is as tall as the switch */
+.ismSfSwitch {
+  line-height: 1;
+}
+
+.ismSfOrder {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-6);
+}
+
+.ismSfRule {
+  width: 100%;
+  height: 1px;
+  margin: var(--space-6) 0;
+  border: 0;
+  background: var(--color-border-light);
+}
+
+/* The plugin writes these two itself, the same in both modes: grey thin text of 15 px, and a pale
+   box around what says that nothing is added yet */
+.ismSfGrey {
+  margin: 0;
+  color: grey;
+  font-size: 15px;
+  font-weight: 200;
+  line-height: 21px;
+}
+
+.ismSfNone {
+  margin: 0;
+  padding: 5px;
+  background: #f5f7fa;
+  line-height: 21px;
+}
+
+/* An action or a transition of the state in a panel: what moves it, what it does, and the round
+   buttons that delete and edit it; 10 px between two */
+.ismSfItems {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-5);
+  gap: 10px;
+}
+
+.ismSfItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.ismSfItem__handle {
+  display: flex;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  cursor: grab;
+}
+
+.ismSfItem__text {
+  flex: 1 1 0;
+  min-width: 0;
+  line-height: 1;
+}
+
+/* The orange box of a warning, without a title */
+.ismSfWarning {
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-warning-callout-fill);
+}
+
+.ismSfWarning p {
+  margin: 0;
+  line-height: 21px;
+}
+
+/* The aliases of an action: a field of 400 px with how many more it takes under it */
+.ismSfCombo {
+  display: block;
+  max-width: 400px;
+}
+
+.ismSfLimit {
+  display: block;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+/* A list that writes its choices with capitals, and one that does not list its empty choice */
+.ismSfCapital {
+  text-transform: capitalize;
+}
+
+.ismSfNoBlank option[value=""] {
+  display: none;
+}
+
+/* What is folded away under an action's settings: an arrow that turns and a line of text, then the
+   settings 28 px in from both sides and 24 px apart */
+.ismSfMore__button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  line-height: 21px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ismSfMore__button:hover,
+.ismSfMore__button:focus {
+  text-decoration: underline;
+}
+
+.ismSfMore__arrow {
+  display: inline-flex;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0 var(--space-2) 0 var(--space-1);
+  border-radius: 8px;
+}
+
+.ismSfMore__arrow .atlIcon {
+  transition: transform var(--duration-normal) var(--ease-out-quint);
+}
+
+.ismSfMore--open .ismSfMore__arrow .atlIcon {
+  transform: rotate(90deg);
+}
+
+.ismSfMore__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: 5px 28px 29px;
+}
+
+.ismSfMore__body[hidden] {
+  display: none;
 }
 
 /* The two ways to write a policy, in the plugin's dialog of 600 px: a line of what is asked and each
@@ -1143,13 +1365,18 @@
   line-height: 22px;
 }
 
+/* In the red the theme writes for a label in error */
 .ismLabel__title--invalid {
-  color: var(--color-critical);
+  color: var(--color-critical-button-text);
 }
 
+/* "– optional" follows the name at once, slanted and as heavy as it */
 .ismLabel__optional {
   color: var(--color-text-secondary);
-  font-weight: var(--font-weight-regular);
+}
+
+.ismLabel__optional em {
+  font-style: italic;
 }
 
 .ismLabel__help {
@@ -1208,14 +1435,60 @@
   gap: var(--space-2);
 }
 
+/* What lies over the plugin's code editor until it is edited: it takes the click that starts the
+   editing, and shows itself, white at 70 % as the theme writes it in both modes, when the Tab key
+   comes to it */
+.ismAceBox {
+  position: relative;
+}
+
+.ismAceHint {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: rgb(255 255 255 / 70%);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-s);
+  line-height: 21px;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.ismAceHint p {
+  margin: 0;
+}
+
+.ismAceHint:focus {
+  border: 2px solid var(--color-accent);
+  outline: none;
+  opacity: 1;
+}
+
+.ismAceHint.ismAceHint--inactive {
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* JSON as the plugin's code editor shows it. Light: Ace's "github" theme in Ace's own fonts, the
-   numbers of the lines in a grey gutter 50 px wide, bold brackets and keywords, a line at the 80th
-   column. Dark: Ace's dark theme as the Atlas theme colours it, in the Atlas code font, with a line
-   at the left of the gutter. Lines are as tall as the font makes them, which is what Ace measures,
-   and the line of the cursor lies on a band. */
+   numbers of the lines in a grey gutter as wide as the last number shown needs (50 px for two
+   digits), bold brackets and keywords, a line at the 80th column. Dark: Ace's dark theme as the
+   Atlas theme colours it, in the Atlas code font, with a line at the left of the gutter. Lines are
+   as tall as the font makes them, which is what Ace measures, and the line of the cursor lies on
+   a band. */
 .ismAce.atlCodeEditor {
   --ace-edge: 0px;
-  --code-gutter: calc(54px + var(--ace-edge));
+  --code-gutter: calc(var(--ace-gutter-width, 50px) + 4px + var(--ace-edge));
   --ace-edge-color: transparent;
   --ace-gutter: #e8e8e8;
   --ace-gutter-text: #aaaaaa;
@@ -1236,7 +1509,7 @@
   border-radius: 0;
   background:
     linear-gradient(var(--ace-edge-color), var(--ace-edge-color)) 0 0 / var(--ace-edge) 100% no-repeat,
-    linear-gradient(var(--ace-gutter), var(--ace-gutter)) 0 0 / calc(50px + var(--ace-edge)) 100% no-repeat,
+    linear-gradient(var(--ace-gutter), var(--ace-gutter)) 0 0 / calc(var(--ace-gutter-width, 50px) + var(--ace-edge)) 100% no-repeat,
     var(--ace-background);
   color: var(--ace-text);
   font-family: Monaco, Menlo, 'Ubuntu Mono', Consolas, source-code-pro, monospace;
@@ -1294,7 +1567,7 @@
 }
 
 .ismAce .atlCodeEditor__line::before {
-  width: calc(37px + var(--ace-edge));
+  width: calc(var(--ace-gutter-width, 50px) - 13px + var(--ace-edge));
   margin-right: 17px;
   background: linear-gradient(90deg, var(--ace-edge-color) var(--ace-edge), var(--ace-gutter) var(--ace-edge));
   box-shadow: 13px 0 0 var(--ace-gutter);

@@ -431,6 +431,9 @@ const parses = (text: string): boolean => {
   }
 };
 
+/** Whether a part edited as text can be saved: it may be left empty, and is JSON otherwise */
+export const draftIsValid = (text: string | undefined): boolean => !text || parses(text);
+
 export function draftsAreValid(action: Action, drafts: Drafts): boolean {
   const type = actionType(action);
   if (type === 'allocation' || type === 'rollup') return parses(drafts.json ?? '');
@@ -498,6 +501,18 @@ export function aceJsonTokens(text: string): CodeToken[][] {
       ...rest,
     ];
   });
+}
+
+/**
+ * How wide Ace draws the numbers of the lines, in pixels: as wide as the number of the last line
+ * it draws needs, so 42 px up to line 9, 50 px up to line 99 and 59 px beyond. Ace draws the lines
+ * in sight and one more.
+ */
+export function aceGutterWidth(lines: number, shownHeight: number, lineHeight: number, scrolled = 0): number {
+  const shown =
+    lineHeight > 0 ? Math.floor(scrolled / lineHeight) + Math.ceil(shownHeight / lineHeight) + 1 : lines;
+  const last = Math.max(1, Math.min(lines, shown));
+  return Math.ceil(33 + String(last).length * 8.43);
 }
 
 /**

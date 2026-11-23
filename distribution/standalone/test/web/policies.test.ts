@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { leadingDebounce } from '../../web/apps/index_management/jobs';
-import { aceActiveLine, aceJsonTokens } from '../../web/apps/index_management/policy_model';
+import { aceActiveLine, aceGutterWidth, aceJsonTokens, draftIsValid } from '../../web/apps/index_management/policy_model';
 
 /** A clock whose time goes on only when told, with the timers set on it */
 function fakeClock() {
@@ -165,5 +165,47 @@ describe('the line the JSON editor draws on a band, as Ace does', () => {
   it('stays in the text when the text has become shorter than the cursor', () => {
     assert.equal(aceActiveLine('{}', 40, 40), 0);
     assert.equal(aceActiveLine('', 0, 0), 0);
+  });
+});
+
+describe('how wide the JSON editor draws the numbers of its lines, as Ace does', () => {
+  it('is as wide as the number of the last line of a short text needs', () => {
+    assert.equal(aceGutterWidth(1, 100, 16), 42);
+    assert.equal(aceGutterWidth(6, 500, 16), 42);
+    assert.equal(aceGutterWidth(9, 500, 16), 42);
+    assert.equal(aceGutterWidth(10, 500, 16), 50);
+    assert.equal(aceGutterWidth(99, 2000, 16), 50);
+    assert.equal(aceGutterWidth(100, 2000, 16), 59);
+  });
+
+  it('counts only the lines that are drawn: a long text in a low editor starts narrow', () => {
+    // 100 px: seven lines of 16 px and one more, six of 18 px and one more
+    assert.equal(aceGutterWidth(40, 100, 16), 42);
+    assert.equal(aceGutterWidth(40, 100, 18), 42);
+    assert.equal(aceGutterWidth(40, 600, 16), 50);
+  });
+
+  it('widens once the tenth line is drawn', () => {
+    assert.equal(aceGutterWidth(40, 100, 16, 31), 42);
+    assert.equal(aceGutterWidth(40, 100, 16, 32), 50);
+    assert.equal(aceGutterWidth(40, 100, 18, 53), 42);
+    assert.equal(aceGutterWidth(40, 100, 18, 54), 50);
+  });
+
+  it('is never narrower than one digit needs', () => {
+    assert.equal(aceGutterWidth(0, 100, 16), 42);
+    assert.equal(aceGutterWidth(5, 0, 16), 42);
+    assert.equal(aceGutterWidth(12, 100, 0), 50);
+  });
+});
+
+describe('a part of an action that is edited as text', () => {
+  it('may be left empty, and is JSON otherwise', () => {
+    assert.ok(draftIsValid(undefined));
+    assert.ok(draftIsValid(''));
+    assert.ok(draftIsValid('{ "source": "{{ctx.index}}_shrunken" }'));
+    assert.ok(draftIsValid('[]'));
+    assert.ok(!draftIsValid('{ "source": '));
+    assert.ok(!draftIsValid('x'));
   });
 });
