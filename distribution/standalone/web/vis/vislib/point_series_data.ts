@@ -42,7 +42,7 @@ export interface Ordered {
   date: boolean;
   /** Milliseconds, or the step of a number histogram */
   interval: number;
-  /** Moves a moment on by whole intervals, by the calendar for months and years */
+  /** Moves a moment on by whole intervals, by the calendar for days, weeks, months and years */
   addInterval: (value: number, times: number) => number;
   min?: number;
   max?: number;
@@ -99,10 +99,16 @@ export function buildPointSeries(
       ? options.percentFormat
       : (value: number) => column.format(value);
 
+  // A bucket's key that is not a number or a text (a range) is told apart by its text, and
+  // written from the key itself
+  const keys = new Map<string, unknown>();
   const xOf = (row: TableRow): number | string => {
     if (!xColumn) return '_all';
     const value = row[xColumn.id];
-    return typeof value === 'number' ? value : keyText(value);
+    if (typeof value === 'number') return value;
+    const text = keyText(value);
+    if (value !== null && typeof value === 'object') keys.set(text, value);
+    return text;
   };
   const xValues: Array<number | string> = [];
   const seenX = new Set<number | string>();
@@ -190,7 +196,7 @@ export function buildPointSeries(
     groupColumns,
     xValues,
     xLabel: xColumn ? xColumn.name : 'All docs',
-    xFormat: (value) => (xColumn ? keyLabel(xColumn, value) : String(value)),
+    xFormat: (value) => (xColumn ? keyLabel(xColumn, typeof value === 'string' && keys.has(value) ? keys.get(value) : value) : String(value)),
     yLabel: yColumns.length > 1 ? '' : (yColumns[0]?.name ?? ''),
     yFormat: yColumns[0] ? formatOf(yColumns[0]) : (value) => String(value),
     zLabel: zColumn?.name,

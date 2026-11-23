@@ -98,7 +98,9 @@ export function layoutPointSeries(
     const items: Item[] = [];
     const before = config.position === 'left' || config.position === 'top';
     const hasTitle = before ? config.show : config.show || config.titleShow;
-    const title: Item | undefined = hasTitle ? { kind: 'title', placed, size: titleSize(config.title) } : undefined;
+    // A title beside the chart is at least a pixel wide, even with no text (its min-width)
+    const depth = isHorizontal(config) ? titleSize(config.title) : Math.max(1, titleSize(config.title));
+    const title: Item | undefined = hasTitle ? { kind: 'title', placed, size: depth } : undefined;
     if (title) placed.title = { rect: { x: 0, y: 0, width: 0, height: 0 }, text: config.title, transform: '' };
     if (title && before) items.push(title);
     if (config.show) {

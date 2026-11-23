@@ -2,9 +2,14 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import type { AggConfig, TableColumn } from '../../web/lib/aggs';
+import { bucketFilter, tabify, type AggConfig, type AggContext, type TableColumn } from '../../web/lib/aggs';
+import { DEFAULT_FORMAT_SETTINGS } from '../../web/lib/field_formats';
+import type { Filter, IndexPattern } from '../../web/lib/types';
+import { splitTables, splitTimeFilter } from '../../web/vis/types';
 import { axisConfig, keptTicks, placeTick, truncateLabel, type AxisScaleInfo } from '../../web/vis/vislib/axis';
+import { heatmapColor } from '../../web/vis/vislib/color_maps';
 import { seriesColors, standardizeColor } from '../../web/vis/vislib/colors';
+import { colorBucket, heatmapColors, heatmapLabels } from '../../web/vis/vislib/heatmap';
 import { groupedCount, groupedNum, isColorDark } from '../../web/vis/vislib/point_series_chart';
 import {
   buildPointSeries,
@@ -159,12 +164,13 @@ describe('the axes of the classic charts', () => {
     const value = axisConfig({ labels: { show: false } }, 'value', { ordinal: false, title: '' });
     const category = axisConfig({ labels: { show: false } }, 'category', { ordinal: false, title: '' });
     const layout = layoutPointSeries(500, 300, [axis(value)], [axis(category)]);
-    // An axis with no labels is its ticks and five pixels; an empty column is a pixel wide
-    assert.deepEqual(layout.chart, { x: 11, y: 10, width: 488, height: 269 });
+    // An axis with no labels is its ticks and five pixels; a title beside it with no text is a
+    // pixel wide (its min-width), one under it nothing
+    assert.deepEqual(layout.chart, { x: 12, y: 10, width: 487, height: 269 });
     const [left, bottom] = layout.axes;
-    assert.deepEqual(left.rect, { x: 0, y: 10, width: 11, height: 269 });
+    assert.deepEqual(left.rect, { x: 1, y: 10, width: 11, height: 269 });
     assert.equal(left.transform, 'translate(11,0)');
-    assert.deepEqual(bottom.rect, { x: 11, y: 279, width: 488, height: 11 });
+    assert.deepEqual(bottom.rect, { x: 12, y: 279, width: 487, height: 11 });
   });
 });
 
@@ -498,3 +504,186 @@ describe('a pie', () => {
   });
 });
 
+describe('a heat map', () => {
+  it("takes its colours from the theme's maps, as getHeatmapColors does", () => {
+    // As OpenSearch Dashboards 3.9.0 gives them with the Atlas theme
+    assert.equal(heatmapColor(0, 'Greens'), 'rgb(255,255,255)');
+    assert.equal(heatmapColor(0.25, 'Greens'), 'rgb(204,227,222)');
+    assert.equal(heatmapColor(0.75, 'Greens'), 'rgb(101,173,158)');
+    assert.equal(heatmapColor(0, 'Green to Red'), 'rgb(52,199,89)');
+    assert.equal(heatmapColor(0.5, 'Green to Red'), 'rgb(255,149,0)');
+    assert.equal(heatmapColor(0.1, 'Green to Red'), 'rgb(93,189,71)');
+    // The dark theme's own green, orange and red
+    assert.equal(heatmapColor(0, 'Green to Red', true), 'rgb(48,209,88)');
+    assert.equal(heatmapColor(0, 'Greens', true), heatmapColor(0, 'Greens'));
+    assert.throws(() => heatmapColor(1.5, 'Greens'), /from 0 to 1/);
+    assert.throws(() => heatmapColor(0.5, 'Purples'), /invalid colorSchemaName/);
+  });
+
+  it('names its ranges as vislib does', () => {
+    const format = (value: number) => String(value);
+    // Over a stretch of more than ten, whole numbers
+    assert.deepEqual(heatmapLabels({ colorsNumber: 4 }, [0, 200000], format), [
+      '0 - 50000',
+      '50000 - 100000',
+      '100000 - 150000',
+      '150000 - 200000',
+    ]);
+    assert.deepEqual(heatmapLabels({ colorsNumber: 2 }, [1.5, 101.5], format), ['1 - 52', '52 - 102']);
+    // Over a shorter one, as they fall
+    assert.deepEqual(heatmapLabels({ colorsNumber: 2 }, [0.5, 10.5], format), ['0.5 - 5.5', '5.5 - 10.5']);
+    assert.deepEqual(heatmapLabels({ colorsNumber: 3, percentageMode: true }, [0, 9], format), ['0% - 34%', '34% - 67%', '67% - 100%']);
+    assert.deepEqual(heatmapLabels({ colorsNumber: 4 }, [5, 5], format), ['5']);
+    const ranges = { setColorRange: true, colorsRange: [{ from: 0, to: 10 }, { from: 10, to: null }] };
+    assert.deepEqual(heatmapLabels(ranges, [0, 100], (value) => `#${value}`), ['#0 - #10', '#10 - ']);
+  });
+
+  it('colours its ranges along the map, an empty name not at all', () => {
+    const colors = heatmapColors(['a', '', 'b', 'c'], 'Greens', false, false);
+    assert.deepEqual(Object.keys(colors), ['a', 'b', 'c']);
+    assert.equal(colors.a, heatmapColor(0, 'Greens'));
+    assert.equal(colors.b, heatmapColor(0.5, 'Greens'));
+    assert.equal(heatmapColors(['a', 'b'], 'Greens', true, false).a, heatmapColor(1, 'Greens'));
+  });
+
+  it('puts a value in the range it falls in', () => {
+    const params = { colorsNumber: 4 };
+    assert.equal(colorBucket(0, params, [0, 100]), 0);
+    assert.equal(colorBucket(60, params, [0, 100]), 2);
+    assert.equal(colorBucket(100, params, [0, 100]), 3);
+    assert.equal(colorBucket(7, params, [7, 7]), 0);
+    assert.equal(colorBucket(7, params, [NaN, NaN]), 3);
+    assert.equal(colorBucket(null, params, [0, 100]), -1);
+    const ranges = { setColorRange: true, colorsRange: [{ from: 0, to: 10 }, { from: 10, to: 20 }] };
+    assert.equal(colorBucket(15, ranges, [0, 100]), 1);
+    assert.equal(colorBucket(25, ranges, [0, 100]), -1);
+    // Nothing counts as zero among ranges
+    assert.equal(colorBucket(null, ranges, [0, 100]), 0);
+  });
+});
+
+const logs: IndexPattern = {
+  id: 'logs',
+  title: 'logs-*',
+  timeFieldName: 'timestamp',
+  fields: [
+    { name: 'timestamp', type: 'date', searchable: true, aggregatable: true },
+    { name: 'bytes', type: 'number', searchable: true, aggregatable: true },
+    { name: 'clientip', type: 'ip', searchable: true, aggregatable: true },
+    { name: 'machine.os.keyword', type: 'string', searchable: true, aggregatable: true },
+  ],
+  fieldFormatMap: {},
+};
+const logsContext: AggContext = { indexPattern: logs, formatSettings: { ...DEFAULT_FORMAT_SETTINGS, timeZone: 'UTC' } };
+const countAgg: AggConfig = { id: '1', enabled: true, type: 'count', schema: 'metric', params: {} };
+
+describe('the buckets of a chart', () => {
+  const keysOf = (agg: AggConfig, buckets: unknown[]) => {
+    const table = tabify([countAgg, agg], { aggregations: { '2': { buckets } } }, logsContext);
+    return table.rows.map((row) => table.columns[0].format(row[table.columns[0].id]));
+  };
+
+  it("write a range of numbers as the original's range format", () => {
+    const agg: AggConfig = { id: '2', enabled: true, type: 'range', schema: 'segment', params: { field: 'bytes' } };
+    assert.deepEqual(
+      keysOf(agg, [
+        { key: '*-1000.0', to: 1000, doc_count: 1 },
+        { key: '1000.0-5000.0', from: 1000, to: 5000, doc_count: 2 },
+        { key: '5000.0-*', from: 5000, doc_count: 3 },
+      ]),
+      ['≥ -∞ and < 1,000', '≥ 1,000 and < 5,000', '≥ 5,000 and < +∞']
+    );
+  });
+
+  it('write a range of dates from, to, before or after', () => {
+    const agg: AggConfig = { id: '2', enabled: true, type: 'date_range', schema: 'segment', params: { field: 'timestamp' } };
+    const day = Date.UTC(2026, 10, 16);
+    assert.deepEqual(
+      keysOf(agg, [
+        { key: 'a', to: day, doc_count: 1 },
+        { key: 'b', from: day, to: day + DAY, doc_count: 1 },
+        { key: 'c', from: day + DAY, doc_count: 1 },
+      ]),
+      [
+        'Before Nov 16, 2026 @ 00:00:00.000',
+        'Nov 16, 2026 @ 00:00:00.000 to Nov 17, 2026 @ 00:00:00.000',
+        'After Nov 17, 2026 @ 00:00:00.000',
+      ]
+    );
+  });
+
+  it('write a range of addresses from one to another, and a mask as it is', () => {
+    const agg = (ipRangeType: string): AggConfig => ({
+      id: '2',
+      enabled: true,
+      type: 'ip_range',
+      schema: 'segment',
+      params: { field: 'clientip', ipRangeType },
+    });
+    const buckets = [
+      { key: '0.0.0.0-127.255.255.255', from: '0.0.0.0', to: '127.255.255.255', doc_count: 1 },
+      { key: '128.0.0.0-*', from: '128.0.0.0', doc_count: 1 },
+    ];
+    assert.deepEqual(keysOf(agg('fromTo'), buckets), ['0.0.0.0 to 127.255.255.255', '128.0.0.0 to Infinity']);
+    assert.deepEqual(keysOf(agg('mask'), [{ key: '0.0.0.0/1', from: '0.0.0.0', to: '128.0.0.0', doc_count: 1 }]), ['0.0.0.0/1']);
+  });
+
+  it('end a month of a date histogram a calendar month on', () => {
+    const agg: AggConfig = { id: '2', enabled: true, type: 'date_histogram', schema: 'segment', params: { field: 'timestamp', interval: 'M' } };
+    const december = new Date(2026, 11, 1).getTime();
+    const table = tabify([countAgg, agg], { aggregations: { '2': { buckets: [{ key: december, doc_count: 1 }] } } }, logsContext);
+    const filter = bucketFilter(table.columns[0], december, logsContext);
+    assert.deepEqual(filter?.range?.timestamp, {
+      gte: new Date(december).toISOString(),
+      lt: new Date(2027, 0, 1).toISOString(),
+      format: 'strict_date_optional_time',
+    });
+  });
+
+  it('give each chart of a split its bucket', () => {
+    const split = columnOf('col-0-4', 'machine.os.keyword', aggOf('4', 'terms', 'split'));
+    const count = columnOf('col-1-1', 'Count', aggOf('1', 'count', 'metric'));
+    const parts = splitTables({
+      columns: [split, count],
+      rows: [
+        { 'col-0-4': 'ios', 'col-1-1': 1 },
+        { 'col-0-4': 'osx', 'col-1-1': 2 },
+        { 'col-0-4': 'ios', 'col-1-1': 3 },
+      ],
+    });
+    assert.deepEqual(
+      parts.map((part) => [part.label, part.split?.key, part.table.rows.length, part.table.columns.length]),
+      [
+        ['ios: machine.os.keyword', 'ios', 2, 1],
+        ['osx: machine.os.keyword', 'osx', 1, 1],
+      ]
+    );
+    assert.equal(parts[0].split?.column, split);
+  });
+});
+
+describe('the filters of a click', () => {
+  const range = (field: string, params: Record<string, unknown>, negate = false): Filter => ({
+    meta: { index: 'logs', alias: null, negate, disabled: false, type: 'range', key: field, params },
+    range: { [field]: params },
+  });
+  const phrase: Filter = {
+    meta: { index: 'logs', alias: null, negate: false, disabled: false, type: 'phrase', key: 'geo.src', params: { query: 'US' } },
+    query: { match_phrase: { 'geo.src': 'US' } },
+  };
+
+  it('set the time range by a range on the time field, and filter by the others', () => {
+    const time = range('timestamp', { gte: '2026-11-16T15:00:00.000Z', lt: '2026-11-16T18:00:00.000Z', format: 'strict_date_optional_time' });
+    const bytes = range('bytes', { gte: 0, lt: 1000 });
+    const { timeRange, rest } = splitTimeFilter([time, phrase, bytes], 'timestamp');
+    assert.deepEqual(timeRange, { from: '2026-11-16T15:00:00.000Z', to: '2026-11-16T18:00:00.000Z' });
+    assert.deepEqual(rest, [phrase, bytes]);
+  });
+
+  it('stay filters without a time field, and when one leaves its range out', () => {
+    const time = range('timestamp', { gte: '2026-11-16T15:00:00.000Z', lt: '2026-11-16T18:00:00.000Z' });
+    assert.deepEqual(splitTimeFilter([time], undefined), { rest: [time] });
+    const out = range('timestamp', { gte: '2026-11-16T15:00:00.000Z', lt: '2026-11-16T18:00:00.000Z' }, true);
+    assert.deepEqual(splitTimeFilter([out], 'timestamp'), { rest: [out] });
+  });
+});

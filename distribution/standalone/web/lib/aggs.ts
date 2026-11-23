@@ -10,6 +10,7 @@
 
 import {
   UNIT_MS,
+  addUnits,
   formatDate,
   parseDateMath,
   parseInterval,
@@ -17,6 +18,7 @@ import {
   scaledDateFormat,
   type AbsoluteRange,
   type Interval,
+  type TimeUnit,
 } from './dates';
 import {
   DEFAULT_FORMAT_SETTINGS,
@@ -807,12 +809,6 @@ function metricValue(column: TableColumn, bucket: Bucket): unknown {
   }
 }
 
-const rangeText = (key: RangeKey, format: (value: unknown) => string) => {
-  if (key.gte === undefined || key.gte === null) return key.lt === undefined || key.lt === null ? 'All' : `< ${format(key.lt)}`;
-  if (key.lt === undefined || key.lt === null) return `≥ ${format(key.gte)}`;
-  return `${format(key.gte)} to ${format(key.lt)}`;
-};
-
 function bucketColumn(agg: AggConfig, context: AggContext, id: string): TableColumn {
   const settings = context.formatSettings ?? DEFAULT_FORMAT_SETTINGS;
   const base: TableColumn = {
@@ -840,21 +836,37 @@ function bucketColumn(agg: AggConfig, context: AggContext, id: string): TableCol
     case 'histogram':
       return { ...base, interval: numberInterval(agg, context), format: fieldFormat };
     case 'range':
-      return { ...base, format: (value) => rangeText((value ?? {}) as RangeKey, fieldFormat) };
-    case 'date_range':
-      return {
-        ...base,
-        format: (value) =>
-          rangeText((value ?? {}) as RangeKey, (end) =>
-            formatDate(new Date(end as number), settings.dateFormat, settings.timeZone)
-          ),
-      };
-    case 'ip_range':
+      // As the original's range format: an open end is an infinity, as its number formats write one
       return {
         ...base,
         format: (value) => {
           const key = (value ?? {}) as RangeKey;
-          return key.label ?? rangeText(key, String);
+          const from = key.gte === undefined || key.gte === null ? '-∞' : fieldFormat(key.gte);
+          const to = key.lt === undefined || key.lt === null ? '+∞' : fieldFormat(key.lt);
+          return `≥ ${from} and < ${to}`;
+        },
+      };
+    case 'date_range':
+      // As the original's convertDateRangeToString
+      return {
+        ...base,
+        format: (value) => {
+          const key = (value ?? {}) as RangeKey;
+          const date = (end: unknown) =>
+            end === undefined || end === null ? '-' : formatDate(new Date(end as number), settings.dateFormat, settings.timeZone);
+          if (!key.gte) return `Before ${date(key.lt)}`;
+          if (!key.lt) return `After ${date(key.gte)}`;
+          return `${date(key.gte)} to ${date(key.lt)}`;
+        },
+      };
+    case 'ip_range':
+      // As the original's convertIPRangeToString: a mask as it is, a range from one address to another
+      return {
+        ...base,
+        format: (value) => {
+          const key = (value ?? {}) as RangeKey;
+          if (param<string>(agg, 'ipRangeType', 'fromTo') === 'mask') return key.label ?? '';
+          return `${key.gte ? String(key.gte) : '-Infinity'} to ${key.lt ? String(key.lt) : 'Infinity'}`;
         },
       };
     case 'terms':
@@ -1004,17 +1016,21 @@ export function bucketFilter(column: TableColumn, key: unknown, context: AggCont
       }
       if (key === OTHER_KEY) return undefined;
       return phraseFilter(field, key, indexId);
-    case 'date_histogram':
+    case 'date_histogram': {
       if (!field || typeof key !== 'number') return undefined;
+      // The bucket ends an interval on, days and longer counted by the calendar, as moment adds them
+      const step = /^(\d+(?:\.\d+)?)(ms|[smhdwMy])$/.exec(dateInterval(agg, context).expression);
+      const end = step ? addUnits(new Date(key), Number(step[1]), step[2] as TimeUnit).getTime() : key + (column.interval ?? UNIT_MS.d);
       return rangeFilter(
         field,
         {
           gte: new Date(key).toISOString(),
-          lt: new Date(key + (column.interval ?? UNIT_MS.d)).toISOString(),
+          lt: new Date(end).toISOString(),
           format: 'strict_date_optional_time',
         },
         indexId
       );
+    }
     case 'histogram':
       if (!field || typeof key !== 'number') return undefined;
       return rangeFilter(field, { gte: key, lt: key + (column.interval ?? 1) }, indexId);

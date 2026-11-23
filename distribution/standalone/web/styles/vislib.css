@@ -91,6 +91,18 @@
   font-weight: var(--font-weight-semibold);
 }
 
+/* A title beside the chart takes a pixel even when it has no text */
+.visWrapper .y-axis-title {
+  min-width: 1px;
+}
+
+/* The values written in a heat map's squares, in the page's own text */
+.visWrapper .square text {
+  font-family: var(--font-family);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-regular);
+}
+
 .visWrapper rect {
   opacity: 1;
 }
@@ -539,4 +551,55 @@
 
 .visTooltip__headerText {
   flex: 1 1 100%;
+}
+
+/* "Select filters to apply": as wide as what it offers, from 400 px, as the original's dialog */
+.atlModal.visFilterChoice {
+  width: auto;
+  min-width: min(400px, 100%);
+  max-width: 768px;
+}
+
+/* The dialog takes the focus when it opens, as the original's, which draws no ring around it */
+.atlModal.visFilterChoice:focus {
+  outline: none;
+}
+
+/* Each as wide as a form row of the original's at most, a long one going on to a second line */
+.visFilterChoice__row {
+  display: flex;
+  max-width: 400px;
+}
+
+.visFilterChoice__row + .visFilterChoice__row {
+  margin-top: var(--space-4);
+}
+
+/* Its switches are the original's compressed ones */
+.visFilterChoice .atlSwitch {
+  align-items: flex-start;
+  line-height: 16px;
+}
+
+.visFilterChoice .atlSwitch__track {
+  width: 28px;
+  height: 16px;
+  border-radius: 8px;
+}
+
+.visFilterChoice .atlSwitch__track::after {
+  width: 12px;
+  height: 12px;
+}
+
+.visFilterChoice .atlSwitch__track[aria-checked="true"] {
+  background: var(--color-accent);
+}
+
+.visFilterChoice .atlSwitch__track[aria-checked="true"]::after {
+  transform: translateX(12px);
+}
+
+.visFilterChoice__negate {
+  color: var(--color-critical-text);
 }

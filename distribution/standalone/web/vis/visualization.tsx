@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ChartMessage, LegendToggle } from '../charts/core';
+import { ChartMessage } from '../charts/core';
 import { ErrorBoundary } from '../components/basic';
 import type { Table } from '../lib/aggs';
 import type { TimeRange } from '../lib/dates';
@@ -14,6 +14,7 @@ import type { Filter } from '../lib/types';
 import { visType, type UiState, type Vis } from '../lib/vis';
 import type { RequestRecord } from '../services/search';
 import { errorMessage } from '../services/http';
+import { useFilterChoice } from './apply_filters';
 import { ControlsVis } from './controls_vis';
 import { GaugeVis } from './gauge_vis';
 import { HeatmapVis } from './heatmap_vis';
@@ -81,16 +82,15 @@ const DRAWN: Record<string, (props: VisRenderProps) => ReactNode> = {
   tile_map: (props) => <TileMapVis {...props} />,
 };
 
-// The kinds whose legend can be opened and closed from the corner of the chart, by a button
-// drawn here; the line, area and bar charts draw their own, as vislib does
-const LEGEND_KINDS = new Set(['pie', 'heatmap']);
-
 /** Whether this product draws a kind of visualization */
 export const canDraw = (type: string) =>
   type in DRAWN || type === 'markdown' || type === 'input_control_vis' || type === 'metrics' || type === 'vega';
 
 /** Whether a kind of visualization takes colours from the page's memory, and so a turn */
 export const takesTurn = (type: string) => type in DRAWN;
+
+// The maps filter as they always have; the other drawings' clicks go as the original's value click
+const MAPS = new Set(['region_map', 'tile_map']);
 
 function AggVisualization({ vis: saved, input, tick, uiState, onUiState, onFilter, onTimeChange, onData, turn, onError }: VisualizationProps) {
   // Params a drawing sets on an aggregation (a map's bounds and precision), until the aggregations change
@@ -106,6 +106,7 @@ function AggVisualization({ vis: saved, input, tick, uiState, onUiState, onFilte
   const [data, setData] = useState<VisData>();
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(true);
+  const choice = useFilterChoice({ onFilter, onTimeChange, indexPattern: data?.indexPattern });
   const report = useRef(onData);
   report.current = onData;
   const reportError = useRef(onError);
@@ -151,8 +152,11 @@ function AggVisualization({ vis: saved, input, tick, uiState, onUiState, onFilte
   } else {
     const parts = vis.type === 'table' || vis.type in DRAWN ? splitTables(data.table) : [{ table: data.table }];
     const split = vis.aggs.find((agg) => agg.schema === 'split' && agg.enabled !== false);
-    const asRows = split?.params?.row !== false;
-    const props = { vis, uiState: uiState ?? vis.uiState, onUiState, onFilter, onTimeChange, onAggParams };
+    // Rows or columns: the original reads them from the visualization's params, where its editor
+    // puts them; this product's editor has put them on the aggregation
+    const asRows = vis.params.row !== undefined ? Boolean(vis.params.row) : split?.params?.row !== false;
+    const clicks = onFilter && !MAPS.has(vis.type) ? choice.apply : onFilter;
+    const props = { vis, uiState: uiState ?? vis.uiState, onUiState, onFilter: clicks, onTimeChange, onAggParams };
     body =
       parts.length === 1 && parts[0].label === undefined ? (
         draw({ ...props, data })
@@ -163,21 +167,17 @@ function AggVisualization({ vis: saved, input, tick, uiState, onUiState, onFilte
           {parts.map((part) => (
             <div key={part.label} className="visSplit__part">
               <div className="visSplit__title">{part.label}</div>
-              <div className="visSplit__body">{draw({ ...props, data: { ...data, table: part.table } })}</div>
+              <div className="visSplit__body">{draw({ ...props, data: { ...data, table: part.table }, split: part.split })}</div>
             </div>
           ))}
         </div>
       );
   }
-  const state = uiState ?? vis.uiState;
-  const legendOpen = state.vis?.legendOpen !== false;
   return (
     <>
       {loading && <div className="atlProgress visRoot__progress" />}
       {body}
-      {data && !error && onUiState && LEGEND_KINDS.has(vis.type) && vis.params.addLegend !== false && (
-        <LegendToggle open={legendOpen} onToggle={() => onUiState({ ...state, vis: { ...state.vis, legendOpen: !legendOpen } })} />
-      )}
+      {choice.dialog}
     </>
   );
 }

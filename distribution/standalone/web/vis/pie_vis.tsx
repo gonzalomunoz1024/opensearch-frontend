@@ -31,7 +31,7 @@ const truncateOf = (value: unknown): number => {
   return value === null || value === undefined || value === '' || !Number.isFinite(number) ? 0 : number;
 };
 
-export function PieVis({ vis, data, uiState, onUiState, onFilter }: VisRenderProps) {
+export function PieVis({ vis, data, uiState, onUiState, onFilter, split }: VisRenderProps) {
   const params = vis.params as PieParams;
   const { table, context } = data;
 
@@ -95,7 +95,7 @@ export function PieVis({ vis, data, uiState, onUiState, onFilter }: VisRenderPro
     );
   }
 
-  // A click on a slice filters on it and on the slices it is inside
+  // A click on a slice filters on it, on the slices it is inside and on the bucket of its pie in a split
   const onSliceClick = onFilter
     ? (slice: PieSlice) => {
         const filters: Filter[] = [];
@@ -103,6 +103,8 @@ export function PieVis({ vis, data, uiState, onUiState, onFilter }: VisRenderPro
           const filter = bucketFilter(at.bucket.column, at.bucket.key, context);
           if (filter) filters.push(filter);
         }
+        const splitFilter = split && bucketFilter(split.column, split.key, context);
+        if (splitFilter) filters.push(splitFilter);
         if (filters.length) onFilter(filters);
       }
     : undefined;

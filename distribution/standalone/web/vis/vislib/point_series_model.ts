@@ -9,6 +9,7 @@
  */
 
 import type { Table } from '../../lib/aggs';
+import type { HeatmapColoring } from './heatmap';
 import { axisConfig, isHorizontal, type AxisConfig, type AxisParams, type AxisScaleInfo } from './axis';
 import {
   buildPointSeries,
@@ -23,7 +24,7 @@ import {
 import { bandScale, tickCount, valueScale, zonedTimeTicks, type BandScale, type ValueScale, type ZoneOffset } from './scales';
 import type { Interpolation } from './shapes';
 
-export type SeriesKind = 'histogram' | 'line' | 'area';
+export type SeriesKind = 'histogram' | 'line' | 'area' | 'heatmap';
 
 export interface SeriesParams {
   show?: boolean | string;
@@ -43,6 +44,7 @@ export interface PointSeriesParams {
   addLegend?: boolean;
   legendPosition?: string;
   addTimeMarker?: boolean;
+  enableHover?: boolean;
   orderBucketsBySum?: boolean;
   radiusRatio?: number;
   interpolate?: string;
@@ -78,6 +80,8 @@ export interface ValueAxisModel {
 export interface CategoryAxisModel {
   config: AxisConfig;
   format: (value: number | string) => string;
+  /** The names along the axis when it lists names of its own, not the values of the bucket along the chart */
+  values?: Array<number | string>;
 }
 
 export interface ThresholdLine {
@@ -103,8 +107,14 @@ export interface PointSeriesModel {
   threshold?: ThresholdLine;
   addTimeMarker: boolean;
   tooltip: boolean;
+  /** Pointing at a mark dims the others (enableHover) */
+  hover: boolean;
   /** Values written on the marks */
   valueLabels: boolean;
+  /** What the chart shows instead, when its settings do not let it be drawn */
+  error?: string;
+  /** The colours of a heat map's squares */
+  heatmap?: HeatmapColoring;
 }
 
 const SCALE_STACKED = new Set(['percentage', 'wiggle', 'silhouette']);
@@ -115,7 +125,7 @@ const interpolationOf = (value: string | undefined): Interpolation =>
   value === 'cardinal' || value === 'step-after' || value === 'step-before' ? value : 'linear';
 
 const kindOf = (value: string | undefined): SeriesKind | undefined =>
-  value === 'histogram' || value === 'line' || value === 'area' ? value : undefined;
+  value === 'histogram' || value === 'line' || value === 'area' || value === 'heatmap' ? value : undefined;
 
 /** vislib's seriId: the measure's id, without what a percentile or a bound adds to it */
 const seriesParamId = (aggId: string) => {
@@ -252,6 +262,8 @@ export function buildPointSeriesModel({ params, table, percentFormat, bounds, ad
     threshold,
     addTimeMarker: Boolean(params.addTimeMarker),
     tooltip: params.addTooltip !== false,
+    // On unless the visualization says otherwise
+    hover: params.enableHover === undefined ? true : Boolean(params.enableHover),
     valueLabels: valuesOnChart,
   };
 }

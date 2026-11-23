@@ -12,7 +12,7 @@
 import { useCallback, useId, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useSize } from '../../charts/core';
 import type { AxisScaleInfo, AxisTick, DrawnAxis } from './axis';
-import { isHorizontal } from './axis';
+import { isHorizontal, titleSize } from './axis';
 import { VisLegend, type LegendPosition, type VisLegendProps } from './legend';
 import { layoutPointSeries, type LayoutAxisInput, type PlacedAxis, type Rect } from './point_series_layout';
 import {
@@ -21,6 +21,7 @@ import {
   scaleValueAxis,
   valueDomain,
   VislibError,
+  type CategoryAxisModel,
   type PointSeriesModel,
   type ScaledCategoryAxis,
   type ScaledValueAxis,
@@ -34,6 +35,10 @@ import { VislibTooltip, type Placement, type TooltipDetail, type TooltipState } 
 
 const GUTTER = 0.15;
 const AXIS_COLOR = '#ddd';
+/** The values written in a heat map's squares, in the chart's own text */
+const CELL_FONT = { size: '14px' };
+/** The room a value written in a square leaves to its edges */
+const CELL_PADDING = 5;
 
 export interface PointSeriesChartProps {
   model: PointSeriesModel;
@@ -164,7 +169,7 @@ function TitleSvg({ placed }: { placed: PlacedAxis }) {
     <svg
       className={`visAxis__svg axis-title ${horizontal ? 'x' : 'y'}-axis-title`}
       focusable="false"
-      width={title.rect.width}
+      width={horizontal ? title.rect.width : titleSize(title.text)}
       height={title.rect.height}
       style={{ left: title.rect.x, top: title.rect.y }}
     >
@@ -177,7 +182,10 @@ function TitleSvg({ placed }: { placed: PlacedAxis }) {
 
 interface Scaled {
   values: Map<string, ScaledValueAxis>;
+  /** The first axis of names, along which the marks stand */
   category: ScaledCategoryAxis;
+  /** Every axis of names, at the size of the chart */
+  categories: ScaledCategoryAxis[];
 }
 
 export function PointSeriesChart({ model, colorOf, offsetAt, dimming, legend, onPointClick, onBrush, now }: PointSeriesChartProps) {
@@ -192,6 +200,7 @@ export function PointSeriesChart({ model, colorOf, offsetAt, dimming, legend, on
 
   const drawn = useMemo(() => {
     if (!size.width || !size.height) return undefined;
+    if (model.error) return { error: model.error, layout: undefined, scaled: undefined };
     try {
       const scaled: Partial<Scaled> = { values: new Map() };
       const valueInputs: LayoutAxisInput[] = model.valueAxes.map(({ config, format }) => ({
@@ -203,21 +212,19 @@ export function PointSeriesChart({ model, colorOf, offsetAt, dimming, legend, on
           return axis.info;
         },
       }));
-      const categoryInputs: LayoutAxisInput[] = model.categoryAxes.map(({ config, format }, index) => ({
-        config,
-        format,
-        scaleFor: (length) => {
-          const axis = scaleCategoryAxis(config, model.xValues, model.ordered, length, offsetAt);
-          if (index === 0) scaled.category = axis;
-          return axis.info;
-        },
+      // An axis of names of its own lists them; the others, the values of the bucket along the chart
+      const scaleCategory = (axis: CategoryAxisModel, length: number) =>
+        scaleCategoryAxis(axis.config, axis.values ?? model.xValues, axis.values ? undefined : model.ordered, length, offsetAt);
+      const categoryInputs: LayoutAxisInput[] = model.categoryAxes.map((axis) => ({
+        config: axis.config,
+        format: axis.format,
+        scaleFor: (length) => scaleCategory(axis, length).info,
       }));
       const layout = layoutPointSeries(size.width, size.height, valueInputs, categoryInputs);
       const chart = layout.chart;
       // The scales the marks are drawn with: those of the chart's own size, when an axis is hidden too
-      const category0 = model.categoryAxes[0];
-      const categoryLength = category0 && isHorizontal(category0.config) ? chart.width : chart.height;
-      if (category0) scaled.category = scaleCategoryAxis(category0.config, model.xValues, model.ordered, categoryLength, offsetAt);
+      scaled.categories = model.categoryAxes.map((axis) => scaleCategory(axis, isHorizontal(axis.config) ? chart.width : chart.height));
+      scaled.category = scaled.categories[0];
       for (const { config } of model.valueAxes) {
         const placed = layout.axes.find((axis) => axis.input.config === config);
         if (!placed?.scale || !scaled.values?.has(config.id)) {
@@ -253,8 +260,15 @@ export function PointSeriesChart({ model, colorOf, offsetAt, dimming, legend, on
   };
 
   const legendPosition: LegendPosition | undefined = legend?.position;
+  // The legend lights up a series only where pointing at a mark does
   const legendNode: ReactNode = legend ? (
-    <VisLegend {...legend} labels={model.labels} colorOf={colorOf} opacityOf={legendOpacity} onHighlight={highlight} />
+    <VisLegend
+      {...legend}
+      labels={model.labels}
+      colorOf={colorOf}
+      opacityOf={legendOpacity}
+      onHighlight={model.hover || overlapAreas ? highlight : undefined}
+    />
   ) : null;
 
   const body = (() => {
@@ -368,15 +382,15 @@ export function PointSeriesChart({ model, colorOf, offsetAt, dimming, legend, on
       setTooltip({ clientX: event.clientX, clientY: event.clientY, header, details: details ?? [] });
     };
     const markEvents = (item: SeriesConfig, point: VislibPoint) => ({
-      onMouseOver: () => highlight(item.data.label),
-      onMouseOut: () => highlight(undefined),
+      onMouseOver: model.hover ? () => highlight(item.data.label) : undefined,
+      onMouseOut: model.hover ? () => highlight(undefined) : undefined,
       onMouseMove: (event: ReactMouseEvent) => {
         event.stopPropagation();
         showTip(event, item, point);
       },
       onMouseLeave: () => setTooltip(undefined),
       onClick: onPointClick ? () => onPointClick(point, item) : undefined,
-      style: { cursor: onPointClick ? 'pointer' : undefined, opacity: markOpacity(item.data.label) },
+      style: { cursor: onPointClick && model.hover ? 'pointer' : undefined, opacity: markOpacity(item.data.label) },
     });
 
     const marks: ReactNode[] = [];
@@ -489,6 +503,92 @@ export function PointSeriesChart({ model, colorOf, offsetAt, dimming, legend, on
               {rects}
               {texts}
             </g>
+          </g>
+        );
+      } else if (item.type === 'heatmap') {
+        // A square for each value, in the colour of the range it falls in, on the row of its series
+        const coloring = model.heatmap;
+        const rows = scaled.categories[1]?.band;
+        if (!coloring || !rows) return;
+        let squareWidth = band?.band ?? 0;
+        if (time && ordered) {
+          // Over time, as wide as an interval from the start of the axis
+          const start = ordered.min ?? time.domain[0];
+          const width = time(ordered.addInterval(start, 1)) - time(start);
+          squareWidth = (horizontal ? width : -width) || squareWidth;
+        }
+        const squareHeight = rows.band;
+        const radians = (coloring.rotate * Math.PI) / 180;
+        const maxLength = Math.min(Math.abs(squareWidth / Math.cos(radians)), Math.abs(squareHeight / Math.sin(radians))) - CELL_PADDING;
+        const maxHeight = Math.min(Math.abs(squareWidth / Math.sin(radians)), Math.abs(squareHeight / Math.cos(radians))) - CELL_PADDING;
+        const squares = item.data.values.map((point, at) => {
+          const bucket = coloring.bucketOf(point.y);
+          const name = coloring.labels[bucket];
+          const hidden = bucket < 0;
+          // A range with no name is see-through; a value in no range has no colour
+          const fill = name === '' ? 'transparent' : name === undefined ? undefined : colorOf(name);
+          const sx = xAt(point.x);
+          const sy = rows(point.series);
+          let text: ReactNode = null;
+          if (coloring.showLabels) {
+            const written = coloring.format(point.y ?? NaN);
+            const box = measureText(written, CELL_FONT);
+            const tooBig = box.width > maxLength || box.ascent + box.descent > maxHeight;
+            const rgb = fill ? /rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/.exec(fill) : null;
+            const cx = sx + squareWidth / 2;
+            const cy = sy + squareHeight / 2;
+            text = (
+              <text
+                x={cx}
+                y={cy}
+                transform={`rotate(${coloring.rotate},${cx},${cy})`}
+                style={{
+                  display: hidden || tooBig ? 'none' : 'initial',
+                  dominantBaseline: 'central',
+                  textAnchor: 'middle',
+                  fill: coloring.labelColor ?? (rgb && isColorDark(Number(rgb[1]), Number(rgb[2]), Number(rgb[3])) ? '#FFF' : '#222'),
+                }}
+              >
+                {written}
+              </text>
+            );
+          }
+          const named = name !== undefined && name !== '';
+          return (
+            <g
+              key={at}
+              className="square"
+              onMouseMove={(event) => {
+                event.stopPropagation();
+                showTip(event, item, point);
+              }}
+              onMouseLeave={() => setTooltip(undefined)}
+            >
+              <rect
+                x={sx}
+                width={squareWidth}
+                y={sy}
+                height={squareHeight}
+                data-label={name}
+                fill={fill}
+                style={{
+                  cursor: 'pointer',
+                  stroke: 'black',
+                  strokeWidth: '0.1px',
+                  display: hidden ? 'none' : 'initial',
+                  opacity: name !== undefined ? markOpacity(name) : undefined,
+                }}
+                onMouseOver={model.hover && named ? () => highlight(name) : undefined}
+                onMouseOut={model.hover ? () => highlight(undefined) : undefined}
+                onClick={onPointClick ? () => onPointClick(point, item) : undefined}
+              />
+              {text}
+            </g>
+          );
+        });
+        marks.push(
+          <g key={key}>
+            <g className="series">{squares}</g>
           </g>
         );
       } else if (item.type === 'line') {
