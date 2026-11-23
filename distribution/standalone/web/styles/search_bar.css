@@ -254,14 +254,6 @@
   height: 100%;
   font-size: var(--font-size-xs);
   white-space: nowrap;
-  /* The tint of each kind of suggestion: a tenth of its colour, a fifth on the chosen one */
-  --shl-tile-share: 10%;
-  --shl-tile-share-active: 20%;
-}
-
-:root.themeDark .shlSuggestion {
-  --shl-tile-share: 50%;
-  --shl-tile-share-active: 40%;
 }
 
 .shlSuggestion__type {
@@ -297,53 +289,12 @@
   margin-left: 0;
 }
 
-.shlSuggestion--value .shlSuggestion__text {
-  flex: 1 1 50%;
-}
-
 .shlTypeahead__item--active .shlSuggestion__text,
 .shlTypeahead__item--active .shlSuggestion__type {
   color: var(--color-full-shade);
 }
 
-/* Each kind in its colour, as the original's list: fields, values, operators, conjunctions */
-.shlSuggestion--field .shlSuggestion__type {
-  background-color: color-mix(in srgb, var(--color-warning) var(--shl-tile-share), var(--color-surface));
-  color: var(--color-warning-graphic);
-}
-
-.shlSuggestion--value .shlSuggestion__type {
-  background-color: color-mix(in srgb, var(--color-healthy) var(--shl-tile-share), var(--color-surface));
-  color: var(--color-healthy-graphic);
-}
-
-.shlSuggestion--operator .shlSuggestion__type {
-  background-color: color-mix(in srgb, var(--color-accent) var(--shl-tile-share), var(--color-surface));
-  color: var(--color-accent);
-}
-
-/* The component library's fourth colour of a chart, which the original gives a conjunction */
-.shlSuggestion--conjunction .shlSuggestion__type {
-  background-color: color-mix(in srgb, #9170b8 var(--shl-tile-share), var(--color-surface));
-  color: #9170b8;
-}
-
-.shlTypeahead__item--active .shlSuggestion--field .shlSuggestion__type {
-  background-color: color-mix(in srgb, var(--color-warning) var(--shl-tile-share-active), var(--color-surface));
-}
-
-.shlTypeahead__item--active .shlSuggestion--value .shlSuggestion__type {
-  background-color: color-mix(in srgb, var(--color-healthy) var(--shl-tile-share-active), var(--color-surface));
-}
-
-.shlTypeahead__item--active .shlSuggestion--operator .shlSuggestion__type {
-  background-color: color-mix(in srgb, var(--color-accent) var(--shl-tile-share-active), var(--color-surface));
-}
-
-.shlTypeahead__item--active .shlSuggestion--conjunction .shlSuggestion__type {
-  background-color: color-mix(in srgb, #9170b8 var(--shl-tile-share-active), var(--color-surface));
-}
-
+/* A search made before, in the original's colour of that kind */
 .shlSuggestion--recentSearch .shlSuggestion__type {
   background-color: var(--color-border);
   color: var(--color-text-tertiary);
