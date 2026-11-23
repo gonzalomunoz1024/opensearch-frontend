@@ -1249,9 +1249,317 @@
   padding: 0;
 }
 
-/* A table whose columns share the width alike, as the plugin's tables do */
+/* A table whose columns share the width alike, as the plugin's tables do, with figures of one width
+   (its hyphens are wider so) */
 .ismFixed .atlTable {
   table-layout: fixed;
+  font-feature-settings: "calt", "kern", "liga", "tnum";
+}
+
+/* A link in a cell, as the plugin's: a button, which takes none of the table's figures, on a line
+   of its own height */
+.ismTableLink {
+  display: inline-block;
+  max-width: none;
+  font-feature-settings: normal;
+  line-height: normal;
+  text-align: left;
+  user-select: text;
+}
+
+/* The one as wide as its cell, cut with an ellipsis */
+.ismTableLink--fill {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ismCapitalize {
+  text-transform: capitalize;
+}
+
+/* The search box and what stands beside it, in the middle of their row */
+.ismLs--center {
+  align-items: center;
+}
+
+/* The search bar's box and its filters after it, 8 px apart */
+.ismLs__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ismLs__box {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* The component library's search field is cleared with its own small button, not the browser's */
+.ismLs input::-webkit-search-cancel-button,
+.ismLs input::-webkit-search-decoration {
+  appearance: none;
+}
+
+/* The button that clears it: a grey dot of 12 px with a cross in the surface's colour, 8 px in, the
+   text kept 32 px off the right */
+.ismLs__clear {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  margin-left: var(--space-2);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-text-tertiary);
+  color: var(--color-surface);
+  cursor: pointer;
+}
+
+/* The theme draws its cross with a line of 4 around it, which makes it bold */
+.ismLs__clear .atlIcon {
+  width: 6px;
+  height: 6px;
+  stroke: currentcolor;
+  stroke-width: 4px;
+}
+
+/* The search bar's group of filters: one box on the field's surface, its button inside its line */
+.ismFilterGroup {
+  display: inline-flex;
+  flex: none;
+  overflow: hidden;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+}
+
+.ismFilterButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 32px;
+  padding: 0 var(--space-2);
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 21px;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) ease-out;
+}
+
+/* Open, under the pointer or with the focus, it is tinted as the theme's empty buttons are while
+   pressed */
+.ismFilterButton--open,
+.ismFilterButton:hover,
+.ismFilterButton:focus {
+  background: color-mix(in srgb, var(--color-text-secondary) var(--tint-opacity), transparent);
+}
+
+/* The name keeps the width it has in the theme's bold, so that it does not move when it is set so */
+.ismFilterButton__text {
+  display: inline-flex;
+  flex-direction: column;
+  text-align: center;
+}
+
+.ismFilterButton__text::after {
+  content: attr(data-text);
+  height: 0;
+  overflow: hidden;
+  font-weight: var(--font-weight-semibold);
+  visibility: hidden;
+}
+
+/* How many are chosen: the theme's notification badge, a pill of 20 px whose text is in the light
+   theme's ink in both themes, as the theme picks a dark text for its blue */
+.ismFilterButton__count {
+  min-width: 24px;
+  padding: 0 var(--space-1);
+  border-radius: 999px;
+  background: var(--color-accent);
+  color: #1d1d1f;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+  text-align: center;
+}
+
+/* Its list: 300 px wide, a row of 30 px for each value, a line under each */
+.ismFilterPopover {
+  width: 300px;
+}
+
+.ismFilterSearch {
+  padding: var(--space-2);
+}
+
+.ismFilterItems {
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.ismFilterItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-1) var(--space-3);
+  border: 0;
+  border-bottom: 1px solid rgb(239 239 242);
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-s);
+  line-height: 21px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ismFilterItem:hover,
+.ismFilterItem:focus {
+  background: var(--color-surface-secondary);
+  color: var(--color-accent);
+  outline: none;
+}
+
+.ismFilterItem .atlIcon {
+  flex: none;
+}
+
+.ismFilterItem__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* What the list says while it loads or when it has nothing: in the middle of 64 px */
+.ismFilterNote {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 64px;
+}
+
+.ismFilterNote__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  text-align: center;
+}
+
+.ismFilterNote__error {
+  color: var(--color-critical);
+}
+
+/* --- Policy managed indexes and Change policy: the plugin's own 25 px beside the frame's ----------- */
+
+.ismManaged,
+.ismChange {
+  padding: 0 25px;
+}
+
+/* Refresh and Change policy over the panel, at its right, 24 px apart */
+.ismManaged__top {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-6);
+}
+
+/* The plugin's dialogs that may be as wide as 1000 px: a policy, a managed index's info, a confirmation */
+.atlModal.ismModal.ismWideModal {
+  max-width: 1000px;
+}
+
+/* The plugin puts most of its dialogs in a mask of its own, over the one the component library's
+   dialog brings: the page behind is darkened twice and blurred twice (two blurs of 4 px) */
+.atlScrim:has(> .ismMasked) {
+  background-image: linear-gradient(var(--scrim), var(--scrim));
+}
+
+.atlScrim:has(> .ismMasked)::before {
+  backdrop-filter: blur(5.66px);
+}
+
+/* A policy's buttons: Copy at the left, the others 24 px apart at the right */
+.ismMiPolicyModal .atlModal__footer {
+  gap: var(--space-6);
+}
+
+.ismMiPolicyModal__copy {
+  margin-right: auto;
+}
+
+/* The plugin gives the code itself, inside the block's 24 px, a width of 600 px at least */
+.ismMiCode .ismCodeBlock__code {
+  min-width: 600px;
+}
+
+/* A field under a 17 px name, as the plugin's compressed form rows lay one out */
+.ismPr {
+  display: flex;
+  flex-direction: column;
+  max-width: 400px;
+}
+
+.ismPr + .ismPr {
+  margin-top: var(--space-4);
+}
+
+.ismPr__label {
+  margin-bottom: var(--space-1);
+}
+
+.ismPr__title {
+  margin: 0;
+  font-size: var(--font-size-l);
+  font-weight: var(--font-weight-semibold);
+  line-height: 22px;
+  letter-spacing: -0.022em;
+}
+
+.ismPr__field > .atlField {
+  width: 100%;
+}
+
+.ismPr__help,
+.ismPr__error {
+  padding-top: var(--space-1);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+.ismPr__help {
+  color: var(--color-text-tertiary);
+}
+
+.ismPr__error {
+  color: var(--color-critical-text);
+}
+
+/* What the panel of the new policy says under its title: the theme's smallest text */
+.ismChange__note {
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+/* Its radios are small: their labels are the theme's smallest text, a line of 18 px each, the row
+   no taller than the label */
+.ismChange__radios .ismRadio,
+.ismChange__radios .ismRadio__label {
+  font-size: var(--font-size-xs);
+  line-height: 18px;
 }
 
 .ismCell {

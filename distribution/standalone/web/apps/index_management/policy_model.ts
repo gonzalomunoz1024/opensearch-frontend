@@ -631,3 +631,87 @@ export function aceEditorTokens(text: string, cursor?: number): CodeToken[][] {
     return aceFoldsAt(texts[row] ?? '') ? [{ text: '', kind: 'Fold' }, ...tokens] : tokens;
   });
 }
+
+// --- Managed indexes ---------------------------------------------------------------------------------
+
+interface ManagedIndexMetaData {
+  policySeqNo?: number | null;
+  policyCompleted?: boolean;
+  state?: { name?: string };
+  action?: { name?: string; failed?: boolean };
+  retryInfo?: { failed?: boolean };
+  info?: Record<string, unknown>;
+}
+
+/** An index under a policy, as the list of managed indexes has it */
+export interface ManagedIndex {
+  index: string;
+  indexUuid: string;
+  dataStream: string | null;
+  policyId: string;
+  policy: Policy | null;
+  enabled: boolean;
+  managedIndexMetaData: ManagedIndexMetaData | null;
+}
+
+/** How the job of a managed index is doing */
+export function jobStatus(item: ManagedIndex): string {
+  const meta = item.managedIndexMetaData;
+  if (!meta) return 'Initializing';
+  if (meta.policyCompleted) return 'Completed';
+  if (meta.retryInfo?.failed || meta.action?.failed) return 'Failed';
+  return 'Running';
+}
+
+/** Whether the ticked indexes cannot be retried: none is ticked, or one of them has not failed */
+export function retryDisabled(items: ManagedIndex[]): boolean {
+  return (
+    items.length === 0 ||
+    items.some((item) => {
+      const meta = item.managedIndexMetaData;
+      return !meta || (!meta.retryInfo?.failed && !meta.action?.failed);
+    })
+  );
+}
+
+/**
+ * The states a retry may start from: those the policy of every ticked index has, in the order of
+ * the first one's; none when an index has no policy or no states.
+ */
+export function commonStates(items: Array<Pick<ManagedIndex, 'policy'>>): string[] {
+  let common: string[] | undefined;
+  for (const item of items) {
+    const names = item.policy?.states?.map((state) => state.name);
+    if (!names) return [];
+    common = common === undefined ? [...new Set(names)] : common.filter((name) => names.includes(name));
+    if (common.length === 0) return [];
+  }
+  return common ?? [];
+}
+
+/**
+ * What stays ticked when a list is drawn again, as the component library's table keeps it: the
+ * ticked rows it still shows, as they were when ticked. The same array when all of them are.
+ */
+export function stillListed<Row>(ticked: Row[], rows: Row[], id: (row: Row) => string): Row[] {
+  const shown = new Set(rows.map(id));
+  const kept = ticked.filter((row) => shown.has(id(row)));
+  return kept.length === ticked.length ? ticked : kept;
+}
+
+/** The options of a field that searches as it is typed in: what is typed, a * after it, first */
+export function withWildcard(search: string, names: string[]): string[] {
+  return [...(search.trim() ? [`${search}*`] : []), ...names];
+}
+
+/**
+ * The data streams the "Data streams" filter lists: once loaded, the chosen one first and the others
+ * after it; once something is typed in its search box, those that start with it, in their order.
+ */
+export function dataStreamChoices(names: string[], chosen: string[], typed?: string): string[] {
+  if (typed !== undefined) {
+    const start = typed.toLowerCase();
+    return names.filter((name) => name.toLowerCase().startsWith(start));
+  }
+  return [...names.filter((name) => chosen.includes(name)), ...names.filter((name) => !chosen.includes(name))];
+}

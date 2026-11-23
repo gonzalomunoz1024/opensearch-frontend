@@ -74,7 +74,7 @@ export function EditorChoiceModal({
     <Modal
       title="Configuration method"
       titleSize="l"
-      className="ismChoiceModal"
+      className="ismChoiceModal ismMasked"
       onClose={onClose}
       footer={
         <>

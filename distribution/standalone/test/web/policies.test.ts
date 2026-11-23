@@ -11,7 +11,14 @@ import {
   aceJsonTokens,
   aceLineRange,
   aceMatchingBracket,
+  commonStates,
+  dataStreamChoices,
   draftIsValid,
+  jobStatus,
+  retryDisabled,
+  stillListed,
+  withWildcard,
+  type ManagedIndex,
 } from '../../web/apps/index_management/policy_model';
 
 /** A clock whose time goes on only when told, with the timers set on it */
@@ -313,5 +320,103 @@ describe('a part of an action that is edited as text', () => {
     assert.ok(draftIsValid('[]'));
     assert.ok(!draftIsValid('{ "source": '));
     assert.ok(!draftIsValid('x'));
+  });
+});
+
+/** A managed index with what the list says of it; a policy of the states named */
+function managed(
+  index: string,
+  meta: ManagedIndex['managedIndexMetaData'],
+  states?: string[]
+): ManagedIndex {
+  return {
+    index,
+    indexUuid: `${index}-uuid`,
+    dataStream: null,
+    policyId: 'p',
+    policy: states ? { default_state: states[0] ?? '', states: states.map((name) => ({ name })) } : null,
+    enabled: true,
+    managedIndexMetaData: meta,
+  };
+}
+
+describe('the job status of a managed index, as the plugin words it', () => {
+  it('is initializing until the index has metadata', () => {
+    assert.equal(jobStatus(managed('a', null)), 'Initializing');
+  });
+
+  it('is completed, then failed, then running', () => {
+    assert.equal(jobStatus(managed('a', { policyCompleted: true, action: { failed: true } })), 'Completed');
+    assert.equal(jobStatus(managed('a', { retryInfo: { failed: true } })), 'Failed');
+    assert.equal(jobStatus(managed('a', { action: { name: 'rollover', failed: true } })), 'Failed');
+    assert.equal(jobStatus(managed('a', { action: { name: 'rollover', failed: false } })), 'Running');
+    assert.equal(jobStatus(managed('a', {})), 'Running');
+  });
+});
+
+describe('whether the ticked managed indexes may be retried', () => {
+  const failed = managed('a', { action: { failed: true } });
+  const retrying = managed('b', { retryInfo: { failed: true } });
+
+  it('needs one ticked, and every ticked one failed', () => {
+    assert.equal(retryDisabled([]), true);
+    assert.equal(retryDisabled([failed, retrying]), false);
+    assert.equal(retryDisabled([failed, managed('c', {})]), true);
+    assert.equal(retryDisabled([failed, managed('d', null)]), true);
+  });
+});
+
+describe('the states a retry may start from', () => {
+  it('are those every ticked index has, in the order of the first one', () => {
+    const first = managed('a', {}, ['hot', 'warm', 'delete', 'hot']);
+    const second = managed('b', {}, ['delete', 'hot', 'cold']);
+    assert.deepEqual(commonStates([first]), ['hot', 'warm', 'delete']);
+    assert.deepEqual(commonStates([first, second]), ['hot', 'delete']);
+  });
+
+  it('are none when an index has no policy, or nothing is shared', () => {
+    assert.deepEqual(commonStates([]), []);
+    assert.deepEqual(commonStates([managed('a', {}, ['hot']), managed('b', {})]), []);
+    assert.deepEqual(commonStates([managed('a', {}, ['hot']), managed('b', {}, ['cold'])]), []);
+  });
+});
+
+describe('the rows that stay ticked when a list is drawn again', () => {
+  const id = (row: { id: string; n: number }) => row.id;
+  const ticked = [
+    { id: 'a', n: 1 },
+    { id: 'b', n: 1 },
+  ];
+
+  it('are the ticked rows still shown, as they were when ticked', () => {
+    const kept = stillListed(ticked, [{ id: 'b', n: 2 }, { id: 'c', n: 2 }], id);
+    assert.deepEqual(kept, [{ id: 'b', n: 1 }]);
+  });
+
+  it('are the same array when all of them are still shown', () => {
+    assert.equal(stillListed(ticked, [{ id: 'a', n: 2 }, { id: 'b', n: 2 }], id), ticked);
+  });
+});
+
+describe('the options of a field that searches as it is typed in', () => {
+  it('put what is typed with a * after it first, once something is typed', () => {
+    assert.deepEqual(withWildcard('logs', ['logs-1', 'logs-2']), ['logs*', 'logs-1', 'logs-2']);
+    assert.deepEqual(withWildcard(' lo ', ['logs-1']), [' lo *', 'logs-1']);
+    assert.deepEqual(withWildcard('  ', ['logs-1']), ['logs-1']);
+  });
+});
+
+describe('the data streams the "Data streams" filter lists', () => {
+  const names = ['logs', 'Metrics', 'traces', 'metrics-2'];
+
+  it('put the chosen one first', () => {
+    assert.deepEqual(dataStreamChoices(names, []), names);
+    assert.deepEqual(dataStreamChoices(names, ['traces']), ['traces', 'logs', 'Metrics', 'metrics-2']);
+  });
+
+  it('keep those that start with what is typed, whatever its case, in their order', () => {
+    assert.deepEqual(dataStreamChoices(names, ['traces'], 'MET'), ['Metrics', 'metrics-2']);
+    assert.deepEqual(dataStreamChoices(names, [], 'rics'), []);
+    assert.deepEqual(dataStreamChoices(names, ['traces'], ''), names);
   });
 });

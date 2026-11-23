@@ -355,10 +355,11 @@ export function Table<Row>({
                 </th>
               )}
               {columns.map((column, index) => {
-                const sorted = query.sortField === column.field;
+                // Two columns may show one field, as the plugin's Job Status shows the index's
+                const sorted = Boolean(column.sortable) && query.sortField === column.field;
                 return (
                   <th
-                    key={column.field}
+                    key={`${column.field}-${index}`}
                     style={{ width: column.width, textAlign: column.align }}
                     data-test-subj={`tableHeaderCell_${column.field}_${index}`}
                     aria-sort={sorted ? (query.sortDirection === 'asc' ? 'ascending' : 'descending') : undefined}
@@ -407,9 +408,9 @@ export function Table<Row>({
                       />
                     </td>
                   )}
-                  {columns.map((column) => (
+                  {columns.map((column, index) => (
                     <td
-                      key={column.field}
+                      key={`${column.field}-${index}`}
                       style={{ textAlign: column.align }}
                       className={fixed && column.truncate ? 'ismTable__truncate' : undefined}
                     >

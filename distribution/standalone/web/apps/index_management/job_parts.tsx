@@ -15,6 +15,7 @@ import { Pagination } from '../../components/table';
 import { LocalTable, ism, toasts, type Answer, type TableColumn } from './common';
 import { useSpaced } from './index_select';
 import { leadingDebounce } from './jobs';
+import { ModalButtons, PluginModal } from './plugin_modal';
 import { aceActiveLine, aceEditorTokens, aceGutterWidth, aceLineRange } from './policy_model';
 import { wildcardOption, type FieldItem } from './rollup_model';
 
@@ -208,6 +209,77 @@ export function CustomLabel({
   );
 }
 
+/**
+ * A field as the plugin's compressed form rows lay it out with an `EuiText size="s"` h3 for its
+ * name: the name at 17 px, 4 px over the field, at most 400 px wide, then what is wrong with it and
+ * what it is for, each 4 px under what is above it; two rows 16 px apart.
+ */
+export function PluginRow({
+  title,
+  help,
+  error,
+  children,
+}: {
+  title?: ReactNode;
+  help?: ReactNode;
+  error?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="ismPr">
+      {title && (
+        <div className="ismPr__label">
+          <h3 className="ismPr__title">{title}</h3>
+        </div>
+      )}
+      <div className="ismPr__field">{children}</div>
+      {error && <div className="ismPr__error">{error}</div>}
+      {help && <div className="ismPr__help">{help}</div>}
+    </div>
+  );
+}
+
+/**
+ * The plugin's ConfirmationModal: its title, what it asks in a line, Cancel and the action, as wide
+ * as what it says up to 1000 px. The action is run and the dialog closed at once, as there.
+ */
+export function PluginConfirmationModal({
+  title,
+  bodyMessage,
+  actionMessage,
+  onClose,
+  onAction,
+}: {
+  title: string;
+  bodyMessage: ReactNode;
+  actionMessage: string;
+  onClose: () => void;
+  onAction: () => void | Promise<void>;
+}) {
+  const body = useDialogFocus<HTMLParagraphElement>();
+  return (
+    <PluginModal
+      title={title}
+      onClose={onClose}
+      className="ismWideModal ismMasked"
+      footer={
+        <ModalButtons
+          label={actionMessage}
+          onCancel={onClose}
+          onConfirm={() => {
+            void onAction();
+            onClose();
+          }}
+          cancelTestId="confirmationModalCloseButton"
+          confirmTestId="confirmationModalActionButton"
+        />
+      }
+    >
+      <p ref={body}>{bodyMessage}</p>
+    </PluginModal>
+  );
+}
+
 /** The buttons under a form, at its right: the one that leaves it and the one that saves it */
 export function FormButtons({ children }: { children: ReactNode }) {
   return <div className="ismFormButtons">{children}</div>;
@@ -326,7 +398,8 @@ export function AceJsonEditor({
 
 /**
  * The search box over a list, and the pages of the list beside it when there is more than one,
- * as the plugin's list controls have them.
+ * as the plugin's list controls have them. `filters` are the search bar's own filters, 8 px after
+ * the box; `children` come after the search bar, 24 px apart.
  */
 export function ListSearch({
   search,
@@ -336,6 +409,9 @@ export function ListSearch({
   pages = 1,
   onPage,
   paginationTestId,
+  filters,
+  className,
+  ariaLabel = placeholder,
   children,
 }: {
   search: string;
@@ -345,12 +421,48 @@ export function ListSearch({
   pages?: number;
   onPage?: (page: number) => void;
   paginationTestId?: string;
+  filters?: ReactNode;
+  className?: string;
+  /** What a screen reader calls the box: the component library's search bar says what it does */
+  ariaLabel?: string;
   children?: ReactNode;
 }) {
+  // As the component library's search field, a button clears what is typed and puts the focus back
+  const clear =
+    search === '' ? undefined : (
+      <button
+        type="button"
+        className="ismLs__clear"
+        aria-label="Clear input"
+        onClick={(event) => {
+          event.currentTarget.parentElement?.querySelector('input')?.focus();
+          onSearch('');
+        }}
+      >
+        <Icon name="cross" />
+      </button>
+    );
+  const box = (
+    <SearchField
+      compact
+      value={search}
+      onChange={onSearch}
+      placeholder={placeholder}
+      aria-label={ariaLabel}
+      append={clear}
+    />
+  );
   return (
-    <div className="ismLs">
+    <div className={cx('ismLs', className)}>
       <div className="ismLs__search">
-        <SearchField compact value={search} onChange={onSearch} placeholder={placeholder} aria-label={placeholder} />
+        {filters ? (
+          <div className="ismLs__bar">
+            <div className="ismLs__box">{box}</div>
+            {filters}
+          </div>
+        ) : (
+          box
+        )}
       </div>
       {children}
       {pages > 1 && page !== undefined && onPage && (
