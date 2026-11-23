@@ -413,24 +413,26 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
       const rules = Array.isArray(params.colors)
         ? (params.colors as Array<{ range?: string; regex?: string; text?: string; background?: string }>)
         : [];
-      const byRegex = params.fieldType === 'string';
+      // By the kind of field its editor saves with it: without one nothing is coloured
+      const { fieldType } = params;
       return (value) => {
         const shown = stringify(value);
-        for (const rule of rules) {
+        // The last rule that matches is the one drawn, as the original's findLast
+        for (let index = rules.length - 1; index >= 0; index -= 1) {
+          const rule = rules[index];
           let matches = false;
-          if (byRegex) {
+          if (fieldType === 'string') {
             try {
-              matches = rule.regex ? new RegExp(rule.regex).test(shown) : false;
+              // A rule without a pattern matches every text
+              matches = new RegExp(rule.regex ?? '').test(shown);
             } catch {
               matches = false;
             }
-          } else if (rule.range) {
+          } else if (fieldType === 'number' && rule.range) {
             const number = toNumber(value);
-            const [low, high] = rule.range.split(':').map((part) => (part === '' ? NaN : Number(part)));
-            matches =
-              number !== undefined &&
-              (Number.isNaN(low) || number >= low) &&
-              (Number.isNaN(high) || number <= high);
+            // An end left out is zero, as Number reads it
+            const [low, high] = rule.range.split(':').map(Number);
+            matches = number !== undefined && number >= low && number <= high;
           }
           if (matches) return { text: shown, color: rule.text, background: rule.background };
         }

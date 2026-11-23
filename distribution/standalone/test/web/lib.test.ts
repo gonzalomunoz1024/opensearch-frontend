@@ -138,7 +138,7 @@ describe('numbers', () => {
     assert.equal(createFormatter({ id: 'url' })('javascript:alert(1)').href, undefined);
     const coloured = createFormatter({
       id: 'color',
-      params: { fieldType: 'number', colors: [{ range: '500:', text: '#fff', background: '#f00' }] },
+      params: { fieldType: 'number', colors: [{ range: '500:Infinity', text: '#fff', background: '#f00' }] },
     })(503);
     assert.equal(coloured.background, '#f00');
   });
@@ -166,6 +166,36 @@ describe('numbers', () => {
     assert.equal(raw(' https://x.test/a\tb ').href, 'https://x.test/ab');
     assert.equal(raw('a/b:c').href, 'a/b:c');
     assert.equal(raw('#/doc?x=java\tscript:1').href, '#/doc?x=javascript:1');
+  });
+
+  it('colours a value by the last rule that matches, as the original', () => {
+    const grey = { text: '#111', background: '#eee' };
+    const red = { text: '#f00', background: '#fee' };
+    const byNumber = createFormatter({
+      id: 'color',
+      params: { fieldType: 'number', colors: [{ range: '0:100000', ...grey }, { range: '5000:100000', ...red }] },
+    });
+    assert.equal(byNumber(7000).color, '#f00');
+    assert.equal(byNumber(7000).background, '#fee');
+    assert.equal(byNumber(100).color, '#111');
+    assert.equal(byNumber(-1).color, undefined);
+    const byText = createFormatter({
+      id: 'color',
+      params: { fieldType: 'string', colors: [{ regex: '^2', ...grey }, { regex: '0', ...red }] },
+    });
+    assert.equal(byText('200').color, '#f00');
+    assert.equal(byText('211').color, '#111');
+    assert.equal(byText('404').color, '#f00');
+    assert.equal(byText('311').color, undefined);
+    // An end left out is zero, as Number reads it, and a rule without a pattern matches every text
+    const ends = createFormatter({ id: 'color', params: { fieldType: 'number', colors: [{ range: ':100', ...red }] } });
+    assert.equal(ends(50).color, '#f00');
+    assert.equal(ends(-50).color, undefined);
+    assert.equal(createFormatter({ id: 'color', params: { fieldType: 'number', colors: [{ range: '500:', ...red }] } })(503).color, undefined);
+    assert.equal(createFormatter({ id: 'color', params: { fieldType: 'string', colors: [{ regex: '', ...red }] } })('any').color, '#f00');
+    assert.equal(createFormatter({ id: 'color', params: { fieldType: 'string', colors: [{ ...red }] } })('any').color, '#f00');
+    // Without the kind of field its editor saves with it, nothing is coloured
+    assert.equal(createFormatter({ id: 'color', params: { colors: [{ range: '0:100', ...red }] } })(50).color, undefined);
   });
 });
 
