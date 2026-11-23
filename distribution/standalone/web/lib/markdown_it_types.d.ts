@@ -1,0 +1,60 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/*
+ * The part of markdown-it 14.2.0 this product uses, typed by hand after its documentation, so that
+ * the build needs no package of types for it. Add to it as code needs more.
+ */
+
+declare module 'markdown-it' {
+  /** One step of a parsed text: a block or inline element opened (1), closed (-1), or whole (0) */
+  export interface Token {
+    type: string;
+    tag: string;
+    attrs: Array<[string, string]> | null;
+    nesting: 1 | 0 | -1;
+    level: number;
+    children: Token[] | null;
+    content: string;
+    markup: string;
+    info: string;
+    block: boolean;
+    hidden: boolean;
+    attrGet(name: string): string | null;
+    attrPush(attr: [string, string]): void;
+  }
+
+  export interface Options {
+    html?: boolean;
+    xhtmlOut?: boolean;
+    breaks?: boolean;
+    langPrefix?: string;
+    linkify?: boolean;
+    typographer?: boolean;
+    maxNesting?: number;
+  }
+
+  export type RenderRule = (tokens: Token[], index: number, options: Options, env: object, self: Renderer) => string;
+
+  export interface Renderer {
+    rules: Record<string, RenderRule | undefined>;
+    renderToken(tokens: Token[], index: number, options: Options): string;
+  }
+
+  export interface Utils {
+    lib: { mdurl: { encode(url: string): string } };
+    /** A text with its backslash escapes and character references read */
+    unescapeAll(text: string): string;
+  }
+
+  export default class MarkdownIt {
+    constructor(presetName: 'default' | 'zero' | 'commonmark', options?: Options);
+    constructor(options?: Options);
+    readonly renderer: Renderer;
+    readonly utils: Utils;
+    validateLink: (url: string) => boolean;
+    normalizeLink: (url: string) => string;
+    normalizeLinkText: (url: string) => string;
+    render(text: string, env?: object): string;
+    parse(text: string, env: object): Token[];
+  }
+}
