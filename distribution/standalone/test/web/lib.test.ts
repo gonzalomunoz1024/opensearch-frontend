@@ -79,6 +79,19 @@ describe('dates', () => {
     assert.equal(range.to.getTime() - range.from.getTime(), 86400000 - 1);
   });
 
+  it('counts a year from 29 February to the last day of February, as the original does', () => {
+    const leapDay = new Date(2024, 1, 29, 12, 0, 0, 0);
+    const at = (expression: string) => parseDateMath(expression, { now: leapDay })?.getTime();
+    assert.equal(at('now-1y'), new Date(2023, 1, 28, 12).getTime());
+    assert.equal(at('now+1y'), new Date(2025, 1, 28, 12).getTime());
+    assert.equal(at('now-5y'), new Date(2019, 1, 28, 12).getTime());
+    assert.equal(at('now+4y'), new Date(2028, 1, 29, 12).getTime());
+    assert.equal(at('now-1y-1M'), new Date(2023, 0, 28, 12).getTime());
+    // and any other day of a year stays the day it is
+    assert.equal(parseDateMath('now-1y', { now })?.getTime(), new Date(2025, 10, 22, 3, 52, 10, 500).getTime());
+    assert.equal(parseDateMath('now+100y', { now })?.getTime(), new Date(2126, 10, 22, 3, 52, 10, 500).getTime());
+  });
+
   it('writes dates with the tokens of the date settings', () => {
     const date = new Date(Date.UTC(2026, 10, 22, 1, 37, 55, 7));
     assert.equal(formatDate(date, 'MMM D, YYYY @ HH:mm:ss.SSS', 'UTC'), 'Nov 22, 2026 @ 01:37:55.007');
@@ -138,9 +151,97 @@ describe('numbers', () => {
     assert.equal(createFormatter({ id: 'url' })('javascript:alert(1)').href, undefined);
     const coloured = createFormatter({
       id: 'color',
-      params: { fieldType: 'number', colors: [{ range: '500:', text: '#fff', background: '#f00' }] },
+      params: { fieldType: 'number', colors: [{ range: '500:Infinity', text: '#fff', background: '#f00' }] },
     })(503);
     assert.equal(coloured.background, '#f00');
+  });
+
+  it('makes no link a browser would run as a script', () => {
+    const url = createFormatter({ id: 'url' });
+    const raw = createFormatter({ id: 'url', params: { urlTemplate: '{{rawValue}}', labelTemplate: 'open' } });
+    // A browser drops tabs and line ends inside an address, and control characters and spaces around it
+    for (const value of [
+      'java\tscript:alert(1)',
+      'java\nscript:alert(1)',
+      'jav\r\nascript:alert(1)',
+      '\u0001javascript:alert(1)',
+      ' \u0000\u001f javascript:alert(1)',
+      'JaVaScRiPt:alert(1)',
+      'vbscript:x',
+      'data:text/html,<script>alert(1)</script>',
+    ]) {
+      assert.equal(url(value).href, undefined, JSON.stringify(value));
+      assert.equal(raw(value).href, undefined, JSON.stringify(value));
+      assert.equal(createFormatter({ id: 'url', params: { type: 'img' } })(value).image, undefined, JSON.stringify(value));
+    }
+    // What is no scheme stays a link
+    assert.equal(url(' https://x.test/a ').href, 'https://x.test/a');
+    assert.equal(raw(' https://x.test/a\tb ').href, 'https://x.test/ab');
+    assert.equal(raw('a/b:c').href, 'a/b:c');
+    assert.equal(raw('#/doc?x=java\tscript:1').href, '#/doc?x=javascript:1');
+  });
+
+  it('colours a value by the last rule that matches, as the original', () => {
+    const grey = { text: '#111', background: '#eee' };
+    const red = { text: '#f00', background: '#fee' };
+    const byNumber = createFormatter({
+      id: 'color',
+      params: { fieldType: 'number', colors: [{ range: '0:100000', ...grey }, { range: '5000:100000', ...red }] },
+    });
+    assert.equal(byNumber(7000).color, '#f00');
+    assert.equal(byNumber(7000).background, '#fee');
+    assert.equal(byNumber(100).color, '#111');
+    assert.equal(byNumber(-1).color, undefined);
+    const byText = createFormatter({
+      id: 'color',
+      params: { fieldType: 'string', colors: [{ regex: '^2', ...grey }, { regex: '0', ...red }] },
+    });
+    assert.equal(byText('200').color, '#f00');
+    assert.equal(byText('211').color, '#111');
+    assert.equal(byText('404').color, '#f00');
+    assert.equal(byText('311').color, undefined);
+    // An end left out is zero, as Number reads it, and a rule without a pattern matches every text
+    const ends = createFormatter({ id: 'color', params: { fieldType: 'number', colors: [{ range: ':100', ...red }] } });
+    assert.equal(ends(50).color, '#f00');
+    assert.equal(ends(-50).color, undefined);
+    assert.equal(createFormatter({ id: 'color', params: { fieldType: 'number', colors: [{ range: '500:', ...red }] } })(503).color, undefined);
+    assert.equal(createFormatter({ id: 'color', params: { fieldType: 'string', colors: [{ regex: '', ...red }] } })('any').color, '#f00');
+    assert.equal(createFormatter({ id: 'color', params: { fieldType: 'string', colors: [{ ...red }] } })('any').color, '#f00');
+    // Without the kind of field its editor saves with it, nothing is coloured
+    assert.equal(createFormatter({ id: 'color', params: { colors: [{ range: '0:100', ...red }] } })(50).color, undefined);
+  });
+
+  it('reads text as a boolean as the original: trimmed, in lower case, and not from "1" or "0"', () => {
+    const boolean = createFormatter({ id: 'boolean' });
+    assert.deepEqual(
+      [true, 1, 'true', 'yes', ' YES ', 'True'].map((value) => boolean(value).text),
+      ['true', 'true', 'true', 'true', 'true', 'true']
+    );
+    assert.deepEqual(
+      [false, 0, 'false', 'no', 'No', ' FALSE\n'].map((value) => boolean(value).text),
+      ['false', 'false', 'false', 'false', 'false', 'false']
+    );
+    assert.deepEqual(
+      ['1', '0', 'US', ' Maybe ', 2, -1].map((value) => boolean(value).text),
+      ['1', '0', 'us', 'maybe', '2', '-1']
+    );
+  });
+
+  it('looks a value up as the original: an empty answer is no answer', () => {
+    const entries = [{ key: 'css', value: 'Style sheet' }, { key: 'gz', value: '' }, { key: 'deb' }, { key: 404, value: 'Not found' }, {}];
+    // What the original's editor saves once the text for the others was typed and cleared
+    const cleared = createFormatter({ id: 'static_lookup', params: { lookupEntries: entries, unknownKeyValue: '' } });
+    assert.deepEqual(
+      ['css', 'gz', 'deb', 'png', 404, '404'].map((value) => cleared(value).text),
+      ['Style sheet', 'gz', 'deb', 'png', 'Not found', 'Not found']
+    );
+    const others = createFormatter({ id: 'static_lookup', params: { lookupEntries: entries, unknownKeyValue: 'other' } });
+    assert.deepEqual(
+      ['css', 'gz', 'deb', 'png'].map((value) => others(value).text),
+      ['Style sheet', 'other', 'other', 'other']
+    );
+    assert.equal(createFormatter({ id: 'static_lookup', params: { lookupEntries: entries, unknownKeyValue: null } })('png').text, 'png');
+    assert.equal(createFormatter({ id: 'static_lookup' })('png').text, 'png');
   });
 });
 

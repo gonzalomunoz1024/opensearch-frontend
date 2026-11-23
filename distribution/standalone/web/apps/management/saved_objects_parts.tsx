@@ -50,13 +50,19 @@ const META_ICONS: Record<string, IconName> = {
 
 export const iconOfMeta = (icon?: string): IconName => (icon ? META_ICONS[icon] : undefined) ?? 'grid';
 
-/** The icon of a type, small, with its name when the pointer is on it */
+/** The icon of the Import button and of the file to import: the original's `importAction` */
+export const IMPORT_ICON: IconName = 'importAction';
+
+/**
+ * The icon of a type, small, with its name when the pointer is on it. An application's icon
+ * (`dashboardApp`) is given no colour by the original, so it has its two.
+ */
 export function TypeIcon({ type, icon, testId = 'objectType' }: { type: string; icon?: string; testId?: string }) {
   const label = getSavedObjectLabel(type);
   return (
     <Tooltip content={label}>
       <span className="sobTypeIcon" role="img" aria-label={label} data-test-subj={testId}>
-        <Icon name={iconOfMeta(icon)} />
+        <Icon name={iconOfMeta(icon)} app={icon !== undefined && /.+App$/.test(icon)} />
       </span>
     </Tooltip>
   );
@@ -64,11 +70,7 @@ export function TypeIcon({ type, icon, testId = 'objectType' }: { type: string; 
 
 /** The original's `kqlSelector`: two rings, for what an object is tied to */
 export function RelationshipsIcon() {
-  return (
-    <svg className="atlIcon" viewBox="0 0 16 16" aria-hidden>
-      <path d="M6 11.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM10 11.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" />
-    </svg>
-  );
+  return <Icon name="kqlSelector" />;
 }
 
 // --- Small controls -------------------------------------------------------------------------------

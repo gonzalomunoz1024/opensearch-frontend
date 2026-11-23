@@ -20,7 +20,9 @@ import {
   bodyOf,
   describePast,
   expandToRequests,
+  failedAnswer,
   formatAnswer,
+  historyKey,
   insertRequest,
   lineOf,
   looksLikeCurl,
@@ -34,6 +36,7 @@ import {
   requestsBetween,
   suggest,
   toCurl,
+  typedOnLine,
   type ActionsPlace,
   type Answer,
   type ClusterNames,
@@ -96,7 +99,7 @@ async function send(request: ConsoleRequest, several: boolean, signal: AbortSign
     const ok = status >= 200 && status < 300;
     const timeMs = Date.now() - started;
     if (!ok) {
-      const value = text ? text : `Request failed to get to the server (status code: ${status})`;
+      const value = failedAnswer(text, contentType, status);
       return { ...base, ok, statusCode: status, statusText, contentType: text ? contentType : 'text/plain', timeMs, value: titled(value) };
     }
     const warnings = response.headers.get('warning');
@@ -632,14 +635,7 @@ function HistoryPanel({ settings, onApply, onClose }: { settings: ConsoleSetting
           className="dvtHistory__list"
           aria-label="History of sent requests"
           aria-activedescendant={`historyReq${selected}`}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              if (chosen) onApply(chosen);
-            } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-              event.preventDefault();
-              choose(selected + (event.key === 'ArrowUp' ? -1 : 1));
-            }
-          }}
+          onKeyDown={(event) => historyKey(event, selected, { choose, apply: () => chosen && onApply(chosen) })}
         >
           {requests.map((request, index) => {
             const description = describePast(request, now);
@@ -1037,8 +1033,8 @@ export function Console() {
             highlighted={doc.highlighted}
             onChange={(next) => {
               const [start, end] = editor.current?.selection() ?? [0, 0];
-              // Suggestions follow what is typed, and go when text is taken away
-              if (start === end && next.length > text.length) openMenu(next, start);
+              // Suggestions follow what is typed, and go when text is taken away or a line is begun
+              if (start === end && next.length > text.length && typedOnLine(next, start)) openMenu(next, start);
               else setMenu(undefined);
               setText(next);
             }}

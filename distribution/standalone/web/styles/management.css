@@ -2,69 +2,217 @@
 
 /* Dashboards Management: its own navigation beside its pages. Class prefix: mgt. */
 
+/* --- The frame ---------------------------------------------------------------------------------- */
+
+/*
+ * As the original's: a page padded 16 pixels, the side navigation (the theme's EuiSideNav) and the
+ * page body beside it. A page in the frame brings its own 16 pixels around it (`.mgtPage`, the
+ * index patterns' `.inpPage`, the landing page): they stand for the frame's padding at the top, the
+ * right and the bottom and for the navigation's margin at its right, so the frame pads its left only.
+ */
 .mgtFrame {
   display: flex;
-  align-items: flex-start;
-  flex: 1 1 auto;
-  min-width: 0;
+  flex: none;
+  max-width: 100%;
+  padding-left: var(--space-4);
+  background-color: var(--color-surface);
 }
 
+/* 220 pixels wide, or as wide as its widest line when the page body takes the rest */
 .mgtNav {
-  flex: 0 0 234px;
-  position: sticky;
-  top: var(--header-height);
-  padding: var(--space-6) var(--space-4);
+  flex: 0 1 auto;
+  width: 220px;
+  margin: var(--space-4) 0;
 }
 
-.mgtNav__title {
+/* The button that unfolds it in a narrow window, and what it folds */
+.mgtNav__mobileHeading {
+  display: none;
+  margin: 0;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: 1;
+}
+
+/* The section's heading and its links reach 8 pixels out on each side, on the theme's radius */
+.mgtNav__heading,
+.mgtNav__link {
+  display: block;
+  width: calc(100% + 2 * var(--space-2));
+  margin-left: calc(-1 * var(--space-2));
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  line-height: 1.5;
+  text-align: left;
+}
+
+.mgtNav__heading {
+  margin-bottom: var(--space-2);
+  padding: 0 var(--space-2);
+}
+
+.mgtNav__headingContent,
+.mgtNav__linkContent {
+  display: flex;
+  align-items: center;
+}
+
+.mgtNav__headingLabel,
+.mgtNav__linkLabel {
+  flex-grow: 1;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mgtNav__headingLabel {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-m);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+/* The section's name and the mark of its tip, 8 pixels apart */
+.mgtNav__tipped {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  margin-bottom: var(--space-3);
-  white-space: nowrap;
-  font-size: var(--font-size-m);
-  font-weight: var(--font-weight-semibold);
 }
 
-.mgtNav__title a {
-  color: var(--color-text-primary);
-  text-decoration: none;
-}
-
-.mgtNav__title .atlIcon {
-  color: var(--color-text-tertiary);
-}
-
-.mgtNav ul {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
+/* The links, 25 pixels apart */
 .mgtNav__link {
-  display: block;
-  padding: var(--space-1) 0;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-s);
+  padding: 2px var(--space-2);
   text-decoration: none;
+  cursor: pointer;
 }
 
-.mgtNav__link:hover {
-  color: var(--color-text-primary);
-}
-
-.mgtNav__link--active,
-.mgtNav__link--active:hover {
+.mgtNav__link--selected {
   color: var(--color-accent);
   font-weight: var(--font-weight-medium);
 }
 
+/* Under the pointer or with the focus a link is drawn in the text's colour, the selected one too,
+   as the theme's rules weigh */
+.mgtNav__link:hover,
+.mgtNav__link:focus {
+  color: var(--color-text-primary);
+  text-decoration: none;
+}
+
+/* The theme's ring, 2 pixels off the link */
+.mgtNav__link:focus-visible {
+  outline-offset: 2px;
+}
+
+/* The page body: at most 1200 pixels wide (here with the page's own 16 on each side), in the
+   middle of the room the navigation leaves */
 .mgtBody {
-  flex: 1 1 auto;
+  display: flex;
+  flex: 1 1 100%;
+  flex-direction: column;
+  align-items: stretch;
   min-width: 0;
+  max-width: calc(1200px + 2 * var(--space-4));
+  margin: 0 auto;
+}
+
+/* A page on its short address, alone: the original's transparent page, padded 24 pixels with the
+   page's own 16 */
+.mgtAlone {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-2);
+}
+
+@media (max-width: 767px) {
+  /* The navigation over the page body, as wide as the page less the original's margin */
+  .mgtFrame {
+    flex-direction: column;
+    padding-left: 0;
+  }
+
+  .mgtNav {
+    width: auto;
+    margin: var(--space-4) calc(2 * var(--space-4)) 0 var(--space-4);
+  }
+
+  .mgtNav__mobileHeading {
+    display: block;
+  }
+
+  /* The theme's empty primary button as wide as the navigation, with a line under it */
+  .mgtNav__mobileToggle {
+    display: inline-block;
+    width: 100%;
+    max-width: 100%;
+    padding: 0 var(--space-4);
+    border: 1px solid transparent;
+    border-bottom-color: var(--color-border-light);
+    border-radius: 0;
+    background-color: transparent;
+    color: var(--color-accent-button-text);
+    font-size: var(--font-size-m);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .mgtNav__mobileToggle:hover,
+  .mgtNav__mobileToggle:focus {
+    background-color: var(--color-accent-tint);
+  }
+
+  .mgtNav__mobileToggleContent {
+    display: flex;
+    flex-direction: row-reverse;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 var(--space-2);
+  }
+
+  .mgtNav__mobileToggleText {
+    margin-right: var(--space-2);
+    padding: var(--space-4) 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .mgtNav__mobileToggle .atlIcon {
+    fill: currentcolor;
+  }
+
+  /* Folded until the button unfolds it */
+  .mgtNav__content {
+    max-height: 0;
+    padding: 0 var(--space-6);
+    overflow: hidden;
+    visibility: hidden;
+    opacity: 0;
+  }
+
+  .mgtNav--openOnMobile .mgtNav__content {
+    max-height: 5000px;
+    padding: var(--space-6);
+    visibility: visible;
+    opacity: 1;
+  }
+}
+
+@media (max-width: 767px) and (prefers-reduced-motion: no-preference) {
+  .mgtNav__mobileToggle {
+    transition:
+      background-color var(--duration-fast) ease-out,
+      border-color var(--duration-fast) ease-out,
+      color var(--duration-fast) ease-out;
+  }
+
+  .mgtNav--openOnMobile .mgtNav__content {
+    transition: all var(--duration-normal) var(--ease-out-quint);
+  }
 }
 
 .mgtPage {
@@ -75,18 +223,48 @@
   padding: var(--space-6);
 }
 
+/* --- The landing page: the original's panel in the middle, as wide as its text ------------------ */
+
 .mgtLanding {
-  max-width: 640px;
-  margin: var(--space-4) auto;
+  padding: var(--space-4);
+}
+
+.mgtLanding__panel {
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: var(--space-6);
+  border: 1px solid var(--color-border-light);
   border-radius: var(--radius-lg);
-  background: var(--color-surface);
+  background-color: var(--color-surface);
   box-shadow: var(--shadow-card);
 }
 
+.mgtLanding__head {
+  text-align: center;
+}
+
+.mgtLanding__icon {
+  display: block;
+  margin: 0 auto var(--space-6);
+}
+
+.mgtLanding__text {
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
 .mgtLanding__rule {
-  margin: var(--space-5) 0;
+  height: 1px;
+  margin: var(--space-6) 0;
   border: 0;
-  border-top: 1px solid var(--color-border-light);
+  background-color: var(--color-border-light);
+  color: var(--color-border-light);
+}
+
+.mgtLanding__more {
+  color: var(--color-text-secondary);
+  text-align: center;
 }
 
 .mgtTabTools {
@@ -830,21 +1008,5 @@
 @media (max-width: 575px) {
   .mgtBottomBar__count {
     visibility: hidden;
-  }
-}
-
-@media (max-width: 900px) {
-  .mgtFrame {
-    flex-direction: column;
-  }
-
-  .mgtNav {
-    position: static;
-    flex-basis: auto;
-    padding-bottom: 0;
-  }
-
-  .mgtPage {
-    padding-left: var(--space-4);
   }
 }

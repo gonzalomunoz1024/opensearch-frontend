@@ -303,12 +303,19 @@ export function urlParts(params: Record<string, unknown>, value: unknown): { url
   return { url, label };
 }
 
-// Only links a page may safely open: a relative address, or http, https or mailto
+// Only links a page may safely open: a relative address, or http, https or mailto. The address is
+// read as a browser reads it, without the spaces and control characters around it and the tabs and
+// line ends inside it, so that none of them hides a scheme such as `java<tab>script:`
 function safeUrl(url: string): string | undefined {
-  const trimmed = url.trim();
-  if (/^(https?:|mailto:)/i.test(trimmed)) return trimmed;
-  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return undefined;
-  return trimmed;
+  // eslint-disable-next-line no-control-regex
+  const trimmed = url.replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, '').replace(/[\t\n\r]/g, '');
+  // The scheme is the one the browser's own parser gives it
+  try {
+    const { protocol } = new URL(trimmed, 'http://localhost');
+    return protocol === 'http:' || protocol === 'https:' || protocol === 'mailto:' ? trimmed : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknown) => Formatted {
@@ -376,10 +383,12 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
     }
     case 'boolean':
       return (value) => {
-        if (typeof value === 'boolean') return text(String(value));
-        if (value === 1 || value === '1' || value === 'true' || value === 'yes') return text('true');
-        if (value === 0 || value === '0' || value === 'false' || value === 'no') return text('false');
-        return text(stringify(value));
+        // Text is read trimmed and in lower case, and is shown so when it is neither; "1" and "0"
+        // are text, not the numbers, as the original reads them
+        const read = typeof value === 'string' ? value.trim().toLowerCase() : value;
+        if (read === true || read === 1 || read === 'true' || read === 'yes') return text('true');
+        if (read === false || read === 0 || read === 'false' || read === 'no') return text('false');
+        return text(typeof read === 'string' ? read : stringify(read));
       };
     case 'ip':
       return (value) => {
@@ -402,32 +411,35 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
       const entries = Array.isArray(params.lookupEntries)
         ? (params.lookupEntries as Array<{ key: unknown; value: unknown }>)
         : [];
-      const lookup = new Map(entries.map((entry) => [String(entry.key), String(entry.value)]));
-      const unknown = typeof params.unknownKeyValue === 'string' ? params.unknownKeyValue : undefined;
-      return (value) => text(lookup.get(String(value)) ?? unknown ?? stringify(value));
+      const lookup = new Map(entries.map((entry) => [String(entry.key), entry.value]));
+      // An entry without an answer and an empty text for the other values are none, as the original
+      // reads them: the value itself is shown
+      return (value) => text(stringify(lookup.get(String(value)) || params.unknownKeyValue || value));
     }
     case 'color': {
       const rules = Array.isArray(params.colors)
         ? (params.colors as Array<{ range?: string; regex?: string; text?: string; background?: string }>)
         : [];
-      const byRegex = params.fieldType === 'string';
+      // By the kind of field its editor saves with it: without one nothing is coloured
+      const { fieldType } = params;
       return (value) => {
         const shown = stringify(value);
-        for (const rule of rules) {
+        // The last rule that matches is the one drawn, as the original's findLast
+        for (let index = rules.length - 1; index >= 0; index -= 1) {
+          const rule = rules[index];
           let matches = false;
-          if (byRegex) {
+          if (fieldType === 'string') {
             try {
-              matches = rule.regex ? new RegExp(rule.regex).test(shown) : false;
+              // A rule without a pattern matches every text
+              matches = new RegExp(rule.regex ?? '').test(shown);
             } catch {
               matches = false;
             }
-          } else if (rule.range) {
+          } else if (fieldType === 'number' && rule.range) {
             const number = toNumber(value);
-            const [low, high] = rule.range.split(':').map((part) => (part === '' ? NaN : Number(part)));
-            matches =
-              number !== undefined &&
-              (Number.isNaN(low) || number >= low) &&
-              (Number.isNaN(high) || number <= high);
+            // An end left out is zero, as Number reads it
+            const [low, high] = rule.range.split(':').map(Number);
+            matches = number !== undefined && number >= low && number <= high;
           }
           if (matches) return { text: shown, color: rule.text, background: rule.background };
         }

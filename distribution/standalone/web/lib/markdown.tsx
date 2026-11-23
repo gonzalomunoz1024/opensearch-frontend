@@ -168,8 +168,16 @@ const cellsOf = (line: string): string[] =>
     .split(/(?<!\\)\|/)
     .map((cell) => cell.trim().replace(/\\\|/g, '|'));
 
-function renderBlocks(lines: string[], options: MarkdownOptions, keyPrefix: string): ReactNode[] {
+/**
+ * How deep quotes and lists may nest, as in the original's parser: a quote is one step, a list is
+ * two, and what lies a hundred steps deep is left out. Without an end, a stored text of a few
+ * thousand ">" ends the page that draws it with "Maximum call stack size exceeded".
+ */
+const MAX_NESTING = 100;
+
+function renderBlocks(lines: string[], options: MarkdownOptions, keyPrefix: string, depth = 0): ReactNode[] {
   const nodes: ReactNode[] = [];
+  if (depth >= MAX_NESTING) return nodes;
   let index = 0;
   const key = () => `${keyPrefix}-${nodes.length}`;
 
@@ -217,7 +225,7 @@ function renderBlocks(lines: string[], options: MarkdownOptions, keyPrefix: stri
         body.push(lines[index].replace(QUOTE, ''));
         index += 1;
       }
-      nodes.push(<blockquote key={key()}>{renderBlocks(body, options, key())}</blockquote>);
+      nodes.push(<blockquote key={key()}>{renderBlocks(body, options, key(), depth + 1)}</blockquote>);
       continue;
     }
 
@@ -258,7 +266,9 @@ function renderBlocks(lines: string[], options: MarkdownOptions, keyPrefix: stri
             const simple = !loose && !body.slice(1).some((text) => ITEM.test(text) || FENCE.test(text));
             return (
               <li key={at}>
-                {simple ? renderInline(body.join('\n').trim(), options, `${key()}-${at}`) : renderBlocks(body, { ...options }, `${key()}-${at}`)}
+                {simple && depth + 2 < MAX_NESTING
+                  ? renderInline(body.join('\n').trim(), options, `${key()}-${at}`)
+                  : renderBlocks(body, { ...options }, `${key()}-${at}`, depth + 2)}
               </li>
             );
           })}
