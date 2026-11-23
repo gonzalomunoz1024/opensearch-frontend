@@ -2569,8 +2569,28 @@
 
 /* --- Snapshot Management ------------------------------------------------------------------------ */
 
-.ismSnapshotFlyout {
+/* A flyout of Snapshot Management, as the plugin's: under the header, 600 px wide, its head, its
+   body and its foot 24 px in from the sides */
+.ismSnapshotFlyout.atlFlyout {
+  top: var(--header-height);
   width: min(600px, 100vw);
+}
+
+/* Its mask, where it has one (restoring), as the plugin's: under the header, and the page behind it
+   blurred as well as dimmed */
+.atlFlyoutMask:has(+ .ismSnapshotFlyout) {
+  top: var(--header-height);
+  backdrop-filter: blur(4px);
+}
+
+.ismSnapshotFlyout .atlFlyout__header,
+.ismSnapshotFlyout .atlFlyout__body {
+  padding: var(--space-6);
+}
+
+.ismSnapshotFlyout .atlFlyout__footer {
+  padding: var(--space-4) var(--space-6);
+  background: var(--color-surface);
 }
 
 .ismFlyoutFooter {
@@ -2578,10 +2598,72 @@
   width: 100%;
 }
 
-/* Cancel, flush as the plugin's: no padding, 8 px more before the button beside it */
+/* Cancel, flush as the plugin's: no padding inside its border, 8 px more before the button beside it,
+   its word on a line of 21 px as OUI's empty button sets it */
 .ismFlyoutFooter__cancel {
   padding-inline: 0;
   margin-right: var(--space-2);
+  border: 1px solid transparent;
+  line-height: 1.5;
+}
+
+.ismSnapshotPolicyPage__footer > .atlButton--empty {
+  line-height: 1.5;
+}
+
+/* The button that acts is never narrower than the plugin's, and has its clear 1 px border */
+.ismFlyoutFooter > .atlButton--primary {
+  min-width: 112px;
+  border: 1px solid transparent;
+}
+
+/* The plugin's dialogs that ask before deleting (OUI's confirmation modal): as wide as their words,
+   from 400 px up to 768 px; a large title; text in lines of 21 px with a line's space under a
+   paragraph; the theme's buttons 40 px high, the one that deletes inside a clear border */
+.atlModal.ismConfirm {
+  width: auto;
+  min-width: min(400px, 100%);
+  max-width: min(768px, 100%);
+}
+
+.ismConfirm .atlModal__title {
+  font-size: 22px;
+  line-height: 28px;
+  letter-spacing: -0.021em;
+}
+
+.ismConfirm__body {
+  font-size: var(--font-size-s);
+  line-height: 1.5;
+}
+
+.ismConfirm__body p {
+  margin: 0 0 1.5em;
+}
+
+.ismConfirm__body strong {
+  font-weight: var(--font-weight-semibold);
+}
+
+.ismConfirm .atlModal__footer > .atlButton {
+  height: 40px;
+  line-height: 1.5;
+}
+
+.ismConfirm .atlModal__footer > .atlButton--dangerFill {
+  border: 1px solid transparent;
+}
+
+/* The keyboard's ring stands 2 px off the plugin's buttons */
+.ismConfirm .atlModal__footer > .atlButton:focus-visible,
+.ismListPanel__actions .atlButton:focus-visible,
+.ismSnapshotPolicyPage__actions .atlButton:focus-visible,
+.ismPolicyPanel__header .atlButton:focus-visible,
+.ismSnapshotPolicy__channels > .atlButton:focus-visible,
+.ismSnapshotForm__repository > .atlButton:focus-visible,
+.ismSnapshotPolicyPage__footer > .atlButton:focus-visible,
+.ismFlyoutFooter > .atlButton:focus-visible {
+  outline-offset: 2px;
 }
 
 /* A form of Snapshot Management is laid out as the plugin's: its parts one under the other, with
@@ -2632,12 +2714,205 @@
   line-height: 1.5;
 }
 
-/* What a field means, in a line of 14 px as the plugin's span is set outside any text block */
+/* What a field means: the plugin's small light span, set outside any text block, so on lines as
+   high as the page's 14 px font (the words sit 1 px lower in them than in a line of their own) */
+.ismSnapField__helpLine,
+.ismSnapshotPolicy__noteLine {
+  font-size: var(--font-size-s);
+  line-height: 1;
+}
+
 .ismSnapField__help {
-  display: block;
   font-size: var(--font-size-xs);
   font-weight: 200;
-  line-height: 14px;
+}
+
+/* What a part of a form is for, where the plugin says more than a few words: its small subdued
+   text, 5 px above and below a paragraph in light letters */
+.ismSnapHelp {
+  padding: 5px 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}
+
+.ismSnapHelp > p {
+  margin: 0;
+  font-weight: 200;
+}
+
+/* A link that leaves the product, as the plugin's in the pages of Snapshot Management: part of
+   its line, the small arrow 4 px after its words */
+.ismListPanel .ismExternal,
+.ismSnapshotPolicyPage .ismExternal,
+.ismSnapshotFlyout .ismExternal {
+  display: inline;
+  white-space: normal;
+}
+
+.ismListPanel .ismExternal > .atlIcon,
+.ismSnapshotPolicyPage .ismExternal > .atlIcon,
+.ismSnapshotFlyout .ismExternal > .atlIcon {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-left: var(--space-1);
+  vertical-align: middle;
+}
+
+/* JSON to change, as the plugin's code editor draws it with the theme's colours: nine tenths of
+   nine tenths of the width (the plugin sizes its editor twice), lines of 18 px with 4 px before
+   the text, a white gutter with a line at its left as wide as its numbers need, and the line of
+   the cursor on a band that crosses the gutter */
+.ismSnapEditor {
+  --ism-ace-gutter-line: #e9e9eb;
+  --ism-ace-guide: #86868b;
+  --ism-ace-key: #037098;
+  --ism-ace-language: #5256e1;
+  --ism-ace-string: #087824;
+  --ism-ace-comment: #41705a;
+  --ism-ace-band: color-mix(in srgb, var(--color-border) 70%, transparent);
+  position: relative;
+  width: 90%;
+}
+
+/* The dark theme's: its line and guides in the theme's border and faint text, ace's dark words */
+.themeDark .ismSnapEditor {
+  --ism-ace-gutter-line: var(--color-border);
+  --ism-ace-guide: var(--color-text-tertiary);
+  --ism-ace-key: hsl(196deg 47.83% 57.37%);
+  --ism-ace-language: rgb(149.7 152.3 249.3);
+  --ism-ace-string: rgb(76.9 183.8 103.5);
+  --ism-ace-comment: hsl(151deg 20.13% 59.2%);
+}
+
+.ismSnapEditor .atlCodeEditor {
+  /* The gutter: a pixel of line, then the numbers with 20 px before and 13 after them */
+  --ism-ace-gutter: calc(34px + var(--ism-ace-digits, 1) * 1ch);
+  --code-gutter: calc(var(--ism-ace-gutter) + 4px);
+  --ism-ace-gutter-paint: linear-gradient(
+    to right,
+    var(--ism-ace-gutter-line) 0,
+    var(--ism-ace-gutter-line) 1px,
+    var(--color-surface) 1px,
+    var(--color-surface) var(--ism-ace-gutter),
+    var(--color-surface-secondary) var(--ism-ace-gutter)
+  );
+  width: 90%;
+  border: 0;
+  border-radius: 0;
+  background: var(--ism-ace-gutter-paint);
+}
+
+/* The original's gutter ends on a whole pixel */
+@supports (width: round(up, 1px, 1px)) {
+  .ismSnapEditor .atlCodeEditor {
+    --ism-ace-gutter: calc(1px + round(up, 33px + var(--ism-ace-digits, 1) * 1ch, 1px));
+  }
+}
+
+.ismSnapEditor .atlCodeEditor:focus-within {
+  border: 0;
+  box-shadow: none;
+}
+
+.ismSnapEditor .atlCodeEditor__paint {
+  padding: 0;
+}
+
+.ismSnapEditor .atlCodeEditor__line {
+  padding: 0 4px 0 var(--code-gutter);
+  background: transparent;
+}
+
+.ismSnapEditor .atlCodeEditor__line::before {
+  box-sizing: border-box;
+  width: var(--code-gutter);
+  margin: 0 0 0 calc(-1 * var(--code-gutter));
+  padding-right: 17px;
+  background: var(--ism-ace-gutter-paint);
+  color: var(--color-text-secondary);
+}
+
+.ismSnapEditor .atlCodeEditor__line--marked {
+  background: var(--ism-ace-band);
+}
+
+.ismSnapEditor .atlCodeEditor__line--marked::before {
+  background:
+    linear-gradient(var(--ism-ace-band), var(--ism-ace-band)),
+    var(--ism-ace-gutter-paint);
+}
+
+.ismSnapEditor .atlCodeEditor__input {
+  padding: 0 4px 0 var(--code-gutter);
+}
+
+.ismSnapEditor .tokKey,
+.ismSnapEditor .tokNumber {
+  color: var(--ism-ace-key);
+}
+
+.ismSnapEditor .tokString {
+  color: var(--ism-ace-string);
+}
+
+.ismSnapEditor .tokBoolean,
+.ismSnapEditor .tokEscape {
+  color: var(--ism-ace-language);
+}
+
+.ismSnapEditor .tokComment {
+  color: var(--ism-ace-comment);
+}
+
+/* The guide of an indent: a line at the right of each tab of it, the whole height of the line */
+.ismSnapEditor .tokGuide {
+  display: inline-block;
+  height: 1lh;
+  vertical-align: top;
+  background: linear-gradient(
+    to left,
+    var(--ism-ace-guide) 0,
+    var(--ism-ace-guide) 1px,
+    transparent 1px,
+    transparent 100%
+  );
+}
+
+/* The hint the Tab key stops on: unseen under the text, which a click reaches, until it has the
+   focus */
+.ismSnapEditor__hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: color-mix(in srgb, var(--color-surface) 70%, transparent);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-s);
+  line-height: 1.5;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.ismSnapEditor__hint > p {
+  margin: 0;
+}
+
+.ismSnapEditor__hint:focus {
+  z-index: 1;
+  border: 2px solid var(--color-accent);
+  outline: none;
+  opacity: 1;
+}
+
+.ismSnapEditor__hint--inactive {
+  display: none;
 }
 
 .ismSnapField__body > .atlField,
@@ -2645,6 +2920,13 @@
 .ismSnapField__body > .atlSelect {
   width: 100%;
   max-width: 400px;
+}
+
+/* A text area as OUI's compressed one: its words 8 px in from the edge of its ring, three lines
+   high, and the 2 px under it that its line leaves */
+.ismSnapField__body > textarea.atlField {
+  margin-bottom: 2px;
+  padding: 7px;
 }
 
 .ismSnapField__error {
@@ -2844,6 +3126,22 @@
   gap: var(--space-6);
 }
 
+/* Its buttons, those over a policy's page and the one beside a panel's title, as the plugin's
+   small buttons: at least 112 px wide, the icon 8 px from the words, and a clear 1 px border round
+   them (the danger button keeps its own) */
+.ismListPanel__actions .atlButton,
+.ismSnapshotPolicyPage__actions .atlButton,
+.ismPolicyPanel__header .atlButton {
+  min-width: 112px;
+  gap: var(--space-2);
+}
+
+.ismListPanel__actions .atlButton:not(.atlButton--danger),
+.ismSnapshotPolicyPage__actions .atlButton:not(.atlButton--danger),
+.ismPolicyPanel__header .atlButton:not(.atlButton--danger) {
+  border: 1px solid transparent;
+}
+
 .ismListPanel__rule {
   height: 1px;
   margin: var(--space-2) 0;
@@ -2867,18 +3165,62 @@
   margin-bottom: 0;
 }
 
-/* The columns share the width as the plugin's table does: what no column claims, in equal parts */
+/* The search box as OUI's: the magnifier 8 px in from its edge, the words 32 px */
+.ismListPanel .ismSearchRow .atlFieldGroup {
+  padding-left: calc(var(--space-2) - 1px);
+}
+
+.ismListPanel .ismSearchRow .atlFieldGroup > input {
+  padding-left: var(--space-2);
+}
+
+/* The columns share the width as the plugin's table does: what no column claims, in equal parts;
+   and its figures are of one width, as in OUI's tables */
 .ismListPanel .atlTable,
 .ismPolicyPanel .atlTable {
   table-layout: fixed;
+  font-feature-settings: 'calt' 1, 'kern' 1, 'liga' 1, 'tnum' 1;
+}
+
+/* OUI's table keeps a caption for screen readers over its header, 1 px high */
+.ismListPanel .ismTable__scroll,
+.ismPolicyPanel .ismTable__scroll {
+  padding-top: 1px;
+}
+
+/* A tick box stands in the middle of its row as a block, as OUI's, and does not sit on the line of
+   the words (which made the rows 3 px higher) */
+.ismListPanel .atlTable__check .atlCheckbox {
+  display: flex;
+}
+
+/* A link that is a button, as OUI's: on a line of the font's own height, its figures as the font
+   draws them */
+.ismListPanel .atlTable .atlLinkButton,
+.ismPolicyPanel .atlTable .atlLinkButton {
+  font-feature-settings: normal;
+  line-height: normal;
+}
+
+/* OUI lays out what a cell holds in a flex box, which stands in the middle of the row: a link that
+   is a button and a status with its dot are blocks so, and not set on the line of the words (where
+   they made a row 2 px higher) */
+.ismListPanel .atlTable td > .atlLinkButton,
+.ismPolicyPanel .atlTable td > .atlLinkButton {
+  display: block;
+}
+
+.ismListPanel .atlTable td > .atlHealth {
+  display: flex;
 }
 
 .ismListPanel .atlTable .atlLinkButton {
   text-align: left;
 }
 
+/* The pager, as the plugin's, 16 px under the table (the kit's margin) and no further in */
 .ismListPanel .ismTable .atlPagination {
-  padding: var(--space-4) 0 0;
+  padding: 0;
 }
 
 /* The filters as the plugin's group of them: one box, the buttons parted by thin lines */
@@ -2906,6 +3248,7 @@
   background: none;
   color: var(--color-text-primary);
   font-weight: var(--font-weight-medium);
+  line-height: 1.5;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -2920,9 +3263,19 @@
   font-weight: var(--font-weight-semibold);
 }
 
+/* A short name stands in the middle of the 48 px the plugin's filter button keeps for it */
 .ismFilterGroup__name {
   min-width: 48px;
-  text-align: left;
+  text-align: center;
+}
+
+.ismFilterGroup__name::after {
+  content: attr(data-text);
+  display: block;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: var(--font-weight-semibold);
 }
 
 .ismFilterGroup__button .ismFilterCount {
@@ -2949,6 +3302,7 @@
 .ismTabbed > .atlTabs > .atlTab[aria-selected="true"] {
   background: var(--color-surface-secondary);
   color: var(--color-text-primary);
+  cursor: default;
 }
 
 .ismTabbed > .atlTabs > .atlTab[aria-selected="true"]::after {
@@ -3018,6 +3372,21 @@
   width: 100%;
 }
 
+/* The time of day as the plugin's date picker: its clock 16 px, 12 px in from the edge, and the
+   time 32 px in */
+.ismTimeField.atlFieldGroup {
+  padding-left: calc(var(--space-3) - 1px);
+}
+
+.ismTimeField.atlFieldGroup > .atlIcon {
+  width: 16px;
+  height: 16px;
+}
+
+.ismTimeField.atlFieldGroup > input {
+  padding-left: 0;
+}
+
 .ismTimeList {
   max-height: 200px;
   overflow-y: auto;
@@ -3053,13 +3422,11 @@
   max-width: none;
 }
 
-/* "Configure when to check…": the plugin's span, grey in its own words, in a line of 14 px */
+/* "Configure when to check…": the plugin's span, grey in its own words, on a line of 14 px */
 .ismSnapshotPolicy__note {
-  display: block;
   color: grey;
   font-size: var(--font-size-xs);
   font-weight: 200;
-  line-height: 14px;
 }
 
 /* The channel, its refresh and the channels' page, 8 px apart on the plugin's 600 px less the
@@ -3079,6 +3446,26 @@
 
 .ismSnapshotPolicy__channels > .atlButton {
   flex: none;
+}
+
+/* The buttons beside a field and at the foot of the page, as the plugin's small buttons: the icon
+   8 px from the words, a clear 1 px border round them, the one that acts at least 112 px wide */
+.ismSnapshotPolicy__channels > .atlButton,
+.ismSnapshotForm__repository > .atlButton,
+.ismSnapshotPolicyPage__footer > .atlButton {
+  gap: var(--space-2);
+  border: 1px solid transparent;
+}
+
+/* Beside a field, whose lines are of 21 px, the words keep the page's line, where they stand as
+   the plugin's do */
+.ismSnapshotPolicy__channels > .atlButton,
+.ismSnapshotForm__repository > .atlButton {
+  line-height: 1.43;
+}
+
+.ismSnapshotPolicyPage__footer > .atlButton--primary {
+  min-width: 112px;
 }
 
 /* The refresh is the plugin's button with only an icon in it, not a square icon button */
@@ -3176,9 +3563,11 @@
   background: var(--color-border-light);
 }
 
+/* Three to a row as OUI's grid of thirds: each 33.3 % of the grid and its outer gutters, less a
+   gutter (so the third column starts a little to the left of a true third) */
 .ismPolicyFacts {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(3, calc((100% + var(--space-6)) * 0.333 - var(--space-6)));
   gap: var(--space-6);
   margin: 0;
   line-height: 1.5;

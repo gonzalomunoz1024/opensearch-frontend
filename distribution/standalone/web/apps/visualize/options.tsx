@@ -12,7 +12,7 @@ import { Fragment, useEffect, useId, useState, type ReactNode } from 'react';
 import { RAMP_NAMES } from '../../charts/core';
 import { cx } from '../../components/basic';
 import { Icon } from '../../components/icon';
-import { FormRow, RangeField, TextArea } from '../../components/form';
+import { TextArea } from '../../components/form';
 import { ColorPickerPanel, cssColor, parseColor } from '../../components/color_picker';
 import { Popover, Tooltip } from '../../components/overlay';
 import { aggLabel, type AggConfig, type AggContext } from '../../lib/aggs';
@@ -1142,19 +1142,29 @@ function MarkdownData({ params, setParams }: OptionsProps) {
   );
 }
 
-/** The original's panel of settings has no title */
+/**
+ * The original's panel of settings has no title; its font size is a RangeOption with the value
+ * beside the handle and a field to write it in
+ */
 function MarkdownOptions(props: OptionsProps) {
   const { params, setParams } = props;
   const fields = useFields(props);
+  const [fontSizeValid, setFontSizeValid] = useState(true);
   return (
-    <section className="vzePanel">
-      <div className="vzeFields">
-        <FormRow label="Base font size in points" full>
-          <RangeField min={8} max={36} value={Number(params.fontSize ?? 12)} onChange={(fontSize) => setParams({ ...params, fontSize })} />
-        </FormRow>
-        {fields.toggle('Open links in new tab', ['openLinksInNewTab'], { testId: 'markdownEditorOpenLinksInNewTab' })}
-      </div>
-    </section>
+    <Panel>
+      <ParamRow label="Base font size in points" invalid={!fontSizeValid} error={fontSizeValid ? undefined : 'Values must be on or between 8 and 36'}>
+        <RangeControl
+          min={8}
+          max={36}
+          value={Number(params.fontSize ?? 12)}
+          showInput
+          onValidity={setFontSizeValid}
+          ariaLabel="Base font size in points"
+          onChange={(fontSize) => setParams({ ...params, fontSize })}
+        />
+      </ParamRow>
+      {fields.toggle('Open links in new tab', ['openLinksInNewTab'], { testId: 'markdownEditorOpenLinksInNewTab' })}
+    </Panel>
   );
 }
 

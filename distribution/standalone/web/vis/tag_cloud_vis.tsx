@@ -1,164 +1,259 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
-/* Tag cloud: the values of a field as words, each as large as its measure. */
+/*
+ * Tag cloud: the values of a field as words, each as large as its measure, drawn as OpenSearch
+ * Dashboards 3.9.0 draws them (vis_type_tagcloud: TagCloudChart, TagCloudVisualization, Label
+ * and FeedbackMessage). The cloud fills the box but for a warning, when the words were too many or
+ * do not all fit, and the names of the columns under it; both are told once the cloud is drawn.
+ * The cloud is drawn again, and laid out again, whenever the data, the options or the size of the
+ * box change, the size at most every 300 ms. A click on a word filters for its term.
+ */
 
-import { useMemo } from 'react';
-import { ChartMessage, ChartTooltip, ordinalColors, textWidth, useSize, useTooltip } from '../charts/core';
-import { bucketFilter } from '../lib/aggs';
-import { bucketColumns, metricColumns, numberOf, type VisRenderProps } from './types';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { SERIES_COLORS } from '../charts/core';
+import { Icon } from '../components/icon';
+import { Tooltip } from '../components/overlay';
+import { bucketFilter, type AggContext, type Table, type TableColumn } from '../lib/aggs';
+import type { Filter } from '../lib/types';
+import { formatValue } from './table_data';
+import type { VisData } from './request';
+import { cloudTags, TAG_CLOUD_DEFAULTS, TAG_CLOUD_STATUS, TagCloud, type TagCloudOptions } from './tag_cloud';
+import { ordinalScale } from './tag_cloud_d3';
+import { bucketColumns, metricColumns, type VisRenderProps } from './types';
 import '../styles/vis_basic.css';
 
-interface TagCloudParams {
-  scale?: 'linear' | 'log' | 'square root';
-  orientation?: 'single' | 'right angled' | 'multiple';
-  minFontSize?: number;
-  maxFontSize?: number;
-  showLabel?: boolean;
+interface LabelState {
+  label: string;
+  shouldShowLabel: boolean;
 }
 
-interface Word {
-  text: string;
-  key: unknown;
-  value: number;
-  size: number;
-  rotate: number;
+interface FeedbackState {
+  shouldShowTruncate: boolean;
+  shouldShowIncomplete: boolean;
 }
 
-interface Placed extends Word {
-  x: number;
-  y: number;
+interface CloudCallbacks {
+  onLabel: (state: LabelState) => void;
+  onFeedback: (state: FeedbackState) => void;
+  onFilter: (filters: Filter[]) => void;
 }
 
-// The same word leans the same way every time it is drawn
-function hash(text: string): number {
-  let value = 0;
-  for (let index = 0; index < text.length; index += 1) value = (value * 31 + text.charCodeAt(index)) >>> 0;
-  return value;
+/** The options of a visualization with the defaults of the tag cloud for those it has not set */
+function withDefaults(params: Record<string, unknown>): TagCloudOptions {
+  const options: Record<string, unknown> = { ...params };
+  for (const [key, value] of Object.entries(TAG_CLOUD_DEFAULTS)) if (options[key] === undefined) options[key] = value;
+  return options as TagCloudOptions;
 }
 
-const ANGLES = [-60, -30, 0, 30, 60];
-
-/** Places words from the middle outwards along a spiral, where they overlap nothing placed before */
-export function layoutCloud(words: Word[], width: number, height: number): { placed: Placed[]; skipped: number } {
-  const boxes: Array<{ left: number; top: number; right: number; bottom: number }> = [];
-  const placed: Placed[] = [];
-  let skipped = 0;
-  const stretch = height === 0 ? 1 : width / height;
-  for (const word of [...words].sort((a, b) => b.size - a.size)) {
-    const long = textWidth(word.text, word.size, 400) + 4;
-    const tall = word.size * 1.05;
-    const angle = (word.rotate * Math.PI) / 180;
-    const boxWidth = Math.abs(long * Math.cos(angle)) + Math.abs(tall * Math.sin(angle));
-    const boxHeight = Math.abs(long * Math.sin(angle)) + Math.abs(tall * Math.cos(angle));
-    let done = false;
-    for (let step = 0; step < 4000 && !done; step += 1) {
-      const turn = step * 0.22;
-      const reach = 1.6 * turn;
-      const x = width / 2 + reach * Math.cos(turn) * stretch;
-      const y = height / 2 + reach * Math.sin(turn);
-      const box = { left: x - boxWidth / 2, top: y - boxHeight / 2, right: x + boxWidth / 2, bottom: y + boxHeight / 2 };
-      if (box.left < 0 || box.top < 0 || box.right > width || box.bottom > height) {
-        if (reach > Math.max(width, height)) break;
-        continue;
+/**
+ * lodash's throttle: called at once, then at most once more at the end of each wait in which it
+ * was called again
+ */
+function throttle(func: () => void, wait: number): () => void {
+  let lastCallTime: number | undefined;
+  let lastInvokeTime = 0;
+  let timerId: ReturnType<typeof setTimeout> | undefined;
+  let called = false;
+  const invoke = (time: number) => {
+    called = false;
+    lastInvokeTime = time;
+    func();
+  };
+  const shouldInvoke = (time: number) => {
+    if (lastCallTime === undefined) return true;
+    const sinceCall = time - lastCallTime;
+    return sinceCall >= wait || sinceCall < 0 || time - lastInvokeTime >= wait;
+  };
+  const remainingWait = (time: number) => Math.min(wait - (time - (lastCallTime ?? time)), wait - (time - lastInvokeTime));
+  const timerExpired = () => {
+    const time = Date.now();
+    if (shouldInvoke(time)) {
+      timerId = undefined;
+      if (called) invoke(time);
+      called = false;
+      return;
+    }
+    timerId = setTimeout(timerExpired, remainingWait(time));
+  };
+  return () => {
+    const time = Date.now();
+    const isInvoking = shouldInvoke(time);
+    called = true;
+    lastCallTime = time;
+    if (isInvoking) {
+      if (timerId === undefined) {
+        lastInvokeTime = time;
+        timerId = setTimeout(timerExpired, wait);
+        invoke(time);
+        return;
       }
-      if (boxes.some((other) => box.left < other.right && box.right > other.left && box.top < other.bottom && box.bottom > other.top)) continue;
-      boxes.push(box);
-      placed.push({ ...word, x, y });
-      done = true;
+      clearTimeout(timerId);
+      timerId = setTimeout(timerExpired, wait);
+      invoke(time);
+      return;
     }
-    if (!done) skipped += 1;
-  }
-  return { placed, skipped };
+    if (timerId === undefined) timerId = setTimeout(timerExpired, wait);
+  };
 }
 
-export function TagCloudVis({ vis, data, uiState, onFilter }: VisRenderProps) {
-  const params = vis.params as TagCloudParams;
-  const { table, context } = data;
-  const [ref, size] = useSize<HTMLDivElement>();
-  const tip = useTooltip();
-  const bucket = bucketColumns(table)[0];
-  const metric = metricColumns(table)[0];
+/** What draws the cloud into its element and tells what to show around it, as TagCloudVisualization */
+class TagCloudVisualization {
+  private readonly tagCloud: TagCloud;
+  private truncated = false;
+  private hasBucket = false;
+  private context: AggContext | undefined;
 
-  const words = useMemo(() => {
-    if (!bucket || !metric) return [];
-    const raw = table.rows
-      .map((row) => ({ key: row[bucket.id], text: bucket.format(row[bucket.id]), value: numberOf(row, metric) ?? 0 }))
-      .filter((word) => word.text !== '');
-    const values = raw.map((word) => word.value);
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    const scale = (value: number) => {
-      if (max === min) return 1;
-      if (params.scale === 'log') return (Math.log(Math.max(value, 1e-9)) - Math.log(Math.max(min, 1e-9))) / (Math.log(max) - Math.log(Math.max(min, 1e-9)));
-      if (params.scale === 'square root') return (Math.sqrt(value) - Math.sqrt(min)) / (Math.sqrt(max) - Math.sqrt(min));
-      return (value - min) / (max - min);
-    };
-    const smallest = params.minFontSize ?? 18;
-    const largest = params.maxFontSize ?? 72;
-    return raw.map((word) => ({
-      ...word,
-      size: smallest + (largest - smallest) * Math.max(0, Math.min(1, scale(word.value))),
-      rotate:
-        params.orientation === 'right angled' ? (hash(word.text) % 2 === 0 ? 0 : 90) : params.orientation === 'multiple' ? ANGLES[hash(word.text) % ANGLES.length] : 0,
-    }));
-  }, [table, bucket, metric, params.scale, params.minFontSize, params.maxFontSize, params.orientation]);
+  constructor(node: HTMLElement, private readonly callbacks: CloudCallbacks) {
+    this.tagCloud = new TagCloud(node, ordinalScale(SERIES_COLORS));
+    this.tagCloud.on('select', (tag) => {
+      if (!this.hasBucket || !this.context) return;
+      const { data, rowIndex } = tag.meta;
+      const column = data.columns[0];
+      const row = data.rows[rowIndex];
+      const filter = column && row ? bucketFilter(column, row[column.id], this.context, { table: data, row }) : undefined;
+      if (filter) this.callbacks.onFilter([filter]);
+    });
+  }
 
-  const labelHeight = params.showLabel ? 22 : 0;
-  const layout = useMemo(() => {
-    const height = Math.max(0, size.height - labelHeight);
-    // Words that are too large for the room shrink together until the largest fits
-    let factor = 1;
-    const widest = Math.max(1, ...words.map((word) => textWidth(word.text, word.size, 400) + 8));
-    if (size.width > 0 && widest > size.width) factor = size.width / widest;
-    let result = layoutCloud(words.map((word) => ({ ...word, size: word.size * factor })), size.width, height);
-    for (let attempt = 0; attempt < 4 && result.skipped > 0 && size.width > 0; attempt += 1) {
-      factor *= 0.8;
-      result = layoutCloud(words.map((word) => ({ ...word, size: word.size * factor })), size.width, height);
+  async render(data: VisData, options: TagCloudOptions): Promise<void> {
+    const { table, context } = data;
+    const bucket = bucketColumns(table)[0];
+    this.hasBucket = bucket !== undefined;
+    this.context = context;
+    this.tagCloud.setOptions(options);
+    this.updateData(table, bucket);
+    this.tagCloud.resize();
+
+    await this.renderComplete();
+
+    if (table.columns.length !== 2) {
+      this.callbacks.onFeedback({ shouldShowTruncate: false, shouldShowIncomplete: false });
+      return;
     }
-    return result;
-  }, [words, size.width, size.height, labelHeight]);
+    this.callbacks.onLabel({ label: `${table.columns[0].name} - ${table.columns[1].name}`, shouldShowLabel: Boolean(options.showLabel) });
+    this.callbacks.onFeedback({
+      shouldShowTruncate: this.truncated,
+      shouldShowIncomplete: this.tagCloud.getStatus() === TAG_CLOUD_STATUS.INCOMPLETE,
+    });
+  }
 
-  if (words.length === 0) return <ChartMessage>No results found</ChartMessage>;
-  // Each word takes the next colour of the palette, the largest first
-  const colors = ordinalColors(words.map((word) => word.text), uiState.vis?.colors);
+  destroy(): void {
+    this.tagCloud.destroy();
+  }
+
+  private updateData(table: Table, bucket: TableColumn | undefined) {
+    const made = cloudTags(table, bucket, metricColumns(table)[0], formatValue);
+    if (!made) {
+      this.tagCloud.setData([]);
+      return;
+    }
+    this.truncated = made.truncated;
+    this.tagCloud.setData(made.tags);
+  }
+
+  private renderComplete(): Promise<void> {
+    return new Promise((resolve) => {
+      const once = () => {
+        this.tagCloud.off('renderComplete', once);
+        resolve();
+      };
+      this.tagCloud.on('renderComplete', once);
+    });
+  }
+}
+
+function FeedbackMessage({ shouldShowTruncate, shouldShowIncomplete }: FeedbackState) {
+  if (!shouldShowTruncate && !shouldShowIncomplete) return null;
+  return (
+    <Tooltip
+      className="visTagCloud__tip"
+      content={
+        <>
+          {shouldShowTruncate && <p>The number of tags has been truncated to avoid long draw times.</p>}
+          {shouldShowIncomplete && <p>The container is too small to display the entire cloud. Tags might be cropped or omitted.</p>}
+        </>
+      }
+    >
+      <span className="visTagCloud__warning" tabIndex={0} role="img" aria-label="Info">
+        <Icon name="alert" />
+      </span>
+    </Tooltip>
+  );
+}
+
+export function TagCloudVis({ vis, data, onFilter }: VisRenderProps) {
+  const chart = useRef<HTMLDivElement>(null);
+  const controller = useRef<TagCloudVisualization | null>(null);
+  const [label, setLabel] = useState<LabelState>({ label: '', shouldShowLabel: true });
+  const [feedback, setFeedback] = useState<FeedbackState>({ shouldShowTruncate: false, shouldShowIncomplete: false });
+  const filter = useRef(onFilter);
+  filter.current = onFilter;
+  const paramsKey = JSON.stringify(vis.params);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const options = useMemo(() => withDefaults(vis.params), [paramsKey]);
+
+  useEffect(() => {
+    const node = chart.current;
+    if (!node) return undefined;
+    const visController = new TagCloudVisualization(node, {
+      onLabel: setLabel,
+      onFeedback: setFeedback,
+      onFilter: (filters) => filter.current?.(filters),
+    });
+    controller.current = visController;
+    return () => {
+      visController.destroy();
+      controller.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    void controller.current?.render(data, options);
+  }, [data, options]);
+
+  // A new size draws the cloud again, at most every 300 ms, as the original's resize observer
+  const updateChartSize = useMemo(
+    () =>
+      throttle(() => {
+        void controller.current?.render(data, options);
+      }, 300),
+    [data, options]
+  );
+  const onResize = useRef(updateChartSize);
+  onResize.current = updateChartSize;
+  // Observed from when the element is put in the page, before the cloud is made, as the original
+  // observes it: a size heard of before then draws nothing, and the same size again nothing more
+  const observer = useRef<ResizeObserver | null>(null);
+  const size = useRef({ height: 0, width: 0 });
+  const observe = useCallback((node: HTMLDivElement | null) => {
+    observer.current?.disconnect();
+    observer.current = null;
+    if (!node || typeof ResizeObserver === 'undefined') return;
+    const watcher = new ResizeObserver(() => {
+      const { height, width } = node.getBoundingClientRect();
+      if (size.current.height === height && size.current.width === width) return;
+      onResize.current();
+      size.current = { height, width };
+    });
+    watcher.observe(node);
+    observer.current = watcher;
+  }, []);
 
   return (
-    <div ref={ref} className="visTagCloud" data-test-subj="visChart">
-      {size.width > 0 && size.height > 0 && (
-        <svg width={size.width} height={size.height - labelHeight} role="img" aria-label={vis.title || 'Tag cloud'}>
-          {layout.placed.map((word) => (
-            <text
-              key={word.text}
-              x={word.x}
-              y={word.y}
-              dy="0.35em"
-              textAnchor="middle"
-              fontSize={word.size}
-              fontWeight={400}
-              fill={colors.get(word.text)}
-              transform={word.rotate ? `rotate(${word.rotate} ${word.x} ${word.y})` : undefined}
-              style={{ cursor: onFilter ? 'pointer' : undefined }}
-              data-test-subj="tagCloudWord"
-              onMouseMove={(event) =>
-                tip.show({ x: event.clientX, y: event.clientY, rows: [{ label: word.text, value: metric ? metric.format(word.value) : String(word.value) }] })
-              }
-              onMouseLeave={tip.hide}
-              onClick={() => {
-                const filter = bucket ? bucketFilter(bucket, word.key, context) : undefined;
-                if (filter && onFilter) onFilter([filter]);
-              }}
-            >
-              {word.text}
-            </text>
-          ))}
-        </svg>
-      )}
-      {params.showLabel && bucket && metric && (
-        <div className="visTagCloud__label">
-          {bucket.name} - {metric.name}
+    <div className="visTagCloud" ref={observe}>
+      <div className="visTagCloud__container">
+        <div className="visTagCloud__chart">
+          <div className="visTagCloud__cloud" data-test-subj="tagCloudVisualization" ref={chart} />
         </div>
-      )}
-      <ChartTooltip content={tip.content} />
+        <div>
+          <FeedbackMessage {...feedback} />
+        </div>
+        <div>
+          <div className="visTagCloud__label" style={{ display: label.shouldShowLabel ? 'block' : 'none' }}>
+            {label.label}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
