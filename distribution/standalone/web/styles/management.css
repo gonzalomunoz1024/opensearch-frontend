@@ -83,111 +83,14 @@
   box-shadow: var(--shadow-card);
 }
 
-.mgtLanding__rule,
-.mgtRule {
+.mgtLanding__rule {
   margin: var(--space-5) 0;
   border: 0;
   border-top: 1px solid var(--color-border-light);
 }
 
-.mgtLead {
-  margin: var(--space-3) 0;
-  max-width: 1100px;
-}
-
-.mgtBadges {
-  flex-wrap: wrap;
-  margin-top: calc(var(--space-2) * -1);
-}
-
-.mgtDisplayName {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--space-2);
-  margin: var(--space-4) 0 var(--space-6);
-}
-
-.mgtDisplayName .atlFormRow {
-  flex: 0 1 400px;
-}
-
-/* The save button sits beside the field, above the help line under it */
-.mgtDisplayName > .atlButton {
-  margin-bottom: 24px;
-}
-
 .mgtTabTools {
   margin: var(--space-4) 0 var(--space-3);
-}
-
-.mgtTabHeader {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-4);
-  margin-bottom: var(--space-3);
-}
-
-.mgtTabHeader p {
-  margin-top: var(--space-1);
-  max-width: 900px;
-}
-
-.mgtAddFilter {
-  margin-bottom: var(--space-3);
-}
-
-.mgtDot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-healthy);
-}
-
-.mgtConflict {
-  color: var(--color-warning-text);
-  text-decoration: underline dotted;
-}
-
-/* --- The two steps that make an index pattern ------------------------------------------------- */
-
-.mgtStepTitle {
-  margin-bottom: var(--space-4);
-}
-
-.mgtWizardRow {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-6);
-}
-
-/* The button lines up with the first field, under its label */
-.mgtWizardRow > .atlButton {
-  margin-top: 22px;
-}
-
-.mgtWizardStatus {
-  margin: var(--space-5) 0 var(--space-4);
-}
-
-.mgtWizardStep2 {
-  margin-top: var(--space-4);
-  max-width: 560px;
-}
-
-.mgtTimeField {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--space-2);
-}
-
-.mgtTimeField .atlFormRow {
-  flex: 1 1 auto;
-}
-
-.mgtWizardFooter {
-  justify-content: flex-end;
-  margin-top: var(--space-6);
 }
 
 /* --- Forms -------------------------------------------------------------------------------------- */
@@ -226,44 +129,6 @@
 
 .mgtSamples td {
   overflow-wrap: anywhere;
-}
-
-.mgtRules {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.mgtRules__row {
-  display: grid;
-  grid-template-columns: 1fr 1fr var(--control-height);
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.mgtRules--colors .mgtRules__row {
-  grid-template-columns: 1fr 96px 128px 96px var(--control-height);
-}
-
-.mgtRules__row--head {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-}
-
-.mgtColor {
-  width: 100%;
-  height: var(--control-height);
-  padding: 2px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-}
-
-.mgtColorExample {
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-xs);
-  text-align: center;
 }
 
 /* --- Advanced settings -------------------------------------------------------------------------- */
