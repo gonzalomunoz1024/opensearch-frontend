@@ -14,7 +14,7 @@ import { Icon } from '../../components/icon';
 import { Popover } from '../../components/overlay';
 import { useBreadcrumbs } from '../../shell/state';
 import { Detail, Details, ExternalLink, JsonEditor, go, ism, toasts } from './common';
-import { ConfigureJob, FieldRow, FormPanel, Spacer, Wizard, nameOptions, useIndexNames } from './job_parts';
+import { ConfigureJob, FieldRow, FormPanel, InfoGrid, Spacer, Wizard, nameOptions, useIndexNames } from './job_parts';
 import {
   CALENDAR_TIMEUNITS,
   FIXED_TIMEUNITS,
@@ -901,15 +901,7 @@ export function TransformSchedule({
 /** What a job groups and aggregates by, each as a name over the field it works on */
 export function Definitions({ items }: { items: DefinitionItem[] }) {
   return (
-    <div className="ismSmallDetails">
-      <Details columns={4}>
-        {items.map((item, at) => (
-          <Detail key={at} name={item.title}>
-            {item.field}
-          </Detail>
-        ))}
-      </Details>
-    </div>
+    <InfoGrid size="xs" items={items.map((item) => ({ term: item.title, value: item.field }))} />
   );
 }
 

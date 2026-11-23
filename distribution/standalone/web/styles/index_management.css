@@ -1239,6 +1239,21 @@
   padding: var(--space-2);
 }
 
+.atlPopover.ismActionsPopover--plain {
+  padding: 0;
+}
+
+.ismActionsPopover--plain .atlContextMenu__item {
+  height: 37px;
+}
+
+/* The JSON of a transform job: the component library's small code */
+.ismJsonSmall .ismJobJson .ismCodeBlock__code,
+.ismJsonSmall .ismJobJson .ismCodeBlock__pre {
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
 .ismActionsPopover .atlContextMenu {
   min-width: 0;
 }
@@ -3361,17 +3376,18 @@
 
 /* --- A grid of sample data ------------------------------------------------------------------------ */
 
+/* A grid of sample data, as the component library's data grid with all its borders and a shaded
+   header: the row of controls in a border of its own, then cells 34 px high, 6 px in, each with a
+   line at its right and under it, and the first of a row with one at its left as well */
 .ismGrid {
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-sm);
   background: var(--color-surface);
 }
 
 .ismGrid__toolbar {
   display: flex;
   align-items: center;
-  padding: var(--space-1) var(--space-2);
-  border-bottom: 1px solid var(--color-border-light);
+  padding: var(--space-1) var(--space-1) var(--space-1) 6px;
+  border: 1px solid var(--color-border-light);
 }
 
 .ismGrid__selector {
@@ -3379,7 +3395,7 @@
   align-items: center;
   gap: var(--space-2);
   height: 24px;
-  padding: 0 var(--space-2);
+  padding: 0 9px;
   border: 0;
   border-radius: var(--radius-sm);
   background: none;
@@ -3400,15 +3416,18 @@
 /* The columns share the width there is, and none is narrower than 100px: the page gives the least width */
 .ismGrid__table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   table-layout: fixed;
   font-size: var(--font-size-s);
+  line-height: 21px;
 }
 
 .ismGrid__table th,
 .ismGrid__table td {
+  box-sizing: border-box;
   height: 34px;
-  padding: 0 var(--space-2);
+  padding: 6px;
   border-right: 1px solid var(--color-border-light);
   border-bottom: 1px solid var(--color-border-light);
   text-align: left;
@@ -3417,19 +3436,18 @@
   text-overflow: ellipsis;
 }
 
+.ismGrid__table th:first-child,
+.ismGrid__table td:first-child {
+  border-left: 1px solid var(--color-border-light);
+}
+
+.ismGrid__table td {
+  font-feature-settings: "calt", "kern", "liga", "tnum";
+}
+
 .ismGrid__table th {
-  height: 44px;
   background: var(--color-surface-secondary);
   font-weight: var(--font-weight-semibold);
-}
-
-.ismGrid__table th:last-child,
-.ismGrid__table td:last-child {
-  border-right: 0;
-}
-
-.ismGrid__table tbody tr:last-child td {
-  border-bottom: 0;
 }
 
 .ismGrid__table--highlight tbody tr:hover {
@@ -3716,25 +3734,29 @@
 }
 
 .ismPreviewEmpty {
-  padding: var(--space-5) var(--space-4);
+  max-width: 504px;
+  margin: 0 auto;
+  padding: var(--space-6);
   text-align: center;
   font-size: var(--font-size-s);
 }
 
 .ismPreviewEmpty h4 {
-  margin: 0 0 var(--space-3);
-  font-size: var(--font-size-s);
+  margin: 0;
+  font-size: 15px;
+  line-height: 20px;
   font-weight: var(--font-weight-semibold);
 }
 
 .ismPreviewEmpty p {
-  margin: 0;
+  margin: var(--space-3) 0 0;
   color: var(--color-text-secondary);
 }
 
 .ismPreviewTitle {
   margin: 0;
   font-size: var(--font-size-s);
+  line-height: 20px;
   font-weight: var(--font-weight-semibold);
 }
 
@@ -3783,7 +3805,8 @@
 
 /* Why a transform job failed, in the component library's dialog: as wide as what it says, between
    400 and 768 px */
-.atlModal.ismErrorModal {
+.atlModal.ismErrorModal,
+.atlModal.ismModal.ismFitModal {
   width: auto;
   min-width: 400px;
   max-width: 768px;
@@ -3791,6 +3814,53 @@
 
 .ismErrorModal .atlModal__body {
   line-height: 21px;
+}
+
+/* What a job is doing under its term in a grid: the plugin's row of dot and word is 2 px taller */
+.ismInfoGrid .ismTransformStatus {
+  margin-bottom: 2px;
+}
+
+/* What folds away under a job's settings, as the component library's accordion: a row 20 px high,
+   the arrow 4 px in and 8 px before the title, which turns down when it is open */
+.ismAcc__button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ismAcc__button:hover .ismAcc__title {
+  text-decoration: underline;
+}
+
+.ismAcc__arrow {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0 var(--space-2) 0 var(--space-1);
+  transition: transform var(--duration-fast) ease;
+}
+
+.ismAcc__button[aria-expanded="true"] .ismAcc__arrow {
+  transform: rotate(90deg);
+}
+
+.ismAcc__title {
+  margin: 0;
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.ismAcc__body {
+  padding: 10px;
 }
 
 /* --- Notification settings ------------------------------------------------------------------------ */

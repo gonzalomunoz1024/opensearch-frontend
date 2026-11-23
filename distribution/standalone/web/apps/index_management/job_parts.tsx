@@ -311,7 +311,16 @@ export function PluginConfirmationModal({
  * edge as the plugin hangs it: each item after an empty icon, the first one that can be chosen with
  * the focus.
  */
-export function JobActionsMenu({ items, disabled }: { items: ContextMenuItem[]; disabled?: boolean }) {
+export function JobActionsMenu({
+  items,
+  disabled,
+  plain,
+}: {
+  items: ContextMenuItem[];
+  disabled?: boolean;
+  /** As the page of a transform job: the menu at its usual size, with nothing around it */
+  plain?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
   return (
@@ -321,14 +330,14 @@ export function JobActionsMenu({ items, disabled }: { items: ContextMenuItem[]; 
         onClose={close}
         position="downLeft"
         offset={8}
-        className="ismActionsPopover"
+        className={cx('ismActionsPopover', plain && 'ismActionsPopover--plain')}
         button={
           <Button icon="chevronDown" iconSide="right" disabled={disabled} onClick={() => setOpen(!open)} testId="actionButton">
             Actions
           </Button>
         }
       >
-        <ContextMenu small panels={[{ id: 'actions', items }]} onDone={close} />
+        <ContextMenu small={!plain} panels={[{ id: 'actions', items }]} onDone={close} />
       </Popover>
     </div>
   );
@@ -702,7 +711,7 @@ export function JobEditPage({ title, children }: { title: string; children: Reac
  * The row over a job's details, as the plugin's: its name at 28 px, whether it is enabled, and its
  * buttons, 10 px in from the panels' edges and 24 px over the first of them
  */
-export function JobDetailsHeader({ title, health, actions }: { title: string; health: ReactNode; actions: ReactNode }) {
+export function JobDetailsHeader({ title, health, actions }: { title: string; health?: ReactNode; actions: ReactNode }) {
   return (
     <>
       <div className="ismJdHeader">
@@ -730,8 +739,8 @@ export interface InfoItem {
 export function InfoGrid({ items, columns = 4, size = 's' }: { items: InfoItem[]; columns?: 3 | 4; size?: 's' | 'xs' }) {
   return (
     <div className={`ismInfoGrid ismInfoGrid--${columns} ismInfoGrid--${size}`}>
-      {items.map((item) => (
-        <div className="ismInfoGrid__item" key={item.term}>
+      {items.map((item, index) => (
+        <div className="ismInfoGrid__item" key={`${item.term}-${index}`}>
           <dt>{item.term}</dt>
           {item.bare ? item.value : <dd>{item.value}</dd>}
         </div>
@@ -790,13 +799,24 @@ function CopyableJson({ text }: { text: string }) {
  * "View JSON" of a job as the plugin's: its EuiModal in an EuiOverlayMask (two masks), the title
  * in EuiText s, the code block, and Close
  */
-export function JobJsonModal({ title, json, onClose }: { title: string; json: unknown; onClose: () => void }) {
+export function JobJsonModal({
+  title,
+  json,
+  onClose,
+  small,
+}: {
+  title: string;
+  json: unknown;
+  onClose: () => void;
+  /** As a transform job's: the code at 12 px, in a dialog as wide as it up to 768 px */
+  small?: boolean;
+}) {
   const body = useDialogFocus<HTMLDivElement>();
   return (
     <PluginModal
       title={title}
       onClose={onClose}
-      className="ismWideModal ismMasked"
+      className={small ? 'ismFitModal ismJsonSmall ismMasked' : 'ismWideModal ismMasked'}
       footer={
         <Button variant="empty" onClick={onClose}>
           Close
