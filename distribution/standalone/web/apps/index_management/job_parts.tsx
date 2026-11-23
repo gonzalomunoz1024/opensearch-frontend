@@ -10,7 +10,7 @@ import { Button, Panel, cx } from '../../components/basic';
 import { CodeEditor } from '../../components/code_editor';
 import { SearchField, TextArea, TextField } from '../../components/form';
 import { Icon } from '../../components/icon';
-import { Modal } from '../../components/overlay';
+import { ContextMenu, Modal, Popover, type ContextMenuItem } from '../../components/overlay';
 import { Pagination } from '../../components/table';
 import { LocalTable, ism, toasts, type Answer, type TableColumn } from './common';
 import { useSpaced } from './index_select';
@@ -280,6 +280,78 @@ export function PluginConfirmationModal({
   );
 }
 
+/**
+ * The "Actions" button of a list of jobs and its small context menu, hung from the button's left
+ * edge as the plugin hangs it: each item after an empty icon, the first one that can be chosen with
+ * the focus.
+ */
+export function JobActionsMenu({ items, disabled }: { items: ContextMenuItem[]; disabled?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  return (
+    <div className="ismActions" data-test-subj="actionPopover">
+      <Popover
+        open={open}
+        onClose={close}
+        position="downLeft"
+        offset={8}
+        className="ismActionsPopover"
+        button={
+          <Button icon="chevronDown" iconSide="right" disabled={disabled} onClick={() => setOpen(!open)} testId="actionButton">
+            Actions
+          </Button>
+        }
+      >
+        <ContextMenu small panels={[{ id: 'actions', items }]} onDone={close} />
+      </Popover>
+    </div>
+  );
+}
+
+/**
+ * The plugin's dialog that deletes jobs: the component library's confirmation in a mask of the
+ * plugin's own, as wide as what it says up to 768 px, then a field where "delete" is typed, Cancel
+ * and Delete. It opens with the focus on itself, as Delete cannot take it yet.
+ */
+export function DeleteJobsModal({
+  children,
+  onClose,
+  onDelete,
+}: {
+  children: ReactNode;
+  onClose: () => void;
+  onDelete: () => void | Promise<void>;
+}) {
+  const [typed, setTyped] = useState('');
+  const body = useDialogFocus<HTMLDivElement>();
+  return (
+    <PluginModal
+      title="Delete job(s)"
+      titleTestId="confirmModalTitleText"
+      onClose={onClose}
+      className="ismMasked ismConfirmModal"
+      footer={
+        <>
+          <Button variant="empty" onClick={onClose} testId="confirmModalCancelButton">
+            Cancel
+          </Button>
+          <Button variant="dangerFill" disabled={typed !== 'delete'} onClick={() => void onDelete()} testId="confirmModalConfirmButton">
+            Delete
+          </Button>
+        </>
+      }
+    >
+      <div ref={body} data-test-subj="confirmModalBodyText">
+        <p>{children}</p>
+        <Spacer size="s" />
+        <PluginRow help="To confirm deletion, enter delete in the text field">
+          <TextField compact value={typed} onChange={setTyped} placeholder="delete" testId="deleteTextField" />
+        </PluginRow>
+      </div>
+    </PluginModal>
+  );
+}
+
 /** The buttons under a form, at its right: the one that leaves it and the one that saves it */
 export function FormButtons({ children }: { children: ReactNode }) {
   return <div className="ismFormButtons">{children}</div>;
@@ -423,8 +495,11 @@ export function ListSearch({
   paginationTestId?: string;
   filters?: ReactNode;
   className?: string;
-  /** What a screen reader calls the box: the component library's search bar says what it does */
-  ariaLabel?: string;
+  /**
+   * What a screen reader calls the box: the component library's search bar says what it does;
+   * `null` names it nothing, as the plugin's boxes that have only a placeholder
+   */
+  ariaLabel?: string | null;
   children?: ReactNode;
 }) {
   // As the component library's search field, a button clears what is typed and puts the focus back
@@ -448,7 +523,7 @@ export function ListSearch({
       value={search}
       onChange={onSearch}
       placeholder={placeholder}
-      aria-label={ariaLabel}
+      aria-label={ariaLabel ?? undefined}
       append={clear}
     />
   );

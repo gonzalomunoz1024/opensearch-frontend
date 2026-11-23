@@ -1186,6 +1186,63 @@
   gap: var(--space-2);
 }
 
+/* The table of a list of jobs, laid out on what its cells hold as the plugin's
+   (`tableLayout="auto"`), its figures of one width: the columns it cuts stay on one line, so the
+   table runs past its panel, and past the window, where they are long, as it does there */
+.ismJobsTable .ismTable__scroll {
+  overflow: visible;
+}
+
+.ismJobsTable .atlTable {
+  font-feature-settings: "calt", "kern", "liga", "tnum";
+}
+
+/* Its boxes are as wide as they need: 12 px on either side of each */
+.ismJobsTable .atlTable .atlTable__check {
+  padding-right: var(--space-3);
+}
+
+/* A ticked row of the plugin's tables, as the theme marks it (its last word on it: the same shade
+   under the pointer or not) */
+:is(.ismJobsTable, .ismFixed) .ismTable__row--selected,
+:is(.ismJobsTable, .ismFixed) .ismTable__row--selected:hover {
+  background: #e6f2ff;
+}
+
+:root.themeDark :is(.ismJobsTable, .ismFixed) .ismTable__row--selected,
+:root.themeDark :is(.ismJobsTable, .ismFixed) .ismTable__row--selected:hover {
+  background: #021426;
+}
+
+/* "Actions" of a list of jobs, as the plugin hangs its small context menu: 8 px around it, the
+   theme's popover 112 px wide at least, Delete in the theme's danger text */
+.ismActions {
+  display: inline-flex;
+}
+
+.atlPopover.ismActionsPopover {
+  min-width: 112px;
+  padding: var(--space-2);
+}
+
+.ismActionsPopover .atlContextMenu {
+  min-width: 0;
+}
+
+.ismActionsPopover .atlContextMenu__item--danger {
+  color: var(--color-critical-button-text);
+}
+
+/* The plugin's confirmation dialogs (EuiConfirmModal): the theme's buttons of 40 px, and its bold
+   (`b, strong` of the theme) at 600 */
+.ismConfirmModal .atlModal__footer > .atlButton {
+  height: 40px;
+}
+
+.ismConfirmModal strong {
+  font-weight: var(--font-weight-semibold);
+}
+
 /* A panel of a form or of details: its title, a line, what it holds */
 .ismTp__header {
   display: flex;
@@ -1317,6 +1374,11 @@
   background: var(--color-text-tertiary);
   color: var(--color-surface);
   cursor: pointer;
+}
+
+/* In dark the theme's medium shade is the lighter grey of the secondary text */
+:root.themeDark .ismLs__clear {
+  background: var(--color-text-secondary);
 }
 
 /* The theme draws its cross with a line of 4 around it, which makes it bold */
@@ -1570,7 +1632,7 @@
 
 /* What a list says when it has no rows: the plugin's empty prompt in the table's one cell */
 .ismFixed .ismTable__empty,
-.ismAuto .ismTable__empty {
+.ismJobsTable .ismTable__empty {
   display: block;
   max-width: none;
   padding: 0;
@@ -2776,30 +2838,45 @@
   overflow: auto;
 }
 
-/* What a job is doing: a mark in the colour of its state and a word */
+/* What a job is doing, as the plugin writes it: a 12 px icon level with the top of the smallest
+   text, 4 px apart, each in the theme's colour of its kind (the icon in the graphic shade, the
+   text in the text shade) */
 .ismJobStatus {
-  display: inline-flex;
+  display: flex;
   align-items: flex-start;
   gap: var(--space-1);
   font-size: var(--font-size-xs);
+  line-height: 18px;
 }
 
 .ismJobStatus .atlIcon {
   flex: 0 0 auto;
   width: 12px;
   height: 12px;
-  margin-top: 3px;
 }
 
 .ismJobStatus--critical {
-  color: var(--color-critical-text);
+  color: var(--color-critical-button-text);
+}
+
+.ismJobStatus--critical .atlIcon {
+  color: var(--color-critical);
 }
 
 .ismJobStatus--healthy {
-  color: var(--color-healthy-text);
+  color: var(--color-success-text);
 }
 
+.ismJobStatus--healthy .atlIcon {
+  color: var(--color-healthy-graphic);
+}
+
+/* The plugin writes "Initializing" in a blue of its own, whatever the theme */
 .ismJobStatus--accent {
+  color: #006bb4;
+}
+
+.ismJobStatus--accent .atlIcon {
   color: var(--color-accent);
 }
 

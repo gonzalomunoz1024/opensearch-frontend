@@ -345,9 +345,9 @@ export function Table<Row>({
             <tr>
               {onSelect && (
                 <th className="atlTable__check">
+                  {/* As the component library's table, ticked or not: never half ticked */}
                   <Checkbox
                     checked={allTicked}
-                    indeterminate={!allTicked && tickable.some((row) => ids.has(rowId(row)))}
                     disabled={tickable.length === 0}
                     onChange={(checked) => onSelect(checked ? tickable : [])}
                     testId="checkboxSelectAll"
