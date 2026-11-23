@@ -33,10 +33,13 @@ import {
   type ClusterNames,
 } from '../../web/apps/dev_tools/console_model';
 import { highlight, indentGuides, tokenClasses, type AceToken } from '../../web/apps/dev_tools/console_highlight';
+import { askProxy } from '../../web/apps/dev_tools/console';
 import { matchingBracket, selectionOf } from '../../web/apps/dev_tools/console_editor';
 import { MAX_HISTORY, autocompleteRequests, consoleStorage, type KeyValueStore } from '../../web/apps/dev_tools/console_storage';
 import { failureReason, grokSimulation, grokValue, readSimulation } from '../../web/apps/dev_tools/grok_request';
 import { collapseLiteralStrings, expandLiteralStrings, reindentJson, tokenizeJson } from '../../web/lib/json_text';
+import { createServices, type BootData } from '../../web/services';
+import { loadingCount } from '../../web/shell/loading_count';
 
 const TEXT = `# the cluster
 GET _cat/indices?v
@@ -680,5 +683,47 @@ describe("the console's flyouts", () => {
     // Under its mask a flyout is dimmed and blurred, and a click on it closes it; at the same
     // level it is drawn over the mask, which comes before it in the page
     assert.ok(stackOf('.atlFlyout.dvtFlyout') >= stackOf('.dvtMask'));
+  });
+});
+
+describe("the console's notices", () => {
+  // The kind of toast each message of the console is shown with, read from its source
+  const kindsOf = (message: string): string[] => {
+    const source = readFileSync('web/apps/dev_tools/console.tsx', 'utf8');
+    const quoted = message.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return [...source.matchAll(new RegExp(`services\\.toasts\\.(\\w+)\\(\\s*'${quoted}'`, 'g'))].map((found) => found[1]);
+  };
+
+  it('are plain, with no colour and no icon, as the original\'s toasts.add of a text', () => {
+    // use_send_current_request_to_opensearch.ts and the console menu's copyAsCurl call
+    // notifications.toasts.add with the text alone
+    assert.deepEqual(kindsOf('No request selected. Select a request by placing the cursor inside it.'), ['plain']);
+    assert.deepEqual(kindsOf('Request copied as cURL'), ['plain']);
+  });
+});
+
+describe("the console's requests", () => {
+  it("are counted by the header's loading indicator until their answer is read, as the original's http service counts them", async () => {
+    createServices({ basePath: '/base', version: '3.9.0', name: 'test', settings: {}, settingsDefaults: {}, settingsOverrides: {} } as unknown as BootData);
+    const real = globalThis.fetch;
+    const asked: string[] = [];
+    let answer: (response: Response) => void = () => undefined;
+    globalThis.fetch = ((url: string) => {
+      asked.push(url);
+      return new Promise<Response>((resolve) => (answer = resolve));
+    }) as typeof fetch;
+    try {
+      const before = loadingCount();
+      const reply = askProxy(new URLSearchParams({ path: '_cat/health', method: 'GET' }), { method: 'POST' });
+      assert.equal(loadingCount(), before + 1);
+      answer(new Response('green'));
+      const { response, text } = await reply;
+      assert.equal(response.status, 200);
+      assert.equal(text, 'green');
+      assert.equal(loadingCount(), before);
+      assert.deepEqual(asked, ['/base/api/console/proxy?path=_cat%2Fhealth&method=GET']);
+    } finally {
+      globalThis.fetch = real;
+    }
   });
 });
