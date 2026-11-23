@@ -20,9 +20,42 @@
   margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) 0;
 }
 
+/* The menu in the page of one embedded in another, which has no header: the header's links at
+   the top left, as the original draws them there */
+.dshTopNav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: calc(-1 * var(--space-2)) 0 0 calc(-1 * var(--space-1));
+}
+
+.dshTopNav .atlButton--empty {
+  height: var(--space-6);
+  padding: 0 9px;
+}
+
+.dshTopNav > .atlButton:not(.atlButton--empty) {
+  gap: var(--space-2);
+  min-width: 112px;
+  border: 1px solid transparent;
+}
+
+/* ...and the bar under it follows at once */
+.dshTopNav + .shlSearchBar {
+  padding-top: 0;
+}
+
 .dshGrid {
   position: relative;
   width: 100%;
+}
+
+/* The grid of panels spans the page, as the original's: the margin around its panels is its own
+   (none when margins are off), in place of the page's */
+.dshGrid--placed {
+  width: auto;
+  margin: calc(-1 * var(--space-2));
 }
 
 .dshGrid__item {
@@ -33,7 +66,8 @@
 
 .dshGrid__item--settling {
   transition:
-    transform var(--duration-fast) var(--ease-out-quint),
+    left var(--duration-fast) var(--ease-out-quint),
+    top var(--duration-fast) var(--ease-out-quint),
     width var(--duration-fast) var(--ease-out-quint),
     height var(--duration-fast) var(--ease-out-quint);
 }
@@ -55,7 +89,8 @@
   border-radius: var(--radius-sm);
   background: var(--color-warning);
   transition:
-    transform 100ms ease,
+    left 100ms ease,
+    top 100ms ease,
     width 100ms ease,
     height 100ms ease;
 }
@@ -72,6 +107,94 @@
 
 .dshGrid--flush .dshPanel {
   border-radius: 0;
+}
+
+/* A panel far from the window, not drawn yet: the original's loading chart (its mono, large one)
+   in the middle of its place, with nothing around it */
+.dshWaiting {
+  position: relative;
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 26px;
+}
+
+.dshWaiting__chart {
+  display: inline-block;
+  height: var(--space-6);
+  overflow: hidden;
+}
+
+.dshWaiting__bar {
+  display: inline-block;
+  width: var(--space-1);
+  height: 100%;
+  margin-bottom: var(--space-3);
+  margin-left: 2px;
+  background-color: var(--color-border);
+}
+
+/* Each bar a little nearer the text's colour, as the component library's shadeOrTint makes them:
+   4, 8 and 12 hundredths of it */
+.dshWaiting__bar:nth-child(2) {
+  background-color: color-mix(in srgb, var(--color-text-primary) 4%, var(--color-border));
+}
+
+.dshWaiting__bar:nth-child(3) {
+  background-color: color-mix(in srgb, var(--color-text-primary) 8%, var(--color-border));
+}
+
+.dshWaiting__bar:nth-child(4) {
+  background-color: color-mix(in srgb, var(--color-text-primary) 12%, var(--color-border));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .dshWaiting__bar {
+    animation: dshWaiting 1s ease infinite;
+  }
+
+  .dshWaiting__bar:nth-child(2) {
+    animation-delay: 0.1s;
+  }
+
+  .dshWaiting__bar:nth-child(3) {
+    animation-delay: 0.2s;
+  }
+
+  .dshWaiting__bar:nth-child(4) {
+    animation-delay: 0.3s;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dshWaiting__bar:nth-child(1) {
+    transform: translateY(66%);
+  }
+
+  .dshWaiting__bar:nth-child(2) {
+    transform: translateY(44%);
+  }
+
+  .dshWaiting__bar:nth-child(3) {
+    transform: translateY(22%);
+  }
+}
+
+@keyframes dshWaiting {
+  0% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(66%);
+  }
+
+  100% {
+    transform: translateY(0);
+  }
 }
 
 body.dshDragging {
@@ -128,18 +251,26 @@ body.dshDragging {
 
 /* An untitled panel says so while the dashboard is edited */
 .dshPanel__noTitle {
+  overflow: hidden;
   color: var(--color-text-tertiary);
   font-weight: var(--font-weight-regular);
+  text-overflow: ellipsis;
 }
 
+/* The space after the title is its spans', as in the original: a long one ends where it does */
 .dshPanel__title {
   flex: 1 1 auto;
   min-width: 0;
-  padding: 0 var(--space-2);
+  padding: 0 0 0 var(--space-2);
   /* the original's panel titles are 13 pixels, between the theme's two small sizes */
   font-size: 13px;
   font-weight: var(--font-weight-semibold);
   line-height: 24px;
+}
+
+/* A long title is cut short before the options button, which keeps its size */
+.dshPanel__menuAnchor {
+  flex: none;
 }
 
 /* The original's options button: a tab in the panel's corner, tinted with the text's colour */
@@ -200,7 +331,12 @@ body.dshDragging {
   padding: 0;
 }
 
-/* A description beside the title: the original's icon, its tooltip telling it */
+/* A description beside the title: the original's icon, its tooltip telling it; a long title is
+   cut short before the icon */
+.dshPanel__title > .atlTooltipAnchor {
+  max-width: 100%;
+}
+
 .dshPanel__titleInner {
   display: inline-flex;
   align-items: center;

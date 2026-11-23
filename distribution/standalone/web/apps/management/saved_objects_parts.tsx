@@ -12,6 +12,7 @@ import { Icon, type IconName } from '../../components/icon';
 import { Popover, Tooltip } from '../../components/overlay';
 import { Pagination } from '../../components/table';
 import { HttpFetchError } from '../../services/http';
+import { sectionCrumb } from './frame';
 import { getSavedObjectLabel } from './saved_objects_lib';
 import {
   QueryParseError,
@@ -24,7 +25,8 @@ import {
 } from './saved_objects_query';
 
 export const OBJECTS_ROOT = '/app/management/opensearch-dashboards/objects';
-export const MANAGEMENT_CRUMB = { text: 'Dashboards Management', to: '/app/management' };
+export { MANAGEMENT_CRUMB } from './frame';
+export const OBJECTS_CRUMB = sectionCrumb('objects');
 
 /** The message of a failed request, as the original's toasts write it */
 export function errorText(error: unknown): string {

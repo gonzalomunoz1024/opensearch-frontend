@@ -9,7 +9,8 @@
 import type { SavedObjectReference } from '../../../common/saved_objects';
 import { parseSearchSource, serializeSearchSource } from '../../lib/search_source';
 import type { Filter, Query, RefreshInterval } from '../../lib/types';
-import { encodeState } from '../../lib/url';
+import { encodeState, parseHash } from '../../lib/url';
+import { visType as visTypeOf } from '../../lib/vis';
 
 export const GRID_COLUMNS = 48;
 export const ROW_HEIGHT = 20;
@@ -129,6 +130,17 @@ const parse = <T>(text: string | undefined, fallback: T): T => {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
+/**
+ * A dashboard's query as the original takes it, saved or from the address
+ * (normalizeDashboardQuery): one kept from before queries had a language, a text or a query of
+ * OpenSearch's DSL, is Lucene; one in a language other than DQL or Lucene (a PPL query saved by
+ * an older start) gives way to an empty DQL query, as the panels could not share it.
+ */
+export function dashboardQuery(query: unknown): Query {
+  const migrated = isRecord(query) && 'language' in query ? query : { query, language: 'lucene' };
+  return migrated.language === 'kuery' || migrated.language === 'lucene' ? (migrated as unknown as Query) : { query: '', language: 'kuery' };
+}
+
 /** A new dashboard, with the options the original gives one */
 export function emptyDashboard(): Dashboard {
   return {
@@ -142,6 +154,17 @@ export function emptyDashboard(): Dashboard {
 }
 
 const gridItem = (panelIndex: string, x: number, y: number, w: number, h: number): GridItem => ({ x, y, w, h, i: panelIndex });
+
+/**
+ * A panel's own title and settings as the original's dashboard reads them and writes them back
+ * (convertSavedDashboardPanelToPanelState, then convertPanelStateToSavedDashboardPanel): a title
+ * among the settings stands over the one beside them, and is written beside them.
+ */
+function ownTitle(settings: Record<string, unknown>, title: unknown): Pick<PanelState, 'embeddableConfig' | 'title'> {
+  if (settings.title === undefined) return { embeddableConfig: settings, ...(title !== undefined ? { title: title as string } : {}) };
+  const { title: own, ...rest } = settings;
+  return { embeddableConfig: rest, title: typeof own === 'string' ? own : own === null ? '' : String(own) };
+}
 
 export function dashboardFromSavedObject(object: {
   id: string;
@@ -178,14 +201,7 @@ export function dashboardFromSavedObject(object: {
             ...(panel.sort !== undefined ? { sort: panel.sort } : {}),
           }
         : settings;
-    panels.push({
-      panelIndex,
-      gridData,
-      type,
-      id,
-      embeddableConfig,
-      ...(panel.title !== undefined ? { title: panel.title } : {}),
-    });
+    panels.push({ panelIndex, gridData, type, id, ...ownTitle(embeddableConfig, panel.title) });
   });
   const source = parseSearchSource(object.attributes.kibanaSavedObjectMeta?.searchSourceJSON, references);
   const storedSource = parse<unknown>(object.attributes.kibanaSavedObjectMeta?.searchSourceJSON, {});
@@ -197,7 +213,7 @@ export function dashboardFromSavedObject(object: {
     description: attributes.description ?? '',
     panels,
     options: isRecord(options) ? options : {},
-    query: source.query,
+    query: source.query === undefined ? undefined : dashboardQuery(source.query),
     filters: source.filters,
     timeRestore: Boolean(attributes.timeRestore),
     timeFrom: attributes.timeFrom,
@@ -310,8 +326,7 @@ export function panelsFromUrl(value: unknown): PanelState[] | undefined {
       gridData: gridItem(panelIndex, Number(grid.x ?? 0), Number(grid.y ?? 0), Number(grid.w ?? DEFAULT_PANEL.w), Number(grid.h ?? DEFAULT_PANEL.h)),
       type: entry.type,
       id: entry.id,
-      embeddableConfig: isRecord(entry.embeddableConfig) ? entry.embeddableConfig : {},
-      ...(typeof entry.title === 'string' ? { title: entry.title } : {}),
+      ...ownTitle(isRecord(entry.embeddableConfig) ? entry.embeddableConfig : {}, typeof entry.title === 'string' ? entry.title : undefined),
     });
   }
   return panels;
@@ -656,6 +671,87 @@ const NOT_INSPECTED = new Set(['input_control_vis', 'markdown', 'metrics', 'time
 /** Whether a panel drawing a visualization of this kind offers Inspect, as in the original */
 export const offersInspector = (visType: string): boolean => !NOT_INSPECTED.has(visType);
 
+/**
+ * What the original's finder calls a found object, in its tooltip and in the toast that says it
+ * was added: its title and its kind, a visualization's kind its own ("Sales (Pie)")
+ */
+export function finderName(
+  object: { type: string; attributes: { title?: string; visState?: string } },
+  types: ReadonlyArray<{ type: string; name: string }>
+): string {
+  let kind = types.find((type) => type.type === object.type)?.name ?? object.type;
+  if (object.type === 'visualization') {
+    try {
+      kind = visTypeOf((JSON.parse(object.attributes.visState ?? '') as { type?: string }).type ?? '')?.title ?? kind;
+    } catch {
+      // the type's own name, as above
+    }
+  }
+  return `${object.attributes.title ?? ''} (${kind})`;
+}
+
+// --- A panel's title ---------------------------------------------------------------------------------
+
+/**
+ * The title a panel shows, as the original's panels take it (`getPanelTitle`): its own, a title
+ * among its settings first, or else its object's; none when titles are hidden for it, by its own
+ * setting or, when it has none, the dashboard's.
+ */
+export function panelTitle(panel: Pick<PanelState, 'embeddableConfig' | 'title'>, objectTitle: string, dashboardHides: boolean): string {
+  const own = panel.embeddableConfig.hidePanelTitles;
+  if (own === undefined ? dashboardHides : Boolean(own)) return '';
+  const custom: unknown = panel.embeddableConfig.title !== undefined ? panel.embeddableConfig.title : panel.title;
+  const title = custom === undefined ? objectTitle : custom;
+  return typeof title === 'string' ? title : title ? String(title) : '';
+}
+
+/** Whether a panel's title is hidden: the original hides it when the dashboard or the panel itself does */
+export const panelTitleHidden = (panel: Pick<PanelState, 'embeddableConfig'>, dashboardHides: boolean): boolean =>
+  dashboardHides || Boolean(panel.embeddableConfig.hidePanelTitles);
+
+// --- The bar over a dashboard ------------------------------------------------------------------------
+
+/** The parts of the bar over a dashboard that are shown */
+export interface DashboardBars {
+  topMenu: boolean;
+  /** The menu is drawn in the page, over the bar, not in the header */
+  inlineMenu: boolean;
+  queryInput: boolean;
+  datePicker: boolean;
+  filterBar: boolean;
+}
+
+/**
+ * Whether the page was opened to be embedded in another: `embed` in its address, which hides the
+ * original's header for as long as the page stays open (its chrome service)
+ */
+export const openedEmbedded = (hash: string): boolean => 'embed' in parseHash(hash).hashParams;
+
+/**
+ * The parts of the bar over a dashboard, as the original's top nav shows them
+ * (dashboard_top_nav.tsx). Without the header (a page embedded in another), only the filters
+ * stay, unless the address asks for the menu (`show-top-menu`), the query (`show-query-input`)
+ * or the time (`show-time-filter`), or takes the filters away (`hide-filter-bar`): those count
+ * with `embed` and a value, as `embed` itself does here. In full screen only the filters stay,
+ * and only when the dashboard has some of its own. The menu is drawn in the page while the
+ * address has `embed` with a value, even one put there after the page loaded, under the header.
+ */
+export function dashboardBars(
+  params: Readonly<Record<string, string | undefined>>,
+  page: { headerShown: boolean; fullScreen: boolean; hasFilters: boolean }
+): DashboardBars {
+  const embedded = Boolean(params.embed);
+  const asked = (param: string) => embedded && Boolean(params[param]);
+  const shown = (force: boolean) => (force || page.headerShown) && !page.fullScreen;
+  return {
+    topMenu: shown(asked('show-top-menu')),
+    inlineMenu: embedded,
+    queryInput: shown(asked('show-query-input')),
+    datePicker: shown(asked('show-time-filter')),
+    filterBar: !asked('hide-filter-bar') && (page.hasFilters || !page.fullScreen),
+  };
+}
+
 // --- The round trip to an editor -----------------------------------------------------------------
 
 /** The original's id of the dashboards app: where an editor sent from a dashboard goes back to */
@@ -680,6 +776,15 @@ export const editorStateFor = (panelIndex: string, container: ContainerInfo): Ed
   originatingApp: DASHBOARDS_APP,
   valueInput: undefined,
   embeddableId: panelIndex,
+  containerInfo: container,
+});
+
+/**
+ * What the original's "Create new" hands the New Visualization dialog, which passes it on to the
+ * editor (its visualization factory's `create`): the app to go back to and the dashboard there
+ */
+export const createNewState = (container: ContainerInfo): { originatingApp: string; containerInfo: ContainerInfo } => ({
+  originatingApp: DASHBOARDS_APP,
   containerInfo: container,
 });
 
