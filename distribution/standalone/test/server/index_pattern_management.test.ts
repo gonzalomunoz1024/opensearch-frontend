@@ -61,6 +61,30 @@ describe('the routes of the index pattern pages', () => {
     assert.equal(failureOf(new Error('down')).status, 500);
   });
 
+  it('words a failure as the client of OpenSearch words it: the type, then each root cause', () => {
+    const cause = {
+      root_cause: [
+        { type: 'script_exception', reason: 'compile error' },
+        { type: 'script_exception', reason: 'runtime error' },
+      ],
+      type: 'search_phase_execution_exception',
+      reason: 'all shards failed',
+    };
+    const failure = failureOf(new OpenSearchError(400, { error: cause, status: 400 }, 'all shards failed'));
+    assert.equal(
+      failure.message,
+      'search_phase_execution_exception: [script_exception] Reason: compile error; [script_exception] Reason: runtime error'
+    );
+    assert.deepEqual(failure.attributes, { error: cause });
+    const missing = { root_cause: [{ type: 'index_not_found_exception', reason: 'no such index [foo]' }], type: 'index_not_found_exception' };
+    assert.equal(
+      failureOf(new OpenSearchError(404, { error: missing, status: 404 }, 'no such index')).message,
+      'index_not_found_exception: [index_not_found_exception] Reason: no such index [foo]'
+    );
+    // An error that is a text has no type: the client's own words
+    assert.equal(failureOf(new OpenSearchError(404, { error: 'no such index' }, 'no such index')).message, 'Response Error');
+  });
+
   it('describes _type, which OpenSearch no longer has, as any missing meta field', () => {
     const fields = readFieldCaps(
       { _id: { _id: { type: '_id', searchable: true, aggregatable: true } }, bytes: { long: { type: 'long', searchable: true, aggregatable: true } } },
