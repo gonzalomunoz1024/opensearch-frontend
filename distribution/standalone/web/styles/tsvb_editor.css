@@ -775,46 +775,256 @@
   overflow: auto;
 }
 
+/*
+ * The variables are listed in the table of the product's legacy style sheet, as TSVB's table is,
+ * with that sheet's lines (--vis-tsvb-table-line): cells of 12 px with 8 px around and a line above,
+ * the heads bold, centred and at the bottom, with a line below and none above. Code has a line
+ * height of 1.5 there, as the product's reset gives it, which makes the line of a value 18 px high.
+ */
 .tvbMarkdownEditor__table {
   width: 100%;
-  margin: var(--space-2) 0 var(--space-5);
+  max-width: 100%;
+  margin: 0 0 var(--space-5);
   border-collapse: collapse;
   font-size: var(--font-size-xs);
 }
 
-.tvbMarkdownEditor__table th {
-  padding: var(--space-2);
-  border-bottom: 1px solid var(--color-border-light);
-  font-weight: var(--font-weight-semibold);
-}
-
+.tvbMarkdownEditor__table th,
 .tvbMarkdownEditor__table td {
   padding: var(--space-2);
-  border-top: 1px solid var(--color-border-light);
+  border-top: 1px solid var(--vis-tsvb-table-line);
+  line-height: 1.42857143;
   vertical-align: top;
 }
 
-.tvbMarkdownEditor__table code {
-  font-family: var(--font-family-code);
+.tvbMarkdownEditor__table th {
+  border-top: 0;
+  border-bottom: 1px solid var(--vis-tsvb-table-line);
+  font-weight: bold;
+  text-align: center;
+  vertical-align: bottom;
 }
 
+.tvbMarkdownEditor__variables code {
+  font-family: var(--font-family-code);
+  line-height: 1.5;
+}
+
+/* A variable's link, a button at the top of its line so as to add nothing to the line's height */
 .tvbMarkdownEditor__variable {
   text-align: left;
+  vertical-align: top;
 }
 
-.tvbMarkdownEditor__noVariables {
-  display: block;
-  padding: var(--space-4) 0 calc(var(--space-8) + var(--space-2));
-  border-bottom: 1px solid var(--color-border-light);
-  text-align: center;
+/* Inline code of the product's text: a tenth smaller, on a box of its own */
+.tvbMarkdownEditor__variables .tvbText code {
+  display: inline-block;
+  font-size: calc(var(--font-size-s) * 0.9);
+  font-weight: var(--font-weight-regular);
+  letter-spacing: normal;
 }
 
+/* The product's code block: 12 px text, 24 px inside a line of the light border */
 .tvbMarkdownEditor__example {
+  padding: var(--space-6);
+  border: 1px solid var(--color-border-light);
   white-space: pre;
 }
 
 .tvbMarkdownEditor__css.atlCodeEditor {
   border-radius: 0;
+}
+
+/*
+ * TSVB's two code editors (the Markdown text, the custom CSS) as the original's ACE editors are
+ * drawn with OpenSearch Dashboards' textmate colours: lines of 18 px with 4 px before the text and
+ * none above it; a gutter of the empty shade with a line at its left, as wide as its numbers need
+ * (ACE: 1 + ceil(figures x a figure's width + 33) px), the numbers 13 px from its right; after the
+ * number of a line that starts or ends a fold, ACE's arrow; the line of the cursor on a band that
+ * crosses the gutter; the print margin after the 80th column. The colours are those OpenSearch
+ * Dashboards' ace overrides give the Atlas theme. ACE's styles and pictures: BSD 3-Clause License,
+ * Copyright (c) 2010, Ajax.org B.V.
+ */
+.tvbAce {
+  /* rgb(232.5 232.5 235), drawn as the reference draws it: a gradient would round it down */
+  --tvb-ace-gutter-line: rgb(233 233 235);
+  --tvb-ace-heading: #0c07ff;
+  --tvb-ace-list: #b90690;
+  --tvb-ace-string: rgb(7.68 120.15 36.15);
+  --tvb-ace-function: #3c4c72;
+  --tvb-ace-variable: rgb(2.83 112.03 151.94);
+  --tvb-ace-type: rgb(87.81 96.63 171.4);
+  --tvb-ace-comment: rgb(65.37 111.79 89.81);
+  --tvb-ace-constant: #900;
+  --tvb-ace-language: rgb(82.25 85.86 225.04);
+  --tvb-ace-operator: rgb(102.1 102.1 106.81);
+  --tvb-ace-tag: #00168e;
+  --tvb-ace-url: rgb(10.72 115.34 109.15);
+  --tvb-ace-band: color-mix(in srgb, var(--color-border) 70%, transparent);
+}
+
+:root.themeDark .tvbAce {
+  --tvb-ace-gutter-line: var(--color-border);
+  --tvb-ace-heading: rgb(153.4 151.31 255);
+  --tvb-ace-list: hsl(313.74deg 56.11% 69.5%);
+  --tvb-ace-string: rgb(76.92 183.77 103.46);
+  --tvb-ace-function: rgb(154.9 163.11 182.62);
+  --tvb-ace-variable: hsl(196deg 47.83% 57.37%);
+  --tvb-ace-type: rgb(147.68 156.498 230.74);
+  --tvb-ace-comment: hsl(151deg 20.13% 59.2%);
+  --tvb-ace-constant: hsl(0deg 42.86% 70.73%);
+  --tvb-ace-language: rgb(149.75 152.27 249.33);
+  --tvb-ace-operator: rgb(162.04 162.04 166.56);
+  --tvb-ace-tag: rgb(153.71 162.45 210.11);
+  --tvb-ace-url: rgb(36.37 178.69 169.26);
+}
+
+.tvbAce.atlCodeEditor {
+  --tvb-ace-gutter: calc(34.2px + var(--tvb-code-digits, 1) * 1ch);
+  --code-gutter: calc(var(--tvb-ace-gutter) + 4px);
+  --tvb-ace-gutter-paint: linear-gradient(
+    to right,
+    var(--tvb-ace-gutter-line) 0,
+    var(--tvb-ace-gutter-line) 1px,
+    var(--color-surface) 1px,
+    var(--color-surface) var(--tvb-ace-gutter),
+    var(--color-surface-secondary) var(--tvb-ace-gutter)
+  );
+  border: 0;
+  border-radius: 0;
+  background: var(--tvb-ace-gutter-paint);
+}
+
+.tvbAce.atlCodeEditor:focus-within {
+  border: 0;
+  box-shadow: none;
+}
+
+.tvbAce .atlCodeEditor__paint {
+  padding: 0;
+}
+
+/* ACE's print margin: a line of the border colour after the 80th column, which scrolls with the text */
+.tvbAce .atlCodeEditor__body {
+  --tvb-ace-margin: calc(var(--code-gutter) + 80ch);
+  background: linear-gradient(
+    to right,
+    transparent var(--tvb-ace-margin),
+    var(--color-border) var(--tvb-ace-margin),
+    var(--color-border) calc(var(--tvb-ace-margin) + 1px),
+    transparent calc(var(--tvb-ace-margin) + 1px)
+  );
+}
+
+.tvbAce .atlCodeEditor__line {
+  padding: 0 4px 0 var(--code-gutter);
+  background: transparent;
+}
+
+.tvbAce .atlCodeEditor__line::before {
+  box-sizing: border-box;
+  width: var(--code-gutter);
+  margin: 0 0 0 calc(-1 * var(--code-gutter));
+  padding-right: 17px;
+  background: var(--tvb-ace-gutter-paint);
+  color: var(--color-text-secondary);
+}
+
+.tvbAce .atlCodeEditor__line--marked {
+  background: var(--tvb-ace-band);
+}
+
+.tvbAce .atlCodeEditor__line--marked::before {
+  background:
+    linear-gradient(to right, transparent 1px, var(--tvb-ace-band) 1px),
+    var(--tvb-ace-gutter-paint);
+}
+
+/* ACE's arrows: 5 px, in a box of 11 by 18 one pixel after the number */
+.tvbAce .atlCodeEditor__line:has(> .tokAceFoldStart:first-child)::before {
+  background:
+    url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAANElEQVR42mWKsQ0AMAzC8ixLlrzQjzmBiEjp0A6WwBCSPgKAXoLkqSot7nN3yMwR7pZ32NzpKkVoDBUxKAAAAABJRU5ErkJggg==")
+      no-repeat right 8px center,
+    var(--tvb-ace-gutter-paint);
+}
+
+.tvbAce .atlCodeEditor__line:has(> .tokAceFoldEnd:first-child)::before {
+  background:
+    url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAANElEQVR42m3HwQkAMAhD0YzsRchFKI7sAikeWkrxwScEB0nh5e7KTPWimZki4tYfVbX+MNl4pyZXejUO1QAAAABJRU5ErkJggg==")
+      no-repeat right 8px center,
+    var(--tvb-ace-gutter-paint);
+}
+
+.tvbAce .atlCodeEditor__line--marked:has(> .tokAceFoldStart:first-child)::before {
+  background:
+    url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAANElEQVR42mWKsQ0AMAzC8ixLlrzQjzmBiEjp0A6WwBCSPgKAXoLkqSot7nN3yMwR7pZ32NzpKkVoDBUxKAAAAABJRU5ErkJggg==")
+      no-repeat right 8px center,
+    linear-gradient(to right, transparent 1px, var(--tvb-ace-band) 1px),
+    var(--tvb-ace-gutter-paint);
+}
+
+.tvbAce .atlCodeEditor__line--marked:has(> .tokAceFoldEnd:first-child)::before {
+  background:
+    url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAANElEQVR42m3HwQkAMAhD0YzsRchFKI7sAikeWkrxwScEB0nh5e7KTPWimZki4tYfVbX+MNl4pyZXejUO1QAAAABJRU5ErkJggg==")
+      no-repeat right 8px center,
+    linear-gradient(to right, transparent 1px, var(--tvb-ace-band) 1px),
+    var(--tvb-ace-gutter-paint);
+}
+
+.tvbAce .atlCodeEditor__input {
+  padding: 0 4px 0 var(--code-gutter);
+}
+
+.tokAceHeading {
+  color: var(--tvb-ace-heading);
+}
+
+.tokAceList {
+  color: var(--tvb-ace-list);
+}
+
+.tokAceString {
+  color: var(--tvb-ace-string);
+}
+
+.tokAceFunction {
+  color: var(--tvb-ace-function);
+}
+
+.tokAceVariable {
+  color: var(--tvb-ace-variable);
+}
+
+.tokAceType {
+  color: var(--tvb-ace-type);
+}
+
+.tokAceComment {
+  color: var(--tvb-ace-comment);
+}
+
+.tokAceConstant {
+  color: var(--tvb-ace-constant);
+}
+
+.tokAceLanguage {
+  color: var(--tvb-ace-language);
+}
+
+.tokAceOperator {
+  color: var(--tvb-ace-operator);
+}
+
+.tokAceTag {
+  color: var(--tvb-ace-tag);
+}
+
+.tokAceUrl {
+  color: var(--tvb-ace-url);
+}
+
+.tokAceUnderline {
+  text-decoration: underline;
 }
 
 /* As the original's responsive flex group on a narrow screen: one item a line; a group it made not
