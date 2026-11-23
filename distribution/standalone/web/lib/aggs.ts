@@ -712,7 +712,8 @@ function bucketClause(agg: AggConfig, context: AggContext): Dsl {
       // a filter made from one would not match
       const scripted = fieldOf(agg, context);
       if (field.script && scripted) clause.value_type = scripted.type === 'number' ? 'float' : scripted.type;
-      if (agg.params?.missingBucket) clause.missing = MISSING_KEY;
+      // Missing values are a bucket of a text field only, as the original's switch and its request
+      if (agg.params?.missingBucket && scripted?.type === 'string') clause.missing = MISSING_KEY;
       includeExclude(agg, context, clause);
       return { terms: clause };
     }

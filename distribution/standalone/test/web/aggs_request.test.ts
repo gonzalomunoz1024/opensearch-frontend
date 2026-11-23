@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import type { AggConfig, AggContext } from '../../web/lib/aggs';
+import { buildAggsDsl, type AggConfig, type AggContext } from '../../web/lib/aggs';
 import type { Field, Filter, IndexPattern } from '../../web/lib/types';
 import type { Vis } from '../../web/lib/vis';
 import { contextFilters, fieldBoundsAggs, uniqueQueries, visQuery } from '../../web/vis/request';
@@ -56,6 +56,16 @@ describe('the query of a visualization, as the original puts it together', () =>
         ['win 8', false],
       ]
     );
+  });
+});
+
+describe('the missing values of terms', () => {
+  const terms = (name: string): AggConfig => ({ id: '2', enabled: true, type: 'terms', schema: 'bucket', params: { field: name, size: 5, order: 'desc', orderBy: '_key', missingBucket: true } });
+  const asked = (name: string) => (buildAggsDsl([terms(name)], context)['2'] as { terms: { missing?: string } }).terms.missing;
+
+  it('are a bucket of a text field only, as in the original', () => {
+    assert.equal(asked('os'), '__missing__');
+    assert.equal(asked('bytes'), undefined);
   });
 });
 

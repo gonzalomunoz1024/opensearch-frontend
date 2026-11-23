@@ -295,7 +295,7 @@ function paramEditor(name: string, index: number, p: ParamEditorProps, allowStri
     case 'exclude':
     case 'include': {
       if (name === 'otherBucketLabel' && !params.otherBucket) return null;
-      if (name === 'missingBucketLabel' && !params.missingBucket) return null;
+      if (name === 'missingBucketLabel' && (!params.missingBucket || field?.type !== 'string')) return null;
       if (name === 'exclude' || name === 'include') {
         if (type === 'significant_terms' && field?.type !== 'string') return null;
         if (type === 'terms') {
@@ -436,18 +436,7 @@ function paramEditor(name: string, index: number, p: ParamEditorProps, allowStri
         />
       );
     case 'terms.missingBucket':
-      return (
-        <SwitchRow
-          label="Show missing values"
-          checked={Boolean(params.missingBucket) && field?.type === 'string'}
-          disabled={field?.type !== 'string'}
-          onChange={(missingBucket) => set({ missingBucket })}
-          testId="missingBucketSwitch"
-          tooltip={
-            'Only works for fields of type "string". When enabled, include documents with missing values in the search. If this bucket is in the top N, it appears in the chart. If not in the top N, and you enable "Group other values in separate bucket", OpenSearch adds the missing values to the "other" bucket.'
-          }
-        />
-      );
+      return <MissingBucketParam p={p} />;
     case 'significant_terms.size':
       return <SizeParam p={p} />;
     case 'filters.filters':
@@ -670,6 +659,29 @@ function TimeIntervalParam({ p }: { p: ParamEditorProps }) {
         />
       </div>
     </ParamRow>
+  );
+}
+
+/**
+ * "Show missing values": of a text field only. For any other field the original's editor switches
+ * the parameter off as it opens, without that being a change to apply; here it is shown off and
+ * asked as off, and what is saved keeps what it had.
+ */
+function MissingBucketParam({ p }: { p: ParamEditorProps }) {
+  const { params, set, field } = p;
+  const notText = field?.type !== 'string';
+  const on = Boolean(params.missingBucket);
+  return (
+    <SwitchRow
+      label="Show missing values"
+      checked={on && !notText}
+      disabled={notText}
+      onChange={(missingBucket) => set({ missingBucket })}
+      testId="missingBucketSwitch"
+      tooltip={
+        'Only works for fields of type "string". When enabled, include documents with missing values in the search. If this bucket is in the top N, it appears in the chart. If not in the top N, and you enable "Group other values in separate bucket", OpenSearch adds the missing values to the "other" bucket.'
+      }
+    />
   );
 }
 
