@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { Button, IconButton } from '../../web/components/basic';
 import { Pagination, pageButtons } from '../../web/components/table';
 
 /**
@@ -22,6 +23,27 @@ function markupOf(element: Parameters<typeof renderToStaticMarkup>[0]): string {
   }
   /* eslint-enable no-console */
 }
+
+describe('the buttons', () => {
+  it('draws the sizes of the original: its small button, the kit\'s own and the smallest', () => {
+    assert.match(renderToStaticMarkup(<Button>Save</Button>), /^<button type="button" class="atlButton">Save<\/button>$/);
+    assert.match(renderToStaticMarkup(<Button size="s">Save</Button>), /class="atlButton atlButton--s"/);
+    assert.match(renderToStaticMarkup(<Button variant="empty" size="xs">Save</Button>), /class="atlButton atlButton--empty atlButton--xs"/);
+  });
+
+  it('draws a button of only an icon as the original\'s empty one, and the icon button round', () => {
+    const empty = renderToStaticMarkup(<Button variant="empty" icon="refresh" aria-label="Refresh" />);
+    assert.match(empty, /class="atlButton atlButton--empty atlButton--icon"/);
+    assert.ok(!empty.includes('atlButton--round'));
+    const round = renderToStaticMarkup(<IconButton icon="cross" label="Close" className="ownClose" size="xs" />);
+    assert.match(round, /class="atlButton atlButton--ghost atlButton--xs atlButton--icon atlButton--round ownClose"/);
+    assert.match(round, /aria-label="Close" title="Close"/);
+    // A title of its own stays
+    const titled = renderToStaticMarkup(<IconButton icon="cross" label="Close" title="Close this" />);
+    assert.match(titled, / title="Close this"/);
+    assert.match(titled, / aria-label="Close"/);
+  });
+});
 
 describe('the pages of a table', () => {
   it('offers five pages around the one shown, with the first and the last', () => {

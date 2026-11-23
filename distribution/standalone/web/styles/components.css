@@ -55,14 +55,18 @@ svg.atlIcon:not([role="img"]) {
 
 /* --- Buttons ------------------------------------------------------------------------------- */
 
+/* As the original's buttons: a border that shows no colour (so what they hold sits a pixel further
+   in), 8 px between the icon and the text, and under the pointer or with the focus the same fill:
+   the original's components draw `:focus` as they draw `:hover`, so a button that was clicked keeps
+   it until the focus moves on */
 .atlButton {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: var(--space-2);
   height: var(--control-height);
   padding: 0 var(--space-3);
-  border: 0;
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
   background: var(--color-surface-secondary);
   color: var(--color-text-primary);
@@ -72,19 +76,31 @@ svg.atlIcon:not([role="img"]) {
   cursor: pointer;
   transition:
     background var(--duration-fast) ease-out,
+    border-color var(--duration-fast) ease-out,
     color var(--duration-fast) ease-out,
     filter var(--duration-fast) ease-out,
     transform var(--duration-fast) ease-out;
   user-select: none;
 }
 
-.atlButton:hover {
-  background: color-mix(in srgb, var(--color-text-primary) 8%, var(--color-surface-secondary));
+/* The theme's button that is not filled: the secondary surface, the light border's colour under
+   the pointer */
+.atlButton:hover,
+.atlButton:focus {
+  background: var(--color-border-light);
   text-decoration: none;
 }
 
+/* A press scales it down a little: the original's buttons and icon buttons; its empty ones, below,
+   do not move */
 .atlButton:active {
   transform: scale(0.97);
+}
+
+/* The original's button is never narrower than 112 px; its empty and icon buttons are. The rule
+   weighs no more than `.atlButton`, so a page's own width for one of its buttons still wins */
+.atlButton:where(:not(.atlButton--empty, .atlButton--dangerEmpty, .atlButton--ghost, .atlButton--tint, .atlButton--icon)) {
+  min-width: 112px;
 }
 
 /* A filled button, as the theme's: its colour and the small shadow, brighter under the pointer */
@@ -95,19 +111,17 @@ svg.atlIcon:not([role="img"]) {
 }
 
 .atlButton--primary:hover,
-.atlButton--primary:focus-visible {
+.atlButton--primary:focus {
   background: var(--color-accent);
   filter: brightness(1.1);
 }
 
-/* The theme's icon button on a base of its colour */
-.atlButton--tint {
+/* The theme's icon button on a base of its colour, which stays as it is under the pointer */
+.atlButton--tint,
+.atlButton--tint:hover,
+.atlButton--tint:focus {
   background: var(--color-accent-tint);
   color: var(--color-accent-button-text);
-}
-
-.atlButton--tint:hover {
-  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
 }
 
 /* The theme's danger button, not filled: outlined in the critical colour, a soft fill on hover.
@@ -120,8 +134,11 @@ svg.atlIcon:not([role="img"]) {
 }
 
 .atlButton--danger:hover,
+.atlButton--danger:focus,
 .atlButton--dangerOutline:hover,
-.atlButton--dangerEmpty:hover {
+.atlButton--dangerOutline:focus,
+.atlButton--dangerEmpty:hover,
+.atlButton--dangerEmpty:focus {
   background: var(--color-critical-tint);
 }
 
@@ -142,7 +159,7 @@ svg.atlIcon:not([role="img"]) {
 }
 
 .atlButton--dangerFill:hover,
-.atlButton--dangerFill:focus-visible {
+.atlButton--dangerFill:focus {
   background: var(--color-critical);
   filter: brightness(1.1);
 }
@@ -154,28 +171,41 @@ svg.atlIcon:not([role="img"]) {
   color: var(--color-healthy-button-text);
 }
 
-.atlButton--healthyOutline:hover {
+.atlButton--healthyOutline:hover,
+.atlButton--healthyOutline:focus {
   background: var(--color-healthy-tint);
 }
 
+/* The original's empty button in its primary colour: no fill until hovered, a soft one then */
 .atlButton--empty {
   background: transparent;
   color: var(--color-accent-button-text);
   padding: 0 var(--space-2);
 }
 
-.atlButton--empty:hover {
+.atlButton--empty:hover,
+.atlButton--empty:focus {
   background: var(--color-accent-tint);
 }
 
+/* The original's empty button and icon button in the colour of the text: their soft fill is the
+   secondary text's */
 .atlButton--ghost {
   background: transparent;
   color: var(--color-text-primary);
   padding: 0 var(--space-2);
 }
 
-.atlButton--ghost:hover {
-  background: var(--color-hover);
+.atlButton--ghost:hover,
+.atlButton--ghost:focus {
+  background: color-mix(in srgb, var(--color-text-secondary) var(--tint-opacity), transparent);
+}
+
+/* An empty button does not move when pressed, as the original's; an icon button does */
+.atlButton--empty:not(.atlButton--round):active,
+.atlButton--dangerEmpty:not(.atlButton--round):active,
+.atlButton--ghost:not(.atlButton--round):active {
+  transform: none;
 }
 
 .atlButton--s {
@@ -185,6 +215,12 @@ svg.atlIcon:not([role="img"]) {
   font-size: var(--font-size-xs);
 }
 
+/* The original's smallest empty button and icon button: 24 px, the type as large as the others' */
+.atlButton--xs {
+  height: 24px;
+  padding: 0 var(--space-2);
+}
+
 .atlButton--icon {
   width: var(--control-height);
   padding: 0;
@@ -192,6 +228,15 @@ svg.atlIcon:not([role="img"]) {
 
 .atlButton--icon.atlButton--s {
   width: var(--control-height-s);
+}
+
+.atlButton--icon.atlButton--xs {
+  width: 24px;
+}
+
+/* The theme's icon button is round, whatever its size */
+.atlButton--round {
+  border-radius: 50%;
 }
 
 .atlButton--full {
@@ -1318,7 +1363,6 @@ select.atlField {
 }
 
 .atlModal--confirm .atlModal__footer > .atlButton:not(.atlButton--empty) {
-  border: 1px solid transparent;
   box-shadow: var(--shadow-sm);
 }
 
@@ -1375,7 +1419,6 @@ select.atlField {
   right: calc(var(--space-2) + 1px);
   width: var(--space-6);
   height: var(--space-6);
-  border-radius: 50%;
 }
 
 @keyframes atlRise {
@@ -1408,7 +1451,6 @@ select.atlField {
   right: var(--space-1);
   width: var(--space-6);
   height: var(--space-6);
-  border-radius: 50%;
 }
 
 .atlModal__body {
@@ -1424,15 +1466,6 @@ select.atlField {
   gap: var(--space-4);
   padding: var(--space-3) var(--space-6);
   border-top: 1px solid var(--color-border-light);
-}
-
-/* The original's buttons are never narrower than this; its empty ones are */
-.atlModal__footer > .atlButton:not(.atlButton--empty, .atlButton--ghost) {
-  min-width: 112px;
-}
-
-.atlModal__footer > .atlButton--empty {
-  border: 1px solid transparent;
 }
 
 .atlFlyout {

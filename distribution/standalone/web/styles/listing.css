@@ -59,14 +59,6 @@
   letter-spacing: -0.022em;
 }
 
-/* The original's small filled button: a hairline of nothing around it and the theme's shadow */
-.shlListing__create.atlButton,
-.shlListing__empty .atlButton--primary {
-  gap: var(--space-2);
-  border: 1px solid transparent;
-  box-shadow: var(--shadow-sm);
-}
-
 .shlListing__callout {
   margin-bottom: var(--space-4);
 }
@@ -84,7 +76,6 @@
 
 .shlListing__delete.atlButton {
   flex: none;
-  gap: var(--space-2);
 }
 
 .shlListing__search {

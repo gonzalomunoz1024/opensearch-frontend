@@ -32,7 +32,11 @@ export type ButtonVariant =
 
 export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'type'> {
   variant?: ButtonVariant;
-  size?: 's' | 'm';
+  /**
+   * 'm' is the original's small button (32 px), 's' the kit's own of 28 px, 'xs' the original's
+   * smallest empty button and icon button (24 px)
+   */
+  size?: 'xs' | 's' | 'm';
   icon?: IconName;
   /** 's' for the 12 px icon the original's smallest buttons draw */
   iconSize?: 's' | 'm';
@@ -64,6 +68,7 @@ export function Button({
     'atlButton',
     variant !== 'default' && `atlButton--${variant}`,
     size === 's' && 'atlButton--s',
+    size === 'xs' && 'atlButton--xs',
     full && 'atlButton--full',
     !children && 'atlButton--icon',
     className
@@ -96,13 +101,27 @@ export function Button({
   );
 }
 
-/** A button that is only an icon; `label` is what a screen reader and a hover say */
+/**
+ * A button that is only an icon, as the original's icon button: round in the theme, and pressed as
+ * a button is; `label` is what a screen reader and a hover say. An icon in a `Button` without text
+ * is the original's empty button instead, with its corners.
+ */
 export function IconButton({
   icon,
   label,
+  className,
   ...rest
 }: Omit<ButtonProps, 'children' | 'icon'> & { icon: IconName; label: string }) {
-  return <Button variant="ghost" {...rest} icon={icon} aria-label={label} title={rest.title ?? label} />;
+  return (
+    <Button
+      variant="ghost"
+      {...rest}
+      className={cx('atlButton--round', className)}
+      icon={icon}
+      aria-label={label}
+      title={rest.title ?? label}
+    />
+  );
 }
 
 /** A link to a path of this product */
