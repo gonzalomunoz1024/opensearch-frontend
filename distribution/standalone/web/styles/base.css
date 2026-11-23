@@ -12,9 +12,17 @@ body,
   height: 100%;
 }
 
+/* The page's ground is the root's, as in the original's theme; the body lets it through */
+html {
+  background-color: var(--color-surface);
+}
+
 body {
   margin: 0;
-  background: var(--color-surface);
+  /* As the original's root element (.coreSystemRootDomElement): the page never scrolls sideways */
+  overflow-x: hidden;
+  min-width: 100%;
+  min-height: 100%;
   color: var(--color-text-primary);
   font-family: var(--font-family);
   font-size: var(--font-size-s);
@@ -59,7 +67,7 @@ kbd {
 
 :focus-visible {
   outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
+  outline-offset: 2px;
 }
 
 ::selection {
@@ -178,6 +186,9 @@ kbd {
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+  /* A heading kept for screen readers takes the text's face, as the original's reset gives every
+     heading, not the browser's large bold one */
+  font: inherit;
 }
 
 /* Thin scroll bars that take the theme */
@@ -191,4 +202,14 @@ kbd {
     animation-duration: 0s !important;
     transition-duration: 0s !important;
   }
+}
+
+/* accessibility:disableAnimations, as the original's styles service applies it: animations and
+   transitions take no time, so that what waits for their end still hears of it */
+.reduceMotion *:not(.essentialAnimation),
+.reduceMotion *:not(.essentialAnimation)::before,
+.reduceMotion *:not(.essentialAnimation)::after {
+  animation-duration: 0s !important;
+  transition-duration: 0s !important;
+  transition-delay: 0s !important;
 }
