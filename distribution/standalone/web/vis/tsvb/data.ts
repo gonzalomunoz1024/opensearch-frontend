@@ -612,7 +612,7 @@ function metricValues(
   buckets: TimeBucket[],
   computed: Map<string, Array<number | null>>,
   intervalMs: number,
-  all: Record<string, MathValue>
+  table: boolean
 ): Array<number | null> {
   const from = (id: string | undefined) => namedValues(id, buckets, computed);
   const numeric = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null);
@@ -732,15 +732,24 @@ function metricValues(
       const variables = metric.variables ?? [];
       // A script of the Bucket Script aggregation is arithmetic over params.*, which is what is worked out here
       const script = (metric.script ?? '').replace(/;\s*$/, '');
+      // Math as the product works it out: nothing without variables, `params._all` holding the
+      // values of each variable under its name, no value where a variable has none, and a script
+      // that cannot be worked out failing the panel (a table, whose Math the product never works
+      // out, has no value instead)
+      const math = metric.type === 'math';
+      if (math && variables.length === 0) return buckets.map(() => null);
+      const named = variables.flatMap((variable) => (variable.name ? [[variable.name, from(variable.field)] as const] : []));
+      const timestamps = buckets.map((bucket) => bucket.key);
+      const all: Record<string, MathValue> = Object.fromEntries(named.map(([name, values]) => [name, { values: values.map((value) => value ?? NaN), timestamps }]));
       return buckets.map((bucket, index) => {
+        if (math && named.some(([, values]) => values[index] === null || values[index] === undefined)) return null;
         const params: Record<string, MathValue> = { _index: index, _timestamp: bucket.key, _interval: intervalMs, _all: all };
-        for (const variable of variables) {
-          if (variable.name) params[variable.name] = from(variable.field)[index];
-        }
+        for (const [name, values] of named) params[name] = values[index];
         try {
           const value = evaluateMath(script, { params });
           return Number.isFinite(value) ? value : null;
-        } catch {
+        } catch (failure) {
+          if (math && !table) throw new MathScriptError(failure);
           return null;
         }
       });
@@ -770,12 +779,7 @@ export interface SeriesLine {
 export function seriesLines(series: TsvbSeries, buckets: TimeBucket[], intervalMs: number, table = false): SeriesLine[] {
   const metrics = series.metrics ?? [];
   const computed = new Map<string, Array<number | null>>();
-  const all: Record<string, MathValue> = {};
-  for (const metric of metrics) {
-    const values = metricValues(metric, buckets, computed, intervalMs, all);
-    computed.set(metric.id, values);
-    all[metric.id] = { values: values.map((value) => value ?? NaN), timestamps: buckets.map((bucket) => bucket.key) };
-  }
+  for (const metric of metrics) computed.set(metric.id, metricValues(metric, buckets, computed, intervalMs, table));
   const last = metrics[metrics.length - 1];
   const at = (key: string): TsvbPoint[] => buckets.map((bucket) => [bucket.key, last ? percentileAt(bucket, last.id, key) : null]);
   if (last?.type === 'percentile') {
@@ -887,6 +891,17 @@ export class TooMuchDataError extends Error {
   constructor() {
     super(TOO_MUCH_DATA);
     this.name = 'TooMuchDataError';
+  }
+}
+
+/**
+ * A Math aggregation whose script cannot be worked out: as in the product, which works Math out
+ * after its request, the failure of the panel's request, not of a search
+ */
+export class MathScriptError extends Error {
+  constructor(failure: unknown) {
+    super(failure instanceof Error ? failure.message : String(failure));
+    this.name = 'MathScriptError';
   }
 }
 

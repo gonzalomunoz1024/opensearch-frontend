@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { metricAggs, metricBackground, metricRule, seriesLines, termLabel, timeAxisPattern, tooManyBuckets, topNRows, type ColorRule, type TimeBucket, type TsvbMetric, type TsvbSeries, type TsvbSeriesData } from '../../web/vis/tsvb/data';
+import { MathScriptError, metricAggs, metricBackground, metricRule, seriesLines, termLabel, timeAxisPattern, tooManyBuckets, topNRows, type ColorRule, type TimeBucket, type TsvbMetric, type TsvbSeries, type TsvbSeriesData } from '../../web/vis/tsvb/data';
 import { convertSeriesToVars } from '../../web/vis/tsvb/markdown_vars';
 
 const HOUR = 3600000;
@@ -124,6 +124,24 @@ describe('what a TSVB series works out from its metrics', () => {
     const rate = (unit: string) => seriesLines(seriesOf({ id: 'r', type: 'positive_rate', field: 'bytes', unit }), answer, HOUR)[0].points;
     assert.deepEqual(rate(''), [[0, null], [HOUR, 60], [2 * HOUR, 0]]);
     assert.deepEqual(rate('1m'), [[0, null], [HOUR, 1], [2 * HOUR, 0]]);
+  });
+
+  const answer = [bucket(0, { s: { value: 10 } }), bucket(1, { s: { value: null } }), bucket(2, { s: { value: 30 } })];
+  const math = (script: string, variables = [{ id: 'v', name: 'x', field: 's' }], table = false) =>
+    seriesLines(seriesOf({ id: 's', type: 'avg', field: 'bytes' }, { id: 'm', type: 'math', script, variables }), answer, HOUR, table)[0].points.map(([, value]) => value);
+
+  it('gives Math the values of each variable under its name in params._all', () => {
+    assert.deepEqual(math('params.x / sum(params._all.x.values)'), [0.25, null, 0.75]);
+  });
+
+  it('gives Math no value where a variable has none, and none at all without variables', () => {
+    assert.deepEqual(math('max(params.x, 0)'), [10, null, 30]);
+    assert.deepEqual(math('1 + 1', []), [null, null, null]);
+  });
+
+  it('fails the panel on a Math script it cannot work out, but not a table, which the product never works out', () => {
+    assert.throws(() => math('params.x +'), MathScriptError);
+    assert.deepEqual(math('params.x +', undefined, true), [null, null, null]);
   });
 });
 
