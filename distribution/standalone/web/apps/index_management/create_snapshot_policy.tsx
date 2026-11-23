@@ -196,9 +196,9 @@ export function CreateSnapshotPolicy({ isEdit }: { isEdit: boolean }) {
 
   const condition = policy.deletion?.condition;
   return (
-    <div className="ismPolicyPage ismPolicyPage--form ismSnapshotPolicy">
+    <div className="ismSnapshotPolicyPage ismSnapshotPolicyPage--form ismSnapshotPolicy">
       <h1 className="atlTitleL">{isEdit ? 'Edit' : 'Create'} policy</h1>
-      <p className="ismPolicyPage__subtitle">
+      <p className="ismSnapshotPolicyPage__subtitle">
         Snapshot policies allow you to define an automated snapshot schedule and retention period.{' '}
         <ExternalLink href={SNAPSHOT_DOCS} />
       </p>
@@ -467,7 +467,7 @@ export function CreateSnapshotPolicy({ isEdit }: { isEdit: boolean }) {
       </section>
       <Spacer />
 
-      <div className="ismPolicyPage__footer">
+      <div className="ismSnapshotPolicyPage__footer">
         <Button variant="empty" onClick={() => go(ROUTES.SNAPSHOT_POLICIES)}>
           Cancel
         </Button>

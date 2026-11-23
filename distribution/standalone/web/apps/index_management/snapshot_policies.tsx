@@ -444,10 +444,10 @@ export function SnapshotPolicyDetails() {
   ];
 
   return (
-    <div className="ismPolicyPage">
-      <header className="ismPolicyPage__header">
+    <div className="ismSnapshotPolicyPage">
+      <header className="ismSnapshotPolicyPage__header">
         <h1 className="atlTitleL">{truncate(id)}</h1>
-        <div className="ismPolicyPage__actions">
+        <div className="ismSnapshotPolicyPage__actions">
           <Button onClick={() => go(ROUTES.EDIT_SNAPSHOT_POLICY, { id })}>Edit</Button>
           <Button variant="danger" onClick={() => setDeleting(true)} testId="deleteButton">
             Delete

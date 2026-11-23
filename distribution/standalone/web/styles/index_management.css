@@ -3093,19 +3093,16 @@
   align-items: center;
 }
 
-/* The page of a policy, as the plugin's: 5 px and 50 px in from the page, its panels 24 px apart */
-.ismBody:has(> .ismPolicyPage) {
-  padding: var(--space-4);
-}
-
-.ismPolicyPage {
+/* The page of a snapshot policy, as the plugin's: 5 px and 50 px in from the page, its panels 24 px
+   apart. The frame gives these pages no padding of its own. */
+.ismSnapshotPolicyPage {
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
   padding: 5px 50px;
 }
 
-.ismPolicyPage__header {
+.ismSnapshotPolicyPage__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -3113,11 +3110,11 @@
   padding: 0 10px;
 }
 
-.ismPolicyPage__header h1 {
+.ismSnapshotPolicyPage__header h1 {
   margin: 0;
 }
 
-.ismPolicyPage__actions {
+.ismSnapshotPolicyPage__actions {
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -3125,15 +3122,15 @@
 
 /* The page that makes or changes a policy: its parts one under the other, as the plugin's spacers
    set them */
-.ismPolicyPage--form {
+.ismSnapshotPolicyPage--form {
   display: block;
 }
 
-.ismPolicyPage--form > h1 {
+.ismSnapshotPolicyPage--form > h1 {
   margin: 0;
 }
 
-.ismPolicyPage__subtitle {
+.ismSnapshotPolicyPage__subtitle {
   margin: 0;
   padding: 5px 0;
   color: var(--color-text-secondary);
@@ -3141,7 +3138,7 @@
   line-height: 1.5;
 }
 
-.ismPolicyPage__footer {
+.ismSnapshotPolicyPage__footer {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-2);
