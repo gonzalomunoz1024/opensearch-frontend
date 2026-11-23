@@ -71,7 +71,7 @@ function VegaMenu({ icon, label, items }: { icon: IconName; label: string; items
       position="downLeft"
       button={<IconButton icon={icon} label={label} onClick={() => setOpen(!open)} className="vgaEditor__action" />}
     >
-      <div className="atlContextMenu atlContextMenu--small" onKeyDown={onKeyDown}>
+      <div className="atlContextMenu atlContextMenu--small vgaEditor__menu" onKeyDown={onKeyDown}>
         {items.map((item) =>
           item.href !== undefined ? (
             <a key={item.label} className="atlContextMenu__item" href={item.href} target="_blank" rel="noopener noreferrer" onClick={close}>

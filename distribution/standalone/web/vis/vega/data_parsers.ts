@@ -38,6 +38,16 @@ export function contextQuery(queries: Array<Query | undefined>, filters: Filter[
   return buildQuery(undefined, uniqueQueries(queries), enabled, config);
 }
 
+/**
+ * A search's answer as the original's search route hands it on (shimHitsTotal): the total of hits
+ * a number, where OpenSearch answers { value, relation }
+ */
+export function shimHitsTotal<T extends { hits?: unknown }>(response: T): T {
+  const hits = response.hits as { total?: unknown } | undefined;
+  const total = (hits?.total as { value?: unknown } | null | undefined)?.value ?? hits?.total;
+  return { ...response, hits: { ...hits, total } };
+}
+
 /** A data object of the spec, and its `url` taken out of it */
 export interface DataRequest {
   dataObject: SpecObject;

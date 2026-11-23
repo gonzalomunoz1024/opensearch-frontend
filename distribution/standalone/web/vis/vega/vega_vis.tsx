@@ -17,7 +17,7 @@ import { errorMessage } from '../../services/http';
 import type { RequestRecord } from '../../services/search';
 import type { VisInput } from '../request';
 import { visFailure, type VisFailure } from '../types';
-import { TimeCache, contextQuery, type VegaSearchApi, type VegaSearchRequest } from './data_parsers';
+import { TimeCache, contextQuery, shimHitsTotal, type VegaSearchApi, type VegaSearchRequest } from './data_parsers';
 import type { VegaDebugValues } from './debug_view';
 import { loadVega } from './library';
 import { VegaParser } from './parser';
@@ -80,7 +80,9 @@ function createSearchApi(records: RequestRecord[], signal: AbortSignal): VegaSea
               throw failure;
             }
           }
-          const rawResponse = await services.search.search(indexText, body, { signal, record });
+          // the total of hits a number, in the spec and in Inspect, as the original's search route gives it
+          const rawResponse = shimHitsTotal(await services.search.search(indexText, body, { signal, record }));
+          record.response = rawResponse;
           return { name, rawResponse };
         })
       );

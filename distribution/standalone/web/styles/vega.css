@@ -78,6 +78,7 @@
   margin: auto;
   padding: 0;
   list-style: none;
+  line-height: 1;
   opacity: 0.8;
 }
 
@@ -240,6 +241,13 @@
 
 .vgaEditor__action.atlButton:hover {
   background: var(--color-accent-tint);
+}
+
+/* The kit's menu marks the item under the pointer or with the focus with the secondary surface; in
+   dark the original's is rgb(44 44 46), the tertiary surface (light is the same) */
+.themeDark .vgaEditor__menu .atlContextMenu__item:hover,
+.themeDark .vgaEditor__menu .atlContextMenu__item:focus {
+  background: var(--color-surface-tertiary);
 }
 
 /* The editor takes the whole width and grows with the spec: the sidebar scrolls */

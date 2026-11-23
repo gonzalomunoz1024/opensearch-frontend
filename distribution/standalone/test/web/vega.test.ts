@@ -31,6 +31,7 @@ import {
   pplTime,
   queryParams,
   roundInterval,
+  shimHitsTotal,
   type MapsServiceSettings,
   type SpecObject,
   type VegaSearchApi,
@@ -59,6 +60,7 @@ import { validateVegaExpression } from '../../web/vis/vega/validation';
 import {
   calculatePopoverPosition,
   checkForFunctionProperty,
+  exposeDebugObject,
   formatTooltipValue,
   handleInvalidDate,
   handleInvalidQuery,
@@ -855,6 +857,18 @@ describe('the page\'s query and filters, as the original\'s request handler buil
   });
 });
 
+describe('a search\'s answer, as the original\'s search route hands it to the spec', () => {
+  it('makes the total of hits a number', () => {
+    const answer = { took: 3, hits: { total: { value: 8919, relation: 'eq' }, max_score: null, hits: [] } };
+    assert.deepEqual(shimHitsTotal(answer), { took: 3, hits: { total: 8919, max_score: null, hits: [] } });
+    assert.deepEqual(answer.hits.total, { value: 8919, relation: 'eq' });
+    assert.deepEqual(shimHitsTotal({ hits: { total: 5, hits: [] } }), { hits: { total: 5, hits: [] } });
+    // as the original's, an answer without hits gets them, with no total
+    const withoutHits: { took: number; hits?: unknown } = { took: 1 };
+    assert.deepEqual(shimHitsTotal(withoutHits), { took: 1, hits: { total: undefined } });
+  });
+});
+
 describe('a search\'s url, as the original makes a request of it', () => {
   const request = (url: SpecObject, context: unknown) => {
     const { parser, warnings } = queryParser(RANGE_START, RANGE_END, context);
@@ -1226,6 +1240,35 @@ describe('a spec on a map, as leaflet-vega 0.9.0 prepares it', () => {
 });
 
 // --- Inspect --------------------------------------------------------------------------------------
+
+describe('VEGA_DEBUG, as the original puts it on the window', () => {
+  const values = (name: string) => ({
+    VEGA_VERSION: '6.2.0',
+    VEGA_LITE_VERSION: '6.4.2',
+    view: { name } as unknown as VegaView,
+    vega_spec: { name },
+    vegalite_spec: undefined,
+  });
+
+  it('holds the latest view, and welcomes only the first time', () => {
+    const scope: Parameters<typeof exposeDebugObject>[0] = {};
+    const said: unknown[][] = [];
+    const log = (...args: unknown[]) => said.push(args);
+    const hideFirst = exposeDebugObject(scope, values('first'), log);
+    assert.equal(said.length, 2);
+    assert.match(String(said[1]?.[0]), /^You can access the Vega view with VEGA_DEBUG\. /);
+    assert.deepEqual(scope.VEGA_DEBUG, values('first'));
+    const hideSecond = exposeDebugObject(scope, values('second'), log);
+    assert.equal(said.length, 2);
+    // the first view going leaves the second's
+    hideFirst();
+    assert.deepEqual(scope.VEGA_DEBUG?.vega_spec, { name: 'second' });
+    hideSecond();
+    assert.equal(scope.VEGA_DEBUG, null);
+    exposeDebugObject(scope, values('third'), log);
+    assert.equal(said.length, 2);
+  });
+});
 
 describe('the data sets and signals Inspect shows, as the original lists them', () => {
   it('writes each cell as text, objects as JSON', () => {

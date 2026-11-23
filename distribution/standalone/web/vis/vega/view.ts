@@ -68,7 +68,45 @@ export interface VegaViewOptions {
 
 type DestroyHandler = () => unknown;
 
-const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+/** What the original puts on the window for the browser's console: the view, its specs and the versions */
+export interface VegaDebugObject {
+  VEGA_VERSION?: string;
+  VEGA_LITE_VERSION?: string;
+  view?: VegaView;
+  vega_spec?: unknown;
+  vegalite_spec?: unknown;
+}
+
+type DebugScope = { VEGA_DEBUG?: VegaDebugObject | null };
+
+/**
+ * window.VEGA_DEBUG, as the original sets it with vis_type_vega.exposeDebugObjectToWindow (its
+ * default, which this product does not read): the latest view's, with a welcome in the console the
+ * first time. What is returned takes it away again, if no later view has put its own there; it
+ * leaves null rather than nothing, so that the welcome is not said again.
+ */
+export function exposeDebugObject(
+  scope: DebugScope,
+  values: Required<Omit<VegaDebugObject, 'view'>> & { view: VegaView },
+  log: (...args: unknown[]) => void
+): () => void {
+  if (scope.VEGA_DEBUG === undefined) {
+    log('%cWelcome to OpenSearch Dashboards Vega Plugin!', 'font-size: 16px; font-weight: bold;');
+    log('You can access the Vega view with VEGA_DEBUG. Learn more at https://vega.github.io/vega/docs/api/debugging/.');
+  }
+  const debugObject: VegaDebugObject = {};
+  scope.VEGA_DEBUG = debugObject;
+  debugObject.VEGA_VERSION = values.VEGA_VERSION;
+  debugObject.VEGA_LITE_VERSION = values.VEGA_LITE_VERSION;
+  debugObject.view = values.view;
+  debugObject.vega_spec = values.vega_spec;
+  debugObject.vegalite_spec = values.vegalite_spec;
+  return () => {
+    if (scope.VEGA_DEBUG === debugObject) scope.VEGA_DEBUG = null;
+  };
+}
+
+const clone =<T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
 /**
  * An object that cannot reach a prototype, as @osd/std's validateObject checks it: no `__proto__`
@@ -429,6 +467,18 @@ export class VegaBaseView {
 
   setDebugValues(view: VegaView, spec: unknown, vlspec: unknown) {
     this.options.onDebugValues?.({ view, spec: vlspec || spec });
+    const hide = exposeDebugObject(
+      window as unknown as DebugScope,
+      {
+        VEGA_VERSION: this.libraries.vega.version,
+        VEGA_LITE_VERSION: this.libraries.vegaLite.version,
+        view,
+        vega_spec: spec,
+        vegalite_spec: vlspec,
+      },
+      (...args) => console.log(...args)
+    );
+    this.addDestroyHandler(hide);
   }
 
   destroy(): Promise<unknown> | undefined {
