@@ -53,4 +53,8 @@ code under its licence:
 
 Their licence texts are in licenses/, and in dist/licenses/followed of a build.
 
+The pictures the URL format of an index pattern shows in its samples
+(web/static/plugins/indexPatternManagement/assets/icons) are those OpenSearch Dashboards ships for
+it, under the MIT License, Copyright (c) 2014 Steven Skelton (licenses/url-format-icons.txt).
+
 "OpenSearch" is a trademark of its owner. InfraDashboard is not an OpenSearch project.

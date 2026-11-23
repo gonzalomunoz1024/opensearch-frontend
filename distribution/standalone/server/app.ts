@@ -26,6 +26,7 @@ import {
 } from './http';
 import { exportObjects, fileFromMultipart, importObjects } from './import_export';
 import { registerIndexManagement } from './index_management';
+import { registerIndexPatternManagement } from './index_pattern_management';
 import { registerGeospatial } from './geospatial';
 import { fieldsForWildcard } from './index_pattern_fields';
 import type { Logger } from './logger';
@@ -390,6 +391,10 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
   // --- Index Management ------------------------------------------------------------------------
 
   registerIndexManagement(router, client);
+
+  // --- Index patterns: the indices a pattern names, the preview of a scripted field --------------
+
+  registerIndexPatternManagement(router, client);
 
   // --- TSVB ------------------------------------------------------------------------------------
 
