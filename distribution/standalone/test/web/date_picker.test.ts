@@ -12,6 +12,7 @@ import { describe, it } from 'node:test';
 import {
   addToTimeHistory,
   calendarWeeks,
+  dateOf,
   formatTimeString,
   fromNow,
   fromZonedParts,
@@ -162,6 +163,13 @@ describe('a relative date taken apart and put back together', () => {
     assert.equal(toAbsoluteString('now-1d/d', false, context), '2026-11-22T00:00:00.000Z');
     assert.equal(toAbsoluteString('now-1d/d', true, context), '2026-11-22T23:59:59.999Z');
     assert.equal(toAbsoluteString('banana', false, context), 'banana');
+  });
+
+  it('reads the moment an end of the range is, and none for what is no date', () => {
+    assert.equal(dateOf('now-1d/d', false, context)?.toISOString(), '2026-11-22T00:00:00.000Z');
+    assert.equal(dateOf('now-1d/d', true, context)?.toISOString(), '2026-11-22T23:59:59.999Z');
+    assert.equal(dateOf('2026-11-16T03:59:18.191Z', false, context)?.toISOString(), '2026-11-16T03:59:18.191Z');
+    assert.equal(dateOf('banana', false, context), undefined);
   });
 });
 
