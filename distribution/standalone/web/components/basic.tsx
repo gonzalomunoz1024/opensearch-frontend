@@ -13,6 +13,8 @@ import {
 import { href as toHref } from '../router';
 import { Icon, type IconName } from './icon';
 
+export { FieldToken } from './field_token';
+
 export const cx = (...names: Array<string | false | null | undefined>) =>
   names.filter(Boolean).join(' ');
 
@@ -23,6 +25,8 @@ export type ButtonVariant =
   | 'danger'
   | 'dangerFill'
   | 'dangerOutline'
+  | 'dangerEmpty'
+  | 'healthyOutline'
   | 'empty'
   | 'ghost';
 
@@ -30,6 +34,8 @@ export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement
   variant?: ButtonVariant;
   size?: 's' | 'm';
   icon?: IconName;
+  /** 's' for the 12 px icon the original's smallest buttons draw */
+  iconSize?: 's' | 'm';
   iconSide?: 'left' | 'right';
   full?: boolean;
   loading?: boolean;
@@ -43,6 +49,7 @@ export function Button({
   variant = 'default',
   size = 'm',
   icon,
+  iconSize = 'm',
   iconSide = 'left',
   full,
   loading,
@@ -61,7 +68,7 @@ export function Button({
     !children && 'atlButton--icon',
     className
   );
-  const mark = loading ? <span className="atlSpinner" /> : icon ? <Icon name={icon} /> : null;
+  const mark = loading ? <span className="atlSpinner" /> : icon ? <Icon name={icon} size={iconSize} /> : null;
   const content = (
     <>
       {iconSide === 'left' && mark}
@@ -147,17 +154,21 @@ export function Badge({
   );
 }
 
+/** A state and its word, as the original's: OUI's dot in the state's colour */
 export function Health({ tone, children }: { tone?: Tone; children: ReactNode }) {
-  return <span className={cx('atlHealth', tone && `atlHealth--${tone}`)}>{children}</span>;
+  return (
+    <span className={cx('atlHealth', tone && `atlHealth--${tone}`)}>
+      <Icon name="dot" />
+      {children}
+    </span>
+  );
 }
 
-const CALLOUT_ICONS: Record<string, IconName> = {
-  accent: 'info',
-  healthy: 'checkCircle',
-  warning: 'warning',
-  critical: 'error',
-};
-
+/**
+ * As the original's call-out: the icon and the title on a line in the colour of the kind, and the
+ * text under them from the same edge. As there, the icon is the one the page names, and a call-out
+ * without a title has neither.
+ */
 export function CallOut({
   tone = 'accent',
   size = 'm',
@@ -168,18 +179,20 @@ export function CallOut({
   tone?: Tone;
   /** 's': the original's small call-out, a line in less padding */
   size?: 's' | 'm';
-  /** The icon, when not the one of its tone */
+  /** The icon before the title, where the original gives one */
   icon?: IconName;
   title?: ReactNode;
   children?: ReactNode;
 }) {
   return (
     <div className={cx('atlCallOut', tone !== 'accent' && `atlCallOut--${tone}`, size === 's' && 'atlCallOut--s')} role="status">
-      <Icon name={icon ?? CALLOUT_ICONS[tone]} />
-      <div className="atlGrow">
-        {title && <div className="atlCallOut__title">{title}</div>}
-        {children && <div>{children}</div>}
-      </div>
+      {title && (
+        <div className="atlCallOut__header">
+          {icon && <Icon name={icon} />}
+          <div className="atlCallOut__title">{title}</div>
+        </div>
+      )}
+      {children && <div className="atlCallOut__body">{children}</div>}
     </div>
   );
 }
@@ -197,7 +210,7 @@ export function EmptyPrompt({
 }) {
   return (
     <div className="atlEmpty">
-      {icon && <Icon name={icon} size="xl" />}
+      {icon && <Icon name={icon} size="xxl" />}
       <h2 className="atlTitleS atlEmpty__title">{title}</h2>
       {children && <div className="atlEmpty__body">{children}</div>}
       {actions}
@@ -345,37 +358,13 @@ export function Accordion({
           aria-expanded={open}
           onClick={() => setOpen(!open)}
         >
-          <Icon name={open ? 'chevronDown' : 'chevronRight'} />
+          <Icon name="chevronRight" className="atlAccordion__arrow" />
           <span className="atlGrow">{title}</span>
         </button>
         {extra}
       </div>
       {open && <div>{children}</div>}
     </div>
-  );
-}
-
-const TOKEN_LETTERS: Record<string, string> = {
-  string: 't',
-  number: '#',
-  date: 'd',
-  boolean: 'b',
-  ip: 'ip',
-  geo_point: 'g',
-  geo_shape: 'g',
-  _source: '{}',
-  conflict: '!',
-  nested: 'n',
-  object: '{}',
-  unknown: '?',
-};
-
-/** The small mark that says what kind of field a field is */
-export function FieldToken({ type }: { type: string }) {
-  return (
-    <span className={`atlToken atlToken--${type}`} title={type} aria-label={type}>
-      {TOKEN_LETTERS[type] ?? '?'}
-    </span>
   );
 }
 

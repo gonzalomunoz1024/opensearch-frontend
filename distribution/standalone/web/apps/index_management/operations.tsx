@@ -156,7 +156,7 @@ export function ClearCacheModal(props: OperationProps) {
             </>
           )}
           {blockedItems.length > 0 && (
-            <CallOut tone="warning">
+            <CallOut tone="warning" size="s">
               <p>{blockHint}</p>
               <Names names={blockedItems} />
             </CallOut>
@@ -220,7 +220,7 @@ export function FlushModal(props: OperationProps) {
       )}
       {blockedItems.length > 0 && (
         <div data-test-subj="flushBlockedCallout">
-          <CallOut tone="warning">
+          <CallOut tone="warning" size="s">
             <p>{flushBlockedMessage(target)}</p>
             <Names names={blockedItems} />
           </CallOut>
@@ -286,6 +286,8 @@ export function RefreshModal(props: OperationProps) {
       {blockedItems.length > 0 && (
         <CallOut
           tone="warning"
+          size="s"
+          icon="warning"
           title={`The following ${one(blockedItems.length)} cannot be refreshed because ${closedWording(target)} are either closed or in red status.`}
         >
           <Names names={blockedItems} testId={(name) => `BlockedItem-${name}`} />

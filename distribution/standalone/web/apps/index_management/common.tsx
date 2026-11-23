@@ -358,7 +358,7 @@ export function Table<Row>({
                     {column.sortable ? (
                       <button
                         type="button"
-                        className="atlTable__sort"
+                        className={cx('atlTable__sort', sorted && 'atlTable__sort--sorted')}
                         data-test-subj="tableHeaderSortButton"
                         onClick={() =>
                           onQuery({
@@ -540,7 +540,7 @@ export function SearchRow({
   return (
     <div className="ismSearchRow">
       <div className="atlGrow">
-        <SearchField value={text} onChange={setText} placeholder={placeholder} aria-label={placeholder} />
+        <SearchField compact value={text} onChange={setText} placeholder={placeholder} aria-label={placeholder} />
       </div>
       {children}
     </div>
@@ -756,7 +756,7 @@ export function BottomBar({ children }: { children: ReactNode }) {
 export function SubmitError({ error }: { error?: string }) {
   if (!error) return null;
   return (
-    <CallOut tone="critical" title="Sorry, there was an error">
+    <CallOut tone="critical" icon="warning" title="Sorry, there was an error">
       <p>{error}</p>
     </CallOut>
   );
@@ -787,7 +787,7 @@ export function JSONModal({
       wide
       footer={
         <>
-          <Button variant="empty" size="s" icon="copy" onClick={() => copyText(text)}>
+          <Button variant="empty" size="s" icon="copyClipboard" onClick={() => copyText(text)}>
             Copy
           </Button>
           <Button variant="empty" size="s" onClick={onClose} testId="jsonModalCloseButton">

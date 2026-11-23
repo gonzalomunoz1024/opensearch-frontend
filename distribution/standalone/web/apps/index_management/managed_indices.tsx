@@ -100,7 +100,7 @@ function PolicyModal({ item, onClose }: { item: ManagedIndex; onClose: () => voi
           <Button
             variant="empty"
             size="s"
-            icon="copy"
+            icon="copyClipboard"
             disabled={!item.policy}
             onClick={() => copyText(text)}
             testId="policyModalCopyButton"

@@ -63,9 +63,9 @@
   white-space: nowrap;
 }
 
+/* In the colour of the name, as the original's tree draws its icons */
 .qwbTree__item > .atlIcon {
   flex: none;
-  color: var(--color-text-secondary);
 }
 
 .qwbTreeNote {

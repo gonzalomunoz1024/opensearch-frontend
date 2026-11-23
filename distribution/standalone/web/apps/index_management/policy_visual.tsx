@@ -313,7 +313,7 @@ function LegacyNotification({
 }) {
   return (
     <>
-      <CallOut tone="accent" title="Update your notifications to use Channel ID">
+      <CallOut tone="accent" size="s" icon="info" title="Update your notifications to use Channel ID">
         <p>
           Using Channel ID will give you more control to manage notifications across OpenSearch dashboards. If you do
           decide to switch, you will lose your current error notification settings.

@@ -6,7 +6,7 @@
  * same saved settings.
  */
 
-import { DEFAULT_DATE_FORMAT, formatDate } from './dates';
+import { DEFAULT_DATE_FORMAT, formatDate, type ScaledDateRules } from './dates';
 import { formatNumber } from './numeral';
 import type { Field, FieldFormatSpec, IndexPattern } from './types';
 
@@ -20,6 +20,26 @@ export interface FormatSettings {
   dateNanosFormat?: string;
   /** The setting format:defaultTypeMap: the format of a kind of field that was given none */
   defaultTypeMap: Record<string, FieldFormatSpec>;
+  /** The setting dateFormat:scaled: the format of a date bucket by its interval */
+  scaledDateRules?: ScaledDateRules;
+}
+
+export const DEFAULT_DATE_NANOS_FORMAT = 'MMM D, YYYY @ HH:mm:ss.SSSSSSSSS';
+
+/**
+ * A date_nanos value as the original writes it: past three digits, the fraction of the second is
+ * the one in the text OpenSearch sent ("2020-05-18T20:45:05.957000123Z"), which a date cannot hold
+ */
+export function formatDateNanos(raw: string, date: Date, pattern: string, timeZone?: string): string {
+  const fraction = /S+/.exec(pattern)?.[0] ?? '';
+  if (fraction.length <= 3) return formatDate(date, withLongFractions(pattern, date), timeZone);
+  const shown = formatDate(date, withLongFractions(pattern.replace(fraction, `[${fraction}]`), date), timeZone);
+  // The original's substr(20, length - 21): the digits between the dot and the zone's Z
+  const nanos = raw
+    .slice(20, 20 + Math.max(0, raw.length - 21))
+    .padEnd(9, '0')
+    .slice(0, fraction.length);
+  return shown.replace(fraction, nanos);
 }
 
 export const DEFAULT_FORMAT_SETTINGS: FormatSettings = {
@@ -52,8 +72,6 @@ export type Formatter = (value: unknown) => Formatted;
 
 export const MISSING = '-';
 
-export const DEFAULT_DATE_NANOS_FORMAT = 'MMM D, YYYY @ HH:mm:ss.SSSSSSSSS';
-
 const isMissing = (value: unknown) => value === null || value === undefined || value === '';
 
 function toNumber(value: unknown): number | undefined {
@@ -79,7 +97,8 @@ function toDate(value: unknown): Date | undefined {
 export function stringify(value: unknown): string {
   if (isMissing(value)) return MISSING;
   if (typeof value === 'string') return value;
-  if (typeof value === 'object') return JSON.stringify(value);
+  // As the original's formats write an object: indented by two spaces
+  if (typeof value === 'object') return JSON.stringify(value, null, 2);
   return String(value);
 }
 
@@ -191,21 +210,6 @@ function withLongFractions(pattern: string, date: Date): string {
       ? token
       : `[${String(date.getUTCMilliseconds() * 10 ** (token.length - 3)).padStart(token.length, '0')}]`
   );
-}
-
-/**
- * A date of a date_nanos field: past three S, the fraction of a second is the one the text of the
- * value holds, as the original reads it
- */
-function formatNanos(date: Date, raw: string, pattern: string, zone?: string): string {
-  const run = /S+/.exec(pattern)?.[0] ?? '';
-  if (run.length <= 3) return formatDate(date, withLongFractions(pattern, date), zone);
-  const formatted = formatDate(date, withLongFractions(pattern.replace(run, `[${run}]`), date), zone);
-  const fraction = raw
-    .slice(20, 20 + Math.max(0, raw.length - 21))
-    .padEnd(9, '0')
-    .slice(0, run.length);
-  return formatted.replace(run, fraction);
 }
 
 const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
@@ -322,6 +326,9 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
             : settings.percentPattern;
       const pattern = typeof params.pattern === 'string' && params.pattern ? params.pattern : fallback;
       return (value) => {
+        // The ends of an open range, as the original's numeral formats write them
+        if (value === Infinity) return text('+∞');
+        if (value === -Infinity) return text('-∞');
         const number = toNumber(value);
         return text(number === undefined ? stringify(value) : formatNumber(number, pattern));
       };
@@ -335,19 +342,17 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
       };
     }
     case 'date_nanos': {
+      // The setting dateNanosFormat; a number, as an aggregation answers, in the date format
       const pattern =
         typeof params.pattern === 'string' && params.pattern
           ? params.pattern
-          : (settings.dateNanosFormat ?? DEFAULT_DATE_NANOS_FORMAT);
+          : settings.dateNanosFormat || DEFAULT_DATE_NANOS_FORMAT;
       const zone = typeof params.timezone === 'string' && params.timezone ? params.timezone : settings.timeZone;
       return (value) => {
         const date = toDate(value);
         if (!date) return text(stringify(value));
-        return text(
-          typeof value === 'string'
-            ? formatNanos(date, value, pattern, zone)
-            : formatDate(date, withLongFractions(pattern, date), zone)
-        );
+        if (typeof value !== 'string') return text(formatDate(date, withLongFractions(settings.dateFormat, date), zone));
+        return text(formatDateNanos(value, date, pattern, zone));
       };
     }
     case 'relative_date':
@@ -490,7 +495,9 @@ export function createFormatter(spec: FieldFormatSpec | undefined, settings = DE
     if (Array.isArray(value)) {
       if (value.length === 1) return one(value[0]);
       const parts = value.map((item) => one(item));
-      return { ...parts[0], text: parts.map((part) => part.text).join(', '), href: undefined, image: undefined };
+      // As the original joins a list: a line to each value when one of them takes several
+      const separator = parts.some((part) => part.text.includes('\n')) ? ',\n' : ', ';
+      return { ...parts[0], text: parts.map((part) => part.text).join(separator), href: undefined, image: undefined };
     }
     return one(value);
   };

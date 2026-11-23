@@ -124,7 +124,7 @@ export function DataTable<Row>({
                   {column.sortValue ? (
                     <button
                       type="button"
-                      className="atlTable__sort"
+                      className={cx('atlTable__sort', sort?.column === column.id && 'atlTable__sort--sorted')}
                       onClick={() =>
                         setSort({
                           column: column.id,

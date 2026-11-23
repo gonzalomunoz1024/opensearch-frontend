@@ -11,7 +11,22 @@ keeps working, and parts of it are derived from it under the Apache License, Ver
     order in which the colours of the palette are given out,
   - the reading of a Vega spec (web/vis/vega): its settings, the requests it makes to OpenSearch,
     its warnings and its error texts,
-  - the palette of chart colours, which is that of the OpenSearch UI framework.
+  - the palette of chart colours, which is that of the OpenSearch UI framework,
+  - the icons (web/components/icon.tsx): the drawings of the OpenSearch UI framework (OUI)
+    1.24.2, the component library OpenSearch Dashboards 3.9.0 is built with, copied as data from
+    the icons it holds,
+  - the sample data sets (server/sample_data/data_sets): their documents (the *.json.gz files,
+    copied as they are from src/plugins/home/server/services/sample_data/data_sets of
+    OpenSearch Dashboards 3.9.0), the field mappings of their indices, and their saved objects
+    in the form OpenSearch Dashboards 3.9.0 writes them when it installs a set; and their
+    preview pictures (web/static/plugins/home/assets/sample_data_resources, copied as they are
+    from src/plugins/home/public/assets/sample_data_resources),
+  - the pictures of the welcome screen of a new instance: its illustration
+    (web/static/plugins/home/assets/common, copied as it is from
+    src/plugins/home/public/assets/common) and the shapes behind it (web/static/core_app/images,
+    copied as they are from src/core/public/core_app/images),
+  - the tokens that mark the kind of a field (web/components/field_token.tsx): the glyphs and
+    colours of the OpenSearch UI framework's tokens.
 
 OpenSearch Dashboards
 Copyright OpenSearch Contributors
@@ -19,6 +34,10 @@ Copyright OpenSearch Contributors
 OpenSearch Dashboards includes software, including Kibana source code, developed by
 Elasticsearch (http://www.elastic.co).
 Copyright 2009-2021 Elasticsearch B.V.
+
+OpenSearch UI framework (OUI), under the Apache License, Version 2.0
+Copyright OpenSearch Contributors
+It includes software, including Elastic UI framework source code, developed by Elasticsearch B.V.
 
 The browser script bundles React, React DOM and Scheduler, under the MIT License,
 Copyright (c) Facebook, Inc. and its affiliates, and Leaflet, under the BSD 2-Clause License,
@@ -52,6 +71,10 @@ code under its licence:
     jQuery 3.6.0, MIT License, Copyright OpenJS Foundation and other contributors
 
 Their licence texts are in licenses/, and in dist/licenses/followed of a build.
+
+The drawing of Timeline charts (web/vis/timeline/plot.ts) is derived from Flot 0.8.3 and its
+time, stack, symbol, crosshair, selection, canvas and axis-label plug-ins, under the MIT License,
+Copyright (c) 2007-2014 IOLA and Ole Laursen.
 
 The pictures the URL format of an index pattern shows in its samples
 (web/static/plugins/indexPatternManagement/assets/icons) are those OpenSearch Dashboards ships for

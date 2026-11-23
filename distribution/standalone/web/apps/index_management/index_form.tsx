@@ -462,7 +462,7 @@ function FieldRow({
                 { id: 'object', label: 'Add nested object', onClick: onAddObject },
               ]}
               button={(toggle) => (
-                <IconButton icon="plusCircle" label="Add nested field" onClick={toggle} testId={`${id}-add-sub-field`} />
+                <IconButton icon="plusInCircleFilled" label="Add nested field" variant="empty" onClick={toggle} testId={`${id}-add-sub-field`} />
               )}
             />
           )}
@@ -631,7 +631,7 @@ export function MappingEditor({
       {mode === 'VISUAL' ? (
         <>
           {!fieldsArePlain(added) && (
-            <CallOut tone="warning" title="You have advanced configurations not supported by the visual editor">
+            <CallOut tone="warning" size="s" title="You have advanced configurations not supported by the visual editor">
               To view or modify all of your configurations, switch to the JSON editor.
             </CallOut>
           )}

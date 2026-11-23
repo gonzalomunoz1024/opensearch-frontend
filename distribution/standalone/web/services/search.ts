@@ -43,10 +43,26 @@ export interface RequestRecord {
   tookMs?: number;
 }
 
+/**
+ * The preference a search names, as the courier settings of the original make it: the id of this
+ * visit of the page for "sessionId", the custom preference for "custom", none for "none"
+ */
+export function requestPreference(setting: unknown, custom: unknown, sessionId: string): string | undefined {
+  if (setting === 'sessionId') return sessionId;
+  if (setting !== 'custom' || custom === undefined || custom === null || custom === '') return undefined;
+  return String(custom);
+}
+
+export interface SearchOptions {
+  maxConcurrentShardRequests: number;
+  /** Which shard copies answer: courier:setRequestPreference and courier:customRequestPreference */
+  preference?: string;
+}
+
 export class SearchService {
   constructor(
     private readonly http: Http,
-    private readonly options: () => { maxConcurrentShardRequests: number }
+    private readonly options: () => SearchOptions
   ) {}
 
   /** One request to OpenSearch: any method, any path; the answer whatever its status below 400 */
@@ -69,11 +85,12 @@ export class SearchService {
     body: Record<string, unknown>,
     options: { signal?: AbortSignal; record?: RequestRecord } = {}
   ): Promise<SearchResponse> {
-    const { maxConcurrentShardRequests } = this.options();
+    const { maxConcurrentShardRequests, preference } = this.options();
     const params = new URLSearchParams({ ignore_unavailable: 'true', track_total_hits: 'true' });
     if (maxConcurrentShardRequests > 0) {
       params.set('max_concurrent_shard_requests', String(maxConcurrentShardRequests));
     }
+    if (preference !== undefined) params.set('preference', preference);
     const record = options.record;
     const started = Date.now();
     try {

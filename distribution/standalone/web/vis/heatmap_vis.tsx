@@ -18,6 +18,7 @@ import {
   type LegendPosition,
 } from '../charts/core';
 import { bucketFilter } from '../lib/aggs';
+import { services } from '../services';
 import type { Filter } from '../lib/types';
 import { bucketColumns, keyText, metricColumns, numberOf, type VisRenderProps } from './types';
 
@@ -75,6 +76,15 @@ export function HeatmapVis({ vis, data, uiState, onFilter }: VisRenderProps) {
 
   const { xColumn, yColumn, metric, xs, ys, cells, min, max } = model;
   if (!metric || cells.size === 0) return <ChartMessage>No results found</ChartMessage>;
+  // More rows than the setting visualization:heatmap:maxBuckets allows draw nothing, as in the original
+  const maxBuckets = services.uiSettings.get<number>('visualization:heatmap:maxBuckets', 50);
+  if (ys.length > maxBuckets) {
+    return (
+      <div className="chtMessage" role="alert" data-test-subj="visLibVisualizeError">
+        There are too many series defined ({ys.length}). The configured maximum is {maxBuckets}.
+      </div>
+    );
+  }
   // The rows take their place in the page's memory of colours, as in OpenSearch Dashboards
   assignColors(yColumn ? ys.map((item) => item.label) : [metric.name]);
 
