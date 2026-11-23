@@ -334,16 +334,6 @@
   padding: var(--space-2);
 }
 
-/* The original's compressed search: its icon 8 px in from the edge, the text 32 px in */
-.vbdFields__search.atlFieldGroup {
-  gap: var(--space-3);
-  padding-left: calc(var(--space-2) - 1px);
-}
-
-.vbdFields__search.atlFieldGroup > input {
-  padding: 0;
-}
-
 /* The original's button that clears the search, not the browser's: a 12 px disc with a cross,
    8 px from the outer edge, which leaves the text 32 px short of the end */
 .vbdFields__search.atlFieldGroup > input::-webkit-search-cancel-button {

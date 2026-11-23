@@ -202,7 +202,7 @@ export function VegaDebugView({ values }: { values: VegaDebugValues }) {
   const [tab, setTab] = useState(TABS[0].id);
   return (
     <div className="vgaDebug">
-      <Tabs tabs={TABS} selected={tab} onSelect={setTab} />
+      <Tabs size="s" tabs={TABS} selected={tab} onSelect={setTab} />
       {tab === 'data-viewer--id' && <DataViewer values={values} />}
       {tab === 'signal-viewer--id' && <SignalViewer values={values} />}
       {tab === 'spec-viewer--id' && <SpecViewer values={values} />}
