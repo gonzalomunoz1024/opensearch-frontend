@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { cloneBase, cloneTitle, fullAppState, sameQuery } from '../../web/apps/dashboard/app_state';
+import { cloneBase, cloneTitle, fullAppState, ownTime, sameQuery } from '../../web/apps/dashboard/app_state';
 import {
   MIN_PANEL,
   cellUnder,
@@ -479,6 +479,29 @@ describe('a dashboard in the address', () => {
   it('compares queries by their text and language', () => {
     assert.equal(sameQuery({ query: 'a', language: 'kuery' }, { language: 'kuery', query: 'a' }), true);
     assert.equal(sameQuery({ query: 'a', language: 'kuery' }, { query: 'a', language: 'lucene' }), false);
+  });
+});
+
+describe("a dashboard's own time", () => {
+  // As [Flights] is saved: the interval with the picker's own fields beside the pause and value
+  const kept = {
+    timeRestore: true,
+    timeFrom: 'now-7d',
+    timeTo: 'now',
+    refreshInterval: { display: '15 minutes', pause: false, section: 2, value: 900000 },
+  };
+
+  it('comes with the dashboard, the interval as the time filter keeps it', () => {
+    assert.deepEqual(ownTime(kept), { time: { from: 'now-7d', to: 'now' }, refreshInterval: { pause: false, value: 900000 } });
+    assert.deepEqual(ownTime({ ...kept, timeRestore: false }), {});
+    assert.deepEqual(ownTime({ ...kept, refreshInterval: { pause: false, value: 0 } }).refreshInterval, { pause: true, value: 0 });
+  });
+
+  it('gives way to what the address named, each part on its own', () => {
+    // An address with `_g=()` or `_g=(filters:!())` names no time: the dashboard's is taken
+    assert.deepEqual(ownTime(kept, {}).time, { from: 'now-7d', to: 'now' });
+    assert.deepEqual(ownTime(kept, { time: { from: 'now-1h', to: 'now' } }), { refreshInterval: { pause: false, value: 900000 } });
+    assert.deepEqual(ownTime(kept, { refreshInterval: { pause: false, value: 5000 } }), { time: { from: 'now-7d', to: 'now' } });
   });
 });
 

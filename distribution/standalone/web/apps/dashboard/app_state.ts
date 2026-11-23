@@ -5,8 +5,9 @@
  * dashboard on screen, over what was saved, and its panels only while it is edited.
  */
 
+import type { TimeRange } from '../../lib/dates';
 import { encodeState } from '../../lib/url';
-import type { Filter, Query } from '../../lib/types';
+import type { Filter, Query, RefreshInterval } from '../../lib/types';
 import { panelsToUrl, type Dashboard, type DashboardOptions, type PanelState } from './model';
 
 export interface UrlAppState {
@@ -72,6 +73,28 @@ export function restoredOptions(saved: DashboardOptions): DashboardOptions {
     if (saved[key] !== undefined) options[key] = saved[key];
   }
   return options;
+}
+
+/**
+ * What the page takes of a dashboard's own time when it opens it: its range and its refresh
+ * interval, each unless the address named one itself (`named`: the `_g` the page opened with),
+ * as the original lets what the address says win over what the dashboard sets. Of the interval
+ * the original's time filter keeps the pause and the value, and takes one of nothing as paused.
+ */
+export function ownTime(
+  dashboard: Pick<Dashboard, 'timeRestore' | 'timeFrom' | 'timeTo' | 'refreshInterval'>,
+  named: { time?: unknown; refreshInterval?: unknown } = {}
+): { time?: TimeRange; refreshInterval?: RefreshInterval } {
+  const own: { time?: TimeRange; refreshInterval?: RefreshInterval } = {};
+  if (!dashboard.timeRestore) return own;
+  if (dashboard.timeFrom && dashboard.timeTo && named.time === undefined) {
+    own.time = { from: dashboard.timeFrom, to: dashboard.timeTo };
+  }
+  if (dashboard.refreshInterval && named.refreshInterval === undefined) {
+    const { pause, value } = dashboard.refreshInterval;
+    own.refreshInterval = value > 0 ? { pause: pause !== false, value } : { pause: true, value: 0 };
+  }
+  return own;
 }
 
 /** The query of a saved dashboard, the language as the address names it */
