@@ -682,3 +682,19 @@ describe("the console's flyouts", () => {
     assert.ok(stackOf('.atlFlyout.dvtFlyout') >= stackOf('.dvtMask'));
   });
 });
+
+describe("the console's notices", () => {
+  // The kind of toast each message of the console is shown with, read from its source
+  const kindsOf = (message: string): string[] => {
+    const source = readFileSync('web/apps/dev_tools/console.tsx', 'utf8');
+    const quoted = message.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return [...source.matchAll(new RegExp(`services\\.toasts\\.(\\w+)\\(\\s*'${quoted}'`, 'g'))].map((found) => found[1]);
+  };
+
+  it('are plain, with no colour and no icon, as the original\'s toasts.add of a text', () => {
+    // use_send_current_request_to_opensearch.ts and the console menu's copyAsCurl call
+    // notifications.toasts.add with the text alone
+    assert.deepEqual(kindsOf('No request selected. Select a request by placing the cursor inside it.'), ['plain']);
+    assert.deepEqual(kindsOf('Request copied as cURL'), ['plain']);
+  });
+});

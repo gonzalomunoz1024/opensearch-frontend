@@ -799,7 +799,7 @@ export function Console() {
     if (running) return;
     const requests = requestsBetween(doc, fromLine, toLine);
     if (requests.length === 0) {
-      services.toasts.info('No request selected. Select a request by placing the cursor inside it.');
+      services.toasts.plain('No request selected. Select a request by placing the cursor inside it.');
       return;
     }
     const controller = new AbortController();
@@ -848,7 +848,7 @@ export function Console() {
 
   const copyAsCurl = () => {
     const curl = toCurl(blocksBetween(doc, fromLine, toLine, true), host);
-    const done = () => services.toasts.info('Request copied as cURL');
+    const done = () => services.toasts.plain('Request copied as cURL');
     if (navigator.clipboard?.writeText) navigator.clipboard.writeText(curl).then(done, () => undefined);
   };
 
