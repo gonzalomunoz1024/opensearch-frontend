@@ -124,6 +124,7 @@ export function SaveModal({
         {!showDescription && intro && <p className="atlSubdued atlSaveModal__intro">{intro}</p>}
         {existing && (
           <Switch
+            compressed
             checked={asNew}
             onChange={setAsNew}
             label={`Save as new ${objectType}`}
