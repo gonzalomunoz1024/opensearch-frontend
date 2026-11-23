@@ -2,6 +2,8 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { bucketFilter, otherBucketTerms, tabify, type AggConfig, type AggContext, type TableColumn } from '../../web/lib/aggs';
 import { DEFAULT_FORMAT_SETTINGS } from '../../web/lib/field_formats';
 import type { Filter, IndexPattern } from '../../web/lib/types';
@@ -10,6 +12,7 @@ import { axisConfig, drawAxis, keptTicks, placeTick, truncateLabel, type AxisSca
 import { heatmapColor } from '../../web/vis/vislib/color_maps';
 import { drawMeter, gaugeBucket, gaugeColors, gaugeLabels, gaugeSize, meterConfig } from '../../web/vis/vislib/gauge';
 import { seriesColors, standardizeColor } from '../../web/vis/vislib/colors';
+import { HandlerError, TOO_SMALL } from '../../web/vis/vislib/handler_error';
 import { buildSplitHeatmapModels, colorBucket, heatmapColors, heatmapLabels, type HeatmapParams } from '../../web/vis/vislib/heatmap';
 import { groupedCount, groupedNum, isColorDark } from '../../web/vis/vislib/point_series_chart';
 import {
@@ -20,7 +23,7 @@ import {
   type VislibSeries,
 } from '../../web/vis/vislib/point_series_data';
 import { layoutPointSeries } from '../../web/vis/vislib/point_series_layout';
-import { keptPieLabels } from '../../web/vis/vislib/pie_chart';
+import { keptPieLabels, pieTooSmall } from '../../web/vis/vislib/pie_chart';
 import { splitTooltipDetail } from '../../web/vis/vislib/series_events';
 import { cutSplitTitle, splitTitleRowHeight, splitTitleText, splitTitleTooltip } from '../../web/vis/vislib/split';
 import {
@@ -574,6 +577,24 @@ describe('a pie', () => {
         undefined,
       ]),
       [true, false, true, true, false]
+    );
+  });
+
+  it('is too small for a room 20 pixels wide or high or less, one of no width too', () => {
+    assert.equal(pieTooSmall({ width: 0, height: 194 }), true);
+    assert.equal(pieTooSmall({ width: 42, height: 9.6 }), true);
+    assert.equal(pieTooSmall({ width: 20, height: 100 }), true);
+    assert.equal(pieTooSmall({ width: 100, height: 20 }), true);
+    assert.equal(pieTooSmall({ width: 21, height: 21 }), false);
+  });
+});
+
+describe("vislib's handler", () => {
+  it('says why the charts cannot be drawn in a heading of a box that takes their place', () => {
+    assert.equal(
+      renderToStaticMarkup(createElement(HandlerError, { message: TOO_SMALL })),
+      '<div class="visError chart error" role="alert" data-test-subj="visLibVisualizeError">' +
+        '<h4>This container is too small to render the visualization</h4></div>'
     );
   });
 });

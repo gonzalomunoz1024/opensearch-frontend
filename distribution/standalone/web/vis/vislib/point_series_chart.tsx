@@ -15,6 +15,7 @@ import { useCallback, useId, useMemo, useRef, useState, type MouseEvent as React
 import { useSize } from '../../charts/core';
 import type { AxisScaleInfo, AxisTick, DrawnAxis } from './axis';
 import { isHorizontal, titleSize } from './axis';
+import { HandlerError } from './handler_error';
 import { VisLegend, type LegendPosition, type VisLegendProps } from './legend';
 import { layoutPointSeries, type LayoutAxisInput, type PlacedAxis, type PlacedSplitTitles, type Rect } from './point_series_layout';
 import {
@@ -952,14 +953,10 @@ export function PointSeriesChart({ model, charts, rows, colorOf, offsetAt, dimmi
     />
   ) : null;
 
+  // A chart that cannot be drawn shows the handler's message in place of the charts
+  const failure = drawn?.error;
   let body: ReactNode = null;
-  if (drawn && (drawn.error || !drawn.layout || !drawn.scaled)) {
-    body = (
-      <div className="visError" role="alert">
-        <h2 className="visError__title">{drawn.error}</h2>
-      </div>
-    );
-  } else if (drawn?.layout && drawn.scaled) {
+  if (!failure && drawn?.layout && drawn.scaled) {
     const { layout, scaled } = drawn;
     const placedTitles = layout.axes.filter((axis) => axis.title);
     body = (
@@ -1005,11 +1002,12 @@ export function PointSeriesChart({ model, charts, rows, colorOf, offsetAt, dimmi
 
   return (
     <div className={`visLib${legendPosition ? ` visLib--legend-${legendPosition}` : ''}`} data-test-subj="visLib">
-      <div className="visLib__chart">
+      <div className={`visLib__chart${failure ? ' visLib__chart--failed' : ''}`}>
         {/* The tooltip keeps its side until the pointer leaves the wrapper, its axes too */}
         <div className="visWrapper" ref={wrapperRef} data-test-subj="visChart" onMouseLeave={() => (placement.current = undefined)}>
           {body}
         </div>
+        {failure && <HandlerError message={failure} />}
       </div>
       <div className="visLib__legend">{legendNode}</div>
       <VislibTooltip state={tooltip} container={() => wrapperRef.current} placement={placement} />
