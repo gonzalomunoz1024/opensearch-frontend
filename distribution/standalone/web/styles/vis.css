@@ -172,6 +172,25 @@
   overflow: auto;
 }
 
+/*
+ * The text is the product's markdown body (.visMarkdownBody), whose lines and fills are the full
+ * shade at 15% and 5%; over a background that reads as the other theme it is written in the
+ * lightest shade, its lines and fills from the surface, as the product's osdMarkdown__body--reversed
+ */
+.visTsvbMarkdown .atlMarkdown.visMarkdownBody {
+  --vis-markdown-line: color-mix(in srgb, var(--color-full-shade) 15%, transparent);
+  --vis-markdown-fill: color-mix(in srgb, var(--color-full-shade) 5%, transparent);
+}
+
+.visTsvbMarkdown__content--reversed {
+  color: var(--color-surface-secondary);
+}
+
+.visTsvbMarkdown__content--reversed .atlMarkdown.visMarkdownBody {
+  --vis-markdown-line: color-mix(in srgb, var(--color-surface) 15%, transparent);
+  --vis-markdown-fill: color-mix(in srgb, var(--color-surface) 5%, transparent);
+}
+
 /* Controls: the original's input controls with the Atlas theme */
 
 .visControls {

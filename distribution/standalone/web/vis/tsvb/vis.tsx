@@ -530,6 +530,9 @@ function MarkdownPanel({ params, data }: { params: TsvbParams; data: TsvbData })
   const { text, error } = fillMarkdown(params.markdown, variables);
   const css = params.markdown_css ? params.markdown_css.split(`markdown-${params.id}`).join(elementId) : '';
   const align = params.markdown_vertical_align;
+  // The text is written in the product's markdown body, in the other theme's colours over a
+  // background that reads as the other theme
+  const reversed = isInverted(background, darkTheme());
   return (
     <div className="visTsvbFrame" style={{ background }}>
       <div className="visTsvbMarkdown" data-test-subj="tsvbMarkdown">
@@ -540,11 +543,14 @@ function MarkdownPanel({ params, data }: { params: TsvbParams; data: TsvbData })
             'visTsvbMarkdown__content',
             align === 'middle' || align === 'bottom' ? `visTsvbMarkdown__content--${align}` : '',
             params.markdown_scrollbars ? 'visTsvbMarkdown__content--scroll' : '',
+            reversed ? 'visTsvbMarkdown__content--reversed' : '',
           ]
             .filter(Boolean)
             .join(' ')}
         >
-          <div id={elementId}>{text !== undefined && <Markdown text={text} openLinksInNewTab={Boolean(params.markdown_openLinksInNewTab)} />}</div>
+          <div id={elementId}>
+            {text !== undefined && <Markdown className="visMarkdownBody" text={text} openLinksInNewTab={Boolean(params.markdown_openLinksInNewTab)} />}
+          </div>
         </div>
       </div>
     </div>
