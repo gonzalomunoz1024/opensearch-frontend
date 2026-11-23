@@ -30,6 +30,7 @@ import { SearchBar } from '../../shell/search_bar';
 import { showSearchError } from '../../shell/search_error';
 import { addRecentlyAccessed, currentGlobalParam, useAutoRefresh, useBreadcrumbs, useGlobalState, writeStored } from '../../shell/state';
 import { DocDetails } from './doc_viewer';
+import { writeDiscoverState } from './app_state';
 import { DocTable, filterColumns, toggledColumns, type SortPair } from './doc_table';
 import { DownloadCsv } from './download_csv';
 import { DocPage, ContextPage } from './doc_pages';
@@ -226,8 +227,8 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
     [columns, interval, sort, indexPatternId, savedId, savedQueryId]
   );
   const writeApp = useCallback(
-    (changes: { columns?: string[]; sort?: SortPair[]; interval?: string; indexPattern?: string }, replace = false) => {
-      setHashParams({ _a: appParam(changes) }, { replace });
+    (changes: { columns?: string[]; sort?: SortPair[]; interval?: string; indexPattern?: string }) => {
+      writeDiscoverState({ _a: appParam(changes) });
     },
     [appParam]
   );
@@ -246,7 +247,7 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
   );
   const writeQuery = useCallback(
     (changes: { query?: Query; filters?: Filter[] }) => {
-      setHashParams({ _q: encodeState({ filters: changes.filters ?? appFilters, query: changes.query ?? query }) }, { replace: false });
+      writeDiscoverState({ _q: encodeState({ filters: changes.filters ?? appFilters, query: changes.query ?? query }) });
     },
     [appFilters, query]
   );
@@ -314,7 +315,7 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
       defaultQueryLanguage()
     );
     const next = encodeState({ filters: chosenFilters, query: chosen });
-    if (next !== params._q) setHashParams({ _q: next }, { replace: true });
+    if (next !== params._q) writeDiscoverState({ _q: next });
     if (typeof chosen.language === 'string') writeStored('queryLanguage', chosen.language);
     setOpenedKey(openKey);
   }, [opened, openKey, savedId, saved]);
@@ -654,14 +655,10 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
         indexPattern={indexPattern}
         indexPatterns={patterns}
         onIndexPatternChange={(id) => {
+          // As the original's: only the pattern changes; the columns, the sort, the query and the
+          // filters stay, and the table shows the columns the new pattern has
           setResult(undefined);
-          setHashParams({
-            _a: encodeState({
-              discover: { columns: ['_source'], interval, isDirty: false, savedQuery: savedQueryId, sort: [] },
-              metadata: { indexPattern: id, view: 'discover' },
-            }),
-            _q: encodeState({ filters: [], query }),
-          });
+          writeApp({ indexPattern: id });
         }}
         onRefreshFields={() => {
           services.indexPatterns
