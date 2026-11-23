@@ -56,18 +56,37 @@ describe('a value shown by the URL format', () => {
 
 describe('a link or a picture in Markdown', () => {
   const html = (text: string) => renderToStaticMarkup(<Markdown text={text} />);
+  // The addresses an HTML text holds, as a browser on a page of this product reads them
+  const addresses = (out: string) =>
+    [...out.matchAll(/ (href|src)="([^"]*)"/g)].flatMap(([, name, value]) => {
+      try {
+        const text = value.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+        return [{ name, url: new URL(text, 'http://localhost:5601/app/home') }];
+      } catch {
+        return [];
+      }
+    });
+  // Whether one of them runs a script or shows a document of the writer's own: a picture may be data:image/
+  const leadsAstray = (out: string) =>
+    addresses(out).some(
+      ({ name, url }) =>
+        ['javascript:', 'vbscript:', 'file:'].includes(url.protocol) ||
+        (url.protocol === 'data:' && !(name === 'src' && /^data:image\/(gif|png|jpeg|webp);/i.test(url.href)))
+    );
 
-  it('is left out when its address is one of those, however it is spelled', () => {
-    for (const address of UNSAFE.filter((value) => !/\s/.test(value))) {
-      assert.ok(!/href|src/.test(html(`[text](${address})`)), JSON.stringify(address));
-      assert.ok(!/href|src/.test(html(`[text](<${address}>)`)), JSON.stringify(address));
-      assert.ok(!/href|src/.test(html(`![text](${address})`)), JSON.stringify(address));
+  it('leads nowhere a browser would run, or show as a page of the writer, however it is spelled', () => {
+    // A blob: address stays a link, as in the original: it opens what that other site made, never a script of this page
+    for (const address of UNSAFE.filter((value) => !value.startsWith('blob:'))) {
+      for (const text of [`[text](${address})`, `[text](<${address}>)`, `![text](${address})`, `<${address}>`]) {
+        assert.ok(!leadsAstray(html(text)), JSON.stringify(text));
+      }
     }
-    assert.ok(!/href/.test(html('[text](java&#x09;script:alert(1)) <javascript:alert(1)>')));
     // A character reference is read as the character it stands for before the address is judged, as markdown-it reads it
-    for (const address of ['javascript&colon;alert(1)', '&#106;avascript:alert(1)', 'java&Tab;script:alert(1)', '&#x6A;avascript&#58;alert(1)']) {
-      assert.ok(!/href|src/.test(html(`[text](${address}) ![text](${address})`)), address);
+    for (const address of ['javascript&colon;alert(1)', '&#106;avascript:alert(1)', 'java&Tab;script:alert(1)', '&#x6A;avascript&#58;alert(1)', 'java&#x09;script:alert(1)']) {
+      assert.ok(!leadsAstray(html(`[text](${address}) ![text](${address})`)), address);
     }
+    // markdown-it makes no link or picture at all of a javascript: address
+    assert.ok(!/href|src/.test(html('[a](javascript:alert(1)) [b](JaVaScRiPt:alert(1)) ![c](javascript:alert(1)) <javascript:alert(1)> [d](javascript&colon;x)')));
     assert.ok(!html('![x](data:image/svg+xml;base64,PHN2Zz4=)').includes('<img'));
     assert.ok(html('![x](data:image/png;base64,iVBORw0KGgo=)').includes('<img'));
   });

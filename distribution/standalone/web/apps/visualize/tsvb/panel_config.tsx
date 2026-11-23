@@ -136,7 +136,7 @@ function TimeseriesPanel(props: PanelProps) {
               <Label>Legend position</Label>
             </Item>
             <Item>
-              <Combo options={LEGEND_POSITIONS} value={model.legend_position} clearable={false} onChange={(value) => onChange({ legend_position: value })} />
+              <Combo options={LEGEND_POSITIONS} value={model.legend_position} clearable={false} narrow onChange={(value) => onChange({ legend_position: value })} />
             </Item>
             <Item grow={false}>
               <Label>Display grid</Label>
@@ -148,7 +148,7 @@ function TimeseriesPanel(props: PanelProps) {
               <Label>Tooltip</Label>
             </Item>
             <Item>
-              <Combo options={TOOLTIP_MODES} value={model.tooltip_mode} clearable={false} onChange={(value) => onChange({ tooltip_mode: value })} />
+              <Combo options={TOOLTIP_MODES} value={model.tooltip_mode} clearable={false} narrow onChange={(value) => onChange({ tooltip_mode: value })} />
             </Item>
           </Row>
         </OptionsPanel>
@@ -360,6 +360,7 @@ function MarkdownPanel(props: PanelProps) {
                 options={ALIGNMENTS}
                 value={model.markdown_vertical_align}
                 clearable={false}
+                narrow
                 onChange={(value) => onChange({ markdown_vertical_align: value })}
               />
             </Item>

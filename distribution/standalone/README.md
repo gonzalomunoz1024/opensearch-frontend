@@ -1,9 +1,9 @@
 # The standalone InfraDashboard
 
-A re-creation of OpenSearch Dashboards 3.9.0 that is built from **five npm packages**: React and
-React DOM, and the libraries OpenSearch Dashboards itself draws Vega visualizations and maps
-with, Vega, Vega-Lite and Leaflet. With what they bring and the compiler, that is 89 packages,
-where the fork around it needs about 2,360. It exists because the fork cannot be built where its
+A re-creation of OpenSearch Dashboards 3.9.0 that is built from **six npm packages**: React and
+React DOM, the libraries OpenSearch Dashboards itself draws Vega visualizations and maps with,
+Vega, Vega-Lite and Leaflet, and the parser it reads Markdown with, markdown-it. With what they
+bring and the compiler, that is 96 packages, where the fork around it needs about 2,360. It exists because the fork cannot be built where its
 packages cannot be fetched: a registry that serves only the versions it already holds refused
 174 of them. Nothing here imports a package of OpenSearch Dashboards, of its component library or
 of its charts; the server, the components, the charts, the query language and the formats are
@@ -31,7 +31,7 @@ Node.js 22 and npm are all it needs.
 
 ```bash
 cd distribution/standalone
-npm ci                      # react, react-dom, vega, vega-lite, leaflet, typescript, types
+npm ci                      # react, react-dom, vega, vega-lite, leaflet, markdown-it, typescript, types
 npm test                    # the unit tests, with node --test
 node scripts/build.mjs      # dist/: the server as plain files, the browser side as one script
 node dist/server/main.js --config config/opensearch_dashboards.yml
@@ -39,8 +39,8 @@ node dist/server/main.js --config config/opensearch_dashboards.yml
 
 `OPENSEARCH_HOSTS='["http://localhost:9200"]' SERVER_PORT=5601 node dist/server/main.js` does the
 same from the environment. What runs has no `node_modules`: the server uses Node's own modules
-only, React and Leaflet are inside the browser script, and Vega and Vega-Lite are served as
-their own browser builds, fetched only when a Vega visualization is drawn.
+only, React, Leaflet and markdown-it are inside the browser script, and Vega and Vega-Lite are
+served as their own browser builds, fetched only when a Vega visualization is drawn.
 
 ### Will it build where I am?
 
@@ -49,7 +49,7 @@ node scripts/preflight.mjs                      # asks the registry npm is set u
 node scripts/preflight.mjs --registry <url>     # or another one
 ```
 
-fetches each of the 89 packages of `package-lock.json` from the registry, past the local cache,
+fetches each of the 96 packages of `package-lock.json` from the registry, past the local cache,
 and names any that cannot be had. Run it once on the machine or in the pipeline that will build the image.
 
 `node scripts/check_lockfile.mjs` is the same question asked of the three lists in `registry/`
