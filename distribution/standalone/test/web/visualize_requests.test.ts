@@ -146,6 +146,25 @@ describe('the request, as the original writes it', () => {
     assert.deepEqual(request['3'], { sum_bucket: { buckets_path: '3-bucket>_count' } });
     assert.deepEqual(request['4-bucket'], { terms: { field: 'extension', size: 3, order: { _count: 'desc' } } });
   });
+
+  it('keeps and leaves out terms as asked: numbers on a number field, a pattern on a text field, as the original', () => {
+    // What the original sent for these, measured on the reference
+    const terms = (params: Record<string, unknown>) => dsl(bucket('terms', { size: 5, order: 'desc', orderBy: '1', ...params })).terms as Record<string, unknown>;
+    const numbers = terms({ field: 'bytes', include: [0, 1000, ''], exclude: [1000] });
+    assert.deepEqual(numbers.include, [0, 1000]);
+    assert.deepEqual(numbers.exclude, [1000]);
+    const text = terms({ field: 'extension', include: 'css|png', exclude: 'gif' });
+    assert.equal(text.include, 'css|png');
+    assert.equal(text.exclude, 'gif');
+    // A saved object of an older version keeps its pattern in an object
+    assert.equal(terms({ field: 'extension', include: { pattern: 'css.*' } }).include, 'css.*');
+    // A pattern on a number field, or a list on a text field, is not asked
+    const unasked = terms({ field: 'bytes', include: 'css', exclude: '' });
+    assert.equal('include' in unasked || 'exclude' in unasked, false);
+    assert.equal('include' in terms({ field: 'extension', include: [1] }), false);
+    const significant = dsl(bucket('significant_terms', { field: 'extension', size: 3, include: 'win.*', exclude: 'win 7' }));
+    assert.deepEqual(significant, { significant_terms: { field: 'extension', size: 3, exclude: 'win 7', include: 'win.*' } });
+  });
 });
 
 describe('the buckets of ranges, IP ranges and filters, in the order they are asked', () => {

@@ -560,16 +560,15 @@ function bucketClause(agg: AggConfig, context: AggContext): Dsl {
       const scripted = fieldOf(agg, context);
       if (field.script && scripted) clause.value_type = scripted.type === 'number' ? 'float' : scripted.type;
       if (agg.params?.missingBucket) clause.missing = MISSING_KEY;
-      const include = agg.params?.include;
-      const exclude = agg.params?.exclude;
-      if (typeof include === 'string' && include !== '') clause.include = include;
-      if (typeof exclude === 'string' && exclude !== '') clause.exclude = exclude;
+      includeExclude(agg, context, clause);
       return { terms: clause };
     }
     case 'significant_terms': {
       // An empty size is not asked: OpenSearch's own applies
       const size = agg.params?.size;
-      return { significant_terms: { ...field, ...(size ? { size } : {}) } };
+      const clause: Dsl = { ...field, ...(size ? { size } : {}) };
+      includeExclude(agg, context, clause);
+      return { significant_terms: clause };
     }
     case 'filters': {
       const filters: Record<string, Dsl> = {};
@@ -589,6 +588,25 @@ function bucketClause(agg: AggConfig, context: AggContext): Dsl {
 }
 
 export const MISSING_KEY = '__missing__';
+
+/**
+ * The values a terms or significant terms aggregation keeps or leaves out, as the original's
+ * `migrateIncludeExcludeFormat` writes them: the numbers of a list on a number field, a pattern on
+ * a text field (or the pattern of an older saved object), and nothing on any other field
+ */
+function includeExclude(agg: AggConfig, context: AggContext, clause: Dsl): void {
+  const type = fieldOf(agg, context)?.type;
+  for (const name of ['exclude', 'include']) {
+    const value = agg.params?.[name];
+    if (Array.isArray(value) && value.length > 0 && type === 'number') {
+      const numbers = value.filter((item): item is number => Number.isFinite(item));
+      if (numbers.length) clause[name] = numbers;
+    } else if (value !== null && typeof value === 'object') {
+      const pattern = (value as { pattern?: unknown }).pattern;
+      if (pattern !== undefined) clause[name] = pattern;
+    } else if (value && type === 'string') clause[name] = value;
+  }
+}
 
 /** A clause with what someone wrote under "JSON input" merged into it */
 function withJson(agg: AggConfig, clause: Dsl): Dsl {
