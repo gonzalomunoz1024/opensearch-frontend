@@ -9,7 +9,7 @@ import {
   resolveInterval,
   resolveTimeRange,
 } from '../../web/lib/dates';
-import { createFormatter } from '../../web/lib/field_formats';
+import { createFormatter, DEFAULT_FORMAT_SETTINGS, fieldFormatter } from '../../web/lib/field_formats';
 import { formatNumber } from '../../web/lib/numeral';
 import { buildQuery, describeFilter, phraseFilter, rangeFilter } from '../../web/lib/query';
 import { decode, encode } from '../../web/lib/rison';
@@ -252,6 +252,20 @@ const pattern: IndexPattern = {
     },
   ],
 };
+
+describe('the formatter of a field', () => {
+  it('follows the settings it is given, as the original reads them at each value', () => {
+    const before = { ...DEFAULT_FORMAT_SETTINGS };
+    const after = { ...DEFAULT_FORMAT_SETTINGS, numberPattern: '0.00', bytesPattern: '0.000b' };
+    assert.equal(fieldFormatter(pattern, 'machine.ram', before)(1234.5).text, '1,234.5');
+    // format:number:defaultPattern changed in the settings, the page not loaded again
+    assert.equal(fieldFormatter(pattern, 'machine.ram', after)(1234.5).text, '1234.50');
+    const typeMap = { ...DEFAULT_FORMAT_SETTINGS.defaultTypeMap, number: { id: 'bytes', params: {} } };
+    assert.equal(fieldFormatter(pattern, 'machine.ram', { ...after, defaultTypeMap: typeMap })(2048).text, '2.000KB');
+    // the same settings give the same formatter
+    assert.equal(fieldFormatter(pattern, 'machine.ram', after), fieldFormatter(pattern, 'machine.ram', after));
+  });
+});
 
 describe('the query of a page', () => {
   it('combines the search bar and the filters', () => {

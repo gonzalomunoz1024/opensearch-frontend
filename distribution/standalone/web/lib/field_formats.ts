@@ -523,26 +523,34 @@ export function formatSpecOf(
   return byEsType ?? (field ? map[field.type] : undefined) ?? map._default_ ?? { id: 'string' };
 }
 
-const formatterCache = new WeakMap<object, Map<string, Formatter>>();
+const formatterCache = new WeakMap<object, WeakMap<FormatSettings, Map<string, Formatter>>>();
 
-/** The formatter of a field of an index pattern, made once per pattern and settings */
+/**
+ * The formatter of a field of an index pattern, made once per pattern and settings: the page's
+ * settings are a new object once one of them changes, so a changed default pattern or type map is
+ * followed without a reload, as the original's formats read the settings at each value
+ */
 export function fieldFormatter(
   indexPattern: IndexPattern | undefined,
   fieldName: string,
   settings = DEFAULT_FORMAT_SETTINGS
 ): Formatter {
   const owner = indexPattern ?? settings;
-  let byField = formatterCache.get(owner);
+  let bySettings = formatterCache.get(owner);
+  if (!bySettings) {
+    bySettings = new WeakMap();
+    formatterCache.set(owner, bySettings);
+  }
+  let byField = bySettings.get(settings);
   if (!byField) {
     byField = new Map();
-    formatterCache.set(owner, byField);
+    bySettings.set(settings, byField);
   }
-  const key = `${fieldName}\u0000${settings.dateFormat}\u0000${settings.timeZone ?? ''}`;
-  let formatter = byField.get(key);
+  let formatter = byField.get(fieldName);
   if (!formatter) {
     const field = indexPattern?.fields.find((candidate) => candidate.name === fieldName);
     formatter = createFormatter(formatSpecOf(field, indexPattern, settings), settings);
-    byField.set(key, formatter);
+    byField.set(fieldName, formatter);
   }
   return formatter;
 }
