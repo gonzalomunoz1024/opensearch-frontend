@@ -28,7 +28,8 @@ export interface PopoverProps {
   open: boolean;
   onClose: () => void;
   children: ReactNode;
-  align?: 'left' | 'right';
+  /** 'center': under the middle of its button, as the original's `downCenter` */
+  align?: 'left' | 'right' | 'center';
   padded?: boolean;
   /** As wide as its button at least: a list under a field */
   matchWidth?: boolean;
@@ -37,6 +38,12 @@ export interface PopoverProps {
   /** How the span around the button is laid out */
   anchorStyle?: CSSProperties;
   anchorClassName?: string;
+  /** The space between the button and the popover */
+  gap?: number;
+  /** The space the popover keeps from the sides of the window */
+  edge?: number;
+  /** Above its button when there is room, as the original's `up` positions */
+  above?: boolean;
 }
 
 export function Popover({
@@ -51,6 +58,9 @@ export function Popover({
   className,
   anchorStyle,
   anchorClassName,
+  gap = 4,
+  edge = 8,
+  above: preferAbove = false,
 }: PopoverProps) {
   const anchor = useRef<HTMLSpanElement>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -58,25 +68,33 @@ export function Popover({
 
   const place = useCallback(() => {
     const anchorBox = anchor.current?.getBoundingClientRect();
-    const panelBox = panel.current?.getBoundingClientRect();
+    // The size of the panel as it is laid out: its opening animation scales it a little
+    const panelBox = panel.current ? { width: panel.current.offsetWidth, height: panel.current.offsetHeight } : undefined;
     if (!anchorBox || !panelBox) return;
-    const margin = 8;
+    const margin = edge;
     const panelWidth = Math.max(panelBox.width, matchWidth ? anchorBox.width : 0);
-    let left = align === 'right' ? anchorBox.right - panelWidth : anchorBox.left;
+    let left =
+      align === 'right'
+        ? anchorBox.right - panelWidth
+        : align === 'center'
+          ? anchorBox.left + anchorBox.width / 2 - panelWidth / 2
+          : anchorBox.left;
     left = Math.max(margin, Math.min(left, window.innerWidth - panelWidth - margin));
     const below = window.innerHeight - anchorBox.bottom - margin;
     const above = anchorBox.top - margin;
-    const fitsBelow = panelBox.height + 4 <= below || below >= above;
+    const fitsBelow = preferAbove
+      ? panelBox.height + gap > above && below >= above
+      : panelBox.height + gap <= below || below >= above;
     const next: CSSProperties = {
       left,
       minWidth: matchWidth ? anchorBox.width : undefined,
       width,
-      maxHeight: Math.max(120, (fitsBelow ? below : above) - 4),
+      maxHeight: Math.max(120, (fitsBelow ? below : above) - gap),
     };
-    if (fitsBelow) next.top = anchorBox.bottom + 4;
-    else next.bottom = window.innerHeight - anchorBox.top + 4;
+    if (fitsBelow) next.top = anchorBox.bottom + gap;
+    else next.bottom = window.innerHeight - anchorBox.top + gap;
     setStyle(next);
-  }, [align, matchWidth, width]);
+  }, [align, matchWidth, width, gap, edge, preferAbove]);
 
   useLayoutEffect(() => {
     if (!open) {
