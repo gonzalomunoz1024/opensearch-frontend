@@ -153,7 +153,8 @@ export function ComboBox({
     if (active >= rows.length) setActive(-1);
   }, [active, rows.length]);
 
-  // Focused once it is drawn: in a popover that is only once the popover is placed
+  // Focused a frame later, after what holds it has given the focus to its own first field (a
+  // dialog does), so that this one has it
   useEffect(() => {
     if (!autoFocus) return undefined;
     const frame = requestAnimationFrame(() => input.current?.focus());

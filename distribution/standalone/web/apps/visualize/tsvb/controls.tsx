@@ -87,22 +87,32 @@ export function Spacer({ size = 'l' }: { size?: 'xs' | 's' | 'm' | 'l' }) {
   return <div className={`tvbSpacer tvbSpacer--${size}`} />;
 }
 
-/** Items side by side, wrapping when the row is narrow */
+/**
+ * Items side by side, as the original's flex group: onto more lines when they do not fit only if
+ * it may `wrap`, and one under another on a narrow screen unless it is not `responsive`
+ */
 export function Row({
   children,
   gap = 'l',
   center,
+  wrap,
+  responsive = true,
   className,
   testId,
 }: {
   children: ReactNode;
   gap?: 's' | 'm' | 'l';
   center?: boolean;
+  wrap?: boolean;
+  responsive?: boolean;
   className?: string;
   testId?: string;
 }) {
   return (
-    <div className={cx('tvbRow', `tvbRow--${gap}`, center && 'tvbRow--center', className)} data-test-subj={testId}>
+    <div
+      className={cx('tvbRow', `tvbRow--${gap}`, center && 'tvbRow--center', wrap && 'tvbRow--wrap', responsive && 'tvbRow--responsive', className)}
+      data-test-subj={testId}
+    >
       {children}
     </div>
   );
@@ -233,8 +243,11 @@ export function Combo({
       fullWidth={fullWidth}
     />
   );
+  // A list that can be cleared keeps the room of its clear button while nothing is chosen too, as
+  // the original's does
+  const shown = clearable && !disabled ? <div className="tvbCombo--clearable">{combo}</div> : combo;
   // A list that takes only the room it needs is as wide as what it shows
-  return fullWidth ? combo : <div className="tvbCombo--fit">{combo}</div>;
+  return fullWidth ? shown : <div className="tvbCombo--fit">{shown}</div>;
 }
 
 /** Yes and No as radios, saved as 1 and 0 */
@@ -279,6 +292,7 @@ export function TvbColorPicker({ name, value, onChange, disableTrash }: { name: 
       <ColorPicker
         color={color}
         showAlpha
+        fromSwatch
         label={label}
         onChange={(text, output) => {
           setColor(text);
@@ -599,9 +613,7 @@ export function DragHandle({ handle, hidden }: { handle?: HandleProps; hidden: b
         aria-pressed={lifted}
         title="Drag to sort"
       >
-        <svg className="atlIcon" viewBox="0 0 16 16" aria-hidden="true">
-          <path d="M3 6.500h10M3 9.500h10" />
-        </svg>
+        <Icon name="grab" />
       </div>
     </div>
   );
@@ -648,7 +660,7 @@ export function ColorRules({
         const rule: Doc & { id: string } = { value: 0, ...row };
         const change = (part: Doc) => save(collection.change(rules, { ...rule, ...part }));
         return (
-          <Row key={rule.id} gap="s" center className="tvbColorRules__rule">
+          <Row key={rule.id} gap="s" center wrap responsive={false} className="tvbColorRules__rule">
             <Item grow={false}>
               <Label>Set {primaryName} to</Label>
             </Item>
@@ -732,6 +744,9 @@ export function QueryBarWrapper({ query, onChange, indexPatterns }: { query: Que
         // Another language starts the query over, as the product's query bar does
         onLanguageChange={(language) => onChange({ query: '', language })}
         indexPatterns={patterns}
+        // The original's query field takes the focus when it appears (and the page scrolls to it),
+        // as TSVB does not turn that off
+        autoFocus
       />
     </div>
   );
@@ -923,7 +938,7 @@ export function IndexPatternOptions({
 /** The panel filter and whether the page's filters are ignored: the last row of a panel's data options */
 export function PanelFilter({ model, onChange }: { model: Doc; onChange: OnChange }) {
   return (
-    <Row>
+    <Row wrap responsive={false}>
       <Item>
         <Field label="Panel filter" full>
           <QueryBarWrapper
@@ -945,6 +960,10 @@ export function PanelFilter({ model, onChange }: { model: Doc; onChange: OnChang
 /** "This supports mustache templating. {{key}} is set to the term." */
 export const KEY_HELP = (
   <>
-    This supports mustache templating. <code className="tvbCode">{'{{key}}'}</code> is set to the term.
+    This supports mustache templating.{' '}
+    <span className="tvbCode">
+      <code>{'{{key}}'}</code>
+    </span>{' '}
+    is set to the term.
   </>
 );
