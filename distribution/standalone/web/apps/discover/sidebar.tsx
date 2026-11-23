@@ -140,11 +140,11 @@ export function fieldSummary(rows: RawHit[], indexPattern: IndexPattern, field: 
 }
 
 /**
- * The text of one of a field's top values: an empty string stays empty, as the original's text
- * format keeps it (its details then say "Empty string"), where a missing value is a dash
+ * The text of one of a field's top values: the value as the field's format writes it, an empty
+ * string too, as the original's field calculator does; its details say "Empty string" only when
+ * that text is empty
  */
-export const bucketText = (value: unknown, format: (value: unknown) => { text: string }) =>
-  value === '' ? '' : format(value).text;
+export const bucketText = (value: unknown, format: (value: unknown) => { text: string }) => format(value).text;
 
 /** Whether the original offers to visualize a field from its summary */
 export function isVisualizable(field: Field): boolean {
