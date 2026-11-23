@@ -757,9 +757,11 @@ export function syncParams(vis: Pick<Vis, 'type' | 'params' | 'aggs'>, context: 
   const axes = (Array.isArray(vis.params.valueAxes) ? vis.params.valueAxes : []) as ValueAxis[];
   const metrics = vis.aggs.filter((agg) => agg.schema === 'metric' && agg.type);
   const firstAxis = axes[0]?.id ?? 'ValueAxis-1';
+  // A pipeline is labelled after the metric it is on, as the original's `makeLabel`
+  const labels: AggContext = { ...context, aggs: vis.aggs };
 
   const series = metrics.map((agg) => {
-    const label = aggLabel(agg, context);
+    const label = aggLabel(agg, labels);
     const existing = before.find((item) => item.data?.id === agg.id);
     if (existing) return existing.data.label === label ? existing : { ...existing, data: { id: agg.id, label } };
     const last = before[before.length - 1];

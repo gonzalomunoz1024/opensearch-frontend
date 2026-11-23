@@ -275,6 +275,20 @@ describe('the settings that follow the aggregations', () => {
     assert.equal((kept.valueAxes as Array<{ title: { text: string } }>)[0].title.text, 'Traffic');
   });
 
+  it('labels a pipeline after the metric it is on, as the original names its series', () => {
+    const vis = line();
+    const average: AggConfig = { id: '1', enabled: true, type: 'avg', schema: 'metric', params: { field: 'bytes', customLabel: 'Mean size' } };
+    const sum: AggConfig = { id: '3', enabled: true, type: 'cumulative_sum', schema: 'metric', params: { metricAgg: '1' } };
+    for (const given of [context, {}]) {
+      const params = syncParams({ ...vis, aggs: [average, sum] }, given);
+      const series = params.seriesParams as Array<{ data: { id: string; label: string } }>;
+      assert.deepEqual(
+        series.map((item) => item.data.label),
+        ['Mean size', 'Cumulative Sum of Mean size']
+      );
+    }
+  });
+
   it('changes nothing when nothing changed', () => {
     const vis = line();
     assert.equal(syncParams(vis, context), vis.params);
