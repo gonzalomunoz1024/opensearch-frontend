@@ -26,6 +26,8 @@ keeps working, and parts of it are derived from it under the Apache License, Ver
     (web/static/plugins/home/assets/common, copied as it is from
     src/plugins/home/public/assets/common) and the shapes behind it (web/static/core_app/images,
     copied as they are from src/core/public/core_app/images),
+  - the picture of an empty VisBuilder canvas (web/static/plugins/visBuilder/assets, copied as
+    it is from src/plugins/vis_builder/public/assets),
   - the tokens that mark the kind of a field (web/components/field_token.tsx): the glyphs and
     colours of the OpenSearch UI framework's tokens,
   - the pictures of the overview of a new instance

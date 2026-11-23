@@ -174,10 +174,15 @@ function Percentiles({ model, panel, onChange }: { model: Doc; panel: Panel; onC
       </Item>
     );
     // A table shows one number per column: only the last percentile, with no way to draw it
-    if (panel.type === 'table') return <Row gap="s" key={item.id}>{percentile}</Row>;
-    const band = item.mode === 'band';
+    if (panel.type === 'table') return (
+        <Row gap="s" responsive={false} key={item.id}>
+          {percentile}
+        </Row>
+      );
+    // What a band fills to and how solid it is, hidden only for a line, as the product hides them
+    const band = item.mode !== 'line';
     return (
-      <Row gap="s" center key={item.id}>
+      <Row gap="s" center responsive={false} key={item.id}>
         {percentile}
         <Item grow={false}>
           <span className="tvbLabel">Mode:</span>
@@ -385,7 +390,7 @@ function CalculationVars({
       {rows.map((row) => {
         const change = (part: Doc) => save(collection.change(rows, { ...row, ...part }));
         return (
-          <Row gap="s" center key={row.id} testId="varRow">
+          <Row gap="s" center responsive={false} key={row.id} testId="varRow">
             <Item>
               <TextInput value={row.name} placeholder="Variable name" label="Variable name" onChange={(name) => change({ name })} />
             </Item>
@@ -406,7 +411,11 @@ function CalculationVars({
   );
 }
 
-const code = (text: string) => <code className="tvbCode">{text}</code>;
+const code = (text: string) => (
+  <span className="tvbCode">
+    <code>{text}</code>
+  </span>
+);
 
 function MathAgg(props: AggProps) {
   const { model, siblings } = props;
@@ -816,7 +825,7 @@ const PERCENTILE_RANK_FIELDS = ['number', 'histogram'];
 function PercentileRankValues({ values, table, onChange }: { values: unknown[]; table: boolean; onChange: (values: unknown[]) => void }) {
   const renderRow = (index: number, value: unknown, disableAdd: boolean, disableDelete: boolean) => (
     <div className="tvbAggRow__multiValueRow" key={`percentileRankValue__item${index}`}>
-      <Row gap="l" center>
+      <Row gap="l" center responsive={false}>
         <Item grow={false}>
           <span className="tvbLabel">Value:</span>
         </Item>

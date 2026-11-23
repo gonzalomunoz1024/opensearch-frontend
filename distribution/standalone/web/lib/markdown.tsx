@@ -17,6 +17,70 @@ const SAFE_IMAGE = /^(https?:|\/|\.\.?\/|data:image\/(png|gif|jpeg|webp);|[^:]*$
 
 export const safeLink = (href: string): string | undefined => (SAFE_LINK.test(href.trim()) ? href.trim() : undefined);
 
+// --- Character references -------------------------------------------------------------------------
+
+// The named references a text may hold, as markdown-it reads them: HTML 4's, and HTML's names for
+// the ASCII punctuation; Latin-1 from U+00A0 and the Greek letters run in code point order
+const LATIN1 =
+  'nbsp iexcl cent pound curren yen brvbar sect uml copy ordf laquo not shy reg macr deg plusmn sup2 sup3 acute micro para middot cedil sup1 ' +
+  'ordm raquo frac14 frac12 frac34 iquest Agrave Aacute Acirc Atilde Auml Aring AElig Ccedil Egrave Eacute Ecirc Euml Igrave Iacute Icirc Iuml ' +
+  'ETH Ntilde Ograve Oacute Ocirc Otilde Ouml times Oslash Ugrave Uacute Ucirc Uuml Yacute THORN szlig agrave aacute acirc atilde auml aring ' +
+  'aelig ccedil egrave eacute ecirc euml igrave iacute icirc iuml eth ntilde ograve oacute ocirc otilde ouml divide oslash ugrave uacute ucirc ' +
+  'uuml yacute thorn yuml';
+const GREEK: Array<[number, string]> = [
+  [913, 'Alpha Beta Gamma Delta Epsilon Zeta Eta Theta Iota Kappa Lambda Mu Nu Xi Omicron Pi Rho'],
+  [931, 'Sigma Tau Upsilon Phi Chi Psi Omega'],
+  [945, 'alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigmaf sigma tau upsilon phi chi psi omega'],
+];
+const OTHERS =
+  'Tab:9 NewLine:10 excl:33 quot:34 num:35 dollar:36 percnt:37 amp:38 apos:39 lpar:40 rpar:41 ast:42 plus:43 comma:44 period:46 sol:47 ' +
+  'colon:58 semi:59 lt:60 equals:61 gt:62 quest:63 commat:64 lsqb:91 lbrack:91 bsol:92 rsqb:93 rbrack:93 Hat:94 lowbar:95 grave:96 ' +
+  'lcub:123 lbrace:123 verbar:124 vert:124 rcub:125 rbrace:125 OElig:338 oelig:339 Scaron:352 scaron:353 Yuml:376 fnof:402 circ:710 ' +
+  'tilde:732 thetasym:977 upsih:978 piv:982 ensp:8194 emsp:8195 thinsp:8201 zwnj:8204 zwj:8205 lrm:8206 rlm:8207 hyphen:8208 ndash:8211 ' +
+  'mdash:8212 lsquo:8216 rsquo:8217 sbquo:8218 ldquo:8220 rdquo:8221 bdquo:8222 dagger:8224 Dagger:8225 bull:8226 hellip:8230 permil:8240 ' +
+  'prime:8242 Prime:8243 lsaquo:8249 rsaquo:8250 oline:8254 frasl:8260 euro:8364 image:8465 weierp:8472 real:8476 trade:8482 alefsym:8501 ' +
+  'larr:8592 uarr:8593 rarr:8594 darr:8595 harr:8596 crarr:8629 lArr:8656 uArr:8657 rArr:8658 dArr:8659 hArr:8660 forall:8704 part:8706 ' +
+  'exist:8707 empty:8709 nabla:8711 isin:8712 notin:8713 ni:8715 prod:8719 sum:8721 minus:8722 lowast:8727 radic:8730 prop:8733 infin:8734 ' +
+  'ang:8736 and:8743 or:8744 cap:8745 cup:8746 int:8747 there4:8756 sim:8764 cong:8773 asymp:8776 ne:8800 equiv:8801 le:8804 ge:8805 ' +
+  'sub:8834 sup:8835 nsub:8836 sube:8838 supe:8839 oplus:8853 otimes:8855 perp:8869 sdot:8901 lceil:8968 rceil:8969 lfloor:8970 rfloor:8971 ' +
+  'loz:9674 starf:9733 star:9734 spades:9824 clubs:9827 hearts:9829 diams:9830 check:10003 cross:10007 lang:10216 rang:10217';
+
+const NAMED = new Map<string, number>([
+  ...LATIN1.split(' ').map((name, at): [string, number] => [name, 160 + at]),
+  ...GREEK.flatMap(([first, names]) => names.split(' ').map((name, at): [string, number] => [name, first + at])),
+  ...OTHERS.split(' ').map((pair): [string, number] => {
+    const [name, code] = pair.split(':');
+    return [name, Number(code)];
+  }),
+]);
+
+// A code point no text may hold is read as the replacement character
+const validCodePoint = (code: number) =>
+  !(
+    (code >= 0xd800 && code <= 0xdfff) ||
+    (code >= 0xfdd0 && code <= 0xfdef) ||
+    (code & 0xffff) === 0xffff ||
+    (code & 0xffff) === 0xfffe ||
+    code <= 0x08 ||
+    code === 0x0b ||
+    (code >= 0x0e && code <= 0x1f) ||
+    (code >= 0x7f && code <= 0x9f) ||
+    code > 0x10ffff
+  );
+
+/** The characters a text's references (`&amp;`, `&#x27;`, `&copy;`) stand for; any other `&` stays */
+export function decodeEntities(text: string): string {
+  if (!text.includes('&')) return text;
+  return text.replace(/&(?:#(x[a-f0-9]{1,6}|[0-9]{1,7})|([a-z][a-z0-9]{1,31}));/gi, (reference: string, digits?: string, name?: string) => {
+    if (digits) {
+      const code = digits[0].toLowerCase() === 'x' ? parseInt(digits.slice(1), 16) : parseInt(digits, 10);
+      return String.fromCodePoint(validCodePoint(code) ? code : 0xfffd);
+    }
+    const code = name ? NAMED.get(name) : undefined;
+    return code === undefined ? reference : String.fromCodePoint(code);
+  });
+}
+
 // --- Inline ---------------------------------------------------------------------------------------
 
 interface Rule {
@@ -25,28 +89,34 @@ interface Rule {
 }
 
 const link = (href: string, children: ReactNode, title: string | undefined, options: MarkdownOptions, key: string) => {
-  const safe = safeLink(href);
+  const safe = safeLink(decodeEntities(href));
   if (!safe) return <Fragment key={key}>{children}</Fragment>;
   return (
-    <a key={key} href={safe} title={title} {...(options.openLinksInNewTab ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>
+    <a key={key} href={safe} title={title === undefined ? undefined : decodeEntities(title)} {...(options.openLinksInNewTab ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>
       {children}
     </a>
   );
 };
 
 const RULES: Rule[] = [
-  { pattern: /\\([\\`*_{}[\]()#+\-.!|~<>])/, render: (match) => match[1] },
+  // Any ASCII punctuation, as CommonMark
+  { pattern: /\\([!-/:-@[-`{-~])/, render: (match) => match[1] },
   { pattern: /(`+)([\s\S]+?)\1(?!`)/, render: (match, _options, key) => <code key={key}>{match[2].trim()}</code> },
   {
     pattern: /!\[([^\]]*)\]\(\s*<?([^\s)>]+)>?(?:\s+["']([^"']*)["'])?\s*\)/,
-    render: (match, _options, key) =>
-      SAFE_IMAGE.test(match[2]) ? <img key={key} src={match[2]} alt={match[1]} title={match[3]} /> : <Fragment key={key}>{match[1]}</Fragment>,
+    render: (match, _options, key) => {
+      const [src, alt, title] = [match[2], match[1], match[3]].map((text) => (text === undefined ? undefined : decodeEntities(text)));
+      return src !== undefined && SAFE_IMAGE.test(src) ? <img key={key} src={src} alt={alt} title={title} /> : <Fragment key={key}>{alt}</Fragment>;
+    },
   },
   {
     pattern: /\[((?:[^[\]]|\[[^\]]*\])*)\]\(\s*<?([^\s)>]*)>?(?:\s+["']([^"']*)["'])?\s*\)/,
     render: (match, options, key) => link(match[2], renderInline(match[1], options, key), match[3], options, key),
   },
-  { pattern: /<((?:https?|mailto):[^\s>]+)>/, render: (match, options, key) => link(match[1], match[1].replace(/^mailto:/, ''), undefined, options, key) },
+  {
+    pattern: /<((?:https?|mailto):[^\s>]+)>/,
+    render: (match, options, key) => link(match[1], decodeEntities(match[1].replace(/^mailto:/, '')), undefined, options, key),
+  },
   { pattern: /\*\*([\s\S]+?)\*\*(?!\*)/, render: (match, options, key) => <strong key={key}>{renderInline(match[1], options, key)}</strong> },
   { pattern: /(?<![A-Za-z0-9])__([\s\S]+?)__(?![A-Za-z0-9])/, render: (match, options, key) => <strong key={key}>{renderInline(match[1], options, key)}</strong> },
   { pattern: /~~([\s\S]+?)~~/, render: (match, options, key) => <s key={key}>{renderInline(match[1], options, key)}</s> },
@@ -55,7 +125,7 @@ const RULES: Rule[] = [
   { pattern: /(?: {2,}|\\)\n/, render: (_match, _options, key) => <br key={key} /> },
   {
     pattern: /\bhttps?:\/\/[^\s<>()]+(?:\([^\s<>()]*\))?[^\s<>().,;:!?'"]/,
-    render: (match, options, key) => link(match[0], match[0], undefined, options, key),
+    render: (match, options, key) => link(match[0], decodeEntities(match[0]), undefined, options, key),
   },
 ];
 
@@ -70,10 +140,10 @@ export function renderInline(text: string, options: MarkdownOptions = {}, keyPre
       if (match && (!first || match.index < first.match.index)) first = { rule, match };
     }
     if (!first) {
-      nodes.push(rest);
+      nodes.push(decodeEntities(rest));
       break;
     }
-    if (first.match.index > 0) nodes.push(rest.slice(0, first.match.index));
+    if (first.match.index > 0) nodes.push(decodeEntities(rest.slice(0, first.match.index)));
     nodes.push(first.rule.render(first.match, options, `${keyPrefix}-${count}`));
     count += 1;
     rest = rest.slice(first.match.index + first.match[0].length);
@@ -188,7 +258,7 @@ function renderBlocks(lines: string[], options: MarkdownOptions, keyPrefix: stri
             const simple = !loose && !body.slice(1).some((text) => ITEM.test(text) || FENCE.test(text));
             return (
               <li key={at}>
-                {simple ? renderInline(body.join('\n'), options, `${key()}-${at}`) : renderBlocks(body, { ...options }, `${key()}-${at}`)}
+                {simple ? renderInline(body.join('\n').trim(), options, `${key()}-${at}`) : renderBlocks(body, { ...options }, `${key()}-${at}`)}
               </li>
             );
           })}
@@ -253,7 +323,8 @@ function renderBlocks(lines: string[], options: MarkdownOptions, keyPrefix: stri
       body.push(lines[index].replace(/^ {0,3}/, ''));
       index += 1;
     }
-    if (body.length) nodes.push(<p key={key()}>{renderInline(body.join('\n'), options, key())}</p>);
+    // As CommonMark, without the spaces it starts or ends with
+    if (body.length) nodes.push(<p key={key()}>{renderInline(body.join('\n').trim(), options, key())}</p>);
   }
   return nodes;
 }

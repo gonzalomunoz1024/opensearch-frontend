@@ -87,15 +87,6 @@
   gap: var(--space-2);
 }
 
-.shlQuery {
-  position: relative;
-  display: flex;
-  flex: 1 1 0;
-  align-items: center;
-  min-width: 0;
-  padding: 0 var(--space-1) 0 0;
-}
-
 .shlQuery__saved {
   flex: none;
   width: 36px;
@@ -109,15 +100,6 @@
 /* Tinted while its list is open, as the original's is */
 .shlQuery__saved[aria-expanded="true"] {
   background: var(--color-accent-tint);
-}
-
-/* The ring around the field is the query's; the button before it is not where one types */
-.shlQuery:has(.shlQuery__saved:focus) {
-  box-shadow: none;
-}
-
-.shlQuery:not(.atlField--invalid):has(.shlQuery__saved:focus) {
-  border-color: var(--color-border-light);
 }
 
 /* The list of saved queries under that button, as wide as its text up to the original's 400px */
@@ -289,58 +271,6 @@
 
 .shlSaveQuery__invalid {
   color: var(--color-critical-text);
-}
-
-.shlQuery textarea {
-  flex: 1 1 0;
-  min-width: 0;
-  height: 30px;
-  /* The original's text starts 4px under the top of the field: its box overlaps the border */
-  padding: 3px var(--space-2) 6px;
-  border: 0;
-  background: transparent;
-  line-height: 21px;
-  resize: none;
-  outline: none;
-  overflow: hidden;
-  white-space: pre;
-}
-
-.shlQuery--multiline textarea {
-  white-space: pre-wrap;
-  overflow: auto;
-}
-
-/* Inside the field's border, with the line the original's text box draws at its left */
-.shlQuery__language {
-  flex: none;
-  height: calc(var(--control-height) - 2px);
-  border-left: 1px solid var(--color-border-light);
-  border-radius: 0;
-  color: var(--color-accent-button-text);
-  font-weight: var(--font-weight-medium);
-}
-
-/* The original's update button keeps its width whatever it says */
-.shlTime__submit {
-  min-width: 118px;
-}
-
-.shlQuery__suggestions {
-  max-height: 320px;
-  overflow: auto;
-}
-
-.shlSuggestion__kind {
-  flex: none;
-  width: 64px;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-xs);
-}
-
-.shlSuggestion__detail {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
 }
 
 .shlTime {
@@ -945,7 +875,3 @@
   white-space: normal;
 }
 
-.shlQuery__syntax {
-  margin: 0;
-  font-size: var(--font-size-s);
-}

@@ -453,20 +453,33 @@ export function useSize<T extends HTMLElement>(): [RefObject<T>, Size] {
 let measureContext: CanvasRenderingContext2D | null | undefined;
 
 /** A canvas set to the chart's face, to measure text with; none outside a browser */
-function measurer(fontSize: number, weight: number): CanvasRenderingContext2D | null {
+function measurer(fontSize: number, weight: number, family?: string): CanvasRenderingContext2D | null {
   if (measureContext === undefined) {
     measureContext = typeof document === 'undefined' ? null : document.createElement('canvas').getContext('2d');
   }
   if (measureContext) {
-    measureContext.font = `${weight} ${fontSize}px -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif`;
+    measureContext.font = `${weight} ${fontSize}px ${family ?? '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif'}`;
   }
   return measureContext;
 }
 
-/** The width a text takes in the chart's face */
-export function textWidth(text: string, fontSize = 11, weight = 400): number {
-  const context = measurer(fontSize, weight);
+/** The width a text takes in the chart's face, or in another */
+export function textWidth(text: string, fontSize = 11, weight = 400, family?: string): number {
+  const context = measurer(fontSize, weight, family);
   return context ? context.measureText(text).width : text.length * fontSize * 0.58;
+}
+
+/**
+ * How far below the middle of a line of text its baseline lies, as a canvas sets text whose
+ * baseline is its middle: what an SVG text needs added to stand where a canvas chart puts it
+ */
+export function middleShift(fontSize: number, weight = 400, family?: string): number {
+  const context = measurer(fontSize, weight, family);
+  if (!context) return fontSize * 0.3;
+  context.textBaseline = 'middle';
+  const shift = -context.measureText('0').alphabeticBaseline;
+  context.textBaseline = 'alphabetic';
+  return Number.isFinite(shift) ? shift : fontSize * 0.3;
 }
 
 /** How far a line of the chart's face reaches above and below its baseline */
@@ -574,6 +587,7 @@ export function Legend({
   onToggle,
   onHover,
   classic,
+  elasticSize,
 }: {
   items: LegendItem[];
   position: LegendPosition;
@@ -581,9 +595,20 @@ export function Legend({
   onHover?: (id: string | undefined) => void;
   /** As wide as the legend of a classic chart of OpenSearch Dashboards, whatever the chart's width */
   classic?: boolean;
+  /**
+   * Laid out as elastic-charts lays out its legend: this many pixels wide beside the chart, or
+   * this many high above or below it
+   */
+  elasticSize?: number;
 }) {
+  const elastic = elasticSize !== undefined;
+  const beside = position === 'left' || position === 'right';
   return (
-    <ul className={`chtLegend chtLegend--${position}${classic ? ' chtLegend--classic' : ''}`} data-test-subj="legendContainer">
+    <ul
+      className={`chtLegend chtLegend--${position}${classic ? ' chtLegend--classic' : ''}${elastic ? ' chtLegend--elastic' : ''}`}
+      style={elastic ? (beside ? { width: elasticSize } : { height: elasticSize }) : undefined}
+      data-test-subj="legendContainer"
+    >
       {items.map((item) => (
         <li key={item.id}>
           <button
@@ -627,16 +652,19 @@ export function LegendToggle({ open, onToggle }: { open: boolean; onToggle: () =
 export function ChartFrame({
   legend,
   position = 'right',
+  tight,
   children,
 }: {
   legend?: ReactNode;
   position?: LegendPosition;
+  /** No room between the chart and its legend, which keeps its own */
+  tight?: boolean;
   children: ReactNode;
 }) {
   const column = position === 'top' || position === 'bottom';
   const first = position === 'left' || position === 'top';
   return (
-    <div className="chtFrame" style={{ flexDirection: column ? 'column' : 'row' }}>
+    <div className="chtFrame" style={{ flexDirection: column ? 'column' : 'row', gap: tight ? 0 : undefined }}>
       {legend && first && legend}
       <div className="chtFrame__plot">{children}</div>
       {legend && !first && legend}
