@@ -2573,113 +2573,210 @@
   width: 100%;
 }
 
+/* Cancel, flush as the plugin's: no padding, 8 px more before the button beside it */
+.ismFlyoutFooter__cancel {
+  padding-inline: 0;
+  margin-right: var(--space-2);
+}
+
+/* A form of Snapshot Management is laid out as the plugin's: its parts one under the other, with
+   the plugin's spacers between them */
 .ismSnapshotForm {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
+  display: flow-root;
+  line-height: 1.5;
 }
 
 .ismSnapshotForm h3,
+.ismSnapshotForm h4,
 .ismSnapshotForm h5 {
   margin: 0;
-  font-size: var(--font-size-s);
-  font-weight: var(--font-weight-semibold);
 }
 
-.ismSnapshotForm .ismLabeled + .ismLabeled {
-  margin-top: 0;
+.ismSpacer {
+  flex: none;
 }
 
-.ismSnapshotForm .ismLabeled__field > .atlField,
-.ismSnapshotForm .ismLabeled__field > span,
-.ismSnapshotForm .ismLabeled__field > .atlSelect {
+.ismSpacer--xs {
+  height: var(--space-1);
+}
+
+.ismSpacer--s {
+  height: var(--space-2);
+}
+
+.ismSpacer--m {
+  height: var(--space-4);
+}
+
+.ismSpacer--l {
+  height: var(--space-6);
+}
+
+.ismSpacer--xxl {
+  height: calc(var(--space-8) + var(--space-2));
+}
+
+.ismSnapField__label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.ismSnapField__optional {
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+/* What a field means, in a line of 14 px as the plugin's span is set outside any text block */
+.ismSnapField__help {
+  display: block;
+  font-size: var(--font-size-xs);
+  font-weight: 200;
+  line-height: 14px;
+}
+
+.ismSnapField__body > .atlField,
+.ismSnapField__body > span,
+.ismSnapField__body > .atlSelect {
   width: 100%;
   max-width: 400px;
 }
 
-.ismSnapshotForm__note {
-  margin: calc(var(--space-2) * -1) 0 0;
+.ismSnapField__error {
+  max-width: 400px;
+  padding-top: var(--space-1);
+  color: var(--color-critical);
   font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+/* What a field asks for, under it, as the plugin's help text */
+.ismSnapshotForm__help {
+  margin: 0;
+  padding-top: var(--space-1);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}
+
+/* The plugin's compressed ticks and radios: the box 3 px down a line of 24 px */
+.ismSnapshotForm .atlRadio,
+.ismSnapshotForm .atlCheckbox {
+  align-items: flex-start;
+  line-height: 24px;
+}
+
+.ismSnapshotForm .atlRadio input,
+.ismSnapshotForm .atlCheckbox input {
+  flex: none;
+  margin-top: 3px;
+}
+
+/* The lines of a text area, 21 px as the plugin's */
+.ismSnapshotForm textarea.atlField {
+  line-height: 1.5;
+}
+
+/* The label of a field in a form row: a small heading over what it means, in light letters */
+.ismSmallLabel__title {
+  color: var(--color-text-primary);
+}
+
+.ismSmallLabel__help {
+  display: block;
+  padding-bottom: 5px;
+  font-weight: 200;
+}
+
+/* An accordion of a form, as the plugin's: its heading on a line of its own, the arrow 4 px in */
+.ismSnapshotForm__accordion .atlAccordion__button {
+  gap: var(--space-2);
+  padding: 0;
+  font-weight: var(--font-weight-regular);
+  line-height: 1.5;
+}
+
+.ismSnapshotForm__accordion .atlAccordion__arrow {
+  margin-left: var(--space-1);
 }
 
 .ismSnapshotForm__repository {
   display: flex;
   align-items: flex-end;
-  gap: var(--space-3);
+  gap: var(--space-6);
 }
 
-.ismSnapshotForm__repository > .ismLabeled {
+.ismSnapshotForm__repository > .ismSnapField {
   flex: 0 1 400px;
   min-width: 0;
-}
-
-.ismSnapshotForm__small {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  max-width: 400px;
-}
-
-.ismSnapshotForm__label {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-}
-
-.ismSnapshotForm__minor {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
 }
 
 .ismTickLabel {
   display: flex;
   flex-direction: column;
-  gap: 2px;
 }
 
-.ismTickLabel small {
+.ismTickLabel__title {
+  line-height: 1.5;
+}
+
+.ismTickLabel__help {
   font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
+  font-weight: 200;
+  line-height: 1.5;
 }
 
+/* Ticks one under the other, with the plugin's spacers between them */
 .ismTicks {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-}
-
-.ismTicks--inset {
-  padding: var(--space-3) var(--space-1) 0;
-}
-
-.ismTicks .atlCheckbox {
   align-items: flex-start;
+}
+
+.ismTicks > .ismSpacer {
+  align-self: stretch;
+}
+
+/* The restore's advanced options, 10 px in as the plugin has them */
+.ismTicks--inset {
+  padding: 10px;
+}
+
+.ismTicks--inset > .atlFormRow {
+  align-self: stretch;
+}
+
+.ismTicks__text {
+  margin: 0;
+  padding: 5px 0;
+  font-size: var(--font-size-xs);
+  font-weight: 200;
+  line-height: 1.5;
 }
 
 .ismRestoreSummary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-4);
+  gap: var(--space-6);
 }
 
 .ismRestoreSummary p {
   margin: 0;
 }
 
-.ismIndexList__title {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
+/* The title of a list of indices, as the plugin's: a large arrow back, a space, and the words */
 .ismIndexList__back {
   display: inline-flex;
+  vertical-align: middle;
   padding: 0;
   border: 0;
   background: none;
   color: var(--color-accent);
   cursor: pointer;
+}
+
+.ismIndexList__back .atlIcon {
+  padding-bottom: 5px;
 }
 
 .ismToastAction {
@@ -2699,58 +2796,170 @@
   overflow-wrap: anywhere;
 }
 
+/* The panel around a list, as the plugin's: its padding is 16 px above and below, and 16 px at the
+   sides of the heading and of the list, which a rule the width of the panel divides */
+.ismListPanel {
+  padding: var(--space-4) 0;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.ismListPanel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-6);
+  padding: 0 var(--space-4);
+}
+
+.ismListPanel__heading {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.ismListPanel__heading h1 {
+  margin: 0;
+}
+
+.ismListPanel__description {
+  margin: 0;
+  padding: 5px 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  font-weight: 200;
+  line-height: 1.5;
+}
+
+.ismListPanel__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.ismListPanel__rule {
+  height: 1px;
+  margin: var(--space-2) 0;
+  border: 0;
+  background: var(--color-border-light);
+}
+
+.ismListPanel__body {
+  padding: 0 var(--space-4);
+}
+
+.ismListPanel .ismSearchRow {
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  padding: 0;
+  border: 0;
+}
+
+/* The search box of the snapshot policies, as the plugin's, has the table right under it */
+.ismListPanel .ismSearchRow--alone {
+  margin-bottom: 0;
+}
+
+/* The columns share the width as the plugin's table does: what no column claims, in equal parts */
+.ismListPanel .atlTable,
+.ismPolicyPanel .atlTable {
+  table-layout: fixed;
+}
+
+.ismListPanel .atlTable .atlLinkButton {
+  text-align: left;
+}
+
+.ismListPanel .ismTable .atlPagination {
+  padding: var(--space-4) 0 0;
+}
+
+/* The filters as the plugin's group of them: one box, the buttons parted by thin lines */
 .ismFilterGroup {
   display: inline-flex;
+  flex: none;
+  overflow: hidden;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+}
+
+.ismFilterGroup > * + * {
+  border-left: 1px solid var(--color-border-light);
+}
+
+.ismFilterGroup__button {
+  display: inline-flex;
+  align-items: center;
   gap: var(--space-2);
+  min-width: 48px;
+  height: var(--control-height);
+  padding: 0 var(--space-2);
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
 }
 
-.ismTabbed {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
+/* As the theme's text buttons: a grey wash under the pointer */
+.ismFilterGroup__button:hover,
+.ismFilterGroup__button:focus-visible {
+  background: color-mix(in srgb, var(--color-text-secondary) var(--tint-opacity), transparent);
 }
 
-/* What a snapshot is: the names of its facts are as dark as the facts */
-.ismSnapshotDetails {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-}
-
-.ismSnapshotDetails .ismDetails {
-  gap: var(--space-5);
-}
-
-.ismSnapshotDetails .ismDetail dt {
-  color: inherit;
-  font-size: var(--font-size-s);
+.ismFilterGroup__button--active .ismFilterGroup__name {
   font-weight: var(--font-weight-semibold);
 }
 
-.ismSnapshotForm__minor .ismLabeled {
-  max-width: 400px;
+.ismFilterGroup__name {
+  min-width: 48px;
+  text-align: left;
+}
+
+.ismFilterGroup__button .ismFilterCount {
+  margin-left: 0;
+}
+
+/* The two tabs over the list of snapshots, as the theme draws the plugin's small tabs */
+.ismTabbed {
+  display: flex;
+  flex-direction: column;
+}
+
+.ismTabbed > .atlTabs {
+  gap: var(--space-1);
+  border-bottom: 0;
+}
+
+.ismTabbed > .atlTabs > .atlTab {
+  padding: var(--space-1) 10px;
+  border-radius: var(--radius-sm);
+  line-height: 1.5;
+}
+
+.ismTabbed > .atlTabs > .atlTab[aria-selected="true"] {
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+}
+
+.ismTabbed > .atlTabs > .atlTab[aria-selected="true"]::after {
+  display: none;
 }
 
 /* --- A snapshot policy: its form and what it shows ------------------------------------------------- */
 
-.ismSnapshotPolicy .ismSnapshotForm h3 {
-  font-size: var(--font-size-l);
-  line-height: 1.3;
-}
-
-.ismSnapshotPolicy .ismLabeled__title i,
-.ismSnapshotFlyout .ismLabeled__title i {
-  font-size: var(--font-size-s);
-  font-weight: var(--font-weight-regular);
-  color: var(--color-text-secondary);
-}
-
-.ismCron {
+/* Radios one under the other, as the plugin's radio group */
+.ismRadioStack {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  align-items: flex-start;
 }
 
+/* When a policy runs: the time and the time zone side by side, 24 px apart */
 .ismCron__row {
   display: flex;
   align-items: flex-start;
@@ -2771,20 +2980,36 @@
 
 .ismCron__text {
   margin: 0;
-  font-size: var(--font-size-s);
 }
 
+/* A schedule at the end of an accordion keeps 12 px under it: the bottom margin of the plugin's flex
+   group, which EUI's accordion measures into its height */
+.ismSnapshotForm__accordion .ismCron__row:last-child {
+  margin-bottom: var(--space-3);
+}
+
+/* What a cron expression is, under its field: the plugin's help text around a paragraph of small
+   text, whose line is the 21 px of text at 14 px */
+.ismCron__help {
+  margin: 0;
+  padding: calc(var(--space-1) + 5px) 0 5px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 200;
+  line-height: calc(var(--font-size-s) * 1.5);
+}
+
+/* The days of the week on one line, running past the 400 px of the time as the plugin's do */
 .ismCron__days {
   display: flex;
   gap: var(--space-3);
-  margin-top: var(--space-2);
   white-space: nowrap;
 }
 
 .ismCron__monthly {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-3);
+  gap: var(--space-4);
   width: 100%;
 }
 
@@ -2798,20 +3023,15 @@
   color: var(--color-surface);
 }
 
+/* The maximum age, a number as wide as the plugin's beside a unit of 100 px, 24 px apart */
 .ismSnapshotPolicy__age {
   display: grid;
-  grid-template-columns: 236px 100px;
+  grid-template-columns: 234px 100px;
   gap: var(--space-6);
-  width: 100%;
-}
-
-.ismSnapshotPolicy__more {
-  padding-top: var(--space-3);
 }
 
 .ismSnapshotPolicy__text {
   margin: 0;
-  font-size: var(--font-size-s);
 }
 
 .ismSnapshotPolicy__counts {
@@ -2820,39 +3040,191 @@
   gap: var(--space-6);
 }
 
-.ismSnapshotPolicy__counts > .ismLabeled {
-  flex: 0 0 236px;
+.ismSnapshotPolicy__counts > .ismSnapField {
+  flex: 0 0 234px;
 }
 
+.ismSnapshotPolicy__counts .ismSnapField__body > .atlField {
+  max-width: none;
+}
+
+/* "Configure when to check…": the plugin's span, grey in its own words, in a line of 14 px */
+.ismSnapshotPolicy__note {
+  display: block;
+  color: grey;
+  font-size: var(--font-size-xs);
+  font-weight: 200;
+  line-height: 14px;
+}
+
+/* The channel, its refresh and the channels' page, 8 px apart on the plugin's 600 px less the
+   margins of its flex group */
 .ismSnapshotPolicy__channels {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  width: 100%;
+  max-width: calc(600px - var(--space-2));
 }
 
+.ismSnapshotPolicy__channels > .atlSelect,
 .ismSnapshotPolicy__channels > select {
   flex: 1 1 auto;
   min-width: 0;
 }
 
-.ismSnapshotPolicy__channels > button {
-  flex: 0 0 auto;
-  min-width: 32px;
+.ismSnapshotPolicy__channels > .atlButton {
+  flex: none;
 }
 
-.ismPage--form.ismSnapshotPolicy .ismLabeled:has(.ismSnapshotPolicy__channels) > .ismLabeled__body {
-  max-width: 600px;
+/* The refresh is the plugin's button with only an icon in it, not a square icon button */
+.ismSnapshotPolicy__channels > .atlButton--icon {
+  width: auto;
+  padding: 0 var(--space-3);
 }
 
+/* "Advanced settings – optional" beside the button that opens them */
 .ismSnapshotPolicy__fold {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
 }
 
-.ismSnapshotPolicy .ismDetail dt {
-  color: inherit;
-  font-size: var(--font-size-s);
+/* The page of a policy, as the plugin's: 5 px and 50 px in from the page, its panels 24 px apart */
+.ismBody:has(> .ismPolicyPage) {
+  padding: var(--space-4);
+}
+
+.ismPolicyPage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: 5px 50px;
+}
+
+.ismPolicyPage__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+  padding: 0 10px;
+}
+
+.ismPolicyPage__header h1 {
+  margin: 0;
+}
+
+.ismPolicyPage__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* The page that makes or changes a policy: its parts one under the other, as the plugin's spacers
+   set them */
+.ismPolicyPage--form {
+  display: block;
+}
+
+.ismPolicyPage--form > h1 {
+  margin: 0;
+}
+
+.ismPolicyPage__subtitle {
+  margin: 0;
+  padding: 5px 0;
+  color: var(--color-text-secondary);
+  font-weight: 200;
+  line-height: 1.5;
+}
+
+.ismPolicyPage__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.ismPolicyPanel {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+/* As the plugin's, the title stands 2 px out of the panel's padding, unless a button is beside it */
+.ismPolicyPanel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1);
+  margin: -2px;
+}
+
+.ismPolicyPanel__header--action {
+  margin: 0;
+}
+
+.ismPolicyPanel__header h2 {
+  margin: 0;
+}
+
+.ismPolicyPanel__rule {
+  height: 1px;
+  margin: var(--space-2) 0;
+  border: 0;
+  background: var(--color-border-light);
+}
+
+.ismPolicyFacts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-6);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.ismPolicyFacts--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ismPolicyFacts--one {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Two grids one under the other are 12 px apart, as the plugin's, whose margins overlap */
+.ismPolicyFacts + .ismPolicyFacts {
+  margin-top: var(--space-3);
+}
+
+.ismPolicyFacts dt {
   font-weight: var(--font-weight-semibold);
+}
+
+.ismPolicyFacts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* "None", a paragraph of the plugin's text, keeps the line of space under it */
+.ismPolicyFacts dd > p {
+  margin: 0 0 1.5em;
+}
+
+/* "Advanced settings" opens as the plugin's accordion: a plain line with the arrow 4 px in */
+.ismPolicyPanel .ismPolicyFacts + .atlAccordion {
+  margin-top: var(--space-2);
+}
+
+.ismPolicyPanel .atlAccordion__button {
+  gap: var(--space-2);
+  padding: 0;
+  font-weight: var(--font-weight-regular);
+  line-height: 1.5;
+}
+
+.ismPolicyPanel .atlAccordion__arrow {
+  margin-left: var(--space-1);
+}
+
+.ismPolicyPanel .atlAccordion .ismPolicyFacts {
+  margin-top: var(--space-2);
 }

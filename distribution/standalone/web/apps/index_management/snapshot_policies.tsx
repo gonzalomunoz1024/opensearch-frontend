@@ -4,17 +4,14 @@
  * Snapshot policies: the list of them, and the page that shows one with what it last did.
  */
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Accordion, Button, CodeBlock, Health, Panel } from '../../components/basic';
+import { useEffect, useRef, useState } from 'react';
+import { Accordion, Button, CodeBlock, Health } from '../../components/basic';
 import { SearchField } from '../../components/form';
+import { MenuButton } from '../../components/overlay';
 import { navigateHash, useLocation } from '../../router';
 import { useBreadcrumbs } from '../../shell/state';
 import {
-  ActionsMenu,
-  ContentPanel,
   DeleteModal,
-  Detail,
-  Details,
   ExternalLink,
   LocalTable,
   Table,
@@ -25,7 +22,6 @@ import {
   type TableColumn,
 } from './common';
 import { InfoModal } from './indices';
-import { FormPanel } from './job_parts';
 import { CRUMBS, ROUTES } from './routes';
 import {
   activityInfoWord,
@@ -44,7 +40,7 @@ import {
   type PolicyMetadata,
   type SMPolicy,
 } from './snapshot_model';
-import { SNAPSHOT_DOCS } from './snapshot_parts';
+import { Facts, ListPanel, PolicyPanel, SNAPSHOT_DOCS } from './snapshot_parts';
 
 const policyPath = (id: string) => `smPolicies/${encodeURIComponent(id)}`;
 
@@ -209,7 +205,7 @@ export function SnapshotPolicies() {
   const none = selected.length === 0;
   return (
     <>
-      <ContentPanel
+      <ListPanel
         title="Snapshot policies"
         description={
           <>
@@ -219,18 +215,28 @@ export function SnapshotPolicies() {
         }
         actions={
           <>
-            <Button size="s" icon="refresh" onClick={() => void load()} testId="refreshButton">
+            <Button icon="refresh" onClick={() => void load()} testId="refreshButton">
               Refresh
             </Button>
-            <Button size="s" disabled={none} onClick={() => void turn(false)}>
+            <Button disabled={none} onClick={() => void turn(false)}>
               Disable
             </Button>
-            <Button size="s" disabled={none} onClick={() => void turn(true)}>
+            <Button disabled={none} onClick={() => void turn(true)}>
               Enable
             </Button>
-            <ActionsMenu
-              testId="actionButton"
-              disabled={none}
+            <MenuButton
+              align="left"
+              button={(toggle) => (
+                <Button
+                  icon="chevronDown"
+                  iconSide="right"
+                  disabled={none}
+                  onClick={toggle}
+                  testId="actionButton"
+                >
+                  Actions
+                </Button>
+              )}
               items={[
                 {
                   label: 'Edit',
@@ -246,15 +252,16 @@ export function SnapshotPolicies() {
                 },
               ]}
             />
-            <Button size="s" variant="primary" icon="plus" onClick={create}>
+            <Button variant="primary" icon="plus" onClick={create}>
               Create policy
             </Button>
           </>
         }
       >
-        <div className="ismSearchRow">
+        <div className="ismSearchRow ismSearchRow--alone">
           <div className="atlGrow">
             <SearchField
+              compact
               value={text}
               onChange={(value) => {
                 setText(value);
@@ -301,7 +308,7 @@ export function SnapshotPolicies() {
             </div>
           }
         />
-      </ContentPanel>
+      </ListPanel>
       {deleting && (
         <DeletePolicyModal
           policyIds={selected.map((policy) => policy.name).join(', ')}
@@ -328,19 +335,6 @@ interface ChannelConfig {
   config: { name?: string; config_type?: string };
 }
 
-/** Facts of a policy, three in a row */
-function Facts({ items, columns = 3 }: { items: Array<[string, ReactNode]>; columns?: number }) {
-  return (
-    <Details columns={columns}>
-      {items.map(([name, value]) => (
-        <Detail key={name} name={name}>
-          {value}
-        </Detail>
-      ))}
-    </Details>
-  );
-}
-
 export function SnapshotPolicyDetails() {
   const { hashParams } = useLocation();
   const id = hashParams.id ?? '';
@@ -360,7 +354,11 @@ export function SnapshotPolicyDetails() {
       setMetadata(answer.response.metadata);
       return answer.response.policy;
     }
-    const why = answer.ok ? 'Policy was empty' : answer.error;
+    const why = !answer.ok
+      ? answer.error
+      : answer.response
+        ? 'Policy was empty'
+        : "policy doesn't exist";
     toasts.danger(`Could not load the policy: ${why}`);
     go(ROUTES.SNAPSHOT_POLICIES);
     return undefined;
@@ -446,20 +444,18 @@ export function SnapshotPolicyDetails() {
   ];
 
   return (
-    <div className="ismPage ismPage--form ismSnapshotPolicy">
-      <header className="ismPageHeader ismPageHeader--center">
-        <h1 className="ismPageTitle atlGrow">{truncate(id)}</h1>
-        <div className="ismPanel__actions">
-          <Button size="s" onClick={() => go(ROUTES.EDIT_SNAPSHOT_POLICY, { id })}>
-            Edit
-          </Button>
-          <Button size="s" variant="danger" onClick={() => setDeleting(true)} testId="deleteButton">
+    <div className="ismPolicyPage">
+      <header className="ismPolicyPage__header">
+        <h1 className="atlTitleL">{truncate(id)}</h1>
+        <div className="ismPolicyPage__actions">
+          <Button onClick={() => go(ROUTES.EDIT_SNAPSHOT_POLICY, { id })}>Edit</Button>
+          <Button variant="danger" onClick={() => setDeleting(true)} testId="deleteButton">
             Delete
           </Button>
         </div>
       </header>
 
-      <FormPanel title="Policy settings">
+      <PolicyPanel title="Policy settings">
         <Facts
           items={[
             ['Policy name', <span title={id}>{truncate(id, 30)}</span>],
@@ -488,9 +484,9 @@ export function SnapshotPolicyDetails() {
             ]}
           />
         </Accordion>
-      </FormPanel>
+      </PolicyPanel>
 
-      <FormPanel title="Snapshot schedule">
+      <PolicyPanel title="Snapshot schedule">
         <Facts
           items={[
             [
@@ -504,9 +500,9 @@ export function SnapshotPolicyDetails() {
             ['Next snapshot time', renderTime(metadata?.creation?.trigger?.time)],
           ]}
         />
-      </FormPanel>
+      </PolicyPanel>
 
-      <FormPanel title="Snapshot retention period">
+      <PolicyPanel title="Snapshot retention period">
         {deletion ? (
           <Facts
             items={[
@@ -527,9 +523,9 @@ export function SnapshotPolicyDetails() {
             ]}
           />
         )}
-      </FormPanel>
+      </PolicyPanel>
 
-      <FormPanel title="Notifications">
+      <PolicyPanel title="Notifications">
         <Facts
           columns={2}
           items={[
@@ -545,28 +541,28 @@ export function SnapshotPolicyDetails() {
                   {channel.config.name} ({channel.config.config_type})
                 </a>
               ) : (
-                'None'
+                <p>None</p>
               ),
             ],
           ]}
         />
-      </FormPanel>
+      </PolicyPanel>
 
-      <Panel>
-        <div className="ismFormPanel__header">
-          <h2 className="ismPanel__heading">Last creation/deletion</h2>
-          <Button size="s" icon="refresh" onClick={() => void load()} testId="refreshButton">
+      <PolicyPanel
+        title="Last creation/deletion"
+        action={
+          <Button icon="refresh" onClick={() => void load()} testId="refreshButton">
             Refresh
           </Button>
-        </div>
-        <hr className="ismRule" />
+        }
+      >
         <LocalTable
           columns={activityColumns}
           rows={latestActivities(metadata)}
           rowId={(row) => row.activityType ?? ''}
           paged={false}
         />
-      </Panel>
+      </PolicyPanel>
 
       {deleting && (
         <DeletePolicyModal policyIds={id} onClose={() => setDeleting(false)} onDelete={remove} />
