@@ -15,84 +15,83 @@ import {
 import { createPortal } from 'react-dom';
 import { Button, cx } from '../components/basic';
 import { Icon, type IconName } from '../components/icon';
-import type { AppLocation } from '../lib/url';
+import { appUrl } from '../lib/url';
 import { href, useLocation } from '../router';
 import { services } from '../services';
-import {
-  NAV_LOCKED_KEY,
-  TRACKED_APPS,
-  canDock,
-  helpExtensionOf,
-  isUnderPath,
-  navMode,
-  recentLinkTitle,
-  trackedAppLink,
-  trackedUrlKey,
-} from './chrome_layout';
+import { helpExtensionOf } from './chrome_layout';
 import { HeaderBreadcrumbs, useBreadcrumbLimit } from './header_breadcrumbs';
 import { HeaderIcon } from './header_icon';
 import { HeaderTooltip } from './header_popover';
 import { HelpMenu } from './help_menu';
 import { countRequests, useLoadingCount } from './loading_count';
-import { Navigation, type NavGroupItem, type RecentLinkItem } from './navigation';
-import { currentGlobalParam, useChromeState, useRecentlyAccessed, type RecentItem } from './state';
+import {
+  currentGlobalParam,
+  readStored,
+  useChromeState,
+  useRecentlyAccessed,
+  writeStored,
+} from './state';
 import { UserBannerList } from './user_banner';
 import '../styles/shell.css';
 import '../styles/chrome.css';
 
-interface NavApp {
-  /** The application's id in the original: what its link to itself is tracked under */
+interface NavLink {
   id: string;
   label: string;
   /** The path of the application */
   path: string;
-  /** What its link adds to the path */
-  subUrl?: string;
   /** Other paths that are this application too */
   also?: string[];
+  /** The time range follows to this page */
+  carriesTime?: boolean;
 }
 
-interface NavCategory {
-  /** The original's id of the category */
+interface NavGroup {
   id: string;
   label: string;
   icon?: IconName | 'logo';
-  apps: NavApp[];
+  links: NavLink[];
 }
 
-/** The applications of the navigation in their groups, in the original's order */
-export function navCategories(): NavCategory[] {
+export function navGroups(): NavGroup[] {
   return [
     {
-      id: 'opensearchDashboards',
-      // The product's choice: its own name where the original says "OpenSearch Dashboards"
+      id: 'product',
       label: services.boot.name,
       icon: 'logo',
-      apps: [
-        { id: 'opensearch_dashboards_overview', label: 'Overview', path: '/app/opensearch_dashboards_overview' },
-        { id: 'discover', label: 'Discover', path: '/app/discover', subUrl: '#/', also: ['/app/data-explorer'] },
-        { id: 'dashboards', label: 'Dashboards', path: '/app/dashboards' },
-        { id: 'visualize', label: 'Visualize', path: '/app/visualize' },
+      links: [
+        { id: 'overview', label: 'Overview', path: '/app/opensearch_dashboards_overview' },
+        {
+          id: 'discover',
+          label: 'Discover',
+          path: '/app/discover',
+          also: ['/app/data-explorer/discover', '/app/data-explorer'],
+          carriesTime: true,
+        },
+        { id: 'dashboards', label: 'Dashboards', path: '/app/dashboards', carriesTime: true },
+        { id: 'visualize', label: 'Visualize', path: '/app/visualize', carriesTime: true },
       ],
     },
     {
-      id: 'opensearch',
+      id: 'plugins',
       label: 'OpenSearch Plugins',
-      apps: [{ id: 'opensearch-query-workbench', label: 'Query Workbench', path: '/app/opensearch-query-workbench' }],
+      links: [
+        { id: 'queryWorkbench', label: 'Query Workbench', path: '/app/opensearch-query-workbench' },
+      ],
     },
     {
       id: 'management',
       label: 'Management',
       icon: 'managementApp',
-      apps: [
-        { id: 'opensearch_management_overview', label: 'Overview', path: '/app/opensearch_management_overview' },
+      links: [
+        { id: 'managementOverview', label: 'Overview', path: '/app/opensearch_management_overview' },
         {
-          id: 'opensearch_index_management_dashboards',
+          id: 'indexManagement',
           label: 'Index Management',
           path: '/app/opensearch_index_management_dashboards',
         },
         {
-          id: 'opensearch_snapshot_management_dashboards',
+          id: 'snapshotManagement',
           label: 'Snapshot Management',
           path: '/app/opensearch_snapshot_management_dashboards',
         },
@@ -102,109 +101,16 @@ export function navCategories(): NavCategory[] {
           path: '/app/management',
           also: ['/app/objects', '/app/indexPatterns', '/app/settings'],
         },
-        { id: 'dev_tools', label: 'Dev Tools', path: '/app/dev_tools' },
+        { id: 'devTools', label: 'Dev Tools', path: '/app/dev_tools' },
       ],
     },
   ];
 }
 
-function readSession(key: string): string | null {
-  try {
-    return window.sessionStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Where an application's link leads. Dashboards and Visualize go back to where they were left,
- * as the original's URL trackers have it: the place is kept for the session under the original's
- * key, and the link carries the time range of now.
- */
-function appHref(app: NavApp, pathname: string): string {
-  const tracked = TRACKED_APPS[app.id];
-  if (!tracked) return href(`${app.path}${app.subUrl ?? ''}`);
-  return href(
-    trackedAppLink(tracked, {
-      current: isUnderPath(pathname, tracked.base),
-      stored: readSession(trackedUrlKey(services.boot.basePath, tracked)),
-      globalParam: currentGlobalParam(),
-    })
+const isActive = (link: NavLink, pathname: string) =>
+  [link.path, ...(link.also ?? [])].some(
+    (path) => pathname === path || pathname.startsWith(`${path}/`)
   );
-}
-
-/** Keeps where Dashboards and Visualize are, for their links from elsewhere */
-function useTrackedAddresses(location: AppLocation) {
-  useEffect(() => {
-    for (const app of Object.values(TRACKED_APPS)) {
-      if (!isUnderPath(location.pathname, app.base)) continue;
-      try {
-        window.sessionStorage.setItem(
-          trackedUrlKey(services.boot.basePath, app),
-          window.location.hash || app.defaultSubUrl
-        );
-      } catch {
-        // the link then leads to the application's first page
-      }
-    }
-  }, [location]);
-}
-
-function navGroupsOf(categories: NavCategory[], pathname: string): NavGroupItem[] {
-  return categories.map((category) => ({
-    id: category.id,
-    label: category.label,
-    icon:
-      category.icon === 'logo' ? (
-        <img src={href('/logo.svg')} width={24} height={24} alt="" />
-      ) : category.icon ? (
-        <Icon name={category.icon} size="l" app />
-      ) : undefined,
-    links: category.apps.map((app) => ({
-      id: app.id,
-      label: app.label,
-      href: appHref(app, pathname),
-      active: [app.path, ...(app.also ?? [])].some((path) => isUnderPath(pathname, path)),
-    })),
-  }));
-}
-
-function recentLinksOf(recent: RecentItem[], categories: NavCategory[]): RecentLinkItem[] {
-  const targets = categories.flatMap((category) => category.apps.map((app) => ({ path: app.path, title: app.label })));
-  return recent.map((item) => ({
-    id: item.id,
-    label: item.label,
-    href: href(item.link),
-    title: recentLinkTitle(item.label, item.link, targets),
-  }));
-}
-
-function readNavLocked(): boolean {
-  try {
-    return window.localStorage.getItem(NAV_LOCKED_KEY) === 'true';
-  } catch {
-    return false;
-  }
-}
-
-function writeNavLocked(locked: boolean) {
-  try {
-    window.localStorage.setItem(NAV_LOCKED_KEY, String(locked));
-  } catch {
-    // kept for this visit only
-  }
-}
-
-/** Whether the window is wide enough to dock the navigation in, as it changes */
-function useCanDock(): boolean {
-  const [wide, setWide] = useState(() => canDock(window.innerWidth));
-  useEffect(() => {
-    const onResize = () => setWide(canDock(window.innerWidth));
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-  return wide;
-}
 
 const ActionsContext = createContext<HTMLElement | null>(null);
 
@@ -267,6 +173,10 @@ export function TopNav({ items }: { items: TopNavItem[] }) {
   );
 }
 
+function Logo({ size = 24 }: { size?: number }) {
+  return <img src={href('/logo.svg')} width={size} height={size} alt="" />;
+}
+
 /**
  * The link home, as the original's HomeLoader: the product's mark, and in its place a spinner
  * for as long as a request is under way
@@ -327,38 +237,114 @@ function LoadingBar() {
   );
 }
 
+function Navigation({
+  id,
+  docked,
+  onDock,
+  onClose,
+}: {
+  id: string;
+  docked: boolean;
+  onDock: () => void;
+  onClose: () => void;
+}) {
+  const location = useLocation();
+  const recent = useRecentlyAccessed();
+  const [closed, setClosed] = useState<Record<string, boolean>>(() => readStored('navClosed', {}));
+  const toggle = (id: string) => {
+    const next = { ...closed, [id]: !closed[id] };
+    setClosed(next);
+    writeStored('navClosed', next);
+  };
+  const follow = () => {
+    if (!docked) onClose();
+  };
+
+  const section = (id: string, label: string, icon: ReactNode, body: ReactNode) => (
+    <section className="shlNav__group" key={id}>
+      <button type="button" className="shlNav__groupTitle" aria-expanded={!closed[id]} onClick={() => toggle(id)}>
+        {icon}
+        <span className="atlGrow">{label}</span>
+        {/* The original's arrow of an accordion: pointing right, turned down while open */}
+        <Icon name="chevronRight" className="shlNav__arrow" />
+      </button>
+      {!closed[id] && <div className="shlNav__links">{body}</div>}
+    </section>
+  );
+
+  return (
+    <nav id={id} className={cx('shlNav', docked && 'shlNav--docked')} aria-label="Primary" data-test-subj="collapsibleNav">
+      <div className="shlNav__scroll">
+        {section(
+          'recent',
+          'Recently viewed',
+          null,
+          recent.length === 0 ? (
+            <span className="shlNav__empty">No recently viewed items</span>
+          ) : (
+            recent.map((item) => (
+              <a key={item.id} className="shlNav__link" href={href(item.link)} onClick={follow} title={item.label}>
+                <span className="atlTruncate">{item.label}</span>
+              </a>
+            ))
+          )
+        )}
+        {navGroups().map((group) =>
+          section(
+            group.id,
+            group.label,
+            group.icon === 'logo' ? <Logo /> : group.icon ? <Icon name={group.icon} size="l" app /> : null,
+            group.links.map((link) => (
+              <a
+                key={link.id}
+                className="shlNav__link"
+                aria-current={isActive(link, location.pathname) ? 'page' : undefined}
+                href={href(
+                  link.carriesTime ? appUrl(link.path, '/', { _g: currentGlobalParam() }) : link.path
+                )}
+                onClick={follow}
+                data-test-subj={`collapsibleNavAppLink-${link.id}`}
+              >
+                {link.label}
+              </a>
+            ))
+          )
+        )}
+      </div>
+      <button type="button" className="shlNav__dock" onClick={onDock} data-test-subj="collapsible-nav-lock">
+        <Icon name={docked ? 'lock' : 'unlock'} />
+        {docked ? 'Undock navigation' : 'Dock navigation'}
+      </button>
+    </nav>
+  );
+}
+
 export function Chrome({ children }: { children: ReactNode }) {
   const { breadcrumbs, fullScreen } = useChromeState();
-  // Whether the navigation is set to dock, kept as the original keeps it, and whether the menu
-  // button has it open: the two are apart, as in the original's header
-  const [locked, setLocked] = useState(readNavLocked);
+  const [docked, setDocked] = useState<boolean>(() => readStored('navDocked', false));
   const [open, setOpen] = useState(false);
   const [actions, setActions] = useState<HTMLElement | null>(null);
   const location = useLocation();
-  const wide = useCanDock();
+  const narrow = useNarrow();
   const crumbLimit = useBreadcrumbLimit();
-  const recent = useRecentlyAccessed();
   const navId = useId();
   const menuButton = useRef<HTMLButtonElement>(null);
-  // A page that hides the header hides the navigation with it
-  const mode = fullScreen ? 'hidden' : navMode({ locked, open, canDock: wide });
+  const isDocked = docked && !narrow;
+  const navShown = !fullScreen && (isDocked || open);
   // Every request counts toward the home link's spinner, from the first a page makes
   useState(() => countRequests(services.http));
-  useTrackedAddresses(location);
 
-  const categories = navCategories();
-  const closeNav = () => {
-    setOpen(false);
-    menuButton.current?.focus();
-  };
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && open) setOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open]);
 
   return (
     <ActionsContext.Provider value={actions}>
-      <div
-        className={cx('shlApp', mode === 'docked' && 'shlApp--docked', fullScreen && 'shlApp--fullScreen')}
-        // While the navigation lies over the page, the page is not there for a screen reader
-        aria-hidden={mode === 'overlay' ? true : undefined}
-      >
+      <div className={cx('shlApp', isDocked && !fullScreen && 'shlApp--docked', fullScreen && 'shlApp--fullScreen')}>
         {fullScreen ? (
           <LoadingBar />
         ) : (
@@ -370,10 +356,10 @@ export function Chrome({ children }: { children: ReactNode }) {
                   type="button"
                   className="shlHeader__button"
                   aria-label="Toggle primary navigation"
-                  aria-expanded={open}
-                  aria-pressed={open}
+                  aria-expanded={navShown}
+                  aria-pressed={navShown}
                   aria-controls={navId}
-                  onClick={() => setOpen(!open)}
+                  onClick={() => (isDocked ? setDocked(false) : setOpen(!open))}
                   data-test-subj="toggleNavButton"
                 >
                   <HeaderIcon name="menu" className="shlHeader__icon" title="Menu" />
@@ -394,20 +380,20 @@ export function Chrome({ children }: { children: ReactNode }) {
             </div>
           </header>
         )}
-        {mode !== 'hidden' && (
-          <Navigation
-            id={navId}
-            docked={mode === 'docked'}
-            locked={locked}
-            canDock={wide}
-            recent={recentLinksOf(recent, categories)}
-            groups={navGroupsOf(categories, location.pathname)}
-            onClose={closeNav}
-            onLockedChange={(next) => {
-              writeNavLocked(next);
-              setLocked(next);
-            }}
-          />
+        {navShown && (
+          <>
+            {!isDocked && <div className="shlNav__scrim" onClick={() => setOpen(false)} />}
+            <Navigation
+              id={navId}
+              docked={isDocked}
+              onClose={() => setOpen(false)}
+              onDock={() => {
+                writeStored('navDocked', !docked);
+                setDocked(!docked);
+                setOpen(false);
+              }}
+            />
+          </>
         )}
         <main className="shlMain" id="app-wrapper">
           <UserBannerList />
@@ -416,4 +402,16 @@ export function Chrome({ children }: { children: ReactNode }) {
       </div>
     </ActionsContext.Provider>
   );
+}
+
+function useNarrow(): boolean {
+  const query = '(max-width: 991px)';
+  const [narrow, setNarrow] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const onChange = () => setNarrow(media.matches);
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
+  }, []);
+  return narrow;
 }
