@@ -854,23 +854,25 @@ function AliasFields({
   ) => (
     <>
       <Spacer size="m" />
-      <FormRow full label={`Select aliases to ${kind === 'add' ? 'add to' : 'remove from'} indexes`} error={error}>
-        <span>
-          <span className="ismSfCombo">
-            <ComboBox
-              compact
-              allowCustom
-              placeholder={`Enter aliases to ${kind}`}
-              options={[]}
-              selected={names}
-              onChange={(next) => write(next.slice(0, MAX_ALIASES))}
-              invalid={error !== undefined}
-              testId={`${kind}-alias-combo-box`}
-            />
+      <div data-test-subj={`${kind}-alias-row`}>
+        <FormRow full label={`Select aliases to ${kind === 'add' ? 'add to' : 'remove from'} indexes`} error={error}>
+          <span>
+            <span className="ismSfCombo">
+              <ComboBox
+                compact
+                allowCustom
+                placeholder={`Enter aliases to ${kind}`}
+                options={[]}
+                selected={names}
+                onChange={(next) => write(next.slice(0, MAX_ALIASES))}
+                invalid={error !== undefined}
+                testId={`${kind}-alias-combo-box`}
+              />
+            </span>
+            {limit(names.length)}
           </span>
-          {limit(names.length)}
-        </span>
-      </FormRow>
+        </FormRow>
+      </div>
     </>
   );
   return (
@@ -1145,11 +1147,12 @@ function Draggable<Item extends { id: string }>({
     setDragged(undefined);
   };
   return (
-    <div className="ismSfItems">
+    <div className="ismSfItems" data-test-subj="droppable">
       {items.map((item, index) => (
         <div
           key={item.id}
           className="ismSfItem"
+          data-test-subj="draggable"
           onDragOver={(event) => event.preventDefault()}
           onDrop={() => drop(index)}
         >
