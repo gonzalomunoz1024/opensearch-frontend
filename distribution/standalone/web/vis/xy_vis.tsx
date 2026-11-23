@@ -52,12 +52,15 @@ export function XYVis({ vis, data, uiState, onUiState, onFilter, onTimeChange, s
   const offsetAt = useMemo(() => zoneOffset(settings.timeZone), [settings.timeZone]);
   const dimming = dimmingOpacity(services.uiSettings?.get('visualization:dimmingOpacity', 0.5));
 
-  // The bucket a series stands for: its first group's value, as the original's legend filters on it
+  // The bucket a series stands for: its first group's value in the series' first row, as the
+  // original's legend filters on it
   const groupFilter = (label: string): Filter | undefined => {
     const series = model.data.series.find((item) => item.label === label);
     const column = model.data.groupColumns[0];
     if (!series || !column) return undefined;
-    return bucketFilter(column, series.groupKeys[0], context);
+    const rows = new Set(series.values.map((point) => point.row));
+    const row = table.rows.find((candidate) => rows.has(candidate));
+    return bucketFilter(column, series.groupKeys[0], context, row && { table, row });
   };
   const legend = useVislibLegend({
     addLegend: params.addLegend,
@@ -70,7 +73,7 @@ export function XYVis({ vis, data, uiState, onUiState, onFilter, onTimeChange, s
 
   if (table.rows.length === 0) return <ChartMessage>No results found</ChartMessage>;
 
-  const { onPointClick, onBrush } = seriesEvents({ model, axis, context, onFilter, onTimeChange, split });
+  const { onPointClick, onBrush } = seriesEvents({ model, axis, context, table, onFilter, onTimeChange, split });
   return (
     <PointSeriesChart
       model={model}

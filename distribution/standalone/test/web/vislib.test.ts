@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { bucketFilter, tabify, type AggConfig, type AggContext, type TableColumn } from '../../web/lib/aggs';
+import { bucketFilter, otherBucketTerms, tabify, type AggConfig, type AggContext, type TableColumn } from '../../web/lib/aggs';
 import { DEFAULT_FORMAT_SETTINGS } from '../../web/lib/field_formats';
 import type { Filter, IndexPattern } from '../../web/lib/types';
 import { splitTables, splitTimeFilter } from '../../web/vis/types';
@@ -661,6 +661,57 @@ describe('the buckets of a chart', () => {
       ]
     );
     assert.equal(parts[0].split?.column, split);
+    // Its click is in the table before the split, at the bucket's first row
+    assert.equal(parts[1].split?.cell.table.rows.length, 3);
+    assert.deepEqual(parts[1].split?.cell.row, { 'col-0-4': 'osx', 'col-1-1': 2 });
+  });
+
+  it('filter out the terms beside the "Other" bucket, those of the rows it was clicked in', () => {
+    const terms = (otherBucket: boolean): AggConfig => ({
+      id: '3',
+      enabled: true,
+      type: 'terms',
+      schema: 'group',
+      params: { field: 'machine.os.keyword', otherBucket },
+    });
+    const time: AggConfig = { id: '2', enabled: true, type: 'date_histogram', schema: 'segment', params: { field: 'timestamp', interval: 'd' } };
+    const day = Date.UTC(2026, 10, 16);
+    const response = {
+      aggregations: {
+        '2': {
+          buckets: [
+            { key: day, doc_count: 5, '3': { buckets: [{ key: 'ios', doc_count: 2 }, { key: 'osx', doc_count: 1 }, { key: '__other__', doc_count: 2 }] } },
+            { key: day + DAY, doc_count: 3, '3': { buckets: [{ key: 'win 8', doc_count: 2 }, { key: '__missing__', doc_count: 1 }, { key: '__other__', doc_count: 1 }] } },
+          ],
+        },
+      },
+    };
+    const table = tabify([countAgg, time, terms(true)], response, logsContext);
+    const group = table.columns[1];
+    const otherOf = (at: number) => table.rows.filter((row) => row[group.id] === '__other__')[at];
+    const first = bucketFilter(group, '__other__', logsContext, { table, row: otherOf(0) });
+    assert.equal(first?.meta.negate, true);
+    assert.equal(first?.meta.type, 'phrases');
+    assert.deepEqual(first?.meta.params, ['ios', 'osx']);
+    assert.deepEqual(first?.query, {
+      bool: { should: [{ match_phrase: { 'machine.os.keyword': 'ios' } }, { match_phrase: { 'machine.os.keyword': 'osx' } }], minimum_should_match: 1 },
+    });
+    // The second day's: its own terms, the missing bucket left out
+    assert.deepEqual(bucketFilter(group, '__other__', logsContext, { table, row: otherOf(1) })?.meta.params, ['win 8']);
+    // No filter without the cell it was clicked in, nor for a terms aggregation that asks no other bucket
+    assert.equal(bucketFilter(group, '__other__', logsContext), undefined);
+    const plain = tabify([countAgg, time, terms(false)], response, logsContext);
+    assert.equal(bucketFilter(plain.columns[1], '__other__', logsContext, { table: plain, row: plain.rows[2] }), undefined);
+    // A column before every other: the terms of the whole table, once each
+    const os = columnOf('col-0-3', 'machine.os.keyword', aggOf('3', 'terms', 'segment'));
+    const count = columnOf('col-1-1', 'Count', aggOf('1', 'count', 'metric'));
+    const rows = [
+      { 'col-0-3': 'ios', 'col-1-1': 1 },
+      { 'col-0-3': 'osx', 'col-1-1': 2 },
+      { 'col-0-3': 'ios', 'col-1-1': 3 },
+      { 'col-0-3': '__other__', 'col-1-1': 4 },
+    ];
+    assert.deepEqual(otherBucketTerms(os, { table: { columns: [os, count], rows }, row: rows[3] }), ['ios', 'osx']);
   });
 });
 

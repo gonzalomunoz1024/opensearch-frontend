@@ -53,6 +53,8 @@ export interface SeriesEventsInput extends Pick<VisRenderProps, 'onFilter' | 'on
   model: PointSeriesModel;
   axis: SeriesAxis;
   context: AggContext;
+  /** The chart's table: the "Other" bucket of a click filters out the terms beside it there */
+  table: Table;
 }
 
 export interface SeriesEvents {
@@ -61,7 +63,7 @@ export interface SeriesEvents {
 }
 
 /** A click on a mark and a brush along the axis, as filters or a time range */
-export function seriesEvents({ model, axis, context, onFilter, onTimeChange, split }: SeriesEventsInput): SeriesEvents {
+export function seriesEvents({ model, axis, context, table, onFilter, onTimeChange, split }: SeriesEventsInput): SeriesEvents {
   const { xColumn, isTimeField } = axis;
   // A click on a mark filters on its bucket along the axis, on its series' first group and on
   // the bucket of its chart in a split
@@ -70,15 +72,15 @@ export function seriesEvents({ model, axis, context, onFilter, onTimeChange, spl
         const filters: Filter[] = [];
         const raw = point.row;
         if (xColumn && raw) {
-          const filter = bucketFilter(xColumn, raw[xColumn.id], context);
+          const filter = bucketFilter(xColumn, raw[xColumn.id], context, { table, row: raw });
           if (filter) filters.push(filter);
         }
         const group = model.data.groupColumns[0];
         if (group && raw) {
-          const filter = bucketFilter(group, raw[group.id], context);
+          const filter = bucketFilter(group, raw[group.id], context, { table, row: raw });
           if (filter) filters.push(filter);
         }
-        const splitFilter = split && bucketFilter(split.column, split.key, context);
+        const splitFilter = split && bucketFilter(split.column, split.key, context, split.cell);
         if (splitFilter) filters.push(splitFilter);
         if (filters.length) onFilter(filters);
       }

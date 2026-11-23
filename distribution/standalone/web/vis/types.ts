@@ -3,7 +3,7 @@
 /* What every kind of visualization is given to draw itself. */
 
 import type { XYPoint } from '../charts/xy';
-import type { Table, TableColumn, TableRow } from '../lib/aggs';
+import type { BucketCell, Table, TableColumn, TableRow } from '../lib/aggs';
 import type { TimeRange } from '../lib/dates';
 import type { Filter } from '../lib/types';
 import type { UiState, Vis } from '../lib/vis';
@@ -27,6 +27,8 @@ export interface VisRenderProps {
 export interface SplitBucket {
   column: TableColumn;
   key: unknown;
+  /** The table before the split and the bucket's first row in it, as the original's click carries them */
+  cell: BucketCell;
 }
 
 export const bucketColumns = (table: Table, schema?: string): TableColumn[] =>
@@ -57,12 +59,12 @@ export function pointsAlong(points: XYPoint[], xValues: Array<number | string>, 
 export function splitTables(table: Table): Array<{ label?: string; table: Table; split?: SplitBucket }> {
   const split = table.columns.find((column) => column.kind === 'bucket' && column.schema === 'split');
   if (!split) return [{ table }];
-  const groups = new Map<string, { label: string; key: unknown; rows: TableRow[] }>();
+  const groups = new Map<string, { label: string; key: unknown; first: TableRow; rows: TableRow[] }>();
   for (const row of table.rows) {
     const key = keyText(row[split.id]);
     let group = groups.get(key);
     if (!group) {
-      group = { label: `${split.format(row[split.id])}: ${split.name}`, key: row[split.id], rows: [] };
+      group = { label: `${split.format(row[split.id])}: ${split.name}`, key: row[split.id], first: row, rows: [] };
       groups.set(key, group);
     }
     group.rows.push(row);
@@ -71,7 +73,7 @@ export function splitTables(table: Table): Array<{ label?: string; table: Table;
   return [...groups.values()].map((group) => ({
     label: group.label,
     table: { columns, rows: group.rows },
-    split: { column: split, key: group.key },
+    split: { column: split, key: group.key, cell: { table, row: group.first } },
   }));
 }
 

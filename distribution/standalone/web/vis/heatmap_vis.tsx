@@ -93,7 +93,7 @@ export function HeatmapVis({ vis, data, uiState, onUiState, onFilter, onTimeChan
 
   if (table.rows.length === 0) return <ChartMessage>No results found</ChartMessage>;
 
-  const { onPointClick, onBrush } = seriesEvents({ model, axis, context, onFilter, onTimeChange, split });
+  const { onPointClick, onBrush } = seriesEvents({ model, axis, context, table, onFilter, onTimeChange, split });
   return (
     <PointSeriesChart
       model={model}

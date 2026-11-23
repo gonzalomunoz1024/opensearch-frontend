@@ -62,7 +62,7 @@ export function PieVis({ vis, data, uiState, onUiState, onFilter, split }: VisRe
     while (queue.length) {
       const level = queue.splice(0, queue.length);
       const found = level.find((item) => item.name === name);
-      if (found) return found.bucket ? bucketFilter(found.bucket.column, found.bucket.key, context) : undefined;
+      if (found) return found.bucket ? bucketFilter(found.bucket.column, found.bucket.key, context, { table, row: found.bucket.row }) : undefined;
       for (const item of level) queue.push(...item.children);
     }
     return undefined;
@@ -100,10 +100,10 @@ export function PieVis({ vis, data, uiState, onUiState, onFilter, split }: VisRe
     ? (slice: PieSlice) => {
         const filters: Filter[] = [];
         for (let at: PieSlice | undefined = slice; at?.bucket; at = at.parent) {
-          const filter = bucketFilter(at.bucket.column, at.bucket.key, context);
+          const filter = bucketFilter(at.bucket.column, at.bucket.key, context, { table, row: at.bucket.row });
           if (filter) filters.push(filter);
         }
-        const splitFilter = split && bucketFilter(split.column, split.key, context);
+        const splitFilter = split && bucketFilter(split.column, split.key, context, split.cell);
         if (splitFilter) filters.push(splitFilter);
         if (filters.length) onFilter(filters);
       }
