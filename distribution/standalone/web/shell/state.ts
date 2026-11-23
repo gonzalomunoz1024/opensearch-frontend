@@ -7,6 +7,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
+import { isValidTimeRange } from '../lib/date_picker';
 import type { TimeRange } from '../lib/dates';
 import type { Filter, RefreshInterval } from '../lib/types';
 import { decodeState, encodeState } from '../lib/url';
@@ -60,11 +61,16 @@ export function defaultGlobalState(): GlobalState {
   };
 }
 
-function readGlobal(raw: string | undefined): GlobalState {
+/**
+ * What a `_g` stands for. A range whose ends are not both dates is the default range, as in the
+ * original, which searches and shows `timepicker:timeDefaults` in its place (and leaves the
+ * address as it is): no page searches without a time bound because of it.
+ */
+export function globalStateOf(raw: string | undefined): GlobalState {
   const defaults = defaultGlobalState();
   const state = decodeState<GlobalState>(raw);
   return {
-    time: state.time?.from && state.time?.to ? state.time : defaults.time,
+    time: isValidTimeRange(state.time) ? state.time : defaults.time,
     refreshInterval: state.refreshInterval ?? defaults.refreshInterval,
     filters: Array.isArray(state.filters) ? state.filters : [],
   };
@@ -80,8 +86,10 @@ export function currentGlobalParam(): string | undefined {
  * loading a saved query changes the query, the filters and the time range at once.
  */
 export function globalParamWith(patch: Partial<GlobalState>): string {
-  const latest = readGlobal(getLocation().hashParams._g ?? readSession());
-  const encoded = encodeState({ ...latest, ...patch });
+  const raw = getLocation().hashParams._g ?? readSession();
+  // A range that is no date stays in the address until the range itself changes, as in the original
+  const held = decodeState<GlobalState>(raw).time;
+  const encoded = encodeState({ ...globalStateOf(raw), ...(held === undefined ? {} : { time: held }), ...patch });
   writeSession(encoded);
   return encoded;
 }
@@ -89,7 +97,7 @@ export function globalParamWith(patch: Partial<GlobalState>): string {
 export function useGlobalState(): [GlobalState, (patch: Partial<GlobalState>) => void] {
   const location = useLocation();
   const raw = location.hashParams._g ?? readSession();
-  const state = useMemo(() => readGlobal(raw), [raw]);
+  const state = useMemo(() => globalStateOf(raw), [raw]);
 
   // The address always says what is on screen
   useEffect(() => {

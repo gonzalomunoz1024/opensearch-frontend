@@ -18,6 +18,7 @@ import {
   fromZonedParts,
   getDateMode,
   isRangeInvalid,
+  isValidTimeRange,
   parseFormattedDate,
   parseRelativeParts,
   parseTimeParts,
@@ -32,6 +33,7 @@ import {
   zonedParts,
   type QuickRange,
 } from '../../web/lib/date_picker';
+import { setDefaultTimeZone } from '../../web/lib/dates';
 
 const now = new Date(Date.UTC(2026, 10, 23, 4, 37, 14, 419));
 const context = { now };
@@ -89,6 +91,63 @@ describe('how the date picker writes a date', () => {
       assert.equal(formatTimeString(value, FORMAT, false, context), `~ ${words}`, value);
     }
     assert.equal(fromNow(now, now), 'a few seconds ago');
+  });
+
+  it('counts the months on the clock of the zone the settings name, as moment does in it', () => {
+    // The browser is on UTC, where 1 December has begun while it is still 30 November in New York
+    const date = new Date('2024-12-01T01:00:00Z');
+    const later = new Date('2026-05-31T02:00:00Z');
+    setDefaultTimeZone('America/New_York');
+    try {
+      assert.equal(fromNow(date, later, 'America/New_York'), '2 years ago');
+      assert.equal(fromNow(new Date('2025-03-01T00:30:00Z'), new Date('2026-08-29T16:00:00Z'), 'America/New_York'), '2 years ago');
+      assert.equal(fromNow(new Date('2026-01-31T23:00:00Z'), new Date('2026-03-01T03:00:00Z'), 'America/New_York'), 'a month ago');
+      assert.equal(
+        formatTimeString('2024-12-01T01:00:00Z', FORMAT, false, { now: later, timeZone: 'America/New_York' }),
+        '~ 2 years ago'
+      );
+    } finally {
+      setDefaultTimeZone(undefined);
+    }
+    setDefaultTimeZone('Asia/Tokyo');
+    try {
+      assert.equal(fromNow(date, later, 'Asia/Tokyo'), 'a year ago');
+    } finally {
+      setDefaultTimeZone(undefined);
+    }
+    // No zone named: the browser's clock
+    assert.equal(fromNow(date, later), 'a year ago');
+    assert.equal(fromNow(new Date('2025-03-01T00:30:00Z'), new Date('2026-08-29T16:00:00Z')), 'a year ago');
+  });
+
+  it("lets a range stand only when both ends are dates of the date math, as the original's validateTimeRange", () => {
+    // What the original's @elastic/datemath reads as a valid end, and what it does not
+    const ends: Array<[string, boolean]> = [
+      ['now', true],
+      ['now-15m', true],
+      ['now-1y/d', true],
+      ['now+3d', true],
+      ['now/d+1h', true],
+      ['2026-11-01T00:00:00.000Z', true],
+      ['2026-11-01', true],
+      ['2026-11-01||-1d', true],
+      ['2026-11-01T00:00:00.000Z||/d', true],
+      ['banana', false],
+      ['', false],
+      ['now-5x', false],
+      ['now-1q', false],
+      ['2026-02-30T00:00:00.000Z', false],
+      ['x||-1d', false],
+    ];
+    for (const [end, valid] of ends) {
+      assert.equal(isValidTimeRange({ from: end, to: 'now' }), valid, end);
+      assert.equal(isValidTimeRange({ from: 'now-1d', to: end }), valid, end);
+    }
+    // A range the wrong way round is still one: the picker says it cannot be applied
+    assert.equal(isValidTimeRange({ from: 'now', to: 'now-1d' }), true);
+    for (const time of [undefined, null, 'now-15m', {}, { from: 'now-1y' }, { to: 'now' }, { from: 0, to: 'now' }]) {
+      assert.equal(isValidTimeRange(time), false, JSON.stringify(time));
+    }
   });
 
   it('tells the three kinds of date apart', () => {

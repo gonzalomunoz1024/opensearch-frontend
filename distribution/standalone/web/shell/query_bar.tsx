@@ -35,6 +35,14 @@ export function defaultQueryLanguage(): string {
   return setting === 'lucene' ? 'lucene' : 'kuery';
 }
 
+/**
+ * Makes a language the one new queries are written in, as the original's setUserQueryLanguage:
+ * its language switch does so, and its Discover with the language of the query it opens with.
+ */
+export function rememberQueryLanguage(language: string) {
+  writeStored('queryLanguage', language);
+}
+
 /** The documentation of DQL that the original's links lead to */
 export const DQL_DOCS = 'https://opensearch.org/docs/latest/dashboards/dql';
 
@@ -495,7 +503,7 @@ export function QueryBar({
       <LanguageSwitch
         language={language}
         onChange={(next) => {
-          writeStored('queryLanguage', next);
+          rememberQueryLanguage(next);
           onLanguageChange(next);
         }}
       />
