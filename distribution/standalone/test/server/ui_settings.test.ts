@@ -212,6 +212,27 @@ const writes = (opensearch: MemoryOpenSearch) =>
 
 const updateOf = (request: OpenSearchRequest) => (request.body as { doc: { config: Source } }).doc.config;
 
+/** The status and message a refused write answers with, or `undefined` when it is not refused */
+async function refusal(promise: Promise<unknown>) {
+  try {
+    await promise;
+    return undefined;
+  } catch (error) {
+    if (error instanceof HttpError) return { status: error.status, message: error.message };
+    throw error;
+  }
+}
+
+/** The message a check throws, or `undefined` when it lets the value through */
+function failureOf(check: () => void): string | undefined {
+  try {
+    check();
+    return undefined;
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
 describe('the advanced settings as stored', () => {
   it('gives back the Timeline settings stored under their old names under the new ones', async () => {
     const opensearch = holding({ 'timelion:es.timefield': 'timestamp', 'csv:separator': ';' });
@@ -236,10 +257,10 @@ describe('the advanced settings as stored', () => {
     // Not overridden: the original stores them and answers 200
     await settings.setMany({ toString: 'a', valueOf: null });
     assert.deepEqual(updateOf(writes(opensearch)[0]), { toString: 'a', valueOf: null });
-    await assert.rejects(
-      settings.setMany({ 'theme:darkMode': false }),
-      /Unable to update "theme:darkMode" because it is overridden/
-    );
+    assert.deepEqual(await refusal(settings.setMany({ 'theme:darkMode': false })), {
+      status: 400,
+      message: 'Unable to update "theme:darkMode" because it is overridden',
+    });
     assert.deepEqual(await settings.getAll(), {
       constructor: { userValue: 'stored' },
       toString: { userValue: 'a' },
@@ -266,8 +287,7 @@ describe('the schemas of the settings, as the original checks a value', () => {
     assert.ok(ORIGINAL.answers.length > 400);
     for (const [key, value, message] of ORIGINAL.answers) {
       const what = `${key} = ${JSON.stringify(value)}`;
-      if (message === null) assert.doesNotThrow(() => validateSetting(key, value), what);
-      else assert.throws(() => validateSetting(key, value), { message }, what);
+      assert.equal(failureOf(() => validateSetting(key, value)), message ?? undefined, what);
     }
   });
 
@@ -283,12 +303,8 @@ describe('the schemas of the settings, as the original checks a value', () => {
         const stored = opensearch.stored()?.[key.replace('timeline', 'timelion')];
         if (!isObject(value)) assert.deepEqual(stored, value, what);
       } else {
-        await assert.rejects(
-          settings.setMany({ [key]: value }),
-          (error: unknown) =>
-            error instanceof HttpError && error.status === 400 && error.message === message,
-          what
-        );
+        const refused = await refusal(settings.setMany({ [key]: value }));
+        assert.deepEqual(refused, { status: 400, message }, what);
         assert.equal(opensearch.sent.length, before, `nothing is asked of OpenSearch for ${what}`);
       }
     }
@@ -296,21 +312,19 @@ describe('the schemas of the settings, as the original checks a value', () => {
 
   it('checks every value before it writes, so that one value refused stores none', async () => {
     const opensearch = holding({ dateFormat: 'before' });
-    await assert.rejects(
-      settingsOf(opensearch).setMany({ dateFormat: 'x', 'timepicker:quickRanges': '5' }),
-      {
-        status: 400,
-        message:
-          '[validation [timepicker:quickRanges]]: expected value of type [array] but got [number]',
-      }
-    );
+    const changes = { dateFormat: 'x', 'timepicker:quickRanges': '5' };
+    assert.deepEqual(await refusal(settingsOf(opensearch).setMany(changes)), {
+      status: 400,
+      message:
+        '[validation [timepicker:quickRanges]]: expected value of type [array] but got [number]',
+    });
     assert.equal(writes(opensearch).length, 0);
     assert.deepEqual(opensearch.stored(), { dateFormat: 'before' });
   });
 
   it('asks whether a setting is overridden before it checks any value, as the original', async () => {
     const settings = settingsOf(holding({}), { overrides: { 'csv:separator': ';' }, defaults: {} });
-    await assert.rejects(settings.setMany({ dateFormat: 5, 'csv:separator': 5 }), {
+    assert.deepEqual(await refusal(settings.setMany({ dateFormat: 5, 'csv:separator': 5 })), {
       status: 400,
       message: 'Unable to update "csv:separator" because it is overridden',
     });
