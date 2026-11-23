@@ -25,6 +25,7 @@ import {
   Check,
   closeOnEscape,
   holdFocus,
+  IMPORT_ICON,
   InMemoryTable,
   RelationshipsIcon,
   RowAction,
@@ -428,7 +429,7 @@ function ObjectsTable({ allowedTypes }: { allowedTypes: string[] }) {
             <Button variant="empty" icon="upload" onClick={() => setShowExportAll(true)} testId="exportAllObjects">
               Export all objects
             </Button>
-            <Button variant="empty" icon="download" onClick={() => setShowImport(true)} testId="importObjects">
+            <Button variant="empty" icon={IMPORT_ICON} onClick={() => setShowImport(true)} testId="importObjects">
               Import
             </Button>
             <Button variant="empty" icon="refresh" onClick={refresh}>
