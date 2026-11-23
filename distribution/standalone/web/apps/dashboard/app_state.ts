@@ -8,7 +8,7 @@
 import type { TimeRange } from '../../lib/dates';
 import { encodeState } from '../../lib/url';
 import type { Filter, Query, RefreshInterval } from '../../lib/types';
-import { panelsToUrl, type Dashboard, type DashboardOptions, type PanelState } from './model';
+import { dashboardQuery, panelsToUrl, type Dashboard, type DashboardOptions, type PanelState } from './model';
 
 export interface UrlAppState {
   description?: string;
@@ -43,7 +43,7 @@ export function fullAppState(
     filters: current.filters ?? saved.filters,
     fullScreenMode: current.fullScreenMode ?? false,
     options: current.options ?? saved.options,
-    query: current.query ?? saved.query ?? defaultQuery,
+    query: current.query === undefined ? saved.query ?? defaultQuery : dashboardQuery(current.query),
     timeRestore: current.timeRestore ?? saved.timeRestore,
     title: current.title ?? saved.title,
     viewMode,
@@ -97,9 +97,12 @@ export function ownTime(
   return own;
 }
 
-/** The query of a saved dashboard, the language as the address names it */
+/**
+ * The query of a saved dashboard, the language as the address names it; a query of OpenSearch's
+ * DSL is the same whatever the order of its keys, as the original's isEqual takes it
+ */
 export function sameQuery(a: Query | undefined, b: Query | undefined): boolean {
-  return (a?.query ?? '') === (b?.query ?? '') && (a?.language ?? '') === (b?.language ?? '');
+  return sameState(a?.query ?? '', b?.query ?? '') && (a?.language ?? '') === (b?.language ?? '');
 }
 
 const COPY = 'copy';

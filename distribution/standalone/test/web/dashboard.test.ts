@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { cloneBase, cloneTitle, fullAppState, ownTime, sameQuery } from '../../web/apps/dashboard/app_state';
+import { cloneBase, cloneTitle, fullAppState, ownTime, sameQuery, type UrlAppState } from '../../web/apps/dashboard/app_state';
 import {
   MIN_PANEL,
   cellUnder,
@@ -37,7 +37,7 @@ import {
   type PanelState,
 } from '../../web/apps/dashboard/model';
 import { existsFilter, phraseFilter, uniqueFilters } from '../../web/lib/query';
-import type { Filter } from '../../web/lib/types';
+import type { Filter, Query } from '../../web/lib/types';
 import { decodeState, encodeState } from '../../web/lib/url';
 import { makeTurns, waitTurn } from '../../web/vis/turns';
 
@@ -437,6 +437,23 @@ describe('a dashboard saved in an older form', () => {
     // From 6.4 on they are among the settings already; what is beside them is not read
     assert.deepEqual(panels[3].embeddableConfig, {});
   });
+
+  it('reads a query kept from before queries had a language as Lucene, and saves it so', () => {
+    const open = (source: string) =>
+      dashboardFromSavedObject({ id: 'old', attributes: { title: 'Old', kibanaSavedObjectMeta: { searchSourceJSON: source } } });
+    const dsl = open('{"query":{"query_string":{"query":"customer_gender:MALE","analyze_wildcard":true}},"filter":[]}');
+    assert.deepEqual(dsl.query, { query: { query_string: { query: 'customer_gender:MALE', analyze_wildcard: true } }, language: 'lucene' });
+    // As the fork's build saves it again: the text, then the language
+    assert.equal(
+      dashboardToSavedObject(dsl).attributes.kibanaSavedObjectMeta?.searchSourceJSON,
+      '{"query":{"query":{"query_string":{"query":"customer_gender:MALE","analyze_wildcard":true}},"language":"lucene"},"filter":[]}'
+    );
+    assert.deepEqual(open('{"query":"customer_gender:MALE","filter":[]}').query, { query: 'customer_gender:MALE', language: 'lucene' });
+    // A query in a language the panels do not share gives way to an empty DQL query
+    assert.deepEqual(open('{"query":{"query":"source = logs","language":"PPL"},"filter":[]}').query, { query: '', language: 'kuery' });
+    assert.deepEqual(open('{"query":{"query":"a","language":"kuery"},"filter":[]}').query, { query: 'a', language: 'kuery' });
+    assert.equal(open('{"filter":[]}').query, undefined);
+  });
 });
 
 describe('a dashboard in the address', () => {
@@ -490,6 +507,23 @@ describe('a dashboard in the address', () => {
   it('compares queries by their text and language', () => {
     assert.equal(sameQuery({ query: 'a', language: 'kuery' }, { language: 'kuery', query: 'a' }), true);
     assert.equal(sameQuery({ query: 'a', language: 'kuery' }, { query: 'a', language: 'lucene' }), false);
+    // A query of OpenSearch's DSL read back from the address, its keys sorted, is the one saved
+    const saved = { query: { query_string: { query: 'a', analyze_wildcard: true } }, language: 'lucene' };
+    assert.equal(sameQuery(decodeState<{ query: Query }>(encodeState({ query: saved })).query, saved), true);
+    assert.equal(sameQuery({ ...saved, query: { query_string: { query: 'b', analyze_wildcard: true } } }, saved), false);
+  });
+
+  it('takes a query from the address as the original does, one with no language as Lucene', () => {
+    const saved: Dashboard = { ...emptyDashboard(), id: 'mine', title: 'Mine' };
+    const query = { query: '', language: 'kuery' };
+    // As an address written before queries had a language carries it
+    const old = decodeState<UrlAppState>('(query:(query_string:(query:a)))');
+    assert.deepEqual(fullAppState(saved, old, [], query).query, {
+      query: { query_string: { query: 'a' } },
+      language: 'lucene',
+    });
+    assert.deepEqual(fullAppState(saved, { query: { query: 'x', language: 'SQL' } }, [], query).query, { query: '', language: 'kuery' });
+    assert.deepEqual(fullAppState(saved, { query: { query: 'x', language: 'lucene' } }, [], query).query, { query: 'x', language: 'lucene' });
   });
 });
 

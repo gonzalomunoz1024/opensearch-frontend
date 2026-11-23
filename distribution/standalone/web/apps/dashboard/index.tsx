@@ -41,6 +41,7 @@ import { DashboardGrid } from './grid';
 import {
   DEFAULT_PANEL,
   dashboardFromSavedObject,
+  dashboardQuery,
   dashboardToSavedObject,
   emptyDashboard,
   findPlace,
@@ -211,7 +212,10 @@ function DashboardPage({ savedId }: { savedId?: string }) {
   const fullScreen = Boolean(urlState.fullScreenMode);
   const expanded = urlState.expandedPanelId;
   const defaultQuery = useMemo<Query>(() => ({ query: '', language: defaultQueryLanguage() }), []);
-  const query: Query = useMemo(() => urlState.query ?? saved?.query ?? defaultQuery, [urlState.query, saved?.query, defaultQuery]);
+  const query: Query = useMemo(
+    () => (urlState.query === undefined ? saved?.query ?? defaultQuery : dashboardQuery(urlState.query)),
+    [urlState.query, saved?.query, defaultQuery]
+  );
   const appFilters = useMemo(() => urlState.filters ?? saved?.filters ?? [], [urlState.filters, saved?.filters]);
   const filters = useMemo(() => [...global.filters, ...appFilters.filter((filter) => !isPinned(filter))], [global.filters, appFilters]);
   const options: DashboardOptions = urlState.options ?? saved?.options ?? {};

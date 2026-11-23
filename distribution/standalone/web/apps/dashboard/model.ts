@@ -129,6 +129,17 @@ const parse = <T>(text: string | undefined, fallback: T): T => {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
+/**
+ * A dashboard's query as the original takes it, saved or from the address
+ * (normalizeDashboardQuery): one kept from before queries had a language, a text or a query of
+ * OpenSearch's DSL, is Lucene; one in a language other than DQL or Lucene (a PPL query saved by
+ * an older start) gives way to an empty DQL query, as the panels could not share it.
+ */
+export function dashboardQuery(query: unknown): Query {
+  const migrated = isRecord(query) && 'language' in query ? query : { query, language: 'lucene' };
+  return migrated.language === 'kuery' || migrated.language === 'lucene' ? (migrated as unknown as Query) : { query: '', language: 'kuery' };
+}
+
 /** A new dashboard, with the options the original gives one */
 export function emptyDashboard(): Dashboard {
   return {
@@ -197,7 +208,7 @@ export function dashboardFromSavedObject(object: {
     description: attributes.description ?? '',
     panels,
     options: isRecord(options) ? options : {},
-    query: source.query,
+    query: source.query === undefined ? undefined : dashboardQuery(source.query),
     filters: source.filters,
     timeRestore: Boolean(attributes.timeRestore),
     timeFrom: attributes.timeFrom,
