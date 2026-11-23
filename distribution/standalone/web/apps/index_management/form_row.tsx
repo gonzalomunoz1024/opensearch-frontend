@@ -56,9 +56,9 @@ export function FormRow({
         </div>
         <div className="ismDescribed__fields">
           {children && (
-            <div className={cx('ismFormRow', fullWidth && 'ismFormRow--full')} data-test-subj={testId}>
-              <div className="ismFormRow__field">{children}</div>
-              {error && <div className="ismFormRow__error">{error}</div>}
+            <div className={cx('ismCustomRow', fullWidth && 'ismCustomRow--full')} data-test-subj={testId}>
+              <div className="ismCustomRow__field">{children}</div>
+              {error && <div className="ismCustomRow__error">{error}</div>}
             </div>
           )}
         </div>
@@ -66,26 +66,26 @@ export function FormRow({
     );
   }
   return (
-    <div className={cx('ismFormRow', fullWidth && 'ismFormRow--full', className)} data-test-subj={testId}>
+    <div className={cx('ismCustomRow', fullWidth && 'ismCustomRow--full', className)} data-test-subj={testId}>
       {title ? (
-        <div className="ismFormRow__label">
-          <h3 className="ismFormRow__title">
+        <div className="ismCustomRow__label">
+          <h3 className="ismCustomRow__title">
             {title}
             <Optional optional={optional} />
           </h3>
         </div>
       ) : label ? (
-        <div className="ismFormRow__label">
+        <div className="ismCustomRow__label">
           {label}
           <Optional optional={optional} />
         </div>
       ) : null}
-      <div className="ismFormRow__field">
-        {help && helpAt === 'top' && <div className="ismFormRow__help ismFormRow__help--top">{help}</div>}
+      <div className="ismCustomRow__field">
+        {help && helpAt === 'top' && <div className="ismCustomRow__help ismCustomRow__help--top">{help}</div>}
         {children}
       </div>
-      {error && <div className="ismFormRow__error">{error}</div>}
-      {help && helpAt === 'bottom' && <div className="ismFormRow__help">{help}</div>}
+      {error && <div className="ismCustomRow__error">{error}</div>}
+      {help && helpAt === 'bottom' && <div className="ismCustomRow__help">{help}</div>}
     </div>
   );
 }

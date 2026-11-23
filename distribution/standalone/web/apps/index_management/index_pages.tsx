@@ -272,15 +272,15 @@ export const IndexForm = forwardRef<
       ) : (
         <>
           <FormPanel title="Define index">{define}</FormPanel>
-          <div className="ismSpacer" />
+          <div className="ismSpacer ismSpacer--l" />
           {importButton && (
             <>
               {importButton}
-              <div className="ismSpacer" />
+              <div className="ismSpacer ismSpacer--l" />
             </>
           )}
           <FormPanel title="Index settings">{settings}</FormPanel>
-          <div className="ismSpacer" />
+          <div className="ismSpacer ismSpacer--l" />
           <FormPanel
             title={
               <>
@@ -369,10 +369,10 @@ export function CreateIndex() {
   return (
     <div className="ismFormPage">
       <h1 className="ismTextTitle">Create index</h1>
-      <div className="ismSpacer" />
+      <div className="ismSpacer ismSpacer--l" />
       <IndexForm ref={form} />
-      <div className="ismSpacer" />
-      <div className="ismFormButtons">
+      <div className="ismSpacer ismSpacer--l" />
+      <div className="ismEndButtons">
         <Button variant="empty" onClick={() => go(ROUTES.INDICES)} testId="createIndexCancelButton">
           Cancel
         </Button>
@@ -463,7 +463,7 @@ function IndexPart({ index, mode, onSaved, unsaved }: { index: string; mode: Mod
           <CallOut tone="warning">
             This index may contain critical system data. Changing system indexes may break OpenSearch.
           </CallOut>
-          <div className="ismSpacer" />
+          <div className="ismSpacer ismSpacer--l" />
         </>
       )}
       {mode === 'settings' && (
@@ -621,7 +621,7 @@ export function IndexDetail({ index }: { index: string }) {
         <h1 className="ismTextTitle">{index}</h1>
         <IndicesActions selected={[record]} onChange={() => void refresh()} onDelete={() => go(ROUTES.INDICES)} />
       </div>
-      <div className="ismSpacer" />
+      <div className="ismSpacer ismSpacer--l" />
       <Panel>
         <h2 className="ismPanelTitle">Overview</h2>
         <hr className="ismRule" />
@@ -637,7 +637,7 @@ export function IndexDetail({ index }: { index: string }) {
           </div>
         </dl>
       </Panel>
-      <div className="ismSpacer" />
+      <div className="ismSpacer ismSpacer--l" />
       <Tabs
         tabs={TABS.map((item) => ({ id: item.id, label: item.label }))}
         selected={tab}
