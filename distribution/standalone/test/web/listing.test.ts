@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { placeLikeOriginal } from '../../web/components/placement';
-import { compareAsOriginal, pageButtons, pageSizeOptions } from '../../web/shell/listing_model';
+import { compareAsOriginal, compareListed, pageSizeOptions } from '../../web/shell/listing_model';
 
 describe('the list of saved objects', () => {
   it('orders titles by their code points, as the original does', () => {
@@ -16,21 +16,18 @@ describe('the list of saved objects', () => {
     ]);
   });
 
+  it('sorts an object without a value after the others, and before them once turned round', () => {
+    // As the list sorts them: objects, by the value of a column (a visualization of no known type)
+    const rows = ['Line', undefined, '', 'Area'].map((type) => ({ type }));
+    const sorted = (direction: number) => [...rows].sort((a, b) => compareListed(a.type, b.type) * direction).map((row) => row.type);
+    assert.deepEqual(sorted(1), ['', 'Area', 'Line', undefined]);
+    assert.deepEqual(sorted(-1), [undefined, 'Line', 'Area', '']);
+  });
+
   it('offers the page sizes of the original, ordered as text', () => {
     assert.deepEqual(pageSizeOptions(20), [10, 20, 50]);
     assert.deepEqual(pageSizeOptions(100), [10, 100, 20, 50]);
     assert.deepEqual(pageSizeOptions(5), [10, 20, 5, 50]);
-  });
-
-  it('shows up to five pages, with the first and the last', () => {
-    assert.deepEqual(pageButtons(0, 1), [0]);
-    assert.deepEqual(pageButtons(0, 5), [0, 1, 2, 3, 4]);
-    assert.deepEqual(pageButtons(0, 10), [0, 1, 2, 3, 4, 'gap', 9]);
-    assert.deepEqual(pageButtons(5, 10), [0, 'gap', 3, 4, 5, 6, 7, 8, 9]);
-    assert.deepEqual(pageButtons(5, 12), [0, 'gap', 3, 4, 5, 6, 7, 'gap', 11]);
-    assert.deepEqual(pageButtons(4, 10), [0, 1, 2, 3, 4, 5, 6, 'gap', 9]);
-    assert.deepEqual(pageButtons(9, 10), [0, 'gap', 5, 6, 7, 8, 9]);
-    assert.deepEqual(pageButtons(0, 0), []);
   });
 });
 

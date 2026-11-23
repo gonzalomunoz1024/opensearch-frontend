@@ -323,6 +323,18 @@ interface ChannelConfig {
   config: { name?: string; config_type?: string };
 }
 
+/**
+ * The one channel a policy notifies through. One that cannot be loaded, as on a cluster without the
+ * notifications plugin, is "None" with no message: the original never loads it, so its users see "None".
+ */
+export async function policyChannel(channelId: string): Promise<ChannelConfig | undefined> {
+  const answer = await ism.get<{ config_list?: ChannelConfig[] }>(
+    `_notifications/channels/${encodeURIComponent(channelId)}`
+  );
+  const configs = (answer.ok && answer.response?.config_list) || [];
+  return configs.length === 1 ? configs[0] : undefined;
+}
+
 export function SnapshotPolicyDetails() {
   const { hashParams } = useLocation();
   const id = hashParams.id ?? '';
@@ -362,16 +374,8 @@ export function SnapshotPolicyDetails() {
     void load().then(async (found) => {
       const channelId = found?.notification?.channel?.id;
       if (!channelId) return;
-      const answer = await ism.get<{ config_list?: ChannelConfig[] }>(
-        `_notifications/channels/${encodeURIComponent(channelId)}`
-      );
-      if (!here.current) return;
-      if (answer.ok) {
-        const configs = answer.response?.config_list ?? [];
-        setChannel(configs.length === 1 ? configs[0] : undefined);
-      } else {
-        toasts.danger(`Could not load notification channel: ${answer.error}`);
-      }
+      const config = await policyChannel(channelId);
+      if (here.current) setChannel(config);
     });
     return () => {
       here.current = false;

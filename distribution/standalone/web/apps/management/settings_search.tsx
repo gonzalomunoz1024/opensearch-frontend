@@ -51,7 +51,7 @@ export function SettingsSearch({ text, clauses, error, categories, onText, onCla
     <div className="mgtSettingsSearch">
       <div className="mgtSettingsSearch__bar">
         <div className="mgtSettingsSearch__box">
-          <Icon name="search" className="mgtSettingsSearch__icon" />
+          <Icon name="search" size="s" className="mgtSettingsSearch__icon" />
           <input
             ref={input}
             type="search"

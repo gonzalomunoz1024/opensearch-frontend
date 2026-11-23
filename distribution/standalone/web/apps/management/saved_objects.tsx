@@ -8,7 +8,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Link, Spinner } from '../../components/basic';
-import { Icon } from '../../components/icon';
 import { Flyout, Modal, Popover, Portal, downloadFile } from '../../components/overlay';
 import { formatDate } from '../../lib/dates';
 import { navigate } from '../../router';
@@ -25,7 +24,6 @@ import {
   Check,
   IMPORT_ICON,
   InMemoryTable,
-  RelationshipsIcon,
   RowAction,
   SearchBar,
   SmallSwitch,
@@ -334,18 +332,21 @@ function ObjectsTable({ allowedTypes }: { allowedTypes: string[] }) {
       render: (object) => (
         <>
           {object.meta.editUrl && (
-            <RowAction label="Inspect" description="Inspect this saved object" onClick={() => goInspectObject(object)} testId="savedObjectsTableAction-inspect">
-              <Icon name="inspect" />
-            </RowAction>
+            <RowAction
+              label="Inspect"
+              description="Inspect this saved object"
+              icon="inspect"
+              onClick={() => goInspectObject(object)}
+              testId="savedObjectsTableAction-inspect"
+            />
           )}
           <RowAction
             label="Relationships"
             description="View the relationships this saved object has to other saved objects"
+            icon="kqlSelector"
             onClick={() => setRelationshipObject(object)}
             testId="savedObjectsTableAction-relationships"
-          >
-            <RelationshipsIcon />
-          </RowAction>
+          />
         </>
       ),
     },
@@ -378,7 +379,7 @@ function ObjectsTable({ allowedTypes }: { allowedTypes: string[] }) {
         {deleteState === 'deleting' && (
           <Portal>
             <div className="atlScrim sobBusy">
-              <Spinner size="l" />
+              <Spinner size="xl" />
             </div>
           </Portal>
         )}
@@ -611,9 +612,13 @@ function Relationships({ object, allowedTypes, onClose }: { object: ManagedObjec
       actions: true,
       render: (item) =>
         item.meta.editUrl ? (
-          <RowAction label="Inspect" description="Inspect this saved object" onClick={() => goInspectObject(item)} testId="relationshipsTableAction-inspect">
-            <Icon name="inspect" />
-          </RowAction>
+          <RowAction
+            label="Inspect"
+            description="Inspect this saved object"
+            icon="inspect"
+            onClick={() => goInspectObject(item)}
+            testId="relationshipsTableAction-inspect"
+          />
         ) : null,
     },
   ];
@@ -644,7 +649,7 @@ function Relationships({ object, allowedTypes, onClose }: { object: ManagedObjec
           <p>{state.error}</p>
         </Callout>
       ) : !state.relationships ? (
-        <Spinner size="l" />
+        <Spinner size="xl" />
       ) : (
         <div>
           <Callout tone="primary">

@@ -827,7 +827,6 @@ export function IndicesRepositoryInput({
           searched
           loading={loading}
           allowCustom
-          compact
           placeholder="Select or input indexes or index patterns"
           testId="indicesComboBoxInput"
         />
@@ -1141,7 +1140,6 @@ export function CronSchedule({
                 selected={timezone ? [timezone] : []}
                 onChange={(selected) => onTimezone(selected[0] ?? '')}
                 single
-                compact
                 invalid={Boolean(timezoneError)}
                 disabled={disabled}
                 placeholder="Select a time zone"

@@ -373,12 +373,12 @@
   outline: none;
 }
 
+/* The original's compressed search field: its 12 px magnifier 8 px in, in the middle of the line */
 .mgtSettingsSearch__icon.atlIcon {
   position: absolute;
-  top: 8px;
-  left: 5px;
+  top: 10px;
+  left: var(--space-2);
   color: var(--color-text-primary);
-  stroke-width: 1.2;
   pointer-events: none;
 }
 
@@ -517,31 +517,9 @@
 }
 
 /* The call-out that says to take care */
+/* The kit's call-out, as the original's warning one, 16 px from what is above and under it */
 .mgtSettingsCallOut {
   margin: var(--space-4) 0;
-  padding: var(--space-4);
-  border-radius: var(--radius-md);
-  background: var(--color-warning-tint);
-}
-
-.mgtSettingsCallOut__title {
-  display: flex;
-  padding-top: 1px;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--color-warning-text);
-  font-size: var(--font-size-m);
-  font-weight: var(--font-weight-semibold);
-  line-height: 20px;
-}
-
-.mgtSettingsCallOut__icon.atlIcon {
-  stroke-width: 1;
-}
-
-.mgtSettingsCallOut__text {
-  margin-top: var(--space-2);
-  line-height: 21px;
 }
 
 .mgtSettings__loading {
@@ -641,9 +619,10 @@
   color: var(--color-accent);
 }
 
+/* The original's warning dot: the theme's warning colour for a graphic */
 .mgtField__unsavedIcon {
   margin-left: var(--space-2);
-  color: var(--color-warning);
+  color: var(--color-warning-graphic);
 }
 
 .mgtField__unsavedIcon--invalid {
@@ -762,9 +741,10 @@
   overflow-wrap: anywhere;
 }
 
-/* The theme's danger text for the key, its danger colour for the error under the control */
+/* The theme's danger text for the key (the kit's critical button text), its danger colour for the
+   error under the control */
 .mgtField__label--invalid {
-  color: var(--color-critical-text);
+  color: var(--color-critical-button-text);
 }
 
 .mgtField__control {
@@ -976,10 +956,11 @@
   background: color-mix(in srgb, var(--color-healthy) 88%, #000000);
 }
 
+/* Disabled, as the theme's disabled fill buttons */
 .mgtBottomBar__save.atlButton:disabled {
   background: var(--color-border);
   box-shadow: none;
-  color: var(--color-text-tertiary);
+  color: var(--color-disabled-fill-text);
 }
 
 .mgtReloadToast {
