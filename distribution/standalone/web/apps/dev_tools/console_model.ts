@@ -532,6 +532,25 @@ export interface PastRequest {
   data?: string;
 }
 
+/**
+ * A key pressed in the history's list: the arrows choose a request, Enter applies the chosen one.
+ * The keys are the list's alone: applying gives the focus to the editor, where an Enter left to
+ * the browser would break a line as well.
+ */
+export function historyKey(
+  event: { key: string; preventDefault(): void },
+  selected: number,
+  actions: { choose(index: number): void; apply(): void }
+): void {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    actions.apply();
+  } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+    event.preventDefault();
+    actions.choose(selected + (event.key === 'ArrowUp' ? -1 : 1));
+  }
+}
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** "a few seconds ago", "5 minutes ago": how long ago something of the last week was */

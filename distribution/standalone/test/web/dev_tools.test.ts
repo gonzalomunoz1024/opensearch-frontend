@@ -13,6 +13,7 @@ import {
   expandToRequests,
   failedAnswer,
   formatAnswer,
+  historyKey,
   insertRequest,
   keyPath,
   outputOf,
@@ -492,6 +493,23 @@ describe('the history of the console', () => {
     // The cursor goes to the first line of the request put in
     const { text: after, offset } = insertRequest(text, 1, { method: 'GET', endpoint: 'new' });
     assert.equal(after.slice(offset, offset + 7), 'GET new');
+  });
+
+  it('keeps the keys of its list to itself', () => {
+    // Enter applies the chosen request, which gives the focus to the editor: left to the browser,
+    // the same key press would also break a line there
+    const press = (key: string) => {
+      const seen: string[] = [];
+      historyKey({ key, preventDefault: () => seen.push('kept') }, 2, {
+        choose: (index) => seen.push(`choose ${index}`),
+        apply: () => seen.push('apply'),
+      });
+      return seen;
+    };
+    assert.deepEqual(press('Enter'), ['kept', 'apply']);
+    assert.deepEqual(press('ArrowDown'), ['kept', 'choose 3']);
+    assert.deepEqual(press('ArrowUp'), ['kept', 'choose 1']);
+    assert.deepEqual(press('Tab'), []);
   });
 });
 

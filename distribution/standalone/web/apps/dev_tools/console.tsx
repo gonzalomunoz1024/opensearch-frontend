@@ -22,6 +22,7 @@ import {
   expandToRequests,
   failedAnswer,
   formatAnswer,
+  historyKey,
   insertRequest,
   lineOf,
   looksLikeCurl,
@@ -633,14 +634,7 @@ function HistoryPanel({ settings, onApply, onClose }: { settings: ConsoleSetting
           className="dvtHistory__list"
           aria-label="History of sent requests"
           aria-activedescendant={`historyReq${selected}`}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              if (chosen) onApply(chosen);
-            } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-              event.preventDefault();
-              choose(selected + (event.key === 'ArrowUp' ? -1 : 1));
-            }
-          }}
+          onKeyDown={(event) => historyKey(event, selected, { choose, apply: () => chosen && onApply(chosen) })}
         >
           {requests.map((request, index) => {
             const description = describePast(request, now);
