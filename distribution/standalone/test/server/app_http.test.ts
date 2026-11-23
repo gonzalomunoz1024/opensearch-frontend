@@ -176,6 +176,29 @@ describe('a request that changes something', () => {
   });
 });
 
+describe('the status of the server', () => {
+  it("takes the query of the original's route, and refuses another in its words", async () => {
+    const server = await run();
+    try {
+      for (const query of ['', '?v8format=true', '?v8format=FALSE']) {
+        assert.equal((await call(server.port, 'GET', `/api/status${query}`)).status, 200, query);
+      }
+      // as the original answers each (measured)
+      assert.equal(said(await call(server.port, 'GET', '/api/status?x=%zz')), '400 [request query.x]: definition for this key is missing');
+      assert.equal(
+        said(await call(server.port, 'GET', '/api/status?v8format=1')),
+        '400 [request query.v8format]: expected value of type [boolean] but got [string]'
+      );
+      assert.equal(
+        said(await call(server.port, 'GET', '/api/status?v8format=true&v8format=false')),
+        '400 [request query.v8format]: expected value of type [boolean] but got [Array]'
+      );
+    } finally {
+      await server.stop();
+    }
+  });
+});
+
 describe('the version a page says it is of', () => {
   it('must be this one on every GET and every route, as in the original', async () => {
     const server = await run();
@@ -249,6 +272,93 @@ describe('a path', () => {
       await server.stop();
     }
   });
+
+  it('is read as hapi reads it: as it was sent, with the escapes of what needs none decoded', async () => {
+    const server = await run();
+    try {
+      const status = async (path: string) => `${path} ${(await call(server.port, 'GET', path)).status}`;
+      // as the original answers each (measured); an address would make "\" a "/"
+      assert.deepEqual(
+        await Promise.all(
+          ['/api/st%61tus', '/api/status%7E', '/api/%2e/status', '/api/x/../status', '/api\\status', '/app\\home', '/api%2Fstatus'].map(status)
+        ),
+        [
+          '/api/st%61tus 200',
+          '/api/status%7E 404',
+          '/api/%2e/status 200',
+          '/api/x/../status 200',
+          '/api\\status 404',
+          '/app\\home 404',
+          '/api%2Fstatus 404',
+        ]
+      );
+      // A named part keeps its "\", as there
+      const saved = await call(server.port, 'GET', '/api/saved_objects/index-pattern/zz-agent-srv-a\\b');
+      assert.equal(said(saved), '404 Saved object [index-pattern/zz-agent-srv-a\\b] not found');
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('with an escape that cannot be decoded is a bad request, before any header is looked at, as hapi answers it', async () => {
+    const server = await run();
+    try {
+      const refused = { statusCode: 400, error: 'Bad Request', message: 'Bad Request' };
+      const cases: Array<[string, string, Record<string, string>]> = [
+        ['GET', '/api/status%zz', {}],
+        ['GET', '/api/status%', {}],
+        ['GET', '/app/home%zz', {}],
+        ['GET', '/app/home/x%C3%28', {}],
+        ['GET', '/nope%C3/', {}],
+        ['GET', '/api/saved_objects/index-pattern/%zz', {}],
+        // the version and osd-xsrf are not looked at
+        ['GET', '/app/home%zz', { 'osd-version': '1.0.0' }],
+        ['POST', '/api/saved_objects/index-pattern/%zz', JSON_TYPE],
+        ['POST', '/internal/search/opensearch%zz', { ...XSRF, 'osd-version': '1.0.0' }],
+      ];
+      for (const [method, path, headers] of cases) {
+        const answer = await call(server.port, method, path, method === 'GET' ? { headers } : { headers, body: '{}' });
+        assert.deepEqual(
+          [method, path, answer.status, bodyOf(answer), answer.headers['cache-control']],
+          [method, path, 400, refused, NO_CACHE]
+        );
+      }
+      const head = await call(server.port, 'HEAD', '/app/home%zz');
+      assert.deepEqual([head.status, head.headers['content-type'], head.text], [400, 'application/json; charset=utf-8', '']);
+      // A path that no route of its method has is only not there
+      assert.equal(said(await call(server.port, 'POST', '/nope%zz', { headers: XSRF, body: '{}' })), '404 Not Found');
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('that no route takes, or that is refused before a route reads its body, is answered when the body is in, as hapi answers', async () => {
+    const server = await run();
+    try {
+      // The head and half of the body, then the rest: the answer comes after the rest, so that a
+      // client that sends all of its body before it reads (and asks to close) can read it
+      const answered = async (head: string) => {
+        const socket = net.connect(server.port, '127.0.0.1');
+        socket.on('error', () => undefined);
+        const chunks: Buffer[] = [];
+        socket.on('data', (chunk: Buffer) => chunks.push(chunk));
+        const closed = new Promise<void>((resolve) => socket.on('close', () => resolve()));
+        await new Promise<void>((resolve) => socket.on('connect', () => resolve()));
+        socket.write(`${head}Connection: close\r\nContent-Type: application/json\r\nContent-Length: 20000\r\n\r\n${'a'.repeat(10000)}`);
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        const early = Buffer.concat(chunks).toString('latin1');
+        socket.write('a'.repeat(10000));
+        await closed;
+        return [early, Buffer.concat(chunks).toString('latin1').split('\r\n')[0]];
+      };
+      assert.deepEqual(await answered('POST /nope HTTP/1.1\r\nHost: x\r\nosd-xsrf: x\r\n'), ['', 'HTTP/1.1 404 Not Found']);
+      assert.deepEqual(await answered('POST /internal/search/opensearch%zz HTTP/1.1\r\nHost: x\r\n'), ['', 'HTTP/1.1 400 Bad Request']);
+      assert.deepEqual(await answered('POST /api/opensearch-dashboards/settings HTTP/1.1\r\nHost: x\r\n'), ['', 'HTTP/1.1 400 Bad Request']);
+      assert.deepEqual(server.errors, []);
+    } finally {
+      await server.stop();
+    }
+  });
 });
 
 describe('every answer', () => {
@@ -261,6 +371,9 @@ describe('every answer', () => {
         ['GET', '/'],
         ['GET', '/api/status/'],
         ['POST', '/api/opensearch-dashboards/settings'],
+        // the page, as the original's (http_resources), and a path that cannot be read
+        ['GET', '/app/home'],
+        ['GET', '/app/home%zz'],
       ]) {
         const answer = await call(server.port, method, path);
         assert.equal(`${method} ${path} ${answer.headers['cache-control']}`, `${method} ${path} ${NO_CACHE}`);
@@ -503,8 +616,11 @@ describe('the headers of a request', () => {
     try {
       const asking = (size: number) =>
         raw(server.port, `GET /api/status HTTP/1.1\r\nHost: x\r\nConnection: close\r\nX-Big: ${'a'.repeat(size)}\r\n\r\n`);
-      assert.match(await asking(60000), /^HTTP\/1\.1 200 OK\r\n/);
-      assert.equal(await asking(70000), 'HTTP/1.1 400 Bad Request\r\n\r\n');
+      // Node counts the path and each name and value of a header, and takes less than the limit:
+      // here 11 + 4 + 1 + 10 + 5 + 5 + 65,499 = 65,535 bytes. The original takes the same request
+      // and refuses the one with a byte more, in the same way (measured)
+      assert.match(await asking(65499), /^HTTP\/1\.1 200 OK\r\n/);
+      assert.equal(await asking(65500), 'HTTP/1.1 400 Bad Request\r\n\r\n');
       assert.equal(await raw(server.port, 'NOT HTTP\r\n\r\n'), 'HTTP/1.1 400 Bad Request\r\n\r\n');
       assert.deepEqual(server.errors, []);
     } finally {

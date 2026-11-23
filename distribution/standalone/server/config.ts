@@ -162,6 +162,20 @@ const numbers: Reader = (value, key) => {
 const textOrList: Reader = (value, key, fromEnvironment) =>
   Array.isArray(value) ? list(value, key, fromEnvironment) : [string(value, key, fromEnvironment)];
 
+/**
+ * server.basePath as the original checks it (http_config.ts, `/^\/.*[^\/]$/`): a slash first, the
+ * rest on one line, and a last character that is no slash, so that "", "/" and "/a\nb" are
+ * refused, and "/a\n" is not. Its own check takes the place of the type's there, so a value that
+ * is no text is refused in the same words; the original lets a list through when its items,
+ * joined with commas, would pass (`[/a]`), and the base path is then a list: that is refused here.
+ */
+const BASE_PATH = /^\/.*[^/]$/;
+const basePathOf: Reader = (value, key, fromEnvironment) => {
+  const text = typeof value === 'string' || (fromEnvironment && typeof value !== 'object') ? String(value) : undefined;
+  if (text === undefined || !BASE_PATH.test(text)) throw configError(key, "must start with a slash, don't end with one");
+  return text;
+};
+
 /** A size as `@osd/config-schema`'s byteSize reads it: bytes, or `<count>b|kb|mb|gb` */
 const byteSize: Reader = (value, key) => {
   let bytes: unknown = value;
@@ -288,7 +302,7 @@ const oneOf =
 const SETTINGS: Record<string, Reader> = {
   'server.host': string,
   'server.port': number,
-  'server.basePath': string,
+  'server.basePath': basePathOf,
   'server.rewriteBasePath': boolean,
   // The original reads it as server.maxPayload, and names it so when it refuses a value
   'server.maxPayloadBytes': (value) => byteSize(value, 'server.maxPayload'),
@@ -566,10 +580,8 @@ export function loadConfig(
   const read = <T>(key: string, fallback: T): T =>
     key in values ? (SETTINGS[key](values[key], key, fromEnv.has(key)) as T) : fallback;
 
+  // '' when it is not given: the original's is undefined then
   const basePath = read<string>('server.basePath', '');
-  if (basePath !== '' && (!basePath.startsWith('/') || basePath.endsWith('/'))) {
-    throw configError('server.basePath', "must start with a slash, don't end with one");
-  }
   const rewriteBasePath = read('server.rewriteBasePath', false);
   if (rewriteBasePath && basePath === '') {
     throw new Error('[config validation of [server]]: cannot use [rewriteBasePath] when [basePath] is not specified');

@@ -27,11 +27,16 @@ import {
   ClientClosedError,
   HttpError,
   Router,
+  UnreadablePathError,
   badRequest,
+  drainBody,
   errorBody,
+  normalizePath,
   parseBody,
   readBody,
+  readablePath,
   sendReply,
+  targetPath,
   type Handler,
   type Reply,
   type RequestContext,
@@ -54,6 +59,7 @@ import { registerSavedObjects } from './saved_objects_routes';
 import {
   any,
   arrayOf,
+  boolean,
   literal,
   maybe,
   object,
@@ -261,7 +267,11 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
 
   const router = new Router();
 
-  router.get('/api/status', () => {
+  // The query of the original's route (status/routes/status.ts); v8format: true, which asks there
+  // for the statuses of each service and plugin, gets the same answer as without it here
+  const statusQuery = object({ v8format: boolean({ defaultValue: false }) });
+  router.get('/api/status', ({ query }) => {
+    validateRequestPart(statusQuery, queryObject(query), 'query');
     const state = health.state;
     return {
       status: state === 'green' ? 200 : 503,
@@ -455,7 +465,8 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
       headers: {
         'content-type': 'text/html; charset=utf-8',
         'content-security-policy': contentSecurityPolicy(config.map, config.csp, nonce),
-        'cache-control': 'no-store',
+        // As the original's pages (http_resources): never kept, by a browser or a proxy
+        'cache-control': NO_CACHE,
       },
       body: renderPage({
         basePath: config.server.basePath,
@@ -566,33 +577,56 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
   const handle = async (req: http.IncomingMessage): Promise<Reply> => {
     const method = req.method ?? 'GET';
     const target = req.url ?? '/';
-    // Nothing is at a path that starts with two slashes, as in OpenSearch Dashboards; new URL()
-    // would read what follows them as the name of another host, or fail to (a "\" is a "/" to it)
-    if (/^[/\\][/\\]/.test(target)) return notFoundReply();
+    const relative = target.startsWith('/');
     let url: URL;
     try {
-      url = new URL(target, 'http://localhost');
+      // The host is given, so that what follows "//" is never read as the name of another one
+      url = relative ? new URL(`http://localhost${target}`) : new URL(target);
     } catch {
       throw badRequest('The address of the request cannot be read');
     }
-    let path = url.pathname;
     const { basePath, rewriteBasePath } = config.server;
+    const rewritten = basePath !== '' && rewriteBasePath;
+    // hapi's routes for a request no route takes (not found, a path it cannot read) read its body
+    // to the end before they answer, and look at no header (route.js: drain, then the handler)
+    const notThere = async (): Promise<Reply> => {
+      if (!SAFE_METHODS.has(method)) await drainBody(req);
+      return notFoundReply();
+    };
+    const unreadable = async (): Promise<never> => {
+      await drainBody(req);
+      throw new UnreadablePathError();
+    };
+    // The path as hapi reads it: as it was sent, where an address would make a "\" a "/", and
+    // normalized as its router normalizes it. With server.rewriteBasePath the original reads it
+    // as an address to take the base path off (setupBasePathRewrite), and new URL() reads it so.
+    let path = normalizePath(relative && !rewritten ? targetPath(target) : url.pathname);
     // With server.rewriteBasePath requests carry the base path, and one without it is not for
-    // this server; without it, the proxy in front has taken the base path off (setupBasePathRewrite)
-    if (basePath && rewriteBasePath) {
+    // this server; without it, the proxy in front has taken the base path off
+    if (rewritten) {
       if (path === basePath) path = '/';
       else if (path.startsWith(`${basePath}/`)) path = path.slice(basePath.length);
       else return notFoundReply();
     }
+    // Nothing is at a path that starts with two slashes, as in OpenSearch Dashboards
+    if (/^[/\\][/\\]/.test(path)) return readablePath(path) || !SAFE_METHODS.has(method) ? notThere() : unreadable();
 
-    const { route, params } = router.match(method, path);
+    let found: ReturnType<Router['match']>;
+    try {
+      found = router.match(method, path);
+    } catch (error) {
+      if (error instanceof UnreadablePathError) await drainBody(req);
+      throw error;
+    }
+    const { route, params } = found;
     if (route) {
       const maxBytes = route.maxBytes ?? config.server.maxPayloadBytes;
       let cached: Promise<Buffer> | undefined;
       const body = () => (cached ??= readBody(req, maxBytes));
-      // hapi reads the body before it looks at the headers: one said to be larger than the
-      // route takes is refused (413) before the osd-xsrf and osd-version checks
-      if (!SAFE_METHODS.has(method) && Number(req.headers['content-length'] ?? 0) > maxBytes) await body();
+      // hapi reads the body before it looks at the headers (onPostAuth): one larger than the
+      // route takes is refused (413) before the osd-xsrf and osd-version checks, and a refusal
+      // comes when the client has sent all of it, so that it reads the answer
+      if (!SAFE_METHODS.has(method)) await body();
       checkXsrf(req, method, route.pattern);
       checkVersion(req);
       const context: RequestContext = {
@@ -607,10 +641,12 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
       return withForwardedHeaders(forwardedHeaders(req), () => route.handler(context));
     }
     // A path that only another method has: hapi answers that it is not there
-    if (!SAFE_METHODS.has(method)) return notFoundReply();
+    if (!SAFE_METHODS.has(method)) return notThere();
+    // Each GET has a route in the original (the pages, the files, its catch-all /{p*}), whose
+    // parts hapi decodes before anything else: one it cannot decode is a bad request
+    if (!readablePath(path)) return unreadable();
 
-    // Each GET has a route in the original (the pages, the files, its catch-all), which checks
-    // the version as any other
+    // and each checks the version as any other
     checkVersion(req);
     if (path === '/') return { status: 302, headers: { location: `${basePath}${await defaultRoute()}` } };
     if (APP_PATH.test(path)) return page();

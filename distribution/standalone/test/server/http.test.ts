@@ -11,9 +11,12 @@ import {
   Router,
   acceptedEncoding,
   errorBody,
+  normalizePath,
   parseBody,
   readBody,
+  readablePath,
   sendReply,
+  targetPath,
   type Reply,
   type SendOptions,
 } from '../../server/http';
@@ -111,10 +114,30 @@ describe('the routes of a router', () => {
     assert.equal(found('POST', '/api/saved_objects//x').pattern, undefined);
     assert.deepEqual(found('GET', '/api/files/a/b%2Fc').params, { rest: 'a/b/c' });
     assert.deepEqual(found('GET', '/api/files').params, { rest: '' });
+    // hapi's route for a path it cannot read answers so (Boom.badRequest())
     assert.throws(() => router.match('POST', '/api/saved_objects/a/%E0%A4%A'), {
+      name: 'UnreadablePathError',
       status: 400,
-      message: 'The address has a badly encoded part',
+      message: 'Bad Request',
     });
+  });
+
+  it('are looked for with the path as hapi normalizes it, which is as it was sent', () => {
+    // @hapi/call normalize: escapes in capitals, those of what needs none decoded, then the steps
+    assert.equal(normalizePath('/api/st%61tus'), '/api/status');
+    assert.equal(normalizePath('/a%2fb%7e%41%5f%2D'), '/a%2Fb~A_-');
+    assert.equal(normalizePath('/a%20b%25%3f%23%2F'), '/a%20b%25%3F%23%2F');
+    assert.equal(normalizePath('/a/./b/../c'), '/a/c');
+    assert.equal(normalizePath('/a/%2e%2E/c'), '/c');
+    assert.equal(normalizePath('/a/..'), '/');
+    assert.equal(normalizePath('/a/.'), '/a/');
+    assert.equal(normalizePath('/../../a'), '/a');
+    assert.equal(normalizePath('/a\\b/%zz'), '/a\\b/%zz');
+    assert.equal(targetPath('/a\\b?c=/d#e'), '/a\\b');
+    assert.equal(targetPath('/a#b?c'), '/a');
+    assert.equal(targetPath('/a'), '/a');
+    assert.equal(readablePath('/a%20b/%C3%A9'), true);
+    for (const path of ['/a%zz', '/a%', '/a%2', '/a%C3', '/a%C3%28', '/a%ED%A0%80']) assert.equal(readablePath(path), false, path);
   });
 
   it('say which methods a path has when the one asked for is not among them', () => {

@@ -35,6 +35,85 @@ export class ClientClosedError extends Error {
   }
 }
 
+/**
+ * A path with an escape that cannot be decoded (`%zz`, `%`, `%C3%28`): hapi answers it with its
+ * route for a path it cannot read (the special route badRequest, `Boom.badRequest()`), in its words
+ */
+export class UnreadablePathError extends HttpError {
+  constructor() {
+    super(400, 'Bad Request');
+    this.name = 'UnreadablePathError';
+  }
+}
+
+/**
+ * The path of a request target as hapi's router reads it (@hapi/call normalize): each escape in
+ * capitals; the escapes of the characters that need none (letters, digits and _!$&'()*+,;=:@-.~)
+ * decoded, so that `/api/st%61tus` is `/api/status`; then `.` and `..` taken as steps.
+ */
+export function normalizePath(path: string): string {
+  let normalized = path;
+  if (normalized.includes('%')) {
+    normalized = normalized
+      .replace(/%[0-9a-fA-F]{2}/g, (escape) => escape.toUpperCase())
+      .replace(/%(?:2[146-9A-E]|3[\dABD]|4[\dA-F]|5[\dAF]|6[1-9A-F]|7[\dAE])/g, (escape) =>
+        String.fromCharCode(parseInt(escape.slice(1), 16))
+      );
+  }
+  if (normalized.includes('/.') || normalized.startsWith('.')) {
+    const leadingSlash = normalized.startsWith('/');
+    const kept: string[] = [];
+    const segments = normalized.split('/');
+    for (const segment of segments) {
+      if (segment === '..') kept.pop();
+      else if (segment !== '.') kept.push(segment);
+    }
+    // A step at the end leaves a slash there
+    const last = segments[segments.length - 1];
+    if (last === '.' || last === '..') kept.push('');
+    normalized = kept.join('/');
+    if (leadingSlash && !normalized.startsWith('/')) normalized = `/${normalized}`;
+  }
+  return normalized;
+}
+
+/**
+ * The path of a request target as hapi takes it from a target that starts with "/" (request.js
+ * _parseUrl, its fast way): the text before the first "?" or "#", as it was sent. An address
+ * would make a "\" a "/", and hapi does not.
+ */
+export function targetPath(target: string): string {
+  const end = target.search(/[?#]/);
+  return end === -1 ? target : target.slice(0, end);
+}
+
+/** Whether each escape of a path can be decoded, as hapi's router decodes the parts it matches */
+export function readablePath(path: string): boolean {
+  try {
+    decodeURIComponent(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The body of a request read to its end and dropped, as hapi's routes of no route (not found, a
+ * path it cannot read) do before they answer, so that a client still sending it reads the answer
+ */
+export function drainBody(req: IncomingMessage): Promise<void> {
+  return new Promise((done) => {
+    if (req.readableEnded || req.destroyed) {
+      done();
+      return;
+    }
+    req.once('end', () => done());
+    req.once('close', () => done());
+    req.once('error', () => done());
+    req.resume();
+  });
+}
+
 export interface Reply {
   status?: number;
   headers?: Record<string, string>;
@@ -148,7 +227,7 @@ function decode(part: string): string {
   try {
     return decodeURIComponent(part);
   } catch {
-    throw badRequest('The address has a badly encoded part');
+    throw new UnreadablePathError();
   }
 }
 

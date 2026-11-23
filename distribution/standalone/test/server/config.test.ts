@@ -271,6 +271,30 @@ describe('the settings of the server and of its connection to OpenSearch', () =>
     assert.match(fromFile('server.basePath: /a').deprecations[0], /^You should set server\.basePath along with server\.rewriteBasePath/);
   });
 
+  it('server.basePath is checked with the pattern of the original, in its words', () => {
+    const refusal = { message: "[config validation of [server].basePath]: must start with a slash, don't end with one" };
+    // As the original's schema answers each (http_config.ts, run on the reference's own code): a
+    // line break is refused except as the last character
+    for (const written of ["''", '/', '/a/', 'a', '"/a\\nb"', '"/a\\rb"', '"/a\\n\\n"', '"/a\\u2028b"', '1', 'true', '~', '{}', '[a]']) {
+      assert.throws(() => fromFile(`server.basePath: ${written}`), refusal, written);
+    }
+    for (const [written, read] of [
+      ['/a', '/a'],
+      ['//a', '//a'],
+      ['"/a b"', '/a b'],
+      ['/a"b', '/a"b'],
+      ['"/a\\n"', '/a\n'],
+    ]) {
+      assert.equal(fromFile(`server.basePath: ${written}`).config.server.basePath, read, written);
+    }
+    // The original takes a list whose items, joined, would pass, and its base path is then a list
+    assert.throws(() => fromFile('server.basePath: [/a]'), refusal);
+    // From the environment as from the file; an empty variable is not there, as the original's image reads it
+    assert.throws(() => loadConfig({ env: { SERVER_BASEPATH: '/' } }), refusal);
+    assert.equal(loadConfig({ env: { SERVER_BASEPATH: '' } }).config.server.basePath, '');
+    assert.equal(loadConfig({ env: { SERVER_BASEPATH: '/a' } }).config.server.basePath, '/a');
+  });
+
   it('give the headers of every answer as the original writes them', () => {
     const { config } = fromFile(
       'server.customResponseHeaders:\n  X-Count: 1\n  X-List: [a, 2]\n  X-Map: { a: 1 }\n  X-Empty: {}\n  x-none: null'
