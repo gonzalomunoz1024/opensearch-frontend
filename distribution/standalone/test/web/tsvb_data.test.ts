@@ -118,6 +118,15 @@ describe('the lines a split of a TSVB series draws', () => {
   });
 });
 
+describe('what a TSVB series works out from its metrics', () => {
+  it('takes a positive rate over a bucket when it has no unit of its own, and over its unit otherwise', () => {
+    const answer = [bucket(0, { 'r-max': { value: 100 } }), bucket(1, { 'r-max': { value: 160 } }), bucket(2, { 'r-max': { value: 40 } })];
+    const rate = (unit: string) => seriesLines(seriesOf({ id: 'r', type: 'positive_rate', field: 'bytes', unit }), answer, HOUR)[0].points;
+    assert.deepEqual(rate(''), [[0, null], [HOUR, 60], [2 * HOUR, 0]]);
+    assert.deepEqual(rate('1m'), [[0, null], [HOUR, 1], [2 * HOUR, 0]]);
+  });
+});
+
 /** A part of a series as the panels get it, its last value given */
 const part = (id: string, last: number, label = id.split(':')[1] ?? id): TsvbSeriesData => ({
   id,

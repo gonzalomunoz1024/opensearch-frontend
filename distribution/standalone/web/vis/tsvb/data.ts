@@ -669,7 +669,8 @@ function metricValues(
     case 'derivative':
     case 'positive_rate': {
       const source = metric.type === 'positive_rate' ? buckets.map((bucket) => numeric((bucket[`${metric.id}-max`] as { value?: number } | undefined)?.value)) : from(metric.field);
-      const unit = metric.unit ? parseInterval(metric.unit)?.ms : metric.type === 'positive_rate' ? UNIT_MS.s : undefined;
+      // Without a unit of its own, a rate is the change over a bucket, as the product asks for it
+      const unit = metric.unit ? parseInterval(metric.unit)?.ms : undefined;
       return source.map((value, index) => {
         const before = index > 0 ? source[index - 1] : null;
         if (value === null || before === null) return null;
