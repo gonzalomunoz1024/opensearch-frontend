@@ -993,6 +993,12 @@
   overflow: hidden;
 }
 
+/* Data that could not be had: the canvas is empty until the next data, the chart keeps its size */
+.vbdCanvas__vis[hidden] {
+  display: flex;
+  visibility: hidden;
+}
+
 .vbdCanvas__vis {
   display: flex;
   flex: 1 1 auto;
@@ -1237,10 +1243,6 @@
   margin: 0;
   border: 0;
   background: var(--color-border-light);
-}
-
-.vbdConfirm.atlModal {
-  max-width: 300px;
 }
 
 .vbdConfirm__text {

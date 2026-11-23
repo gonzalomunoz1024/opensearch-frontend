@@ -467,7 +467,14 @@ function useSampleHits(indexPattern: IndexPattern | undefined, query: Query, fil
     if (!indexPattern) return undefined;
     const controller = new AbortController();
     const { version: _version, ...fields } = documentFields(indexPattern);
-    const bool = buildQuery(indexPattern, query, filters, services.queryConfig());
+    // A query that cannot be read finds nothing to count: the chart says what is wrong with it
+    let bool: ReturnType<typeof buildQuery>;
+    try {
+      bool = buildQuery(indexPattern, query, filters, services.queryConfig());
+    } catch {
+      setHits([]);
+      return undefined;
+    }
     const range = indexPattern.timeFieldName ? resolveTimeRange(time, { weekStart: services.weekStart() }) : undefined;
     const timeFilter = timeRangeFilter(indexPattern, range);
     if (timeFilter) bool.bool.filter.push(timeFilter);
