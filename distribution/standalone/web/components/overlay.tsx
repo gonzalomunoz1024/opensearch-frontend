@@ -55,6 +55,8 @@ export interface PopoverProps {
   /** How the span around the button is laid out */
   anchorStyle?: CSSProperties;
   anchorClassName?: string;
+  /** Above its button when there is room, as the original's `up` positions */
+  above?: boolean;
 }
 
 export function Popover({
@@ -74,6 +76,7 @@ export function Popover({
   className,
   anchorStyle,
   anchorClassName,
+  above: preferAbove = false,
 }: PopoverProps) {
   const anchor = useRef<HTMLSpanElement>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -113,7 +116,9 @@ export function Popover({
     left = Math.max(margin, Math.min(left, window.innerWidth - panelWidth - margin));
     const below = window.innerHeight - anchorBox.bottom - margin;
     const above = anchorBox.top - margin;
-    const fitsBelow = panelBox.height + offset <= below || below >= above;
+    const fitsBelow = preferAbove
+      ? panelBox.height + offset > above && below >= above
+      : panelBox.height + offset <= below || below >= above;
     const next: CSSProperties = {
       left,
       minWidth: matchWidth ? anchorBox.width : undefined,
@@ -124,7 +129,7 @@ export function Popover({
     else next.bottom = window.innerHeight - anchorBox.top + offset;
     setStyle(next);
     setPlacement(fitsBelow ? 'bottom' : 'top');
-  }, [align, side, matchWidth, fitWidth, width, offset, buffer, placeAt]);
+  }, [align, side, matchWidth, fitWidth, width, offset, buffer, placeAt, preferAbove]);
 
   useLayoutEffect(() => {
     if (!open) {
