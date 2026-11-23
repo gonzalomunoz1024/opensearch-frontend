@@ -306,9 +306,14 @@ export function urlParts(params: Record<string, unknown>, value: unknown): { url
 // Only links a page may safely open: a relative address, or http, https or mailto
 function safeUrl(url: string): string | undefined {
   const trimmed = url.trim();
-  if (/^(https?:|mailto:)/i.test(trimmed)) return trimmed;
-  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return undefined;
-  return trimmed;
+  // Judged as a browser reads it: it drops tabs and line ends from an address and the control
+  // characters before it, so "java<tab>script:" is a scheme to it though it is not one as text
+  try {
+    const { protocol } = new URL(trimmed, 'http://localhost');
+    return protocol === 'http:' || protocol === 'https:' || protocol === 'mailto:' ? trimmed : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknown) => Formatted {
