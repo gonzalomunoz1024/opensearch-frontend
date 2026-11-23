@@ -22,6 +22,7 @@ import {
   patternFromSavedObject,
   preselectedTimeField,
   resolvedItems,
+  resolvedOrNone,
   sampleInputsOf,
   savedBodyOf,
   tabsOf,
@@ -384,6 +385,12 @@ describe('the wizard', () => {
       { isDisabled: true, display: '───', fieldName: '' },
       { display: "I don't want to use the time filter", fieldName: undefined },
     ]);
+  });
+
+  it('takes a failed request for indices as no match, as the original, which warns of nothing', async () => {
+    assert.deepEqual(await resolvedOrNone(Promise.reject(new Error('Not Found'))), []);
+    const found = await resolvedOrNone(Promise.resolve({ indices: [{ name: 'logs', attributes: ['open'] }] }));
+    assert.deepEqual(found.map((item) => item.name), ['logs']);
   });
 
   it('takes "I don\'t want to use the time filter" as a choice, as the original', () => {

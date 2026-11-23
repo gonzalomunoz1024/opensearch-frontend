@@ -656,6 +656,18 @@ export interface ResolveResponse {
   data_streams?: Array<{ name: string; timestamp_field?: string }>;
 }
 
+/**
+ * The indices, aliases and data streams a request for them answers; none when it fails, as the
+ * original swallows such a failure: typing `.` or `<` into the wizard warns of nothing
+ */
+export async function resolvedOrNone(request: Promise<ResolveResponse | undefined>): Promise<MatchedItem[]> {
+  try {
+    return resolvedItems(await request);
+  } catch {
+    return [];
+  }
+}
+
 /** The indices, aliases and data streams of a resolve, by name */
 export function resolvedItems(response: ResolveResponse | undefined): MatchedItem[] {
   if (!response) return [];

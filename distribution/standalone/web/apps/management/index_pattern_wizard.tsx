@@ -21,7 +21,7 @@ import {
   ILLEGAL_CHARACTERS_VISIBLE,
   matchedIndicesOf,
   preselectedTimeField,
-  resolvedItems,
+  resolvedOrNone,
   timeFieldChoice,
   timeFieldOptions,
   timeFieldOptionValue,
@@ -41,10 +41,11 @@ async function getIndices(rawPattern: string, showAll: boolean): Promise<Matched
   const pattern = rawPattern.trim();
   if (pattern === '' || pattern === '*:' || pattern.startsWith(',')) return [];
   const path = encodeURIComponent(pattern).replace(/%2C/gi, ',').replace(/%3A/gi, ':');
-  const response = await services.http.get<ResolveResponse>(`/internal/index-pattern-management/resolve_index/${path}`, {
-    query: { expand_wildcards: showAll ? 'all' : undefined },
-  });
-  return resolvedItems(response);
+  return resolvedOrNone(
+    services.http.get<ResolveResponse>(`/internal/index-pattern-management/resolve_index/${path}`, {
+      query: { expand_wildcards: showAll ? 'all' : undefined },
+    })
+  );
 }
 
 /** What failed to load is told in a warning, and the list is then empty */
