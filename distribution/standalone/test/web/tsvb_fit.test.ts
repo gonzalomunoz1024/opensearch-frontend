@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { isColorDark, isInverted, placeBox, placedStyle } from '../../web/vis/tsvb/fit';
+import { axisColor, isColor, isColorDark, isInverted, legendColor, luminance, placeBox, placedStyle } from '../../web/vis/tsvb/fit';
 
 const rounded = (placement: ReturnType<typeof placeBox>) =>
   placement && { ...placement, scale: Math.round(placement.scale * 100000) / 100000 };
@@ -55,5 +55,33 @@ describe('when the text of a TSVB panel takes the colours of the other theme', (
     assert.equal(isInverted('#000000', true), false);
     assert.equal(isInverted('#ffffff', true), true);
     assert.equal(isInverted('#ffffff', false), false);
+  });
+});
+
+describe('the colours of a TSVB time series over a background of its own', () => {
+  it('reads a colour the product can read, and its relative luminance', () => {
+    assert.equal(luminance('#ffffff'), 1);
+    assert.equal(luminance('#000'), 0);
+    assert.equal(Math.round(luminance('#333') * 10000) / 10000, 0.0331);
+    assert.equal(isColor('#1a2b3c'), true);
+    assert.equal(isColor('rgba(0, 0, 0, 0.5)'), true);
+    assert.equal(isColor(''), false);
+    assert.equal(isColor(undefined), false);
+  });
+
+  it('gives the axes the dark gray over a light background and the light gray over a dark one', () => {
+    assert.equal(axisColor('#ffffff'), '#333');
+    assert.equal(axisColor('#000000'), '#D4D4D4');
+  });
+
+  it('gives the axes the gray that just stands out enough when neither does', () => {
+    // Over a mid gray the light gray stands out more, but not enough: white is the gray that does
+    assert.equal(axisColor('#777777'), 'rgb(255,255,255)');
+  });
+
+  it('writes the names of the legend light over a dark background, as the dark theme does', () => {
+    assert.equal(legendColor('#000000'), '#dfe5ef');
+    assert.equal(legendColor('#1d1e24'), '#dfe5ef');
+    assert.equal(legendColor('#ffffff'), '#343741');
   });
 });

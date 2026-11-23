@@ -6,9 +6,8 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type 
 import { ChartMessage, SERIES_COLORS, assignColors, type LegendPosition } from '../../charts/core';
 import { XYChart, type XYAxis, type XYSeries } from '../../charts/xy';
 import { Icon } from '../../components/icon';
-import { formatDate, scaledDateFormat, type TimeRange } from '../../lib/dates';
+import { formatDate, scaledDateFormat, utcOffset, type TimeRange } from '../../lib/dates';
 import { Markdown } from '../../lib/markdown';
-import { renderTemplate } from '../../lib/template';
 import type { UiState, Vis } from '../../lib/vis';
 import { href, navigate } from '../../router';
 import { services } from '../../services';
@@ -32,9 +31,10 @@ import {
   type TsvbTableSort,
 } from './data';
 import { panelError, TsvbError, type TsvbPanelError } from './error';
-import { isInverted, placeBox, placedStyle, type BoxSize, type Placement } from './fit';
+import { axisColor, isColor, isInverted, legendColor, placeBox, placedStyle, type BoxSize, type Placement } from './fit';
 import { annotationIcon } from './icons';
 import { convertSeriesToVars } from './markdown_vars';
+import { annotationTexts, replaceVars, type TemplateFault } from './replace_vars';
 
 const number = (value: unknown, fallback: number): number => {
   const parsed = typeof value === 'string' && value.trim() !== '' ? Number(value) : value;
@@ -97,50 +97,106 @@ function slopeOf(data: TsvbPoint[]): number {
   return below === 0 ? 0 : Math.round((above / below) * 100) / 100;
 }
 
+// The grid lines of a TSVB chart, as the product draws them
+const GRID_COLOR = 'rgba(125,125,125,0.1)';
+
+/** An end of a TSVB axis: the number set, none when nothing is */
+const axisEnd = (value: unknown): number | undefined =>
+  value === undefined || value === null || String(value) === '' ? undefined : Number(value);
+
+/** The labels of an axis of shares, as the product writes them: whole percents */
+const percentLabel = (value: number): string => {
+  const share = Number(value) * 100;
+  return `${(Number.isNaN(share) ? 0 : share).toFixed(0)}%`;
+};
+
+/** A series with an axis, and a range, of its own: one on a separate axis, or stacked by itself */
+const ownGroup = (model: TsvbSeries) => Boolean(model.separate_axis) || model.stacked === 'stacked_within_series';
+
+/**
+ * A message in the corner while an annotation's template cannot be filled in, as the product
+ * shows one: again only when the reason changes, gone once every template fills in
+ */
+function useTemplateFault(fault: TemplateFault | undefined) {
+  const shown = useRef<{ id: number; reason: string }>();
+  useEffect(() => {
+    if (fault && shown.current?.reason !== fault.reason) {
+      if (shown.current) services.toasts.dismiss(shown.current.id);
+      shown.current = { id: services.toasts.danger(fault.title, fault.reason), reason: fault.reason };
+    }
+    if (!fault && shown.current) {
+      services.toasts.dismiss(shown.current.id);
+      shown.current = undefined;
+    }
+  }, [fault]);
+}
+
 function TimeSeries({ params, data, onTimeChange }: { params: TsvbParams; data: TsvbData; onTimeChange?: (range: TimeRange) => void }) {
+  const zone = services.timeZone();
+  const pattern = scaledDateFormat(data.interval.ms);
+  // Each mark is named after its latest document, under its time as the chart's tooltip writes it
+  let fault: TemplateFault | undefined;
+  const annotations = data.annotations.flatMap(({ annotation, marks }) => {
+    const named = annotationTexts(annotation.template ?? '', marks);
+    fault = named.fault ?? fault;
+    return marks.map((mark, index) => ({
+      x: mark.time,
+      color: annotation.color,
+      label: `${formatDate(new Date(mark.time), pattern, zone)}\n${named.texts[index]}`,
+      icon: annotationIcon(annotation.icon),
+    }));
+  });
+  useTemplateFault(fault);
   const times = [...new Set(data.series.flatMap((series) => series.data.map(([time]) => time)))].sort((a, b) => a - b);
   if (times.length === 0) return <ChartMessage>No results found</ChartMessage>;
-  const pattern = scaledDateFormat(data.interval.ms);
-  const zone = services.timeZone();
-  const main = `main-${params.axis_position ?? 'left'}`;
+  const models = (params.series ?? []).filter((model) => !model.hidden);
   const axes = new Map<string, XYAxis>();
-  // The main axis speaks as its series do when they all speak alike, and in plain numbers otherwise
-  const onMain = data.series.filter((item) => !item.series.separate_axis);
-  const first = new Set(onMain.map((item) => `${item.series.formatter ?? ''}|${item.series.value_template ?? ''}`)).size === 1 ? onMain[0] : undefined;
-  const anyPercent = data.series.some((series) => series.series.stacked === 'percent');
-  axes.set(main, {
-    id: main,
-    position: params.axis_position === 'right' ? 'right' : 'left',
-    show: true,
-    showLabels: true,
-    scale: params.axis_scale === 'log' ? 'log' : 'linear',
-    mode: anyPercent ? 'percentage' : 'normal',
-    min: params.axis_min === undefined || params.axis_min === '' ? undefined : number(params.axis_min, 0),
-    max: params.axis_max === undefined || params.axis_max === '' ? undefined : number(params.axis_max, 0),
-    tickCount: 5,
-    exact: true,
-    format: first ? seriesFormatter(first.series.formatter, first.series.value_template) : seriesFormatter('0.[00]a', undefined),
-  });
+  // The main axis takes the side of the panel's axis, and is hidden when the first series on it
+  // hides its own axis; it speaks as that series when every series has the same formatter, and
+  // gives the bare values otherwise
+  const firstMain = models.find((model) => !ownGroup(model));
+  const sameFormatter = models.every((model) => model.formatter === models[0]?.formatter);
+  if (firstMain) {
+    axes.set('main', {
+      id: 'main',
+      position: params.axis_position === 'right' ? 'right' : 'left',
+      show: firstMain.axis_position !== 'hidden',
+      showLabels: true,
+      scale: params.axis_scale === 'log' ? 'log' : 'linear',
+      mode: models.some((model) => !ownGroup(model) && model.stacked === 'percent') ? 'percentage' : 'normal',
+      min: axisEnd(params.axis_min),
+      max: axisEnd(params.axis_max),
+      // The range fits the data when no series fills an area under its line
+      fitToData: models.every((model) => model.fill === '0'),
+      tickCount: 5,
+      exact: true,
+      format: sameFormatter ? seriesFormatter(firstMain.formatter, firstMain.value_template) : (value) => String(value),
+    });
+  }
+  for (const model of models.filter(ownGroup)) {
+    const percent = model.stacked === 'percent';
+    axes.set(`own-${model.id}`, {
+      id: `own-${model.id}`,
+      position: model.axis_position === 'right' || model.axis_position === undefined ? 'right' : 'left',
+      show: model.stacked !== 'stacked_within_series' && model.axis_position !== 'hidden',
+      showLabels: true,
+      scale: model.axis_scale === 'log' ? 'log' : 'linear',
+      mode: percent ? 'percentage' : 'normal',
+      min: axisEnd(model.axis_min),
+      max: axisEnd(model.axis_max),
+      fitToData: model.fill === '0',
+      tickCount: 5,
+      exact: true,
+      format: percent ? percentLabel : seriesFormatter(model.formatter, model.value_template),
+    });
+  }
   // A part of a split its series gave no colour takes the colour of its name, as on every chart
   const named = assignColors(data.series.filter((item) => !item.color).map((item) => item.label));
   const colorOf = (item: TsvbSeriesData) => item.color || named.get(item.label) || SERIES_COLORS[0];
   // A series with no name, or set so, is drawn but left out of the legend
   const hideInLegend = (item: TsvbSeriesData) => Boolean(item.series.hide_in_legend) || item.label === '';
   const series: XYSeries[] = data.series.map((item) => {
-    const own = item.series.separate_axis ? `own-${item.seriesId}` : main;
-    if (!axes.has(own)) {
-      axes.set(own, {
-        id: own,
-        position: item.series.axis_position === 'left' ? 'left' : 'right',
-        show: true,
-        showLabels: true,
-        min: item.series.axis_min === undefined || item.series.axis_min === '' ? undefined : number(item.series.axis_min, 0),
-        max: item.series.axis_max === undefined || item.series.axis_max === '' ? undefined : number(item.series.axis_max, 0),
-        tickCount: 5,
-        exact: true,
-        format: (value) => item.format(value),
-      });
-    }
+    const axisId = ownGroup(item.series) ? `own-${item.seriesId}` : 'main';
     const bar = item.series.chart_type === 'bar';
     const { band } = item;
     if (band) {
@@ -153,7 +209,7 @@ function TimeSeries({ params, data, onTimeChange }: { params: TsvbParams; data: 
         hideInLegend: hideInLegend(item),
         type: bar ? 'histogram' : 'area',
         mode: 'normal',
-        axisId: own,
+        axisId,
         interpolate: 'linear',
         showCircles: false,
         drawLines: false,
@@ -163,6 +219,10 @@ function TimeSeries({ params, data, onTimeChange }: { params: TsvbParams; data: 
       };
     }
     const stacked = item.series.stacked && item.series.stacked !== 'none';
+    const lineWidth = number(item.series.line_width, 1);
+    // The points: a ring as wide as the point size round a dot of one pixel, on lines only
+    const pointSize = number(item.series.point_size ?? item.series.line_width, 1);
+    const points = !bar && pointSize > 0;
     return {
       id: item.id,
       label: item.label,
@@ -170,49 +230,56 @@ function TimeSeries({ params, data, onTimeChange }: { params: TsvbParams; data: 
       hideInLegend: hideInLegend(item),
       type: bar ? 'histogram' : number(item.series.fill, 0) > 0 || stacked ? 'area' : 'line',
       mode: stacked ? 'stacked' : 'normal',
-      axisId: own,
-      interpolate: item.series.steps ? 'step-after' : 'linear',
-      showCircles: number(item.series.point_size, 0) > 0,
-      drawLines: number(item.series.line_width, 1) > 0,
-      lineWidth: Math.max(1, number(item.series.line_width, 1)),
+      axisId,
+      interpolate: item.series.steps ? 'step' : 'linear',
+      showCircles: points,
+      drawLines: lineWidth > 0,
+      lineWidth,
       fillOpacity: Math.min(1, number(item.series.fill, 0)),
-      pointSize: number(item.series.point_size, 0) > 0 ? Math.max(1.5, number(item.series.point_size, 0) + 1) : undefined,
+      pointSize: points ? 1 : undefined,
+      pointStroke: points ? pointSize : undefined,
       points: item.data.map(([time, value]) => ({ x: time, y: value })),
     };
   });
-  const position = (['top', 'bottom', 'left', 'right'].includes(params.legend_position ?? '') ? params.legend_position : 'right') as LegendPosition;
+  const position = (['bottom', 'left', 'right'].includes(params.legend_position ?? '') ? params.legend_position : 'right') as LegendPosition;
+  const background = params.background_color || undefined;
+  // Over a background of its own the axes and the legend take colours that stand out from it,
+  // and the points are filled with it
+  const colors: Record<string, string> = isColor(background)
+    ? { '--cht-elastic-text': axisColor(background), '--cht-elastic-legend': legendColor(background), '--cht-elastic-point': background }
+    : {};
   return (
-    <XYChart
-      series={series}
-      axes={[...axes.values()]}
-      x={{
-        type: 'time',
-        values: times,
-        interval: data.interval.ms,
-        domain: [data.range.from.getTime(), data.range.to.getTime()],
-        format: (value) => formatDate(new Date(value as number), pattern, zone),
-        // The product's tooltip names the time alone
-        tooltipFormat: (value) => formatDate(new Date(value as number), pattern, zone),
-        title: perInterval(data.interval.ms),
-      }}
-      // The product's bars take the whole of their bucket
-      fillBuckets
-      legend={params.show_legend === 0 ? false : position}
-      legendValues={Object.fromEntries(
-        data.series.map((item): [string, string | [string, string]] => [item.id, item.band ? [lastText(item, data.series), lowerText(item)] : lastText(item, data.series)])
-      )}
-      grid={{ value: params.show_grid !== 0, category: false }}
-      annotations={data.annotations.flatMap(({ annotation, marks }) =>
-        marks.map((mark) => ({
-          x: mark.time,
-          color: annotation.color,
-          label: mark.text || formatDate(new Date(mark.time), 'MMM D, YYYY @ HH:mm:ss', zone),
-          icon: annotationIcon(annotation.icon),
-        }))
-      )}
-      onBrush={onTimeChange ? (from, to) => onTimeChange({ from: new Date(from).toISOString(), to: new Date(to).toISOString() }) : undefined}
-      testId="tsvbChart"
-    />
+    <div className="visTsvbFrame" style={{ background, ...colors }}>
+      <XYChart
+        series={series}
+        axes={[...axes.values()]}
+        x={{
+          type: 'time',
+          values: times,
+          interval: data.interval.ms,
+          domain: [data.range.from.getTime(), data.range.to.getTime()],
+          format: (value) => formatDate(new Date(value as number), pattern, zone),
+          // The product's tooltip names the time alone
+          tooltipFormat: (value) => formatDate(new Date(value as number), pattern, zone),
+          title: perInterval(data.interval.ms),
+        }}
+        // The product's bars take the whole of their bucket
+        fillBuckets
+        elastic={{
+          offset: (time) => utcOffset(new Date(time), zone),
+          histogram: data.series.some((item) => item.series.chart_type === 'bar' && item.series.stacked && item.series.stacked !== 'none'),
+          gridColor: GRID_COLOR,
+        }}
+        legend={params.show_legend === 0 ? false : position}
+        legendValues={Object.fromEntries(
+          data.series.map((item): [string, string | [string, string]] => [item.id, item.band ? [lastText(item, data.series), lowerText(item)] : lastText(item, data.series)])
+        )}
+        grid={{ value: params.show_grid !== 0, category: params.show_grid !== 0 }}
+        annotations={annotations}
+        onBrush={onTimeChange ? (from, to) => onTimeChange({ from: new Date(from).toISOString(), to: new Date(to).toISOString() }) : undefined}
+        testId="tsvbChart"
+      />
+    </div>
   );
 }
 
@@ -321,13 +388,9 @@ function Splits({
  * of the product, else to the page; an address that cannot be filled in goes nowhere
  */
 function drillDown(template: string, key: string) {
-  let address: string;
-  try {
-    address = renderTemplate(template, { key, args: {} }, { strict: true });
-  } catch (failure) {
-    if (!String(failure).includes('Parse error')) return;
-    address = template;
-  }
+  const filled = replaceVars(template, {}, { key });
+  if ('fault' in filled) return;
+  const address = filled.text;
   const target = new URL(address, window.location.href);
   const base = new URL(href('/'), window.location.href).pathname;
   if (target.origin === window.location.origin && target.pathname.startsWith(`${base}app/`)) {
@@ -459,25 +522,13 @@ function Gauge({ params, data, extra }: { params: TsvbParams; data: TsvbData; ex
   );
 }
 
-const MARKDOWN_ERROR = 'Error processing your markdown';
-
 /**
- * The text of a markdown panel filled in as the product fills it, in strict mode: while it is not
- * well formed (being typed) it shows as written, and a name it has no variable for, or anything
- * else that stops it, is an error the panel shows instead of the text, told apart by the words of
- * the failure as the product tells them apart
+ * The text of a markdown panel filled in as the product fills it; what stops it is an error the
+ * panel shows instead of the text
  */
 function fillMarkdown(markdown: string, variables: Record<string, unknown>): { text?: string; error?: TsvbPanelError } {
-  try {
-    return { text: renderTemplate(markdown, { _all: variables, ...variables, args: {} }, { strict: true }) };
-  } catch (failure) {
-    if (String(failure).includes('Parse error')) return { text: markdown };
-    const message = failure instanceof Error ? failure.message : String(failure);
-    const reason = message.includes('not defined in')
-      ? `{{${String(message.split('"')[1])}}} is an unknown variable`
-      : 'Please verify you are only using markdown, known variables, and built-in Handlebars expressions';
-    return { error: { error: { caused_by: { title: MARKDOWN_ERROR, reason } } } };
-  }
+  const filled = replaceVars(markdown, {}, { _all: variables, ...variables });
+  return 'fault' in filled ? { error: { error: { caused_by: filled.fault } } } : { text: filled.text };
 }
 
 function MarkdownPanel({ params, data }: { params: TsvbParams; data: TsvbData }) {

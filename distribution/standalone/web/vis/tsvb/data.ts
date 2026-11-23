@@ -72,7 +72,8 @@ export interface TsvbSeries {
   fill?: number | string;
   stacked?: 'none' | 'stacked' | 'stacked_within_series' | 'percent';
   separate_axis?: number;
-  axis_position?: 'left' | 'right';
+  axis_position?: 'left' | 'right' | 'hidden';
+  axis_scale?: string;
   axis_min?: number | string;
   axis_max?: number | string;
   steps?: number;
@@ -192,7 +193,8 @@ export interface TsvbSeriesData {
 
 export interface TsvbAnnotationData {
   annotation: TsvbAnnotation;
-  marks: Array<{ time: number; text: string }>;
+  /** A mark for each bucket of the automatic interval with documents: its start, and its latest documents, the latest first */
+  marks: Array<{ time: number; docs: unknown[] }>;
 }
 
 export interface TsvbData {
@@ -1004,43 +1006,93 @@ async function fetchSeries(
   return { plan, groups: [{ key: '', made: build(aggregations) }] };
 }
 
-async function fetchAnnotations(params: TsvbParams, input: VisInput, range: AbsoluteRange, signal?: AbortSignal): Promise<TsvbAnnotationData[]> {
+/** Whether the product asks for an annotation: one shown, with an index, a time field, fields, an icon and a template */
+export const isAnnotationAsked = (annotation: TsvbAnnotation): boolean =>
+  Boolean(annotation.index_pattern && annotation.time_field && annotation.fields && annotation.icon && annotation.template && !annotation.hidden);
+
+/** The time of the last point of all the series, as the product finds it: none without series */
+export function lastSeriesTime(series: Array<{ data: TsvbPoint[] }>): number | null {
+  let last: number | null = null;
+  for (const item of series) {
+    const point = item.data[item.data.length - 1];
+    if (point) last = Math.max(last ?? 0, point[0]);
+  }
+  return last;
+}
+
+/** The interval of an annotation's buckets, as the product asks for it: in seconds, or in milliseconds for a fraction of one */
+export function annotationInterval(bucketMs: number): { expression: string; seconds: number } {
+  const seconds = bucketMs / 1000;
+  return { expression: Number.isInteger(seconds) ? `${seconds}s` : `${bucketMs}ms`, seconds: Math.max(seconds, 1) };
+}
+
+/**
+ * The annotations of a panel, as the product asks for them: the documents in each bucket of the
+ * automatic interval (whatever the panel's), the five latest of each, up to a bucket before the
+ * end of the time range; a bucket with documents makes one mark, at its start, unless it starts
+ * after the last point of the series. A search that fails fails the panel, as there.
+ */
+async function fetchAnnotations(
+  params: TsvbParams,
+  input: VisInput,
+  range: AbsoluteRange,
+  lastTime: number | null,
+  signal?: AbortSignal
+): Promise<TsvbAnnotationData[]> {
   const results: TsvbAnnotationData[] = [];
-  for (const annotation of params.annotations ?? []) {
-    if (annotation.hidden || !annotation.index_pattern || !annotation.time_field) continue;
-    try {
-      const indexPattern = await patternFor(annotation.index_pattern);
-      const queries: Query[] = [];
+  const bucket = annotationInterval(resolveInterval('auto', range.to.getTime() - range.from.getTime(), { targetBuckets: 100, maxBuckets: 200 }).ms);
+  const end = range.to.getTime() - bucket.seconds * 1000;
+  const config = { ...services.queryConfig(), ignoreFilterIfFieldNotInIndex: true };
+  for (const annotation of (params.annotations ?? []).filter(isAnnotationAsked)) {
+    const index = annotation.index_pattern ?? '';
+    const timeField = annotation.time_field ?? '';
+    const indexPattern = await patternFor(index);
+    const global = !annotation.ignore_global_filters;
+    const query = buildQuery(indexPattern, global && input.query ? [input.query] : [], global ? input.filters : [], config);
+    query.bool.must.push({
+      range: { [timeField]: { gte: range.from.toISOString(), lte: new Date(end).toISOString(), format: 'strict_date_optional_time' } },
+    });
+    if (annotation.query_string) {
       const own = asQuery(annotation.query_string);
-      if (own) queries.push(own);
-      if (!annotation.ignore_global_filters && input.query) queries.push(input.query);
-      const panel = asQuery(params.filter);
-      if (!annotation.ignore_panel_filters && panel) queries.push(panel);
-      const query = buildQuery(indexPattern, queries, annotation.ignore_global_filters ? [] : input.filters, {
-        ...services.queryConfig(),
-        ignoreFilterIfFieldNotInIndex: true,
-      });
-      query.bool.must.push({
-        range: { [annotation.time_field]: { gte: range.from.toISOString(), lte: range.to.toISOString(), format: 'strict_date_optional_time' } },
-      });
-      const fields = (annotation.fields ?? '').split(/[,\s]+/).filter(Boolean);
-      const response = await services.search.search(
-        annotation.index_pattern,
-        { size: 100, query, sort: [{ [annotation.time_field]: { order: 'desc' } }], _source: [annotation.time_field, ...fields] },
-        { signal }
-      );
-      const marks = response.hits.hits.flatMap((hit) => {
-        const source = (hit._source ?? {}) as Record<string, unknown>;
-        const read = (path: string) => path.split('.').reduce<unknown>((at, part) => (at as Record<string, unknown> | undefined)?.[part], source) ?? source[path];
-        const time = new Date(String(read(annotation.time_field as string))).getTime();
-        if (Number.isNaN(time)) return [];
-        const text = (annotation.template ?? '').replace(/\{\{\s*([\w.@-]+)\s*\}\}/g, (_, name: string) => String(read(name) ?? ''));
-        return [{ time, text }];
-      });
-      results.push({ annotation, marks });
-    } catch (failure) {
-      if ((failure as Error).name === 'AbortError') throw failure;
+      query.bool.must.push({ ...buildQuery(indexPattern, own ? [own] : [], [], config) });
     }
+    if (!annotation.ignore_panel_filters && params.filter) {
+      const panel = asQuery(params.filter);
+      query.bool.must.push({ ...buildQuery(indexPattern, panel ? [panel] : [], [], config) });
+    }
+    const fields = (annotation.fields ?? '').split(/[,\s]+/);
+    for (const field of fields) query.bool.must.push({ exists: { field } });
+    const response = await services.search.search(
+      index,
+      {
+        size: 0,
+        query,
+        aggs: {
+          [annotation.id]: {
+            date_histogram: {
+              field: timeField,
+              min_doc_count: 0,
+              time_zone: services.timeZone() ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+              extended_bounds: { min: range.from.getTime(), max: end },
+              fixed_interval: bucket.expression,
+            },
+            aggs: {
+              hits: { top_hits: { sort: [{ [timeField]: { order: 'desc' } }], _source: { includes: [...fields, timeField] }, size: 5 } },
+            },
+          },
+        },
+      },
+      { signal }
+    );
+    const buckets =
+      (response.aggregations?.[annotation.id] as { buckets?: Array<{ key: number; hits?: { hits?: { hits?: Array<{ _source?: unknown }> } } }> } | undefined)
+        ?.buckets ?? [];
+    const marks = buckets.flatMap((entry) => {
+      const docs = entry.hits?.hits?.hits ?? [];
+      if (docs.length === 0 || lastTime === null || entry.key > lastTime) return [];
+      return [{ time: entry.key, docs: docs.map((doc) => doc._source) }];
+    });
+    results.push({ annotation, marks });
   }
   return results;
 }
@@ -1050,9 +1102,10 @@ export async function fetchTsvb(params: TsvbParams, input: VisInput, signal?: Ab
   const shown = (params.series ?? []).filter((series) => !series.hidden);
   const fetched = await Promise.all(shown.map((series) => fetchSeries(params, series, input, requests, signal)));
   const plan = fetched[0]?.plan ?? (await planFor(params, undefined, input));
-  const annotations = params.type === 'timeseries' || !params.type ? await fetchAnnotations(params, input, plan.range, signal) : [];
+  const series = fetched.flatMap((result) => result.groups.flatMap((group) => group.made));
+  const annotations = params.type === 'timeseries' || !params.type ? await fetchAnnotations(params, input, plan.range, lastSeriesTime(series), signal) : [];
   return {
-    series: fetched.flatMap((result) => result.groups.flatMap((group) => group.made)),
+    series,
     interval: { ms: plan.intervalMs, expression: plan.intervalExpression },
     range: plan.range,
     annotations,
