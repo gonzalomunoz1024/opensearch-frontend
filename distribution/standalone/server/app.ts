@@ -36,6 +36,7 @@ import { registerShortUrls } from './short_urls';
 import { registerSqlConsole } from './sql_console';
 import { contentSecurityPolicy, readBuild, renderPage, serveStatic } from './static';
 import { registerTsvbFields } from './tsvb_fields';
+import { registerTimeline } from './timeline';
 import { UiSettings } from './ui_settings';
 
 export const PRODUCT_NAME = 'InfraDashboard';
@@ -391,6 +392,7 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
   // --- Index Management ------------------------------------------------------------------------
 
   registerIndexManagement(router, client);
+  registerTimeline(router, { client, repository, uiSettings, config, logger });
 
   // --- TSVB ------------------------------------------------------------------------------------
 

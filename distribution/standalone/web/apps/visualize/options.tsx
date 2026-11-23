@@ -15,6 +15,7 @@ import { aggLabel, type AggConfig, type AggContext } from '../../lib/aggs';
 import { ControlsOptions, ControlsTab } from './controls_editor';
 import { axisName, nextAxisId, oppositeSide } from './defaults';
 import { RegionMapOptions } from './region_map/region_map_options';
+import { TimelineOptions } from '../../vis/timeline/options';
 import { TileMapOptions } from './maps/tile_map_options';
 import { VegaSpecEditor } from './vega_editor';
 
@@ -747,6 +748,7 @@ const TABS: Record<string, OptionTab[]> = {
     { id: 'advanced', label: 'Data', render: (props) => <MarkdownData {...props} /> },
     { id: 'options', label: 'Options', render: (props) => <MarkdownOptions {...props} /> },
   ],
+  timelion: [{ id: 'options', label: 'Options', render: (props) => <TimelineOptions {...props} /> }],
   input_control_vis: [
     { id: 'controls', label: 'Controls', render: (props) => <ControlsTab {...props} /> },
     { id: 'options', label: 'Options', render: (props) => <ControlsOptions {...props} /> },

@@ -63,4 +63,8 @@ code under its licence:
 
 Their licence texts are in licenses/, and in dist/licenses/followed of a build.
 
+The drawing of Timeline charts (web/vis/timeline/plot.ts) is derived from Flot 0.8.3 and its
+time, stack, symbol, crosshair, selection, canvas and axis-label plug-ins, under the MIT License,
+Copyright (c) 2007-2014 IOLA and Ole Laursen.
+
 "OpenSearch" is a trademark of its owner. InfraDashboard is not an OpenSearch project.
