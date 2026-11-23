@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import {
   HALF_HOURS,
@@ -612,5 +613,17 @@ describe('the channel on the page of a policy', () => {
     await withAnswer({ ok: true, response: { config_list: [found, found] } }, async () => {
       assert.equal(await policyChannel('c1'), undefined);
     });
+  });
+});
+
+describe('the head of a list of Snapshot Management', () => {
+  it('is never narrower than its title, which the buttons beside it would cover', () => {
+    // At 1000 px the plugin's "Snapshots" keeps its 138 px and its buttons go past the panel; a
+    // heading allowed to shrink to nothing put the buttons over the title
+    const sheet = readFileSync('web/styles/index_management.css', 'utf8');
+    const start = sheet.indexOf('\n.ismListPanel__heading {');
+    assert.ok(start >= 0, '.ismListPanel__heading has a rule');
+    const rule = sheet.slice(start, sheet.indexOf('}', start));
+    assert.equal(/min-width:\s*0/.test(rule), false);
   });
 });
