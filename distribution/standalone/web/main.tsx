@@ -2,6 +2,7 @@
 
 /* Where the browser side starts: it reads what the server put in the page and draws the app. */
 
+import './lib/csp_nonce'; // first: the page's nonce on every style element made from here on
 import { createRoot } from 'react-dom/client';
 import './styles/tokens.css';
 import './styles/base.css';

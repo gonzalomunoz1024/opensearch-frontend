@@ -71,7 +71,7 @@ map.regionmap:
 });
 
 describe('the page lets the browser fetch', () => {
-  it('from the map services and the region layers, and nowhere else', () => {
+  it('from the map services, the region layers and the sites of OpenSearch, and nowhere else', () => {
     const map = { ...DEFAULT_MAP_CONFIG, regionmap: { ...DEFAULT_MAP_CONFIG.regionmap, layers: [{ url: 'https://shapes.local/a.json', format: { type: 'geojson' }, meta: { feature_collection_path: 'data' }, attribution: '', name: 'A', fields: [] }] } };
     assert.deepEqual(mapOrigins(map), [
       'https://maps.opensearch.org',
@@ -79,7 +79,7 @@ describe('the page lets the browser fetch', () => {
       'https://tiles.maps.opensearch.org',
       'https://shapes.local',
     ]);
-    assert.match(contentSecurityPolicy(map), /connect-src 'self' https:\/\/maps\.opensearch\.org https:\/\/vectors\.maps\.opensearch\.org https:\/\/tiles\.maps\.opensearch\.org https:\/\/shapes\.local;/);
-    assert.match(contentSecurityPolicy(), /connect-src 'self';/);
+    assert.match(contentSecurityPolicy(map), /connect-src 'self' https:\/\/opensearch\.org https:\/\/docs\.opensearch\.org https:\/\/maps\.opensearch\.org https:\/\/vectors\.maps\.opensearch\.org https:\/\/tiles\.maps\.opensearch\.org https:\/\/shapes\.local;/);
+    assert.match(contentSecurityPolicy(), /connect-src 'self' https:\/\/opensearch\.org https:\/\/docs\.opensearch\.org https:\/\/maps\.opensearch\.org https:\/\/vectors\.maps\.opensearch\.org https:\/\/tiles\.maps\.opensearch\.org;/);
   });
 });
