@@ -38,6 +38,7 @@ import {
 } from '../../web/apps/dashboard/model';
 import { existsFilter, phraseFilter, uniqueFilters } from '../../web/lib/query';
 import type { Filter } from '../../web/lib/types';
+import { decodeState, encodeState } from '../../web/lib/url';
 import { makeTurns, waitTurn } from '../../web/vis/turns';
 
 const at = (items: GridItem[], id: string) => {
@@ -454,6 +455,16 @@ describe('a dashboard in the address', () => {
     ]);
     assert.deepEqual(panelsFromUrl(url), [panel('a', 0, 0, { title: 'Own' })]);
     assert.equal(panelsFromUrl('not panels'), undefined);
+  });
+
+  it('is not changed by going through the address, which sorts the keys of its settings', () => {
+    // As a map panel of [eCommerce] is saved: the zoom before the centre
+    const saved = [panel('11', 0, 0, { embeddableConfig: { mapZoom: 2, mapCenter: [28.304380682962783, -22.148437500000004], vis: { b: null, a: 1 } } })];
+    const read = panelsFromUrl(decodeState<{ panels: unknown }>(encodeState({ panels: panelsToUrl(saved) })).panels);
+    assert.deepEqual(Object.keys(read?.[0].embeddableConfig ?? {}), ['mapCenter', 'mapZoom', 'vis']);
+    assert.equal(panelsDiffer(read ?? [], saved), false);
+    const moved = [panel('11', 0, 0, { embeddableConfig: { mapZoom: 3, mapCenter: [28.304380682962783, -22.148437500000004], vis: { b: null, a: 1 } } })];
+    assert.equal(panelsDiffer(moved, saved), true);
   });
 
   it('holds the whole state once open, the panels only while editing', () => {

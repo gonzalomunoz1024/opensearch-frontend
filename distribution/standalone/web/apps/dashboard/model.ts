@@ -9,6 +9,7 @@
 import type { SavedObjectReference } from '../../../common/saved_objects';
 import { parseSearchSource, serializeSearchSource } from '../../lib/search_source';
 import type { Filter, Query, RefreshInterval } from '../../lib/types';
+import { encodeState } from '../../lib/url';
 
 export const GRID_COLUMNS = 48;
 export const ROW_HEIGHT = 20;
@@ -316,9 +317,13 @@ export function panelsFromUrl(value: unknown): PanelState[] | undefined {
   return panels;
 }
 
-/** Whether two lists of panels differ in what is saved of them */
+/**
+ * Whether two lists of panels differ in what is saved of them. The order of the keys of a panel's
+ * settings is not a difference: the address sorts them, so the panels read back from it while a
+ * dashboard is edited would else differ from the saved ones before anything was changed.
+ */
 export function panelsDiffer(a: PanelState[], b: PanelState[]): boolean {
-  return JSON.stringify(panelsToUrl(a)) !== JSON.stringify(panelsToUrl(b));
+  return encodeState(panelsToUrl(a)) !== encodeState(panelsToUrl(b));
 }
 
 /** The id the original gives a panel it adds: a random UUID */
