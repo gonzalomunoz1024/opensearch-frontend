@@ -87,24 +87,6 @@
   gap: var(--space-2);
 }
 
-/* The short URL switch of the share dialog, its tip, and why a short URL could not be made */
-.shlShortUrl {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.shlShortUrl__switch {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.shlShortUrl__tip {
-  display: inline-flex;
-  color: var(--color-text-secondary);
-}
-
 /*
  * The original's row of filters (its filter bar): the menu of all of them in a 36 px column as high
  * as a row, the pills 4 px apart in rows 34 px apart, the first 6 px under the query.
