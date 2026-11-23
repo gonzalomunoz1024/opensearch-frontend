@@ -379,10 +379,12 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
     }
     case 'boolean':
       return (value) => {
-        if (typeof value === 'boolean') return text(String(value));
-        if (value === 1 || value === '1' || value === 'true' || value === 'yes') return text('true');
-        if (value === 0 || value === '0' || value === 'false' || value === 'no') return text('false');
-        return text(stringify(value));
+        // Text is read trimmed and in lower case, and is shown so when it is neither; "1" and "0"
+        // are text, not the numbers, as the original reads them
+        const read = typeof value === 'string' ? value.trim().toLowerCase() : value;
+        if (read === true || read === 1 || read === 'true' || read === 'yes') return text('true');
+        if (read === false || read === 0 || read === 'false' || read === 'no') return text('false');
+        return text(typeof read === 'string' ? read : stringify(read));
       };
     case 'ip':
       return (value) => {

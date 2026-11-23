@@ -197,6 +197,22 @@ describe('numbers', () => {
     // Without the kind of field its editor saves with it, nothing is coloured
     assert.equal(createFormatter({ id: 'color', params: { colors: [{ range: '0:100', ...red }] } })(50).color, undefined);
   });
+
+  it('reads text as a boolean as the original: trimmed, in lower case, and not from "1" or "0"', () => {
+    const boolean = createFormatter({ id: 'boolean' });
+    assert.deepEqual(
+      [true, 1, 'true', 'yes', ' YES ', 'True'].map((value) => boolean(value).text),
+      ['true', 'true', 'true', 'true', 'true', 'true']
+    );
+    assert.deepEqual(
+      [false, 0, 'false', 'no', 'No', ' FALSE\n'].map((value) => boolean(value).text),
+      ['false', 'false', 'false', 'false', 'false', 'false']
+    );
+    assert.deepEqual(
+      ['1', '0', 'US', ' Maybe ', 2, -1].map((value) => boolean(value).text),
+      ['1', '0', 'us', 'maybe', '2', '-1']
+    );
+  });
 });
 
 const pattern: IndexPattern = {
