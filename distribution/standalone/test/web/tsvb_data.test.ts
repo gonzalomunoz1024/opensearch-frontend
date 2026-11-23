@@ -2,7 +2,8 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { MathScriptError, metricAggs, metricBackground, metricRule, seriesLines, termLabel, timeAxisPattern, tooManyBuckets, topNRows, type ColorRule, type TimeBucket, type TsvbMetric, type TsvbSeries, type TsvbSeriesData } from '../../web/vis/tsvb/data';
+import { createServices, services, type BootData } from '../../web/services';
+import { fetchTsvb, MathScriptError, metricAggs, metricBackground, metricRule, seriesLines, termLabel, timeAxisPattern, tooManyBuckets, topNRows, type ColorRule, type TimeBucket, type TsvbMetric, type TsvbSeries, type TsvbSeriesData } from '../../web/vis/tsvb/data';
 import { convertSeriesToVars } from '../../web/vis/tsvb/markdown_vars';
 
 const HOUR = 3600000;
@@ -196,6 +197,40 @@ describe('the parts of a TSVB series as the panels show them', () => {
     assert.equal(metricBackground({ background_color: '#000000' }, { series: [part('a', 3)] }), undefined);
     // With no series, the rules are met by 0
     assert.equal(metricBackground({ background_color_rules: [{ ...rules[0], operator: 'lte', value: 0 }] }, { series: [] }), 'rgba(51,51,51,1)');
+  });
+});
+
+describe('the buckets a TSVB panel asks OpenSearch for', () => {
+  it('follow the calendar for one unit of its own interval, as the product asks for them, and are fixed otherwise', async () => {
+    createServices({ basePath: '', version: '3.9.0', name: 'test', settings: {}, settingsDefaults: {}, settingsOverrides: {} } as unknown as BootData);
+    const asked: Array<Record<string, unknown>> = [];
+    const { indexPatterns, search } = services;
+    const [list, ask] = [indexPatterns.list, search.search];
+    indexPatterns.list = async () => [];
+    search.search = async (_index, body) => {
+      asked.push(body);
+      return { hits: { total: 0, hits: [] } };
+    };
+    // Three weeks: an automatic interval of a few hours
+    const time = { from: '2026-11-02T00:00:00.000Z', to: '2026-11-23T00:00:00.000Z' };
+    const histogramOf = async (interval: string) => {
+      asked.length = 0;
+      await fetchTsvb({ id: 'p', type: 'timeseries', index_pattern: 'logs', time_field: 'timestamp', interval, series: [{ id: 's', metrics: [{ id: 'm', type: 'count' }] }] }, { time, filters: [] });
+      const { calendar_interval, fixed_interval } = (asked[0].aggs as { s: { aggs: { timeseries: { date_histogram: Record<string, unknown> } } } }).s.aggs.timeseries.date_histogram;
+      return { calendar_interval, fixed_interval };
+    };
+    try {
+      assert.deepEqual(await histogramOf('1w'), { calendar_interval: '1w', fixed_interval: undefined });
+      assert.deepEqual(await histogramOf('1d'), { calendar_interval: '1d', fixed_interval: undefined });
+      assert.deepEqual(await histogramOf('>=1d'), { calendar_interval: '1d', fixed_interval: undefined });
+      assert.deepEqual(await histogramOf('2d'), { calendar_interval: undefined, fixed_interval: '172800000ms' });
+      assert.deepEqual(await histogramOf('12h'), { calendar_interval: undefined, fixed_interval: '43200000ms' });
+      assert.equal((await histogramOf('auto')).calendar_interval, undefined);
+      assert.equal((await histogramOf('>=1m')).calendar_interval, undefined);
+    } finally {
+      indexPatterns.list = list;
+      search.search = ask;
+    }
   });
 });
 

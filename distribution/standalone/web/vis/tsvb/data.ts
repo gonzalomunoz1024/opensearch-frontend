@@ -835,6 +835,8 @@ interface Plan {
   range: AbsoluteRange;
   intervalMs: number;
   intervalExpression: string;
+  /** Whether the buckets follow the calendar, as the product asks for one unit of its own interval */
+  calendar: boolean;
   entireRange: boolean;
   dropLast: boolean;
 }
@@ -871,7 +873,7 @@ function histogram(plan: Plan, shift: number, inner: Dsl): Dsl {
   return {
     date_histogram: {
       field: plan.timeField,
-      fixed_interval: `${Math.max(1, Math.round(plan.intervalMs))}ms`,
+      ...(plan.calendar ? { calendar_interval: plan.intervalExpression } : { fixed_interval: `${Math.max(1, Math.round(plan.intervalMs))}ms` }),
       min_doc_count: 0,
       time_zone: services.timeZone() ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
       extended_bounds: { min: from, max: to },
@@ -946,9 +948,14 @@ async function planFor(params: TsvbParams, series: TsvbSeries | undefined, input
   let intervalMs = auto.ms;
   let expression = auto.expression;
   const fixed = parseInterval(atLeast ? atLeast[1] : requested);
-  if (fixed && (!atLeast || fixed.ms > auto.ms)) {
+  // The panel's own interval holds when it is at least the automatic one; one minute, hour, day,
+  // week, month or year of it is a calendar interval (dateHistogramInterval), the automatic one
+  // never is
+  let calendar = false;
+  if (fixed && (!atLeast || fixed.ms >= auto.ms)) {
     intervalMs = fixed.ms;
     expression = fixed.expression;
+    calendar = !entireRange && /^1[mhdwMy]$/.test(expression);
   }
   if (entireRange) {
     intervalMs = Math.max(1, duration);
@@ -961,6 +968,7 @@ async function planFor(params: TsvbParams, series: TsvbSeries | undefined, input
     range,
     intervalMs,
     intervalExpression: expression,
+    calendar,
     entireRange,
     // The last bucket is still filling, so a line would dip at its end; the panel's choice holds,
     // or else the series' own
