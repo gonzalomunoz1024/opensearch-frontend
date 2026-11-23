@@ -1,275 +1,809 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
-/* Query Workbench: the indices at the left, the editor and its results at the right. */
+/*
+ * Query Workbench, in the boxes the plugin's component library draws under the theme: a page
+ * 16 px in, the panel of the tree (400 px and its 16 px margin) beside the page's panel, flex
+ * groups whose gutters are negative margins (so their edges overlap as the original's do), the
+ * editor's panel, and the results' panel with its tabs, its own panel for SQL's tables and the
+ * table of 155 px columns.
+ */
 
 .qwbPage {
+  --qwb-tree-hover: #e8e8e9;
+  --qwb-focus-from: rgb(0 122 255 / 0%);
+  /* EuiLink's primary colour under the pointer and its fill with the focus */
+  --qwb-link-hover: #0062cc;
+  --qwb-link-focus: #e6f2ff;
+  /* The theme's chosen button of a group, which is raised above the page in dark */
+  --qwb-switch-selected: var(--color-surface);
+
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  padding: var(--space-4);
-}
-
-.qwbPage--full {
-  display: block;
-}
-
-.qwbSide {
   flex: none;
-  width: min(400px, 30vw);
-  min-height: calc(100vh - var(--header-height) - 2 * var(--space-4));
-  max-height: calc(100vh - var(--header-height) - 2 * var(--space-4));
-  padding: var(--space-6) var(--space-4);
+  padding: var(--space-4);
+  background: var(--color-surface);
+}
+
+.themeDark .qwbPage {
+  --qwb-tree-hover: #69696b;
+  --qwb-focus-from: rgb(10 132 255 / 0%);
+  --qwb-link-hover: #006bd6;
+  --qwb-link-focus: #16416d;
+  --qwb-switch-selected: var(--color-surface-tertiary);
+}
+
+/* The theme's ring stands 2 px off what has the keyboard's focus */
+.qwbPage :focus-visible {
+  outline-offset: 2px;
+}
+
+.qwbPage__body {
+  display: flex;
+  flex: 1 1 100%;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* The component library's spacers */
+.qwbSpacer {
+  flex-shrink: 0;
+}
+
+.qwbSpacer--s {
+  height: 8px;
+}
+
+.qwbSpacer--m {
+  height: 16px;
+}
+
+.qwbSpacer--l {
+  height: 24px;
+}
+
+.qwbSpacer--xl {
+  height: 32px;
+}
+
+.qwbSpacer--xxl {
+  height: 40px;
+}
+
+/* The panels: a hairline, the large round and the theme's shadow */
+.qwbSide,
+.qwbMain,
+.qwbEditorPanel,
+.qwbResults,
+.qwbWrap__panel {
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
   box-shadow: var(--shadow-card);
-  overflow: auto;
+}
+
+/* The buttons of the component library: a border the colour of nothing, the icon 8 px from the
+   words */
+.qwbButton.atlButton {
+  gap: var(--space-2);
+  border: 1px solid transparent;
+}
+
+/* --- The frame ------------------------------------------------------------------------------ */
+
+.qwbFrame {
+  display: flex;
+  flex-grow: 1;
+}
+
+.qwbSide {
+  flex: 0 1 auto;
+  margin-right: 10px;
+  padding: var(--space-4);
+}
+
+/* The original's height: the window less what is above and below it */
+.qwbSide__bar {
+  width: 400px;
+  min-width: 192px;
+  max-width: 400px;
+  height: calc(100vh - 254px);
+  margin-right: var(--space-4);
+}
+
+.qwbSide__title {
+  margin: 0;
+  font-size: var(--font-size-m);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+.qwbSide__column {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 308px);
+  margin: calc(-1 * var(--space-3));
+  overflow: hidden auto;
+}
+
+.qwbSide__item {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  min-width: 1px;
+  margin: var(--space-3);
 }
 
 .qwbMain {
   flex: 1 1 auto;
   min-width: 0;
   padding: var(--space-4);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-card);
 }
 
 .qwbTop {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  gap: var(--space-3);
-  margin-bottom: var(--space-4);
+  margin: calc(-1 * var(--space-3));
+}
+
+.qwbTop__item {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  margin: var(--space-3);
+}
+
+/* An empty flex group, whose margins pull what follows 12 px higher */
+.qwbBody__empty {
+  display: flex;
+  margin: calc(-1 * var(--space-3));
 }
 
 /* --- The indices --------------------------------------------------------------------------- */
 
 .qwbTree {
-  display: flex;
-  flex-direction: column;
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+.qwbTree__list {
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.qwbTree__item {
+.qwbTree__node {
+  max-height: 32px;
+  line-height: 32px;
+}
+
+.qwbTree__node--open {
+  max-height: none;
+}
+
+.qwbTree__button {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  min-height: var(--control-height);
-  padding: 0 var(--space-2);
+  width: 100%;
+  max-width: 100%;
+  height: 32px;
+  padding: 0 0 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  line-height: normal;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.qwbTree__button:hover,
+.qwbTree__button:active,
+.qwbTree__button:focus {
+  background: var(--qwb-tree-hover);
+}
+
+/* The ring grows in on focus; reached by the keys, the outline every focused element has too */
+.qwbTree__button:focus {
+  animation: qwbFocusRing 0.4s var(--ease-out-quint) forwards;
+}
+
+@keyframes qwbFocusRing {
+  0% {
+    box-shadow: 0 0 0 6px var(--qwb-focus-from);
+  }
+
+  100% {
+    box-shadow: 0 0 0 3px var(--color-focus-ring);
+  }
+}
+
+.qwbTree__icon {
+  margin: -2px var(--space-2) 0 0;
+}
+
+.qwbTree__label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* In the colour of the name, as the original's tree draws its icons */
-.qwbTree__item > .atlIcon {
-  flex: none;
+.qwbTree__label .atlTooltipAnchor {
+  display: inline-block;
 }
 
-.qwbTreeNote {
+.qwbTree__text {
+  display: block;
+  line-height: 21px;
+}
+
+/* Loading, no index, or failed: centred in a column with 4 px gutters */
+/* Its words in lines as tall as the type, as the page's own text is in the original; only the
+   reason, in EuiText, has lines of 21 px */
+.qwbTreeState {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-2);
-  padding-top: var(--space-6);
+  margin: calc(-1 * var(--space-1));
+  font-size: var(--font-size-s);
+  line-height: 1;
+}
+
+.qwbTreeState__item {
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  margin: var(--space-1);
+}
+
+.qwbTreeState__item--fixed {
+  flex: 0 0 auto;
+}
+
+.qwbTreeState__message {
+  padding: 10px;
+  line-height: 21px;
+}
+
+.qwbTreeState__text {
+  color: var(--color-text-secondary);
   text-align: center;
 }
 
-/* --- The editor ---------------------------------------------------------------------------- */
+/*
+ * The prompt at the address of a data source, as EuiEmptyPrompt: the icon in a line as tall as the
+ * type, then the words in EuiText's lines
+ */
+.qwbPrompt {
+  max-width: 36em;
+  margin: auto;
+  padding: var(--space-6);
+  font-size: var(--font-size-s);
+  line-height: 1;
+  text-align: center;
+}
 
-.qwbEditor {
+/* The theme's colour for the icon of an empty prompt */
+.qwbPrompt__icon {
+  color: var(--color-text-tertiary);
+}
+
+.qwbPrompt__body {
+  color: var(--color-text-secondary);
+  line-height: 21px;
+}
+
+.qwbPrompt p {
+  margin: 0;
+}
+
+/* --- The switch and the editor's panel ----------------------------------------------------- */
+
+.qwbSwitch {
+  display: inline-block;
+  position: relative;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.qwbSwitch__buttons {
+  display: flex;
+  max-width: 100%;
+  padding: 2px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+}
+
+.qwbSwitch__button {
+  flex: 0 1 auto;
+  min-width: 0;
+  height: 28px;
+  padding: 0 var(--space-3);
+  border-radius: 10px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 28px;
+  text-align: center;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) ease-out,
+    color var(--duration-fast) ease-out;
+}
+
+.qwbSwitch__button + .qwbSwitch__button {
+  margin-left: -1px;
+}
+
+.qwbSwitch__button--selected {
+  position: relative;
+  z-index: 0;
+  background: var(--qwb-switch-selected);
+  box-shadow: var(--shadow-sm);
+  color: var(--color-text-primary);
+}
+
+.qwbSwitch__button:hover {
+  color: var(--color-text-primary);
+}
+
+/* With the focus, by the keys or a click, its word is underlined, and no ring is drawn */
+.qwbSwitch__button:focus-within {
+  text-decoration: underline;
+}
+
+/* As wide as its word in bold, so choosing it does not move the other */
+.qwbSwitch__text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.qwbSwitch__text::after {
+  content: attr(data-text);
+  display: block;
+  height: 0;
+  font-weight: var(--font-weight-semibold);
+  visibility: hidden;
+  overflow: hidden;
+}
+
+.qwbEditorPanel {
   padding: var(--space-4);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-lg);
 }
 
-.qwbEditor__title {
-  margin: 0 0 var(--space-2);
+.qwbEditorPanel--ppl {
+  padding: var(--space-6);
 }
 
-.qwbEditor .atlCodeEditor {
-  border-radius: 0;
+.qwbPanelTitle {
+  margin: 0;
+  font-size: var(--font-size-l);
+  font-weight: var(--font-weight-semibold);
+  line-height: 22px;
+  letter-spacing: -0.022em;
 }
 
 .qwbActions {
   display: flex;
   gap: var(--space-4);
-  margin-top: var(--space-6);
 }
 
-.qwbActions .atlButton {
-  min-width: 112px;
+/* Explain: the answer as the component library's code block, with its copy button */
+/* The plugin puts its modals in a mask of its own over the modal's: the window is dimmed twice */
+.atlScrim:has(> .qwbExplainModal),
+.atlScrim:has(> .qwbDownloadError) {
+  background: linear-gradient(var(--scrim), var(--scrim)), var(--scrim);
 }
 
+/* The plugin asks for 800 px; the component library's modal stops at 768 */
+.qwbExplainModal {
+  width: 800px;
+  max-width: min(768px, calc(100vw - 16px));
+}
+
+/* The component library's code block: a hairline, padded 24 px, 52 at the right for the button */
 .qwbExplain {
   position: relative;
+  max-width: 100%;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  overflow: hidden;
+}
+
+.qwbExplain__pre {
+  height: 100%;
+  margin: 0;
+  padding: var(--space-6) 52px var(--space-6) var(--space-6);
+  font-size: inherit;
+  white-space: pre-wrap;
+  overflow: auto;
+  scrollbar-width: thin;
 }
 
 .qwbExplain__code {
-  max-height: 60vh;
-  margin: 0;
-  padding-right: var(--space-8);
-  overflow: auto;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  display: block;
+  font-family: var(--font-family-code);
+  font-size: inherit;
+  font-weight: var(--font-weight-regular);
+  line-height: 1.5;
+  letter-spacing: normal;
 }
 
-.qwbExplain__copy {
+.qwbExplain .qwbTok--punctuation {
+  opacity: 0.7;
+}
+
+.qwbExplain .qwbTok--string {
+  color: var(--code-block-string);
+}
+
+.qwbExplain .qwbTok--number,
+.qwbExplain .qwbTok--boolean {
+  color: var(--code-block-number);
+}
+
+.qwbExplain .qwbTok--null {
+  color: var(--code-block-keyword);
+}
+
+.qwbExplain__controls {
   position: absolute;
-  top: var(--space-2);
-  right: var(--space-2);
-  display: inline-flex;
-  padding: var(--space-1);
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: none;
-  color: var(--color-text-secondary);
-  cursor: pointer;
+  top: var(--space-6);
+  right: var(--space-6);
+  line-height: 0;
 }
 
-.qwbExplain__copy:hover {
-  background: var(--color-hover);
-  color: var(--color-text-primary);
+/* The component library's smallest round icon button */
+.qwbExplain__copy.atlButton {
+  width: var(--space-6);
+  height: var(--space-6);
+  border-radius: 50%;
+}
+
+/* The tooltip of the copy button says nothing until the text is copied */
+.qwbTipEmpty {
+  display: none;
 }
 
 /* --- The results --------------------------------------------------------------------------- */
 
-.qwbResults {
-  margin-top: var(--space-6);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  overflow: hidden;
+.qwbResults__head {
+  padding: 20px 20px 0;
 }
 
-.qwbResults--full {
-  margin-top: 0;
-  min-height: calc(100vh - var(--header-height) - 2 * var(--space-4));
-  box-shadow: var(--shadow-card);
-}
-
-.qwbResults__top {
+.qwbGroup {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  min-height: 52px;
-  padding: var(--space-5) var(--space-5) 0;
+  margin: calc(-1 * var(--space-3));
 }
 
-.qwbResults__top h3 {
+.qwbGroup__item {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  min-width: 0;
+  margin: var(--space-3);
+}
+
+.qwbGroup__item--grow {
+  flex: 1 1 0%;
+}
+
+.qwbResults__title {
   margin: 0;
+  font-size: var(--font-size-l);
+  font-weight: var(--font-weight-semibold);
+  line-height: 22px;
+  letter-spacing: -0.022em;
+}
+
+.qwbExit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.qwbExit:hover {
+  background: var(--color-hover);
 }
 
 .qwbNoResult {
-  padding: 72px var(--space-4);
+  font-size: var(--font-size-s);
+  line-height: 21px;
   text-align: center;
 }
 
-.qwbNoResult h4,
+.qwbNoResult h4 {
+  margin: 0 0 7px;
+  font-size: var(--font-size-m);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
 .qwbNoResult p {
-  margin: 0 0 var(--space-2);
+  margin: 0 0 21px;
+}
+
+/* The tabs: a row 5 px in, a group with 4 px gutters, the theme's pills */
+.qwbTabsRow {
+  display: flex;
+  margin: calc(-1 * var(--space-3));
+  padding: 5px;
+}
+
+.qwbTabsGroup {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+  margin: calc(-1 * var(--space-1));
+}
+
+.qwbTabsGroup__item {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  margin: var(--space-2) var(--space-1) var(--space-1);
 }
 
 .qwbTabs {
-  margin-top: var(--space-3);
-  padding: 0 var(--space-3);
-}
-
-.qwbOutput {
-  border: 0;
-  border-radius: 0;
-}
-
-.qwbTableWrap {
-  padding: var(--space-6);
-}
-
-.qwbTablePanel {
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-}
-
-.qwbTableTop {
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-6);
-  padding: var(--space-5) var(--space-5) var(--space-3);
-}
-
-.qwbTableTop__name {
-  margin: 0 0 var(--space-1);
-  overflow-wrap: anywhere;
-}
-
-.qwbTableTop__count {
-  font-weight: var(--font-weight-regular);
-}
-
-.qwbScroll {
+  gap: var(--space-1);
+  margin: 0 0 6px 7px;
   overflow-x: auto;
 }
 
-.qwbTable {
-  width: 100%;
-  border-collapse: collapse;
+.qwbTab {
+  padding: 6px var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
   font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 21px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color var(--duration-normal) var(--ease-out-quint),
+    background-color var(--duration-normal) var(--ease-out-quint);
 }
 
-.qwbHead {
+.qwbTab:hover:not(.qwbTab--selected),
+.qwbTab:focus {
+  color: var(--color-text-primary);
+}
+
+/* EuiTab's ring is inside it */
+.qwbTab:focus-visible {
+  outline-offset: -3px;
+}
+
+.qwbTab__content {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.qwbTab--selected {
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  cursor: default;
+}
+
+/* The arrow at the top of its column, as the flex item the original puts it in */
+.qwbTabsArrow {
+  display: flex;
+  align-items: flex-start;
+}
+
+/* The plugin's own margin on each tab of its menu: the menu is that much wider */
+.qwbTabsMenu .atlContextMenu__item {
+  margin-right: 27px;
+}
+
+.qwbTabsArrow__button {
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.qwbRule {
+  flex-shrink: 0;
+  height: 1px;
+  margin: 0;
+  border: 0;
+  background: var(--color-border-light);
+  color: var(--color-border-light);
+}
+
+/* SQL's tables sit in a panel of their own, 25 px in */
+.qwbWrap {
+  padding: 25px;
+}
+
+/* The top of a table: its name and count, the search box, the Download menu */
+.qwbTableTop {
+  display: flex;
+  align-items: flex-start;
+  margin: calc(-1 * var(--space-3));
+  padding: 20px 20px 0;
+}
+
+.qwbTableTop__item {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  min-width: 1px;
+  margin: var(--space-3);
+}
+
+.qwbTableTop__item--grow {
+  flex: 1 1 0%;
+}
+
+.qwbTableTop__name {
+  margin: 0;
+  font-size: var(--font-size-m);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+/* The search bar's box is the component library's field of full size */
+.qwbTableTop__search .atlField {
+  height: 40px;
+  padding: 0 var(--space-3) 0 11px;
+}
+
+/* Its text 12 px after the icon, as EuiFieldSearch's 40 px padding puts it: the input's own 2 px
+   padding is part of it */
+.qwbTableTop__search .atlFieldGroup {
+  gap: calc(var(--space-3) - 2px);
+}
+
+/* The Download menu: the component library's context menu, 256 px wide */
+.qwbDownloadMenu.atlPopover {
+  width: 256px;
+}
+
+/* Two scroll bars as the plugin's: one over the table, one under it, scrolled together */
+.qwbTableScroll__top,
+.qwbTableScroll__body {
+  overflow: auto hidden;
+}
+
+.qwbTableScroll__top > div {
+  padding-top: 1px;
+  font-size: var(--font-size-s);
+  line-height: 14px;
+}
+
+/* The table: fixed columns of 155 px after one of 27 px that opens the rows, wider than the
+   panel when they need */
+.qwbTable {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: var(--font-size-s);
+  line-height: 1.5;
+  /* EuiTable's figures, all of one width */
+  font-feature-settings: 'calt' 1, 'kern' 1, 'liga' 1, 'tnum' 1;
+}
+
+.qwbTable__head {
   width: 155px;
-  min-width: 155px;
-  padding: var(--space-3) var(--space-2);
+  padding: 0;
   background: var(--color-surface-secondary);
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
+  line-height: 20px;
   text-align: left;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.qwbTable__head--expander {
+  width: 27px;
+}
+
+.qwbTable__head--nestedExpander {
+  width: 30px;
+}
+
+.qwbTable__headText {
+  overflow: hidden;
+  line-height: 18px;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.qwbHead--expand {
-  width: 27px;
-  min-width: 27px;
+.qwbTable__content {
+  display: flex;
+  align-items: center;
+  padding: 10px var(--space-3);
+  overflow: hidden;
 }
 
-.qwbCell {
-  padding: var(--space-3) var(--space-2);
+.qwbTable__cell {
+  padding: 0;
   border-top: 1px solid var(--color-border-light);
-  vertical-align: top;
+  color: var(--color-text-primary);
+  vertical-align: middle;
+}
+
+.qwbTable__cell > .qwbTable__content {
+  white-space: normal;
+  word-break: break-word;
   overflow-wrap: anywhere;
 }
 
-.qwbCell--expand {
-  width: 27px;
-  padding-right: 0;
+.qwbTable__row:hover {
+  background: var(--color-surface-secondary);
 }
 
-.qwbRow--open > .qwbCell {
-  border-bottom: 0;
+.qwbTable__row--nav:hover {
+  background: none;
 }
 
-.qwbRow--detail > td {
-  padding: 0 0 var(--space-5) var(--space-6);
+/* The original's row of names has no cell of its own, so no line above it */
+.qwbTable__navCell {
+  padding: 0;
 }
 
-.qwbExpand {
+/* EuiTableCellContent's text, around the expander: as wide as the button less its margin */
+.qwbTable__text {
+  display: block;
+  min-width: 0;
+}
+
+/* The component library's small round icon button, "empty" (no shadow ever): 32 px, squeezed
+   by a narrow cell with its icon then at its start */
+.qwbExpander {
   display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: space-around;
+  width: 32px;
+  min-width: 0;
+  max-width: 100%;
+  height: 32px;
+  margin-left: -4px;
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: none;
-  color: var(--color-accent);
+  background: transparent;
+  color: var(--color-accent-button-text);
+  vertical-align: middle;
   cursor: pointer;
 }
 
-.qwbExpand:focus-visible,
-.qwbLink:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
+.qwbExpander:hover,
+.qwbExpander:focus {
+  background-color: var(--color-accent-tint);
 }
 
 .qwbLink {
@@ -278,58 +812,477 @@
   background: none;
   color: var(--color-accent);
   font: inherit;
+  /* A button's own figures, as the browser gives them: the table's are not passed on */
+  font-feature-settings: normal;
+  line-height: normal;
+  text-align: left;
+  cursor: pointer;
+  user-select: text;
+}
+
+.qwbLink:hover,
+.qwbLink:focus {
+  color: var(--qwb-link-hover);
+  text-decoration: underline;
+}
+
+.qwbLink:focus {
+  background-color: var(--qwb-link-focus);
+  animation: qwbFocusRing 0.4s var(--ease-out-quint) forwards;
+}
+
+/* An open row's names, as the component library's side navigation lists them */
+.qwbNavWrap {
+  padding: 0 0 20px 19px;
+}
+
+.qwbNav {
+  width: 300px;
+  padding: 0 0 20px 9px;
+}
+
+.qwbNav__button {
+  display: block;
+  width: 100%;
+  padding: 2px 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--font-size-s);
+  /* A button in the original: the table's figures are not passed on to it */
+  font-feature-settings: normal;
+  line-height: 1.5;
   text-align: left;
   cursor: pointer;
 }
 
-.qwbLink:hover {
-  text-decoration: underline;
+.qwbNav__button--selected {
+  color: var(--color-accent);
+  font-weight: var(--font-weight-medium);
 }
 
-/* What a row holds, under its names */
-.qwbNames {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  margin: 0;
-  padding: var(--space-2) 0 0;
-  list-style: none;
+.qwbNav__button:hover {
+  color: var(--color-text-primary);
 }
 
-.qwbNames__name {
+.qwbNav__content {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+}
+
+/* Every name is cut to its line, and so is the table that is a picked item's name */
+.qwbNav__label {
+  flex-grow: 1;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+.qwbNav__label .qwbTable__cell > .qwbTable__content {
+  white-space: inherit;
+}
+
+/* A button of its own in the original: its margin stays under it, empty as it is */
+.qwbNav__item--root > .qwbNav__button {
+  display: flow-root;
+  width: calc(100% + 16px);
+  margin: 0 0 var(--space-2) calc(-1 * var(--space-2));
+  padding: 0 var(--space-2);
+}
+
+.qwbNav__item--trunk {
+  color: var(--color-text-primary);
+}
+
+.qwbNav__item--trunk > .qwbNav__button {
+  width: calc(100% + 16px);
+  margin-left: calc(-1 * var(--space-2));
+  padding: 2px var(--space-2);
+}
+
+.qwbNav__item--trunk > .qwbNav__items {
+  width: 100%;
+  margin-left: var(--space-2);
+}
+
+.qwbExpander.qwbNav__icon {
+  margin: 0 var(--space-2) 0 0;
+}
+
+.qwbNav__item--branch {
+  position: relative;
   color: var(--color-text-secondary);
 }
 
-.qwbNames__name--open {
-  color: var(--color-accent);
+.qwbNav__item--branch::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  background: var(--color-border-light);
 }
 
-.qwbNested {
-  margin: var(--space-2) 0 0 var(--space-2);
-  border-left: 1px solid var(--color-border-light);
-  overflow-x: auto;
+.qwbNav__item--branch:last-of-type::after {
+  height: 12px;
 }
 
-.qwbTable--nested {
-  width: auto;
+.qwbNav__item--branch > .qwbNav__button {
+  position: relative;
+  padding-right: var(--space-2);
+  padding-left: var(--space-2);
 }
 
-@media (max-width: 900px) {
-  .qwbPage {
-    flex-direction: column;
-    align-items: stretch;
+.qwbNav__item--branch > .qwbNav__button::after {
+  content: '';
+  position: absolute;
+  top: 12px;
+  left: 0;
+  width: 4px;
+  height: 1px;
+  background: var(--color-border-light);
+}
+
+/* The pages right under the table, in a row as tall as their buttons */
+.qwbPager > .atlPagination {
+  min-height: 32px;
+  margin-top: 0;
+}
+
+/* The Output tab: Ace's read-only editor, 500 px tall (over the editors' 140 px below) */
+.qwbCode.qwbCode--output {
+  height: 500px;
+}
+
+/*
+ * The editors, as the original's code editor draws Ace with the theme's colours: lines of 18
+ * pixels with 4 pixels before the text, a gutter on the page's surface with a line at its left,
+ * as wide as its numbers need, the line of the cursor on a band that crosses the gutter, the
+ * selection under the text, the guides of the indents, and a cursor two pixels wide.
+ */
+.qwbCode,
+.qwbComplete {
+  --qwb-code-gutter-line: #e9e9eb;
+  --qwb-code-keyword: #037098;
+  --qwb-code-language: #5256e1;
+  --qwb-code-function: #3c4c72;
+  --qwb-code-operator: #66666b;
+  --qwb-code-string: #087824;
+  --qwb-code-comment: #41705a;
+  --qwb-code-selection: #b3d7ff;
+  --qwb-code-cursor: #000;
+  --qwb-code-match: #0b736d;
+  --qwb-code-band: color-mix(in srgb, var(--color-border) 70%, transparent);
+}
+
+.themeDark .qwbCode,
+.themeDark .qwbComplete {
+  --qwb-code-gutter-line: #38383a;
+  --qwb-code-keyword: hsl(196deg 47.83% 57.37%);
+  --qwb-code-language: rgb(149.75 152.27 249.33);
+  --qwb-code-function: rgb(154.9 163.11 182.62);
+  --qwb-code-operator: rgb(162.04 162.04 166.56);
+  --qwb-code-string: rgb(76.92 183.77 103.46);
+  --qwb-code-comment: hsl(151deg 20.13% 59.2%);
+  --qwb-code-selection: rgb(23.3 59.9 98.2);
+  --qwb-code-cursor: #fff;
+  --qwb-code-match: rgb(36.37 178.69 169.26);
+}
+
+.qwbCode {
+  position: relative;
+  width: 100%;
+  height: 140px;
+}
+
+.qwbCode__editor.atlCodeEditor {
+  /* The gutter: a pixel of line, then the numbers with 19 pixels before and 13 after them */
+  --qwb-gutter: calc(34px + var(--qwb-digits, 1) * 1ch);
+  --code-gutter: calc(var(--qwb-gutter) + 4px);
+  border: 0;
+  border-radius: 0;
+  background: linear-gradient(
+    to right,
+    var(--qwb-code-gutter-line) 0,
+    var(--qwb-code-gutter-line) 1px,
+    var(--color-surface) 1px,
+    var(--color-surface) var(--qwb-gutter),
+    var(--color-surface-secondary) var(--qwb-gutter)
+  );
+  scrollbar-color: color-mix(in srgb, var(--color-text-secondary) 50%, transparent) transparent;
+}
+
+/* Ace gives the gutter whole pixels */
+@supports (width: round(up, 1.5px, 1px)) {
+  .qwbCode__editor.atlCodeEditor {
+    --qwb-gutter: calc(1px + round(up, 33px + var(--qwb-digits, 1) * 1ch, 1px));
+  }
+}
+
+.qwbCode--text .qwbCode__editor.atlCodeEditor {
+  --qwb-gutter: 0px;
+  --code-gutter: 4px;
+  background: var(--color-surface-secondary);
+}
+
+.qwbCode__editor.atlCodeEditor:focus-within {
+  border: 0;
+  box-shadow: none;
+}
+
+/* What is drawn under the text is under it, and over the editor's own ground */
+.qwbCode__editor .atlCodeEditor__body {
+  isolation: isolate;
+}
+
+.qwbCode__editor .atlCodeEditor__paint {
+  padding: 0;
+  tab-size: 4;
+}
+
+.qwbCode__editor .atlCodeEditor__line,
+.qwbCode__editor .atlCodeEditor__line--marked {
+  padding: 0 4px 0 var(--code-gutter);
+  background: transparent;
+}
+
+.qwbCode__editor .atlCodeEditor__line::before {
+  z-index: 2;
+  width: var(--qwb-gutter);
+  margin: 0 4px 0 calc(-1 * var(--code-gutter));
+  padding: 0 13px 0 19px;
+  border-left: 1px solid var(--qwb-code-gutter-line);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+}
+
+.qwbCode__editor .atlCodeEditor__line--marked::before {
+  background: linear-gradient(var(--qwb-code-band), var(--qwb-code-band)), var(--color-surface);
+}
+
+/* The cursor and the selection are drawn by the page, as Ace draws its own */
+.qwbCode__editor .atlCodeEditor__input {
+  padding: 0 4px 0 var(--code-gutter);
+  caret-color: transparent;
+  tab-size: 4;
+}
+
+.qwbCode__editor .atlCodeEditor__input::selection {
+  background: transparent;
+}
+
+.qwbCode__marks {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.qwbCode__activeLine {
+  position: absolute;
+  right: 0;
+  left: var(--qwb-gutter);
+  height: 18px;
+  background: var(--qwb-code-band);
+}
+
+.qwbCode__selection {
+  position: absolute;
+  height: 18px;
+  border-radius: 3px;
+  background: var(--qwb-code-selection);
+}
+
+.qwbCode__selection--first {
+  right: 0;
+  border-radius: 3px 0 0;
+}
+
+.qwbCode__selection--last {
+  border-radius: 0 0 3px 3px;
+}
+
+.qwbCode__selection--between {
+  right: 0;
+  border-radius: 0;
+}
+
+.qwbCode__selection--afterShort {
+  border-top-left-radius: 3px;
+}
+
+.qwbCode__selection--beforeNone {
+  border-bottom-left-radius: 3px;
+}
+
+.qwbCode__bracket {
+  position: absolute;
+  width: 1ch;
+  height: 18px;
+  margin: -1px 0 0 -1px;
+  border: 1px solid var(--color-border-light);
+}
+
+.qwbCode__cursor {
+  position: absolute;
+  z-index: 1;
+  height: 18px;
+  border-left: 2px solid var(--qwb-code-cursor);
+  pointer-events: none;
+  animation: qwbCursor 1s steps(1) infinite;
+}
+
+/* Shown for six tenths of each second, as Ace blinks its cursor */
+@keyframes qwbCursor {
+  0% {
+    opacity: 1;
   }
 
-  .qwbSide {
-    width: auto;
-    min-height: 0;
-    max-height: 240px;
+  60% {
+    opacity: 0;
   }
 }
 
-.qwbResults .atlPagination {
-  padding: var(--space-2) var(--space-3);
+.qwbCode__probe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-family: var(--font-family-code);
+  font-size: 14px;
+  white-space: pre;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.qwbCode .tokSqlKeyword,
+.qwbCode .tokSqlType,
+.qwbCode .tokSqlNumber {
+  color: var(--qwb-code-keyword);
+}
+
+.qwbCode .tokSqlLanguage {
+  color: var(--qwb-code-language);
+}
+
+.qwbCode .tokSqlFunction {
+  color: var(--qwb-code-function);
+}
+
+.qwbCode .tokSqlOperator {
+  color: var(--qwb-code-operator);
+}
+
+.qwbCode .tokSqlString {
+  color: var(--qwb-code-string);
+}
+
+.qwbCode .tokSqlComment {
+  color: var(--qwb-code-comment);
+}
+
+/* An indent guide: a line at the right of each step of an indent, the whole height of the line */
+.qwbCode .tokQwbGuide {
+  display: inline-block;
+  height: 1lh;
+  vertical-align: top;
+  background: linear-gradient(
+    to left,
+    var(--color-text-tertiary) 0,
+    var(--color-text-tertiary) 1px,
+    transparent 1px,
+    transparent 100%
+  );
+}
+
+/*
+ * The hint the Tab key stops on: under the text, unseen, until it has the focus; then over it.
+ * The original draws it white in the dark theme too, under the theme's light text; here it is
+ * the page's surface.
+ */
+.qwbCode__hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: color-mix(in srgb, var(--color-surface) 70%, transparent);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.qwbCode__hint:focus {
+  z-index: 3;
+  border: 2px solid var(--color-accent);
+  opacity: 1;
+}
+
+.qwbCode__hint--inactive {
+  display: none;
+}
+
+/*
+ * The list of completions, as Ace's: 280 pixels wide, at most eight rows of 1.4 lines, the row
+ * chosen on a band, the letters typed marked in each value, and its kind at the right.
+ */
+.qwbComplete {
+  position: fixed;
+  z-index: 4500;
+  width: 280px;
+  border: 1px solid lightgray;
+  background: var(--color-surface-secondary);
+  box-shadow: 2px 3px 5px rgb(0 0 0 / 20%);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-code);
+  font-size: 14px;
+  line-height: 1.4;
+  white-space: pre;
+  overflow: hidden;
+  cursor: default;
+  user-select: none;
+}
+
+.qwbComplete__row {
+  position: relative;
+  z-index: 0;
+  height: 19.59375px;
+  padding: 0 4px;
+}
+
+.qwbComplete__row--active {
+  background: var(--qwb-code-band);
+}
+
+/* The row under the pointer: a box one pixel higher than the row, under its text */
+.qwbComplete__row--hover::before {
+  content: '';
+  position: absolute;
+  inset: -1px 0 1px;
+  z-index: -1;
+  border: 1px solid rgb(171 191 254);
+  background: rgb(233 233 253 / 40%);
+}
+
+.qwbComplete__match {
+  color: var(--qwb-code-match);
+  text-shadow: 0 0 0.01em;
+}
+
+.qwbComplete__meta {
+  position: absolute;
+  right: 4px;
+  z-index: -1;
+  color: var(--qwb-code-keyword);
 }

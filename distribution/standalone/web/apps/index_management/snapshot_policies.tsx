@@ -11,7 +11,6 @@ import { MenuButton } from '../../components/overlay';
 import { navigateHash, useLocation } from '../../router';
 import { useBreadcrumbs } from '../../shell/state';
 import {
-  DeleteModal,
   ExternalLink,
   LocalTable,
   Table,
@@ -40,7 +39,13 @@ import {
   type PolicyMetadata,
   type SMPolicy,
 } from './snapshot_model';
-import { Facts, ListPanel, PolicyPanel, SNAPSHOT_DOCS } from './snapshot_parts';
+import {
+  DeletePolicyDialog,
+  Facts,
+  ListPanel,
+  PolicyPanel,
+  SNAPSHOT_DOCS,
+} from './snapshot_parts';
 
 const policyPath = (id: string) => `smPolicies/${encodeURIComponent(id)}`;
 
@@ -49,23 +54,6 @@ async function switchPolicy(policyId: string, on: boolean): Promise<void> {
   const answer = await ism.post(`${policyPath(policyId)}/${on ? '_start' : '_stop'}`);
   if (answer.ok) toasts.success(`"${policyId}" successfully ${on ? 'started' : 'stopped'}!`);
   else toasts.danger(`Could not ${on ? 'start' : 'stop'} policy "${policyId}" :  ${answer.error}`);
-}
-
-function DeletePolicyModal({
-  policyIds,
-  onClose,
-  onDelete,
-}: {
-  policyIds: string;
-  onClose: () => void;
-  onDelete: () => void | Promise<void>;
-}) {
-  return (
-    <DeleteModal title="Delete policy" onClose={onClose} onDelete={onDelete}>
-      Delete "<strong>{policyIds}</strong>" permanently? Indices will no longer be managed using
-      this policy.
-    </DeleteModal>
-  );
 }
 
 // --- The list ------------------------------------------------------------------------------------------------
@@ -310,10 +298,10 @@ export function SnapshotPolicies() {
         />
       </ListPanel>
       {deleting && (
-        <DeletePolicyModal
+        <DeletePolicyDialog
           policyIds={selected.map((policy) => policy.name).join(', ')}
-          onClose={() => setDeleting(false)}
-          onDelete={remove}
+          onCancel={() => setDeleting(false)}
+          onDelete={() => void remove()}
         />
       )}
     </>
@@ -333,6 +321,18 @@ interface PolicyDocument {
 interface ChannelConfig {
   config_id: string;
   config: { name?: string; config_type?: string };
+}
+
+/**
+ * The one channel a policy notifies through. One that cannot be loaded, as on a cluster without the
+ * notifications plugin, is "None" with no message: the original never loads it, so its users see "None".
+ */
+export async function policyChannel(channelId: string): Promise<ChannelConfig | undefined> {
+  const answer = await ism.get<{ config_list?: ChannelConfig[] }>(
+    `_notifications/channels/${encodeURIComponent(channelId)}`
+  );
+  const configs = (answer.ok && answer.response?.config_list) || [];
+  return configs.length === 1 ? configs[0] : undefined;
 }
 
 export function SnapshotPolicyDetails() {
@@ -374,16 +374,8 @@ export function SnapshotPolicyDetails() {
     void load().then(async (found) => {
       const channelId = found?.notification?.channel?.id;
       if (!channelId) return;
-      const answer = await ism.get<{ config_list?: ChannelConfig[] }>(
-        `_notifications/channels/${encodeURIComponent(channelId)}`
-      );
-      if (!here.current) return;
-      if (answer.ok) {
-        const configs = answer.response?.config_list ?? [];
-        setChannel(configs.length === 1 ? configs[0] : undefined);
-      } else {
-        toasts.danger(`Could not load notification channel: ${answer.error}`);
-      }
+      const config = await policyChannel(channelId);
+      if (here.current) setChannel(config);
     });
     return () => {
       here.current = false;
@@ -413,21 +405,13 @@ export function SnapshotPolicyDetails() {
   const creation = policy.creation?.schedule?.cron;
   const deletion = policy.deletion;
   const deletionCron = deletion?.schedule?.cron;
+  // The plugin marks the times sortable, but its table is given no sorting, so none of its headers
+  // sorts
   const activityColumns: Array<TableColumn<Activity>> = [
     { field: 'activityType', name: 'Activity type', render: (row) => row.activityType },
     { field: 'status', name: 'Status', render: (row) => row.status },
-    {
-      field: 'start_time',
-      name: 'Time started',
-      sortable: true,
-      render: (row) => renderTime(row.start_time),
-    },
-    {
-      field: 'end_time',
-      name: 'Time completed',
-      sortable: true,
-      render: (row) => renderTime(row.end_time),
-    },
+    { field: 'start_time', name: 'Time started', render: (row) => renderTime(row.start_time) },
+    { field: 'end_time', name: 'Time completed', render: (row) => renderTime(row.end_time) },
     {
       field: 'info',
       name: 'Info',
@@ -565,7 +549,11 @@ export function SnapshotPolicyDetails() {
       </PolicyPanel>
 
       {deleting && (
-        <DeletePolicyModal policyIds={id} onClose={() => setDeleting(false)} onDelete={remove} />
+        <DeletePolicyDialog
+          policyIds={id}
+          onCancel={() => setDeleting(false)}
+          onDelete={() => void remove()}
+        />
       )}
       {info && (
         <InfoModal title=" " onClose={() => setInfo(undefined)}>

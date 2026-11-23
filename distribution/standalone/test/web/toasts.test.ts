@@ -53,3 +53,28 @@ describe('the toast service\'s plain message, as the original\'s toasts.add of a
       );
     }));
 });
+
+describe('the test id of a message, as the original\'s toasts take one', () => {
+  it('carries the test id it is given, its lifetime still the kind\'s or the one given', () =>
+    withTimers((timers) => {
+      const toasts = new Toasts();
+      toasts.lifetimes.healthy = 5000;
+      toasts.success('Saved "Logs"', undefined, { testId: 'saveVisualizationSuccess' });
+      toasts.danger('Error on saving "Logs"', 'Forbidden', { testId: 'saveVisualizationError' });
+      toasts.info('Working', undefined, 60000);
+      assert.deepEqual(
+        toasts.get().map((toast) => toast.testId),
+        ['saveVisualizationSuccess', 'saveVisualizationError', undefined]
+      );
+      // A failure told in a few words stays as long as a warning, test id or not
+      assert.deepEqual(timers, [5000, toasts.lifetimes.warning, 60000]);
+    }));
+
+  it('carries it on an error with its whole text', () =>
+    withTimers(() => {
+      const toasts = new Toasts();
+      toasts.addError(new Error('Forbidden'), { title: 'Error on saving', testId: 'saveVisualizationError' });
+      assert.equal(toasts.get()[0].testId, 'saveVisualizationError');
+      assert.equal(toasts.get()[0].text, 'Forbidden');
+    }));
+});

@@ -1,9 +1,9 @@
 InfraDashboard
 
 This product is a re-creation of OpenSearch Dashboards (https://opensearch.org/), written to be
-built from five npm packages: React, React DOM, Vega, Vega-Lite and Leaflet. It uses no package
-of OpenSearch Dashboards, but it follows that product closely so that what was saved with it
-keeps working, and parts of it are derived from it under the Apache License, Version 2.0:
+built from six npm packages: React, React DOM, Vega, Vega-Lite, Leaflet and markdown-it. It uses
+no package of OpenSearch Dashboards, but it follows that product closely so that what was saved
+with it keeps working, and parts of it are derived from it under the Apache License, Version 2.0:
 
   - the mappings of the saved objects index (server/saved_objects_mappings.json),
   - the names, defaults and descriptions of the advanced settings (web/lib/settings_catalogue.json),
@@ -36,7 +36,10 @@ keeps working, and parts of it are derived from it under the Apache License, Ver
   - the colours of the console and the reading of its requests
     (web/apps/dev_tools/console_highlight.ts and console_model.ts): the rules of the console's
     modes for the Ace editor (src/plugins/console/public/application/models/legacy_core_editor/mode
-    and packages/osd-ace) and of the RowParser that reads the requests from them.
+    and packages/osd-ace) and of the RowParser that reads the requests from them,
+  - the way Markdown is read and drawn (web/lib/markdown.tsx): the settings of markdown-it and
+    the rule for links that open a new tab of the Markdown component of opensearch_dashboards_react,
+    with the getSecureRelForTarget and isDomainSecure functions of OUI 1.24.2 that rule uses.
 
 OpenSearch Dashboards
 Copyright OpenSearch Contributors
@@ -51,10 +54,15 @@ It includes software, including Elastic UI framework source code, developed by E
 
 The browser script bundles React, React DOM and Scheduler, under the MIT License,
 Copyright (c) Facebook, Inc. and its affiliates, and Leaflet, under the BSD 2-Clause License,
-Copyright (c) 2010-2023, Volodymyr Agafonkin, Copyright (c) 2010-2011, CloudMade. Vega and
-Vega-Lite are served as their own browser builds, with the packages those builds hold, under the
-BSD 3-Clause License, Copyright (c) 2015-2023 and Copyright (c) 2015, University of Washington
-Interactive Data Lab. Their licence texts are in dist/licenses of a build.
+Copyright (c) 2010-2023, Volodymyr Agafonkin, Copyright (c) 2010-2011, CloudMade. It also bundles
+markdown-it 14.2.0, Copyright (c) 2014 Vitaly Puzrin, Alex Kocharin, and the packages it uses:
+mdurl 2.0.0, Copyright (c) 2015 Vitaly Puzrin, Alex Kocharin, whose URL parser is based on the url
+module of Node.js, Copyright Joyent, Inc. and other Node contributors; linkify-it 5.0.2,
+Copyright (c) 2015 Vitaly Puzrin; uc.micro 2.1.0 and punycode.js 2.3.1, Copyright Mathias Bynens;
+all under the MIT License; and entities 4.5.0, under the BSD 2-Clause License, Copyright (c)
+Felix Böhm. Vega and Vega-Lite are served as their own browser builds, with the packages those
+builds hold, under the BSD 3-Clause License, Copyright (c) 2015-2023 and Copyright (c) 2015,
+University of Washington Interactive Data Lab. Their licence texts are in dist/licenses of a build.
 
 Parts of the Vega visualization are written after the code of the packages OpenSearch Dashboards
 uses for it, so that a spec is read, coloured and drawn as it is there, and are derived from that
@@ -85,7 +93,27 @@ look as they do there, and are derived from it under its licence: its styles, it
 the folding marks and of an error in the gutter, the way it draws the selection and the cursor
 (web/apps/dev_tools/console_editor.tsx and web/styles/dev_tools.css), and the way its tokenizer
 applies the rules of a mode (web/apps/dev_tools/console_highlight.ts); BSD 3-Clause License,
-Copyright (c) 2010, Ajax.org B.V.
+Copyright (c) 2010, Ajax.org B.V. So are the two code editors of TSVB's markdown panel: the way
+the tokenizer applies a mode, the rules of its markdown and less modes and their folding marks
+(web/apps/visualize/tsvb/ace_tokenizer.ts, ace_markdown.ts and ace_less.ts), and its pictures of
+the folding marks (web/styles/tsvb_editor.css).
+
+The Markdown of the custom banner is drawn as react-markdown 6.0.3 draws it, which OpenSearch
+Dashboards draws it with, and is derived from its code and from that of mdast-util-to-hast
+10.2.0, which it uses (web/lib/markdown.tsx): the address a link leads to (react-markdown's
+uriTransformer), MIT License, Copyright (c) 2015 Espen Hovlandsdal, and the lines between blocks
+and in list items, MIT License, Copyright (c) 2016 Titus Wormer.
+
+Their licence texts are in licenses/, and in dist/licenses/followed of a build.
+
+The tag cloud is laid out and drawn after the code of the packages OpenSearch Dashboards draws it
+with, so that its words fall, and move, where they do there, and is derived from that code under
+its licence:
+
+  - the layout of the words (web/vis/cloud_layout.ts): d3-cloud 1.2.5, BSD 3-Clause License,
+    Copyright (c) 2013, Jason Davies
+  - the scales, colours and transitions of the words (web/vis/tag_cloud_d3.ts): d3 3.5.17,
+    BSD 3-Clause License, Copyright (c) 2010-2016, Michael Bostock
 
 Their licence texts are in licenses/, and in dist/licenses/followed of a build.
 

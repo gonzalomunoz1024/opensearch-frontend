@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # The standalone InfraDashboard as an image. The build needs two things from outside: a Node.js 22
-# image, and the npm packages of package-lock.json (89, nine of them named in package.json) from
+# image, and the npm packages of package-lock.json (96, ten of them named in package.json) from
 # whichever registry npm is pointed at. Nothing is compiled from native code and nothing else is
 # downloaded.
 #

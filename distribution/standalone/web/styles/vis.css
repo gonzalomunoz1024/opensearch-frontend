@@ -40,9 +40,11 @@
   overflow-wrap: anywhere;
 }
 
+/* Its text as the product's extra small text: 12 px on a line of 1.5 */
 .visTsvbNoData {
   gap: var(--space-2);
   color: var(--color-text-secondary);
+  line-height: 1.5;
 }
 
 .visTsvbNoData p {
@@ -86,15 +88,24 @@
 }
 
 /*
- * The frame the product draws a TSVB markdown panel and a failed panel in: the visualization's
- * padding, then a transparent border that leaves the panel's background colour inside it
+ * A TSVB panel is drawn on the line-height of the product's page, 1, which those of its parts
+ * that set none inherit (a Top N's rows, a gauge's ring in its line); in the TSVB editor its chart
+ * sets `normal` instead, as the product's does
+ */
+.visRoot[data-vis-type="metrics"] {
+  line-height: 1;
+}
+
+/*
+ * The frame the product draws a TSVB panel in: a transparent border that leaves the panel's
+ * background colour inside it. The visualization's padding of 8 px around it is its container's,
+ * as a dashboard panel's body keeps it; the TSVB editor, whose chart has none, gives it a margin.
  */
 .visTsvbFrame {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
-  margin: var(--space-2);
   border: var(--space-2) solid transparent;
 }
 
@@ -159,6 +170,25 @@
 
 .visTsvbMarkdown__content--scroll {
   overflow: auto;
+}
+
+/*
+ * The text is the product's markdown body (.visMarkdownBody), whose lines and fills are the full
+ * shade at 15% and 5%; over a background that reads as the other theme it is written in the
+ * lightest shade, its lines and fills from the surface, as the product's osdMarkdown__body--reversed
+ */
+.visTsvbMarkdown .atlMarkdown.visMarkdownBody {
+  --vis-markdown-line: color-mix(in srgb, var(--color-full-shade) 15%, transparent);
+  --vis-markdown-fill: color-mix(in srgb, var(--color-full-shade) 5%, transparent);
+}
+
+.visTsvbMarkdown__content--reversed {
+  color: var(--color-surface-secondary);
+}
+
+.visTsvbMarkdown__content--reversed .atlMarkdown.visMarkdownBody {
+  --vis-markdown-line: color-mix(in srgb, var(--color-surface) 15%, transparent);
+  --vis-markdown-fill: color-mix(in srgb, var(--color-surface) 5%, transparent);
 }
 
 /* Controls: the original's input controls with the Atlas theme */
@@ -385,15 +415,15 @@
 /* TSVB */
 
 /*
- * A TSVB metric or gauge writes its label and values in the product's colours: the theme's text
- * at 40% for a label and 70% for a value, or, over a panel colour that reads as the other theme,
- * the theme's surface at 60% and 80%; and at the product's sizes from its base of 14px, before
- * they are scaled to the panel
+ * A TSVB metric or gauge writes its label and values in the product's colours: the theme's full
+ * shade (black, white in dark) at 40% for a label and 70% for a value, or, over a panel colour
+ * that reads as the other theme, the theme's surface at 60% and 80%; and at the product's sizes
+ * from its base of 14px, before they are scaled to the panel
  */
 .visTsvbMetric,
 .visTsvbGauge {
-  --vis-tsvb-text: color-mix(in srgb, var(--color-text-primary) 40%, transparent);
-  --vis-tsvb-value: color-mix(in srgb, var(--color-text-primary) 70%, transparent);
+  --vis-tsvb-text: color-mix(in srgb, var(--color-full-shade) 40%, transparent);
+  --vis-tsvb-value: color-mix(in srgb, var(--color-full-shade) 70%, transparent);
 
   position: relative;
   display: flex;
@@ -470,16 +500,15 @@
 
 /* A TSVB Top N as the product draws it, in its colours and at its base size */
 .visTsvbTopN {
-  --vis-tsvb-text: color-mix(in srgb, var(--color-text-primary) 40%, transparent);
-  --vis-tsvb-value: color-mix(in srgb, var(--color-text-primary) 70%, transparent);
-  --vis-tsvb-hover: color-mix(in srgb, var(--color-text-primary) 10%, transparent);
+  --vis-tsvb-text: color-mix(in srgb, var(--color-full-shade) 40%, transparent);
+  --vis-tsvb-value: color-mix(in srgb, var(--color-full-shade) 70%, transparent);
+  --vis-tsvb-hover: color-mix(in srgb, var(--color-full-shade) 10%, transparent);
 
   position: relative;
   display: flex;
   flex-direction: column;
   overflow: auto;
   font-size: var(--font-size-s);
-  line-height: normal;
 }
 
 .visTsvbTopN--reversed {
@@ -497,12 +526,14 @@
   background-color: var(--vis-tsvb-hover);
 }
 
+/* On the baseline of its row, as the product's reset leaves every cell that sets nothing else */
 .visTsvbTopN__label {
   padding: var(--space-1) 0;
   overflow: hidden;
   color: var(--vis-tsvb-text);
   text-overflow: ellipsis;
   white-space: nowrap;
+  vertical-align: baseline;
 }
 
 .visTsvbTopN__bar {
@@ -582,12 +613,10 @@
   overflow: hidden;
 }
 
+/* The ring stands in a line of text, as tall as the line makes it, and is scaled from the size it
+   measures */
 .visTsvbGauge__ring {
   position: absolute;
-}
-
-.visTsvbGauge__ring svg {
-  display: block;
 }
 
 /*
@@ -602,7 +631,6 @@
   align-items: stretch;
   justify-content: space-around;
   min-height: 0;
-  margin: var(--space-2);
   overflow: auto;
 }
 
@@ -615,22 +643,90 @@
   border: var(--space-2) solid transparent;
 }
 
+/* --- TSVB's table ------------------------------------------------------------------------------ */
+
+/*
+ * TSVB's table is not the data table: the product draws it with the table style of its legacy
+ * style sheet, whose lines have that sheet's own colour (not the Atlas theme's) in each theme.
+ */
+:root {
+  --vis-tsvb-table-line: #d3dae6;
+}
+
+:root.themeDark {
+  --vis-tsvb-table-line: #343741;
+}
+
+/*
+ * What scrolls it in a panel: the visualization, with its 8 px of padding inside what scrolls. The
+ * panel's body keeps that padding around it, so the scroller spans it and takes it inside.
+ */
+.visTsvbTable {
+  display: flex;
+  flex: 1 1 100%;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  margin: calc(-1 * var(--space-2));
+  padding: var(--space-2);
+  overflow: auto;
+}
+
+/* The panel's frame: a transparent border, as wide again */
+.visTsvbTable__frame {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+  border: var(--space-2) solid transparent;
+}
+
+.visTsvbTable__table {
+  width: 100%;
+  max-width: 100%;
+  margin-bottom: 20px;
+  border-spacing: 0;
+  border-collapse: collapse;
+  font-size: var(--font-size-xs);
+}
+
+/* A cell: 8 px around its text on a line of 1.42857143, a line over every row but the titles' */
+.visTsvbTable__table th,
+.visTsvbTable__table td {
+  padding: var(--space-2);
+  border-top: 1px solid var(--vis-tsvb-table-line);
+  line-height: 1.42857143;
+  vertical-align: top;
+}
+
+/* The titles: bold, in the middle of their columns and at the foot of their row, a line under them */
+.visTsvbTable__table th {
+  border-top: 0;
+  border-bottom: 1px solid var(--vis-tsvb-table-line);
+  /* The browser's own weight of a title cell, which the legacy table keeps */
+  font-weight: 700;
+  text-align: center;
+  vertical-align: bottom;
+}
+
+.visTsvbTable__table th.visTsvbTable__pivot {
+  text-align: left;
+}
+
+.visTsvbTable__value {
+  text-align: right;
+}
+
+/* The arrows of a sort and of a trend stand in the middle of their line; a trend's is subdued */
+.visTsvbTable__table .atlIcon {
+  vertical-align: middle;
+}
+
 .visTsvbTable__trend {
   color: var(--color-text-secondary);
 }
 
-.visTsvbTable__trend .atlIcon {
-  vertical-align: middle;
-}
-
-/* The arrow of the column a TSVB table is sorted by, and the room for one the other columns keep */
-.visTsvbTable__sort {
-  vertical-align: middle;
-}
-
-.visTsvbTable__noSort {
+/* A title that cannot sort tells so in a tip: its anchor is a box in the line, as the product's */
+.visTsvbTable__table .atlTooltipAnchor {
   display: inline-block;
-  width: 16px;
-  height: 16px;
-  vertical-align: middle;
 }

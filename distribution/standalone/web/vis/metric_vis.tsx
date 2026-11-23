@@ -1,97 +1,86 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
-/* Metric: a calculation as one large number, or one per bucket. */
+/*
+ * Metric: a calculation as one large number, or one per bucket, as the original's metric
+ * visualization draws it (vis_type_metric's MetricVisComponent and MetricVisValue): the values
+ * side by side, wrapping when they do not fit, each over its label, in the colour of its range or
+ * on it; one of a bucket filters for the bucket when it is clicked.
+ */
 
-import { ChartMessage, rampColor, readableOn } from '../charts/core';
+import { useMemo, type KeyboardEvent } from 'react';
+import { cx } from '../components/basic';
 import { bucketFilter } from '../lib/aggs';
-import { bucketColumns, metricColumns, numberOf, type VisRenderProps } from './types';
+import { services } from '../services';
+import { FormattedValue } from './formatted_value';
+import { groupColumn, metricConfig, metricItems, type MetricItem } from './metric_data';
+import { VisNoResults } from './no_results';
+import type { VisRenderProps } from './types';
 import '../styles/vis_basic.css';
 
-interface Range {
-  from: number;
-  to: number;
-}
-
-interface MetricParams {
-  metric?: {
-    percentageMode?: boolean;
-    useRanges?: boolean;
-    colorSchema?: string;
-    metricColorMode?: 'None' | 'Labels' | 'Background';
-    colorsRange?: Range[];
-    invertColors?: boolean;
-    labels?: { show?: boolean };
-    style?: { fontSize?: number };
-  };
-}
-
-/** The colour of the range a value falls in, on a ramp spread over the ranges */
-export function rangeColor(value: number, ranges: Range[], schema: string, inverted: boolean): string | undefined {
-  const index = ranges.findIndex((range) => value >= range.from && value < range.to);
-  const found = index === -1 && ranges.length && value >= ranges[ranges.length - 1].to ? ranges.length - 1 : index;
-  if (found === -1) return undefined;
-  return rampColor(schema, found / Math.max(ranges.length - 1, 1), inverted);
-}
-
-export const asPercent = (value: number, ranges: Range[]): number => {
-  const min = ranges[0]?.from ?? 0;
-  const max = ranges[ranges.length - 1]?.to ?? 100;
-  return max === min ? 0 : (value - min) / (max - min);
-};
-
 export function MetricVis({ vis, data, onFilter }: VisRenderProps) {
-  const config = (vis.params as MetricParams).metric ?? {};
   const { table, context } = data;
-  const metrics = metricColumns(table);
-  const bucket = bucketColumns(table)[0];
-  const ranges = config.colorsRange?.length ? config.colorsRange : [{ from: 0, to: 10000 }];
-  const mode = config.metricColorMode ?? 'None';
+  const configKey = JSON.stringify(vis.params.metric ?? null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const config = useMemo(() => metricConfig(vis.params), [configKey]);
+  // The schemas between the theme's status colours have a dark form, as the original's
+  const dark = services.uiSettings?.get<boolean>('theme:darkMode', false) === true;
+  const metrics = useMemo(() => metricItems(table, config, context, dark), [table, config, context, dark]);
+  const bucket = groupColumn(table);
 
-  const items = table.rows.flatMap((row) =>
-    metrics.map((metric) => {
-      const value = numberOf(row, metric);
-      const bucketLabel = bucket ? bucket.format(row[bucket.id]) : undefined;
-      const label = bucketLabel === undefined ? metric.name : metrics.length > 1 ? `${bucketLabel} - ${metric.name}` : bucketLabel;
-      const text =
-        value === null
-          ? '-'
-          : config.percentageMode
-            ? `${Math.round(asPercent(value, ranges) * 100)}%`
-            : metric.format(value);
-      const color = value !== null && mode !== 'None' ? rangeColor(value, ranges, config.colorSchema ?? 'Green to Red', Boolean(config.invertColors)) : undefined;
-      return { key: `${bucketLabel ?? ''}|${metric.id}`, label, text, color, row };
-    })
-  );
-  if (items.length === 0) return <ChartMessage>No results found</ChartMessage>;
+  // A metric of a bucket filters for the bucket, as the original's filterBucket event
+  const filter = bucket
+    ? (metric: MetricItem) => {
+        const found = bucketFilter(bucket, metric.row[bucket.id], context, { table, row: metric.row });
+        if (found) onFilter?.([found]);
+      }
+    : undefined;
 
-  const fontSize = config.style?.fontSize ?? 60;
   return (
-    <div className="visMetric" data-test-subj="visChart">
-      {items.map((item) => {
-        const background = mode === 'Background' ? item.color : undefined;
-        const color = mode === 'Labels' ? item.color : background ? readableOn(background) : undefined;
-        const clickable = Boolean(bucket && onFilter);
-        return (
-          <div
-            key={item.key}
-            className="visMetric__item"
-            style={{ background, color, cursor: clickable ? 'pointer' : undefined }}
-            onClick={
-              clickable && bucket
-                ? () => {
-                    const filter = bucketFilter(bucket, item.row[bucket.id], context);
-                    if (filter) onFilter?.([filter]);
-                  }
-                : undefined
-            }
-          >
-            <div className="visMetric__value" style={{ fontSize: `${fontSize}pt` }} data-test-subj="metricValue">
-              {item.text}
-            </div>
-            {config.labels?.show !== false && <div className="visMetric__label">{item.label}</div>}
-          </div>
-        );
-      })}
+    <div className="visMetric">
+      {metrics.length === 0 ? (
+        <VisNoResults />
+      ) : (
+        metrics.map((metric, index) => (
+          <MetricValue key={index} metric={metric} fontSize={config.fontSize} showLabel={config.showLabels} onFilter={filter} />
+        ))
+      )}
+    </div>
+  );
+}
+
+function MetricValue({
+  metric,
+  fontSize,
+  showLabel,
+  onFilter,
+}: {
+  metric: MetricItem;
+  fontSize: number;
+  showLabel: boolean;
+  onFilter?: (metric: MetricItem) => void;
+}) {
+  const filters = Boolean(onFilter);
+  // As a button of the component library answers the keyboard: Enter and the space bar click it
+  const keyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === ' ') event.preventDefault();
+  };
+  const keyUp = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') onFilter?.(metric);
+  };
+  return (
+    <div
+      className={cx('visMetric__container', metric.lightText && 'visMetric__container--light')}
+      style={{ backgroundColor: metric.bgColor }}
+      onClick={filters ? () => onFilter?.(metric) : undefined}
+      onKeyDown={filters ? keyDown : undefined}
+      onKeyUp={filters ? keyUp : undefined}
+      tabIndex={filters ? 0 : undefined}
+      role={filters ? 'button' : undefined}
+    >
+      <div className="visMetric__value" style={{ fontSize: `${fontSize}pt`, color: metric.color }}>
+        <FormattedValue content={metric.value} />
+      </div>
+      {showLabel && <div>{metric.label}</div>}
     </div>
   );
 }

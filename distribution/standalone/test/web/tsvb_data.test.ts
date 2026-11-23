@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { metricAggs, seriesLines, termLabel, timeAxisPattern, tooManyBuckets, topNRows, type TimeBucket, type TsvbMetric, type TsvbSeries, type TsvbSeriesData } from '../../web/vis/tsvb/data';
+import { metricAggs, metricBackground, metricRule, seriesLines, termLabel, timeAxisPattern, tooManyBuckets, topNRows, type ColorRule, type TimeBucket, type TsvbMetric, type TsvbSeries, type TsvbSeriesData } from '../../web/vis/tsvb/data';
 import { convertSeriesToVars } from '../../web/vis/tsvb/markdown_vars';
 
 const HOUR = 3600000;
@@ -157,6 +157,18 @@ describe('the parts of a TSVB series as the panels show them', () => {
     ) as Record<string, { formatted?: string }>;
     assert.equal(variables['1'].formatted, 'true');
     assert.equal(variables['1794787200000'].formatted, '2026-11-16 00:00');
+  });
+
+  it("gives a metric's panel the background of its colour rule only, never the panel's background colour", () => {
+    const rules: ColorRule[] = [{ id: 'r', operator: 'gte', value: 10, background_color: 'rgba(51,51,51,1)', color: 'red' }];
+    const params = { background_color: '#000000', background_color_rules: rules };
+    assert.equal(metricBackground(params, { series: [part('a', 12)] }), 'rgba(51,51,51,1)');
+    assert.equal(metricRule(params, { series: [part('a', 12)] })?.color, 'red');
+    // A panel switched from another type keeps that type's background colour; the metric draws none
+    assert.equal(metricBackground(params, { series: [part('a', 3)] }), undefined);
+    assert.equal(metricBackground({ background_color: '#000000' }, { series: [part('a', 3)] }), undefined);
+    // With no series, the rules are met by 0
+    assert.equal(metricBackground({ background_color_rules: [{ ...rules[0], operator: 'lte', value: 0 }] }, { series: [] }), 'rgba(51,51,51,1)');
   });
 });
 
