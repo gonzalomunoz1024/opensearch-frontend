@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
-/* Date math where the clock of the zone matters: the hour that comes twice when clocks go back. */
+/* Date math where the clock of the zone matters: the hour that comes twice when clocks go back, a date without a time. */
 
 // The moments below are counted on the clock of New York
 process.env.TZ = 'America/New_York';
@@ -38,5 +38,17 @@ describe('date math in the hour that repeats when clocks go back', () => {
     assert.equal(at('now/d', true), '2026-11-02T04:59:59.999Z');
     assert.equal(at('now+1d/d'), '2026-11-02T05:00:00.000Z');
     assert.equal(at('now-1d'), '2026-10-31T05:30:10.500Z');
+  });
+});
+
+describe('a date without a time', () => {
+  it('is the start of that day on the clock, as the original reads it', () => {
+    assert.equal(parseDateMath('2026-11-20')?.toISOString(), '2026-11-20T05:00:00.000Z');
+    assert.equal(parseDateMath('2026-11')?.toISOString(), '2026-11-01T04:00:00.000Z');
+    assert.equal(parseDateMath('2026-11-20||+1M/d')?.toISOString(), '2026-12-20T05:00:00.000Z');
+    // With a time and no zone it was the clock's already; with a zone it is that zone's
+    assert.equal(parseDateMath('2026-11-20T10:00:00')?.toISOString(), '2026-11-20T15:00:00.000Z');
+    assert.equal(parseDateMath('2026-11-20T10:00:00Z')?.toISOString(), '2026-11-20T10:00:00.000Z');
+    assert.equal(parseDateMath('2026-11-20T10:00:00+02:00')?.toISOString(), '2026-11-20T08:00:00.000Z');
   });
 });

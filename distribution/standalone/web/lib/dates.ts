@@ -121,7 +121,10 @@ export function parseDateMath(text: string, options: DateMathOptions = {}): Date
     const split = input.indexOf('||');
     const base = split === -1 ? input : input.slice(0, split);
     math = split === -1 ? '' : input.slice(split + 2);
-    const parsed = /^\d+$/.test(base) ? new Date(Number(base)) : new Date(base);
+    // A date without a time is the start of that day on the clock, as the original reads it;
+    // JavaScript alone reads it as midnight UTC
+    const dated = /^(\d{4}|[+-]\d{6})-\d{2}(-\d{2})?$/.test(base) ? `${base}T00:00` : base;
+    const parsed = /^\d+$/.test(base) ? new Date(Number(base)) : new Date(dated);
     if (Number.isNaN(parsed.getTime())) return undefined;
     date = parsed;
   }
