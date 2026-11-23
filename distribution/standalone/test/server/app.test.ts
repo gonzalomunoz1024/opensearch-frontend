@@ -108,3 +108,60 @@ describe('the two ways from a page to OpenSearch', () => {
     }
   });
 });
+
+describe('an address the server cannot read as a path of its own', () => {
+  it('is answered as a path that is not there, and is not a failure of the server', async () => {
+    const opensearch = await fakeOpenSearch();
+    const server = await run(opensearch.url);
+    try {
+      for (const target of ['//', '//[', '//x/api/status', '///app/home']) {
+        const answer = await ask(server.url, 'GET', target);
+        assert.equal(`${target} ${answer.status}`, `${target} 404`);
+        assert.deepEqual(JSON.parse(answer.body), {
+          statusCode: 404,
+          error: 'Not Found',
+          message: 'Not Found',
+        });
+      }
+      // The whole address in the request line, as a proxy sends it
+      assert.equal((await ask(server.url, 'GET', `${server.url}/app/home`)).status, 200);
+      assert.equal((await ask(server.url, 'GET', 'http://[')).status, 400);
+      assert.deepEqual(server.errors, []);
+    } finally {
+      await server.stop();
+      await opensearch.close();
+    }
+  });
+});
+
+describe('the page while OpenSearch does not answer', () => {
+  it('comes at once: it does not wait for the time limit of a request', async () => {
+    const opensearch = await fakeOpenSearch('hang');
+    const server = await run(opensearch.url, { OPENSEARCH_REQUESTTIMEOUT: '4000' });
+    try {
+      const page = await ask(server.url, 'GET', '/app/home');
+      assert.equal(page.status, 200);
+      assert.match(page.body, /<html lang="en" class="themeLight">/);
+      assert.ok(page.ms < 2000, `the page took ${page.ms} ms`);
+    } finally {
+      await server.stop();
+      await opensearch.close();
+    }
+  });
+
+  it('is dark when the settings of the server say so', async () => {
+    const opensearch = await fakeOpenSearch('hang');
+    const server = await run(opensearch.url, {
+      OPENSEARCH_REQUESTTIMEOUT: '4000',
+      UISETTINGS_OVERRIDES: '{"theme:darkMode":true}',
+    });
+    try {
+      const page = await ask(server.url, 'GET', '/app/home');
+      assert.match(page.body, /<html lang="en" class="themeDark">/);
+      assert.ok(page.ms < 2000, `the page took ${page.ms} ms`);
+    } finally {
+      await server.stop();
+      await opensearch.close();
+    }
+  });
+});

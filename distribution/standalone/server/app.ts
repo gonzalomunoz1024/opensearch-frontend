@@ -306,7 +306,11 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
     } catch {
       // the page explains what is wrong once it is up
     }
-    const dark = await uiSettings.peek<boolean>('theme:darkMode', false);
+    // An OpenSearch that does not answer is not asked: the page would wait for the time limit
+    const dark =
+      health.state === 'green'
+        ? await uiSettings.peek<boolean>('theme:darkMode', false)
+        : config.uiSettings.overrides['theme:darkMode'] ?? config.uiSettings.defaults['theme:darkMode'];
     return {
       headers: {
         'content-type': 'text/html; charset=utf-8',
@@ -354,7 +358,16 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
 
   const handle = async (req: http.IncomingMessage): Promise<Reply> => {
     const method = req.method ?? 'GET';
-    const url = new URL(req.url ?? '/', 'http://localhost');
+    const target = req.url ?? '/';
+    // Nothing is at a path that starts with two slashes, as in OpenSearch Dashboards; new URL()
+    // would read what follows them as the name of another host, or fail to
+    if (target.startsWith('//')) return { status: 404, body: errorBody(404, 'Not Found') };
+    let url: URL;
+    try {
+      url = new URL(target, 'http://localhost');
+    } catch {
+      throw badRequest('The address of the request cannot be read');
+    }
     let path = url.pathname;
     const { basePath } = config.server;
     if (basePath && (path === basePath || path.startsWith(`${basePath}/`))) {
