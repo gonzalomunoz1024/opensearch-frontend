@@ -397,103 +397,49 @@
   margin: 0;
 }
 
-/* Markdown */
+/* --- Markdown ------------------------------------------------------------------------------ */
 
-/* A Markdown visualization: the original's panel, 8px in, scrolled when the text is longer */
+/*
+ * A Markdown visualization as the original's VisualizationContainer holds it: a box over the whole
+ * of the visualization's area, the 8px the editor and a dashboard's panel leave around it included
+ * (the original's container has them as its own padding), which scrolls when the text is longer,
+ * so that the text runs on into those 8px and the scroll bar is at the area's edge. The text is
+ * set solid, as the original's page sets it.
+ */
 .visMarkdownVis {
+  display: flex;
   flex: 1 1 auto;
+  flex-direction: column;
   min-height: 0;
+  margin: calc(-1 * var(--space-2));
   padding: var(--space-2);
   overflow: auto;
+  line-height: 1;
+}
+
+/*
+ * The original's plain panel (EuiPanel, paddingSize "s", without border or shadow): as tall as the
+ * box at least, and as the text when it is longer
+ */
+.visMarkdownVis__panel {
+  flex-grow: 1;
+  padding: var(--space-2);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
 }
 
 /*
  * The original's Markdown body (`osdMarkdown__body`): every size is in em of the base size the
- * visualization sets, as the original's are of its 14px, so that the base size scales them all.
- * Its lines are the text's colour at 15%, its fills at 5%.
+ * visualization sets, as the original's are of its 14px, so that the base size scales them all,
+ * and written as its Sass writes them, to ten places. Its rules and borders are the full shade at
+ * 15%, its fills at 5%. Its line height is the box's, and a long word is not broken, as there.
  */
 .atlMarkdown.visMarkdownBody {
-  --vis-markdown-line: color-mix(in srgb, var(--color-text-primary) 15%, transparent);
-  --vis-markdown-fill: color-mix(in srgb, var(--color-text-primary) 5%, transparent);
+  --vis-markdown-line: color-mix(in srgb, var(--color-full-shade) 15%, transparent);
+  --vis-markdown-fill: color-mix(in srgb, var(--color-full-shade) 5%, transparent);
 
-  line-height: normal;
-}
-
-.atlMarkdown.visMarkdownBody p,
-.atlMarkdown.visMarkdownBody blockquote,
-.atlMarkdown.visMarkdownBody ul,
-.atlMarkdown.visMarkdownBody ol,
-.atlMarkdown.visMarkdownBody dl,
-.atlMarkdown.visMarkdownBody table,
-.atlMarkdown.visMarkdownBody pre {
-  margin-top: 0;
-  margin-bottom: 1.1429em;
-  line-height: 1.5em;
-}
-
-.atlMarkdown.visMarkdownBody strong {
-  font-weight: var(--font-weight-semibold);
-}
-
-.atlMarkdown.visMarkdownBody a {
-  color: inherit;
-  text-decoration: underline;
-}
-
-.atlMarkdown.visMarkdownBody a:hover {
-  text-decoration: underline dotted;
-}
-
-.atlMarkdown.visMarkdownBody a:not([href]) {
-  text-decoration: none;
-}
-
-.atlMarkdown.visMarkdownBody h1,
-.atlMarkdown.visMarkdownBody h2,
-.atlMarkdown.visMarkdownBody h3,
-.atlMarkdown.visMarkdownBody h4,
-.atlMarkdown.visMarkdownBody h5,
-.atlMarkdown.visMarkdownBody h6 {
-  margin-top: 0;
-  margin-bottom: 0.5714em;
-}
-
-/* The first two levels are large and light, as in the original */
-.atlMarkdown.visMarkdownBody h1 {
-  font-size: 2.5714em;
-  font-weight: 300;
-  line-height: 1.3333em;
-}
-
-.atlMarkdown.visMarkdownBody h2 {
-  font-size: 2em;
-  font-weight: 300;
-  line-height: 1.4286em;
-}
-
-.atlMarkdown.visMarkdownBody h3 {
-  font-size: 1.4286em;
-  font-weight: var(--font-weight-semibold);
-  line-height: 1.6em;
-}
-
-.atlMarkdown.visMarkdownBody h4 {
-  font-size: 1.1429em;
-  font-weight: var(--font-weight-semibold);
-  line-height: 1.5em;
-}
-
-.atlMarkdown.visMarkdownBody h5 {
-  font-size: 1em;
-  font-weight: 700;
-  line-height: 1.1429em;
-}
-
-.atlMarkdown.visMarkdownBody h6 {
-  font-size: 0.8571em;
-  font-weight: 700;
-  line-height: 1.3333em;
-  text-transform: uppercase;
+  line-height: inherit;
+  overflow-wrap: normal;
 }
 
 .atlMarkdown.visMarkdownBody > :first-child {
@@ -504,30 +450,118 @@
   margin-bottom: 0;
 }
 
+.atlMarkdown.visMarkdownBody p,
+.atlMarkdown.visMarkdownBody blockquote,
+.atlMarkdown.visMarkdownBody ul,
+.atlMarkdown.visMarkdownBody ol,
+.atlMarkdown.visMarkdownBody dl,
+.atlMarkdown.visMarkdownBody table,
+.atlMarkdown.visMarkdownBody pre {
+  margin-top: 0;
+  margin-bottom: 1.1428571429em;
+  line-height: 1.5em;
+}
+
+.atlMarkdown.visMarkdownBody strong {
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Links: the text's own colour, underlined, dotted under the pointer */
+.atlMarkdown.visMarkdownBody a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.atlMarkdown.visMarkdownBody a:hover {
+  text-decoration: underline dotted;
+}
+
+.atlMarkdown.visMarkdownBody a:active,
+.atlMarkdown.visMarkdownBody a:hover {
+  outline-width: 0;
+}
+
+.atlMarkdown.visMarkdownBody a:not([href]) {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Headings: the first two levels large and light */
+.atlMarkdown.visMarkdownBody h1,
+.atlMarkdown.visMarkdownBody h2,
+.atlMarkdown.visMarkdownBody h3,
+.atlMarkdown.visMarkdownBody h4,
+.atlMarkdown.visMarkdownBody h5,
+.atlMarkdown.visMarkdownBody h6 {
+  margin-top: 0;
+  margin-bottom: 0.5714285714em;
+}
+
+.atlMarkdown.visMarkdownBody h1 {
+  font-size: 2.5714285714em;
+  font-weight: 300;
+  line-height: 1.333333em;
+}
+
+.atlMarkdown.visMarkdownBody h2 {
+  font-size: 2em;
+  font-weight: 300;
+  line-height: 1.428571em;
+}
+
+.atlMarkdown.visMarkdownBody h3 {
+  font-size: 1.4285714286em;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.6em;
+}
+
+.atlMarkdown.visMarkdownBody h4 {
+  font-size: 1.1428571429em;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.5em;
+}
+
+.atlMarkdown.visMarkdownBody h5 {
+  font-size: 1em;
+  font-weight: 700;
+  line-height: 1.142857em;
+}
+
+.atlMarkdown.visMarkdownBody h6 {
+  font-size: 0.8571428571em;
+  font-weight: 700;
+  line-height: 1.333333em;
+  text-transform: uppercase;
+}
+
+/* Images */
 .atlMarkdown.visMarkdownBody img {
   max-width: 100%;
   box-sizing: content-box;
   border-style: none;
 }
 
+/* Quotes */
 .atlMarkdown.visMarkdownBody blockquote {
   padding: 0 1em;
-  border-left: 4px solid var(--vis-markdown-line);
+  border-left: 0.2857142857em solid var(--vis-markdown-line);
   color: inherit;
 }
 
+/* Rules */
 .atlMarkdown.visMarkdownBody hr {
   height: 2px;
-  margin: 1.7143em 0;
+  margin: 1.7142857143em 0;
   padding: 0;
   border: 0;
   background-color: var(--vis-markdown-line);
   overflow: hidden;
 }
 
+/* Lists */
 .atlMarkdown.visMarkdownBody ul,
 .atlMarkdown.visMarkdownBody ol {
-  padding-left: 1.7143em;
+  padding-left: 1.7142857143em;
 }
 
 .atlMarkdown.visMarkdownBody ul {
@@ -567,13 +601,14 @@
 }
 
 .atlMarkdown.visMarkdownBody li > p {
-  margin-bottom: 0.5714em;
+  margin-bottom: 0.5714285714em;
 }
 
 .atlMarkdown.visMarkdownBody li + li {
-  margin-top: 0.2857em;
+  margin-top: 0.2857142857em;
 }
 
+/* Tables */
 .atlMarkdown.visMarkdownBody table {
   display: block;
   width: 100%;
@@ -585,7 +620,7 @@
 
 .atlMarkdown.visMarkdownBody th,
 .atlMarkdown.visMarkdownBody td {
-  padding: 0.2857em 0.8571em;
+  padding: 0.2857142857em 0.8571428571em;
   border: 0;
   border-top: 1px solid var(--vis-markdown-line);
   border-bottom: 1px solid var(--vis-markdown-line);
@@ -604,16 +639,16 @@
 /* Code in the original's own face, not the kit's: the text is the original's to draw */
 .atlMarkdown.visMarkdownBody code,
 .atlMarkdown.visMarkdownBody pre {
-  margin-bottom: 0.5714em;
+  margin-bottom: 0.5714285714em;
   font-family: Monaco, Menlo, "Ubuntu Mono", Consolas, source-code-pro, monospace;
-  font-size: 0.8571em;
+  font-size: 0.8571428571em;
 }
 
 .atlMarkdown.visMarkdownBody code {
   margin: 0;
-  padding: 0.2857em 0;
+  padding: 0.2857142857em 0;
   line-height: 1.5;
-  border-radius: var(--radius-xs);
+  border-radius: 0.2857142857em;
   background-color: var(--vis-markdown-fill);
 }
 
@@ -624,10 +659,10 @@
 }
 
 .atlMarkdown.visMarkdownBody pre {
-  padding: 1.1429em;
-  border-radius: var(--radius-xs);
+  padding: 1.1428571429em;
+  border-radius: 0.2857142857em;
   background-color: var(--vis-markdown-fill);
-  line-height: 1.3333em;
+  line-height: 1.333333em;
   overflow: auto;
   overflow-wrap: normal;
 }
@@ -647,4 +682,3 @@
 .atlMarkdown.visMarkdownBody pre code::after {
   content: normal;
 }
-
