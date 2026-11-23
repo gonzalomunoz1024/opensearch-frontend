@@ -156,15 +156,55 @@ export function setFullScreen(fullScreen: boolean) {
   if (chrome.fullScreen !== fullScreen) setChrome({ fullScreen });
 }
 
+/**
+ * The tab's title of a page that does not set its own, as the original's applications set it
+ * (`chrome.docTitle.change`, reset to the product's name when the application changes): most name
+ * the page by the last crumb of its trail, and a dashboard by its title, also while it is edited;
+ * Discover says "Discover", or "Discover: " and the saved search; Saved objects says "Saved
+ * Objects" on every page of its own; a new dashboard, Dashboards Management's landing page and
+ * advanced settings, Query Workbench, Index Management and Snapshot Management leave the product's
+ * name alone.
+ */
+export function documentTitleOf(
+  location: { pathname: string; hashPath: string; hashParams: Record<string, string | undefined> },
+  breadcrumbs: Breadcrumb[],
+  name: string
+): string {
+  const { pathname, hashPath } = location;
+  const under = (...paths: string[]) =>
+    paths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+  const last = breadcrumbs[breadcrumbs.length - 1]?.text ?? '';
+  let parts: string[];
+  if (under('/app/management/opensearch-dashboards/objects')) parts = ['Saved Objects'];
+  else if (under('/app/management/opensearch-dashboards/indexPatterns')) parts = [last];
+  else if (
+    under(
+      '/app/management',
+      '/app/settings',
+      '/app/opensearch-query-workbench',
+      '/app/opensearch_index_management_dashboards',
+      '/app/opensearch_snapshot_management_dashboards'
+    )
+  ) {
+    parts = [];
+  } else if (under('/app/discover', '/app/data-explorer')) {
+    parts = [hashPath.startsWith('/view/') && breadcrumbs.length > 1 ? `Discover: ${last}` : 'Discover'];
+  } else if (under('/app/home')) parts = ['Home'];
+  else if (under('/app/dashboards', '/app/dashboard')) {
+    // The trail says "Editing <title>", and " (unsaved)" after it, where the title says the title
+    const editing = decodeState<{ viewMode?: string }>(location.hashParams._a).viewMode === 'edit';
+    const title = editing ? last.replace(/^Editing /, '').replace(/ \(unsaved\)$/, '') : last;
+    parts = hashPath.startsWith('/create') ? [] : [title];
+  } else parts = [last];
+  return [...parts, name].filter(Boolean).join(' - ');
+}
+
 /** Says where the page is, in the header and in the tab's title */
 export function useBreadcrumbs(breadcrumbs: Breadcrumb[]) {
   const key = JSON.stringify(breadcrumbs);
   useEffect(() => {
     setChrome({ breadcrumbs });
-    const last = breadcrumbs[breadcrumbs.length - 1]?.text;
-    const first = breadcrumbs[0]?.text;
-    const parts = [last, first !== last ? first : undefined, services.boot.name].filter(Boolean);
-    document.title = parts.join(' - ');
+    document.title = documentTitleOf(getLocation(), breadcrumbs, services.boot.name);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 }
