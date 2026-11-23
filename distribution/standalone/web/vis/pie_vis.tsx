@@ -19,6 +19,9 @@ import { dimmingOpacity } from './vislib/settings';
 import { useVislibLegend } from './vislib/use_legend';
 import '../styles/vislib.css';
 
+/** What vislib says when no pie has a slice (PieContainsAllZeros) */
+const ALL_ZEROS = 'No results displayed because all values equal 0.';
+
 interface PieParams {
   isDonut?: boolean;
   addLegend?: boolean;
@@ -102,13 +105,9 @@ export function PieVis({ vis, data, uiState, onUiState, onFilter, split, splits 
   );
 
   if (table.rows.length === 0) return <ChartMessage>No results found</ChartMessage>;
-  if (roots.every((root) => !root.children.length)) {
-    return (
-      <div className="visError" role="alert">
-        <h2 className="visError__title">No results displayed because all values equal 0.</h2>
-      </div>
-    );
-  }
+  // No pie with a slice: vislib's PieChart fails, and its handler says why in place of the pies,
+  // beside the legend of every name
+  const message = roots.every((root) => !root.children.length) ? ALL_ZEROS : undefined;
 
   // A click on a slice filters on it, on the slices it is inside and on the bucket of its pie in a split
   const onSliceClick = onFilter
@@ -139,6 +138,7 @@ export function PieVis({ vis, data, uiState, onUiState, onFilter, split, splits 
       metricFormat={(value) => (metric ? metric.format(value) : String(value))}
       legend={legend}
       onSliceClick={onSliceClick}
+      message={message}
     />
   );
 }

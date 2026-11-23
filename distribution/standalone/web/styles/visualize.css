@@ -26,6 +26,17 @@
   flex: none;
 }
 
+/*
+ * The editor's main action keeps its width in the header while the anchor of its tooltip holds
+ * it ("Apply or Discard your changes before saving"), as EUI's button keeps its own: the header's
+ * rule reaches only a button that is its child
+ */
+.shlHeader__actions > .atlTooltipAnchor > .atlButton:not(.atlButton--empty) {
+  gap: var(--space-2);
+  min-width: 112px;
+  border: 1px solid transparent;
+}
+
 .vzeEditor {
   display: flex;
   flex: 1 1 auto;

@@ -10,17 +10,18 @@
  * and asks before it is left with changes (`top_nav.ts`, `state_transfer.ts`).
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, CallOut, EmptyPrompt, IconButton, Loading, Tabs, cx } from '../../components/basic';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { CallOut, EmptyPrompt, IconButton, Loading, Tabs, cx } from '../../components/basic';
 import { Switch } from '../../components/form';
 import { Icon } from '../../components/icon';
+import { Tooltip } from '../../components/overlay';
 import type { AggConfig, AggContext } from '../../lib/aggs';
 import type { TimeRange } from '../../lib/dates';
 import { mergeFilters } from '../../lib/query';
 import type { Filter, IndexPattern, Query } from '../../lib/types';
 import { appUrl, buildHash, decodeState, encodeState } from '../../lib/url';
 import { visFromSavedObject, visToSavedObject, visType, type UiState, type Vis, type VisualizationAttributes } from '../../lib/vis';
-import { getLocation, href, lastAddressOf, navigate, setHashParams, setLeaveGuard, useLocation } from '../../router';
+import { enteredAnotherApplication, getLocation, href, lastAddressOf, navigate, setHashParams, setLeaveGuard, useLocation } from '../../router';
 import { services } from '../../services';
 import { errorMessage } from '../../services/http';
 import { TopNav, type TopNavItem } from '../../shell/chrome';
@@ -42,13 +43,14 @@ import { DataTab } from './data_tab';
 import { newVis, syncParams, visProblems, withoutDisabledBuckets } from './defaults';
 import { canAutoApply, dragWidths, editorHeading, initialWidths, keyWidths, searchBarParts, type SplitWidths } from './editor_layout';
 import { LeaveConfirmModal } from './leave_confirm';
+import { INDEX_PATTERNS_LINK, found, loadFailure } from './load_failure';
 import { optionTabs } from './options';
-import { setupRegionMap } from '../../vis/region_map/region_map_type';
 import { SidebarControls, SidebarTitle } from './sidebar';
-import { incomingEditorState, originatingAppUrl, visualizationPackage } from './state_transfer';
+import { incomingEditorState, visualizationPackage } from './state_transfer';
 import { LEAVE_TEXT, confirmsLeave, returnSwitch, visualizeTopNav, type TopNavAction } from './top_nav';
 import { TsvbEditor } from './tsvb/editor';
 import { withTsvbDefaults } from './tsvb/model';
+import { setupVis } from './type_setup';
 
 export const VISUALIZE = '/app/visualize';
 
@@ -86,25 +88,37 @@ interface EditorView {
  */
 let handedOver: { id: string; loaded: Loaded; view: EditorView } | undefined;
 
+/**
+ * The visualization the address names, with what it is drawn from, failing as the original's
+ * fails (`load_failure.ts`): what is missing as `SavedObjectNotFound`, in the order the original
+ * looks (the visualization, its index pattern, its saved search, then its kind)
+ */
 async function load(savedId: string | undefined, create: { type?: string; indexPattern?: string; savedSearchId?: string }): Promise<Loaded> {
   let vis: Vis;
   if (savedId) {
-    vis = visFromSavedObject(await services.savedObjects.get<VisualizationAttributes>('visualization', savedId));
+    vis = visFromSavedObject(await found('visualization', savedId, () => services.savedObjects.get<VisualizationAttributes>('visualization', savedId)));
   } else {
-    if (!create.type || !visType(create.type)) throw new Error('The address names no kind of visualization to create');
-    vis = newVis(create.type, { indexPatternId: create.indexPattern, savedSearchId: create.savedSearchId });
+    const kind = create.type ? visType(create.type) : undefined;
+    if (!kind) throw new Error('You must provide a valid visualization type');
+    // A kind drawn from an index pattern's aggregations is drawn from one, or from a saved search
+    if (kind.aggBased && !create.indexPattern && !create.savedSearchId) throw new Error('You must provide either an indexPattern or a savedSearchId');
+    vis = newVis(kind.name, { indexPatternId: create.indexPattern, savedSearchId: create.savedSearchId });
   }
-  // The setup of a region map: the vector map, join field and base map it has not chosen yet
-  if (vis.type === 'region_map') vis = { ...vis, params: (await setupRegionMap(vis.params)).params };
+  const patternOf = (id: string) => found('index-pattern', id, () => services.indexPatterns.get(id), INDEX_PATTERNS_LINK);
+  let indexPattern = vis.source.indexId ? await patternOf(vis.source.indexId) : undefined;
   let searchTitle: string | undefined;
   const searchId = vis.savedSearchId;
   if (searchId) {
-    vis = await resolveVisSource(vis);
-    const search = await services.savedObjects.get<{ title?: string }>('search', searchId);
+    const linkedTo = vis;
+    vis = await found('search', searchId, () => resolveVisSource(linkedTo));
+    const search = await found('search', searchId, () => services.savedObjects.get<{ title?: string }>('search', searchId));
     searchTitle = search.attributes.title;
+    if (!indexPattern && vis.parent?.indexId) indexPattern = await patternOf(vis.parent.indexId);
   }
-  const indexId = vis.source.indexId ?? vis.parent?.indexId;
-  const indexPattern = indexId ? await services.indexPatterns.get(indexId) : undefined;
+  // A kind this product does not have, as the original's `Vis` refuses it
+  if (!visType(vis.type)) throw new Error(`Invalid visualization type "${vis.type}"`);
+  // The setup of a map: the base map, and a region map's vector map and join field, not chosen yet
+  vis = await setupVis(vis);
   // TSVB reads its saved params over the defaults of its type, as the product does
   if (vis.type === 'metrics') vis = { ...vis, params: withTsvbDefaults(vis.params) };
   return { vis, indexPattern, searchTitle };
@@ -141,7 +155,6 @@ export function VisEditor({ savedId }: { savedId?: string }) {
     return given;
   });
   const [loaded, setLoaded] = useState<Loaded | undefined>(handed?.loaded);
-  const [loadError, setLoadError] = useState<string>();
   const [draft, setDraft] = useState<Draft>();
   const [tab, setTab] = useState<string | undefined>(handed?.view.tab);
   const [collapsed, setCollapsed] = useState(handed?.view.collapsed ?? false);
@@ -186,7 +199,6 @@ export function VisEditor({ savedId }: { savedId?: string }) {
     if (handed) return undefined;
     let live = true;
     setLoaded(undefined);
-    setLoadError(undefined);
     load(savedId, { type: createType, indexPattern: createPattern, savedSearchId: createSearch })
       .then((answer) => {
         if (!live) return;
@@ -195,7 +207,13 @@ export function VisEditor({ savedId }: { savedId?: string }) {
         setLoaded(answer);
         if (savedId) addRecentlyAccessed(appUrl(VISUALIZE, `/edit/${encodeURIComponent(savedId)}`), answer.vis.title, savedId);
       })
-      .catch((failure) => live && setLoadError(errorMessage(failure)));
+      .catch((failure: unknown) => {
+        if (!live) return;
+        // As the original: a warning, and away to where it can be dealt with, asking nothing
+        const { title, text, to, replace } = loadFailure(failure, savedId, currentGlobalParam());
+        services.toasts.warning(title, text);
+        navigate(to, { replace, force: true, state: null });
+      });
     return () => {
       live = false;
     };
@@ -377,11 +395,21 @@ export function VisEditor({ savedId }: { savedId?: string }) {
   }, [autoApply, dirty, draftKey]);
 
   const title = saved?.title ?? '';
+  // The landing page, `#/`, with the `_g` the original's Visualize writes there at once
+  const landing = appUrl(VISUALIZE, '/', { _g: location.hashParams._g });
   useBreadcrumbs(
     saved
-      ? [{ text: 'Visualize', to: appUrl(VISUALIZE, '/') }, { text: saved.id ? title || 'Visualization' : 'Create' }]
-      : [{ text: 'Visualize', to: appUrl(VISUALIZE, '/') }]
+      ? [{ text: 'Visualize', to: landing }, { text: saved.id ? title || 'Visualization' : 'Create' }]
+      : [{ text: 'Visualize', to: landing }]
   );
+  // The document's title as the original's: a saved visualization's own before the product's name
+  // (an empty one left out); a new one leaves it as it was, which is the product's name when the
+  // editor is the first page of Visualize. After the breadcrumbs' own, each time.
+  const [titleBefore] = useState(() => (enteredAnotherApplication() ? services.boot.name : document.title));
+  const docTitle = saved?.id ? [title, services.boot.name].filter(Boolean).join(' - ') : titleBefore;
+  useEffect(() => {
+    document.title = docTitle;
+  });
 
   const shown = useMemo<Vis | undefined>(() => {
     if (!vis || !applied) return undefined;
@@ -389,23 +417,6 @@ export function VisEditor({ savedId }: { savedId?: string }) {
     return { ...vis, aggs: applied.aggs, params: applied.params, uiState, source: { ...vis.source, query: undefined, filters: [] } };
   }, [vis, applied, uiState]);
 
-  if (loadError) {
-    return (
-      <div className="shlPage">
-        <EmptyPrompt
-          icon="warning"
-          title="The visualization could not be loaded"
-          actions={
-            <Button variant="primary" to={appUrl(VISUALIZE, '/')}>
-              Back to the visualizations
-            </Button>
-          }
-        >
-          {loadError}
-        </EmptyPrompt>
-      </div>
-    );
-  }
   if (!saved || !vis || !loaded || !applied || !draft || !shown) return <Loading />;
 
   // The original's `unlinkSavedSearch`: the saved search's query and filters become the
@@ -416,11 +427,9 @@ export function VisEditor({ savedId }: { savedId?: string }) {
     services.toasts.success(`Unlinked from saved search '${loaded.searchTitle ?? ''}'`);
   };
 
-  // Where the editor goes back to: the dashboard it came from, where it was
-  const returnUrl = () =>
-    originatingApp
-      ? originatingAppUrl(originatingApp, { lastAddress: lastAddressOf(originatingApp), containerInfo, globalParam: currentGlobalParam() })
-      : appUrl(VISUALIZE, '/');
+  // Where the editor goes back to, the original's `navigateToApp(originatingApp)`: the dashboard it
+  // came from, where it was, with what was changed there and not saved yet
+  const returnUrl = () => (originatingApp ? lastAddressOf(originatingApp) : appUrl(VISUALIZE, '/'));
 
   // The original's `doSave`: the title into the address first, then the whole visualization
   // (`create` with `overwrite`); then back to the application that opened the editor when asked,
@@ -494,16 +503,26 @@ export function VisEditor({ savedId }: { savedId?: string }) {
     originatingApp,
     savedId: vis.id,
     hasInspector: hasRequests,
-  }).map((item) => ({
-    id: item.id,
-    label: item.label,
-    emphasize: item.emphasize,
-    icon: item.icon,
-    disabled: item.disabled,
-    title: item.tooltip,
-    testId: item.testId,
-    onClick: actions[item.id],
-  }));
+  }).map((item) => {
+    const tooltip = item.tooltip;
+    return {
+      id: item.id,
+      label: item.label,
+      emphasize: item.emphasize,
+      icon: item.icon,
+      disabled: item.disabled,
+      testId: item.testId,
+      onClick: actions[item.id],
+      // The original's EuiToolTip: above the button unless there is no room, after a quarter second
+      wrap: tooltip
+        ? (button: ReactNode) => (
+            <Tooltip content={tooltip} delay="regular">
+              {button}
+            </Tooltip>
+          )
+        : undefined,
+    };
+  });
 
   const tabs = [...(aggBased ? [{ id: 'data', label: 'Data' }] : []), ...optionTabs(saved.type).map((item) => ({ id: item.id, label: item.label }))].map(
     (item) => ({ ...item, testId: `visEditorTab__${item.id}` })

@@ -27,7 +27,7 @@ import type { VisInput } from '../../vis/request';
 import { makeTurns } from '../../vis/turns';
 import { NewVisModal } from '../visualize';
 import { VIS_BUILDER_TITLE, VIS_BUILDER_TYPE } from '../vis_builder/model';
-import { asHeld, cloneBase, cloneTitle, fullAppState, restoredOptions, sameQuery, sameState, type UrlAppState } from './app_state';
+import { asHeld, cloneBase, cloneTitle, fullAppState, ownTime, restoredOptions, sameQuery, sameState, type UrlAppState } from './app_state';
 import {
   CloneModal,
   CustomizePanelModal,
@@ -183,8 +183,9 @@ function settle(panels: PanelState[], order: string[]): { panels: PanelState[]; 
 function DashboardPage({ savedId }: { savedId?: string }) {
   const location = useLocation();
   const rawApp = location.hashParams._a;
-  // Whether the address named a time range when the page opened: a dashboard's own gives way to it
-  const cameWithTime = useRef(location.hashParams._g !== undefined);
+  // The time range and refresh interval the address named when the page opened: a dashboard's
+  // own give way to them, each on its own
+  const cameWithGlobal = useRef(decodeState<{ time?: unknown; refreshInterval?: unknown }>(location.hashParams._g));
   // What the address had when the page opened, which the original takes over what was saved
   const cameWith = useRef(decodeState<UrlAppState>(location.hashParams._a));
   // The query and options as they last came to the original, the order of their keys kept
@@ -273,14 +274,9 @@ function DashboardPage({ savedId }: { savedId?: string }) {
         const dashboard = dashboardFromSavedObject(object);
         setSaved(dashboard);
         addRecentlyAccessed(appUrl(BASE, `/view/${encodeURIComponent(savedId)}`), dashboard.title, savedId);
-        // The dashboard's own time comes with it, in place of the one the address had: no step back
-        if (dashboard.timeRestore && !cameWithTime.current && dashboard.timeFrom && dashboard.timeTo) {
-          const restored = globalParamWith({
-            time: { from: dashboard.timeFrom, to: dashboard.timeTo },
-            ...(dashboard.refreshInterval ? { refreshInterval: dashboard.refreshInterval } : {}),
-          });
-          setHashParams({ _g: restored }, { replace: true });
-        }
+        // The dashboard's own time comes with it, unless the address named one: no step back
+        const own = ownTime(dashboard, cameWithGlobal.current);
+        if (own.time || own.refreshInterval) setHashParams({ _g: globalParamWith(own) }, { replace: true });
       })
       .catch((failure) => live && setLoadError(errorMessage(failure)));
     return () => {
@@ -628,12 +624,8 @@ function DashboardPage({ savedId }: { savedId?: string }) {
       },
       true
     );
-    if (saved.timeRestore && saved.timeFrom && saved.timeTo) {
-      setGlobal({
-        time: { from: saved.timeFrom, to: saved.timeTo },
-        ...(saved.refreshInterval ? { refreshInterval: saved.refreshInterval } : {}),
-      });
-    }
+    const own = ownTime(saved);
+    if (own.time) setGlobal(own);
   };
 
   // --- What is drawn ---
@@ -805,7 +797,14 @@ function DashboardPage({ savedId }: { savedId?: string }) {
           onClose={() => setDialog(undefined)}
         />
       )}
-      {dialog?.kind === 'create' && <NewVisModal onClose={() => setDialog(undefined)} />}
+      {dialog?.kind === 'create' && (
+        // As the original's "Create new": the editor is told the application and the dashboard to come back to
+        <NewVisModal
+          originatingApp="dashboards"
+          containerInfo={{ containerId: container.containerId, containerName: container.containerName }}
+          onClose={() => setDialog(undefined)}
+        />
+      )}
       {dialog?.kind === 'discard' && (
         <ConfirmModal
           title="Discard changes to dashboard?"

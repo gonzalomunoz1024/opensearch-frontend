@@ -14,11 +14,14 @@ import { heatmapColor } from './color_maps';
 import {
   axisPoints,
   buildPointSeriesModel,
+  buildSplitPointSeriesModels,
   scaleValueAxis,
   VislibError,
   type ModelInput,
   type PointSeriesModel,
   type PointSeriesParams,
+  type SplitModelInput,
+  type SplitPointSeriesModels,
 } from './point_series_model';
 
 export interface ColorRange {
@@ -156,8 +159,8 @@ export interface HeatmapModelInput extends ModelInput {
   dark: boolean;
 }
 
-/** A heat map of a table as vislib sets it up: the point series with its two axes of names, and its colours */
-export function buildHeatmapModel({ params, maxBuckets, dark, ...input }: HeatmapModelInput): PointSeriesModel {
+/** A heat map's params as its point series takes them: its two axes of names, and its value axis hidden */
+function heatmapSeriesParams(params: HeatmapParams): HeatmapParams {
   const [first, ...others] = params.categoryAxes?.length ? params.categoryAxes : [{ id: 'CategoryAxis-1', type: 'category' }];
   const categoryAxes: AxisParams[] = [
     { ...first, style: { rangePadding: 0, rangeOuterPadding: 0 } },
@@ -175,14 +178,50 @@ export function buildHeatmapModel({ params, maxBuckets, dark, ...input }: Heatma
   const valueAxes: AxisParams[] = (params.valueAxes?.length ? params.valueAxes : [{ id: 'ValueAxis-1', type: 'value' }]).map((axis, index) =>
     index === 0 ? { ...axis, show: false } : axis
   );
-  const model = buildPointSeriesModel({ ...input, params: { ...params, categoryAxes, valueAxes } });
+  return { ...params, categoryAxes, valueAxes };
+}
+
+/** A heat map of a table as vislib sets it up: the point series with its two axes of names, and its colours */
+export function buildHeatmapModel({ params, maxBuckets, dark, ...input }: HeatmapModelInput): PointSeriesModel {
+  const model = buildPointSeriesModel({ ...input, params: heatmapSeriesParams(params) });
+  return colorHeatmap(model, model.series.length, params, maxBuckets, dark);
+}
+
+export interface SplitHeatmapModelInput extends Omit<SplitModelInput, 'params'> {
+  params: HeatmapParams;
+  maxBuckets: number;
+  dark: boolean;
+}
+
+/**
+ * The heat maps of a split as vislib sets them up: the second axis of names lists the series of
+ * every chart, the ranges cut the values of all of them, and only the first chart is asked whether
+ * it has too many series
+ */
+export function buildSplitHeatmapModels({ params, maxBuckets, dark, ...input }: SplitHeatmapModelInput): SplitPointSeriesModels {
+  const { frame, charts } = buildSplitPointSeriesModels({ ...input, params: heatmapSeriesParams(params) });
+  colorHeatmap(frame, charts[0]?.series.length ?? 0, params, maxBuckets, dark);
+  for (const chart of charts) {
+    chart.categoryAxes = frame.categoryAxes;
+    chart.labels = frame.labels;
+    chart.heatmap = frame.heatmap;
+    chart.error = frame.error;
+  }
+  return { frame, charts };
+}
+
+/**
+ * Gives a heat map's point series its second axis of names, its ranges and their colours; the
+ * squares cannot be drawn when the (first) chart has more series than `maxBuckets`
+ */
+function colorHeatmap(model: PointSeriesModel, seriesCount: number, params: HeatmapParams, maxBuckets: number, dark: boolean): PointSeriesModel {
   // The second axis of names lists the series, by their names as they are
   const last = model.categoryAxes.length - 1;
   model.categoryAxes[last] = { ...model.categoryAxes[last], format: (value) => String(value), values: model.labels };
   // The legend lists the ranges, and none when the squares cannot be drawn
   model.labels = [];
-  if (model.series.length > maxBuckets) {
-    model.error = `There are too many series defined (${model.series.length}). The configured maximum is ${maxBuckets}.`;
+  if (seriesCount > maxBuckets) {
+    model.error = `There are too many series defined (${seriesCount}). The configured maximum is ${maxBuckets}.`;
     return model;
   }
 

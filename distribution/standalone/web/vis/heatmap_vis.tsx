@@ -2,7 +2,8 @@
 
 /*
  * Heat map: a measure for each pair of buckets, as the shade of a square in a matrix, drawn as
- * the classic charts of OpenSearch Dashboards draw it (vislib, in ./vislib).
+ * the classic charts of OpenSearch Dashboards draw it (vislib, in ./vislib). A split draws a heat
+ * map per bucket on the axes they share, in the colours of the values of all of them.
  */
 
 import { useCallback, useMemo } from 'react';
@@ -10,9 +11,10 @@ import { ChartMessage, assignColors } from '../charts/core';
 import { DEFAULT_FORMAT_SETTINGS, createFormatter } from '../lib/field_formats';
 import { services } from '../services';
 import type { VisRenderProps } from './types';
-import { buildHeatmapModel, type HeatmapParams } from './vislib/heatmap';
-import { PointSeriesChart } from './vislib/point_series_chart';
-import { seriesAxisOf, seriesEvents } from './vislib/series_events';
+import { buildHeatmapModel, buildSplitHeatmapModels, type HeatmapParams } from './vislib/heatmap';
+import { PointSeriesChart, type PointSeriesChartPart } from './vislib/point_series_chart';
+import type { PointSeriesModel } from './vislib/point_series_model';
+import { seriesAxisOf, seriesEvents, splitTooltipDetail, type SeriesEvents } from './vislib/series_events';
 import { dimmingOpacity, zoneOffset } from './vislib/settings';
 import { useVislibLegend } from './vislib/use_legend';
 import '../styles/vislib.css';
@@ -48,7 +50,7 @@ function withDefaults(params: Record<string, unknown>): HeatmapParams {
   return merged as HeatmapParams;
 }
 
-export function HeatmapVis({ vis, data, uiState, onUiState, onFilter, onTimeChange, split }: VisRenderProps) {
+export function HeatmapVis({ vis, data, uiState, onUiState, onFilter, onTimeChange, split, splits }: VisRenderProps) {
   const params = useMemo(() => withDefaults(vis.params), [vis.params]);
   const { table, context } = data;
   const settings = context.formatSettings ?? DEFAULT_FORMAT_SETTINGS;
@@ -58,20 +60,29 @@ export function HeatmapVis({ vis, data, uiState, onUiState, onFilter, onTimeChan
   const prepared = useMemo(() => {
     const axis = seriesAxisOf(table, context);
     const percent = createFormatter({ id: 'percent' }, settings);
-    const model = buildHeatmapModel({
+    const input = {
       params,
-      table,
-      percentFormat: (value) => percent(value).text,
+      percentFormat: (value: number) => percent(value).text,
       bounds: axis.bounds,
       addInterval: axis.addInterval,
       maxBuckets,
       dark,
-    });
-    // The series take their place in the page's memory of colours, as in OpenSearch Dashboards
-    assignColors([...new Set(model.data.series.map((series) => series.label))]);
-    return { model, axis };
-  }, [table, context, params, settings, maxBuckets, dark]);
-  const { model, axis } = prepared;
+    };
+    let model: PointSeriesModel;
+    let charts: PointSeriesModel[] | undefined;
+    if (splits) {
+      // A split's heat maps, each of its own rows, on what they share
+      const built = buildSplitHeatmapModels({ ...input, tables: splits.parts.map((part) => part.table), columnCount: table.columns.length });
+      model = built.frame;
+      charts = built.charts;
+    } else {
+      model = buildHeatmapModel({ ...input, table });
+    }
+    // The series of every chart take their place in the page's memory of colours, as in OpenSearch Dashboards
+    assignColors([...new Set((charts ?? [model]).flatMap((chart) => chart.data.series.map((series) => series.label)))]);
+    return { model, charts, axis };
+  }, [table, context, params, settings, maxBuckets, dark, splits]);
+  const { model, charts, axis } = prepared;
 
   // A range's colour: the one picked for it in the legend, else the schema's
   const picked = uiState.vis?.colors;
@@ -93,16 +104,27 @@ export function HeatmapVis({ vis, data, uiState, onUiState, onFilter, onTimeChan
 
   if (table.rows.length === 0) return <ChartMessage>No results found</ChartMessage>;
 
-  const { onPointClick, onBrush } = seriesEvents({ model, axis, context, table, onFilter, onTimeChange, split });
+  // A click on a square of a split's heat map filters on its bucket too; the tooltip names it last
+  const parts: PointSeriesChartPart[] | undefined =
+    charts && splits
+      ? charts.map((chart, index) => {
+          const part = splits.parts[index];
+          const events = seriesEvents({ model: chart, axis, context, table: part.table, onFilter, onTimeChange, split: part.split });
+          return { model: chart, title: part.label, splitDetail: splitTooltipDetail(part.split), ...events };
+        })
+      : undefined;
+  const events: SeriesEvents = parts ? {} : seriesEvents({ model, axis, context, table, onFilter, onTimeChange, split });
   return (
     <PointSeriesChart
       model={model}
+      charts={parts}
+      rows={splits?.rows}
       colorOf={colorOf}
       offsetAt={offsetAt}
       dimming={dimming}
       legend={legend}
-      onPointClick={onPointClick}
-      onBrush={onBrush}
+      onPointClick={events.onPointClick}
+      onBrush={events.onBrush}
     />
   );
 }

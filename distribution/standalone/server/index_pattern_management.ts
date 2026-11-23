@@ -16,7 +16,8 @@ export const SCRIPTING_LANGUAGES = ['painless', 'expression'];
 
 /**
  * What failed, answered as the original answers it: the status of OpenSearch, its error under
- * `attributes.error`, and as the message what the client of OpenSearch calls the error (its type)
+ * `attributes.error`, and as the message what the client of OpenSearch calls the error: its type,
+ * then each of its root causes
  */
 export function failureOf(error: unknown): HttpError {
   if (error instanceof HttpError) return error;
@@ -27,7 +28,11 @@ export function failureOf(error: unknown): HttpError {
       cause && typeof cause === 'object' && typeof (cause as { type?: unknown }).type === 'string'
         ? (cause as { type: string }).type
         : 'Response Error';
-    return new HttpError(error.status || 500, type, { error: cause || type });
+    const roots = type !== 'Response Error' ? (cause as { root_cause?: unknown }).root_cause : undefined;
+    const message = Array.isArray(roots)
+      ? `${type}: ${roots.map((root: { type?: unknown; reason?: unknown }) => `[${String(root?.type)}] Reason: ${String(root?.reason)}`).join('; ')}`
+      : type;
+    return new HttpError(error.status || 500, message, { error: cause || type });
   }
   const message = error instanceof Error ? error.message : String(error);
   return new HttpError(500, message, { error: message });
