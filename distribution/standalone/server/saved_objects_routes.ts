@@ -143,6 +143,27 @@ export function registerSavedObjects(
     maxBytes
   );
 
+  const bulkUpdateBody = arrayOf(
+    object({
+      type: string(),
+      id: string(),
+      attributes: recordOf(string(), any()),
+      version: maybe(string()),
+      references: references(),
+      namespace: maybe(string({ minLength: 1 })),
+    })
+  );
+  router.put('/api/saved_objects/_bulk_update', async (context) => {
+    const objects = validateRequestPart(bulkUpdateBody, await body(context), 'body');
+    return {
+      body: {
+        saved_objects: await repository.bulkUpdate(
+          objects.map((entry) => ({ ...entry, attributes: entry.attributes as Record<string, unknown> }))
+        ),
+      },
+    };
+  });
+
   const exportBody = object({
     type: maybe(stringOrList()),
     objects: maybe(arrayOf(object({ type: string(), id: string() }), { maxSize: limit })),
