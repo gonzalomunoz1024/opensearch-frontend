@@ -201,6 +201,7 @@ function recordingLogger() {
   const logger: Logger = {
     info() {},
     error() {},
+    listening() {},
     warn: (message) => warnings.push(message),
     debug: (message) => debugs.push(message),
   };
