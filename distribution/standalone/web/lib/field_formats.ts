@@ -309,9 +309,13 @@ export function urlParts(params: Record<string, unknown>, value: unknown): { url
 function safeUrl(url: string): string | undefined {
   // eslint-disable-next-line no-control-regex
   const trimmed = url.replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, '').replace(/[\t\n\r]/g, '');
-  if (/^(https?:|mailto:)/i.test(trimmed)) return trimmed;
-  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return undefined;
-  return trimmed;
+  // The scheme is the one the browser's own parser gives it
+  try {
+    const { protocol } = new URL(trimmed, 'http://localhost');
+    return protocol === 'http:' || protocol === 'https:' || protocol === 'mailto:' ? trimmed : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknown) => Formatted {
