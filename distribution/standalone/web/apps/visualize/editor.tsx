@@ -10,17 +10,18 @@
  * and asks before it is left with changes (`top_nav.ts`, `state_transfer.ts`).
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { CallOut, EmptyPrompt, IconButton, Loading, Tabs, cx } from '../../components/basic';
 import { Switch } from '../../components/form';
 import { Icon } from '../../components/icon';
+import { Tooltip } from '../../components/overlay';
 import type { AggConfig, AggContext } from '../../lib/aggs';
 import type { TimeRange } from '../../lib/dates';
 import { mergeFilters } from '../../lib/query';
 import type { Filter, IndexPattern, Query } from '../../lib/types';
 import { appUrl, buildHash, decodeState, encodeState } from '../../lib/url';
 import { visFromSavedObject, visToSavedObject, visType, type UiState, type Vis, type VisualizationAttributes } from '../../lib/vis';
-import { getLocation, href, lastAddressOf, navigate, setHashParams, setLeaveGuard, useLocation } from '../../router';
+import { enteredAnotherApplication, getLocation, href, lastAddressOf, navigate, setHashParams, setLeaveGuard, useLocation } from '../../router';
 import { services } from '../../services';
 import { errorMessage } from '../../services/http';
 import { TopNav, type TopNavItem } from '../../shell/chrome';
@@ -394,11 +395,21 @@ export function VisEditor({ savedId }: { savedId?: string }) {
   }, [autoApply, dirty, draftKey]);
 
   const title = saved?.title ?? '';
+  // The landing page, `#/`, with the `_g` the original's Visualize writes there at once
+  const landing = appUrl(VISUALIZE, '/', { _g: location.hashParams._g });
   useBreadcrumbs(
     saved
-      ? [{ text: 'Visualize', to: appUrl(VISUALIZE, '/') }, { text: saved.id ? title || 'Visualization' : 'Create' }]
-      : [{ text: 'Visualize', to: appUrl(VISUALIZE, '/') }]
+      ? [{ text: 'Visualize', to: landing }, { text: saved.id ? title || 'Visualization' : 'Create' }]
+      : [{ text: 'Visualize', to: landing }]
   );
+  // The document's title as the original's: a saved visualization's own before the product's name
+  // (an empty one left out); a new one leaves it as it was, which is the product's name when the
+  // editor is the first page of Visualize. After the breadcrumbs' own, each time.
+  const [titleBefore] = useState(() => (enteredAnotherApplication() ? services.boot.name : document.title));
+  const docTitle = saved?.id ? [title, services.boot.name].filter(Boolean).join(' - ') : titleBefore;
+  useEffect(() => {
+    document.title = docTitle;
+  });
 
   const shown = useMemo<Vis | undefined>(() => {
     if (!vis || !applied) return undefined;
@@ -492,16 +503,26 @@ export function VisEditor({ savedId }: { savedId?: string }) {
     originatingApp,
     savedId: vis.id,
     hasInspector: hasRequests,
-  }).map((item) => ({
-    id: item.id,
-    label: item.label,
-    emphasize: item.emphasize,
-    icon: item.icon,
-    disabled: item.disabled,
-    title: item.tooltip,
-    testId: item.testId,
-    onClick: actions[item.id],
-  }));
+  }).map((item) => {
+    const tooltip = item.tooltip;
+    return {
+      id: item.id,
+      label: item.label,
+      emphasize: item.emphasize,
+      icon: item.icon,
+      disabled: item.disabled,
+      testId: item.testId,
+      onClick: actions[item.id],
+      // The original's EuiToolTip: above the button unless there is no room, after a quarter second
+      wrap: tooltip
+        ? (button: ReactNode) => (
+            <Tooltip content={tooltip} delay="regular">
+              {button}
+            </Tooltip>
+          )
+        : undefined,
+    };
+  });
 
   const tabs = [...(aggBased ? [{ id: 'data', label: 'Data' }] : []), ...optionTabs(saved.type).map((item) => ({ id: item.id, label: item.label }))].map(
     (item) => ({ ...item, testId: `visEditorTab__${item.id}` })

@@ -118,12 +118,28 @@ function track() {
   }
 }
 
+// The application of the address read last, and whether the address before it was in another one
+let lastApplication: string | undefined;
+let enteredApplication = true;
+
 function read() {
   const key = `${window.location.pathname}${window.location.search}${window.location.hash}`;
   if (key === currentKey) return;
   currentKey = key;
   current = parseLocation(basePath, window.location);
+  const app = applicationOf(window.location.pathname);
+  enteredApplication = app !== lastApplication;
+  lastApplication = app;
   track();
+}
+
+/**
+ * Whether the address now read is the first of its application, after another application's or as
+ * the page loaded: when the original's chrome sets the document's title back to the product's name
+ * (`docTitle.reset()` on every change of application)
+ */
+export function enteredAnotherApplication(): boolean {
+  return enteredApplication;
 }
 
 function emit() {
@@ -135,6 +151,7 @@ export function startRouter(base: string) {
   basePath = base;
   currentKey = '';
   trackedGlobal = undefined;
+  lastApplication = undefined;
   places.clear();
   read();
   window.addEventListener('popstate', emit);

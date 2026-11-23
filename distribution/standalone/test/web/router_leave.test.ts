@@ -10,7 +10,16 @@
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { getLocation, lastAddressOf, locationState, navigate, setLeaveGuard, startRouter, type LeaveTarget } from '../../web/router';
+import {
+  enteredAnotherApplication,
+  getLocation,
+  lastAddressOf,
+  locationState,
+  navigate,
+  setLeaveGuard,
+  startRouter,
+  type LeaveTarget,
+} from '../../web/router';
 
 interface Entry {
   url: string;
@@ -294,6 +303,28 @@ describe('where each application was last', () => {
         },
       }
     ));
+
+  it('knows the first address of an application, where the original sets the title back to the name', () =>
+    withBrowser('/app/visualize#/', '', (browser) => {
+      assert.equal(enteredAnotherApplication(), true, 'as the page loads');
+      navigate('/app/visualize#/create?type=markdown');
+      assert.equal(enteredAnotherApplication(), false, 'a page of the same application');
+      navigate('/app/visualize#/create?type=markdown&_a=(vis:(title:x))', { replace: true });
+      assert.equal(enteredAnotherApplication(), false);
+      navigate('/app/dashboards#/view/d1');
+      assert.equal(enteredAnotherApplication(), true, 'another application');
+      // Its second name is the same application
+      navigate('/app/dashboard#/view/d1?_a=(viewMode:edit)');
+      assert.equal(enteredAnotherApplication(), false);
+      navigate('/app/visualize#/edit/v1');
+      assert.equal(enteredAnotherApplication(), true);
+      navigate('/app/visualize#/edit/v1?_a=(uiState:())', { replace: true });
+      assert.equal(enteredAnotherApplication(), false);
+      // The page loaded again at the same address: its first one
+      browser.history.replaceState(null, '', '/app/visualize#/edit/v1?_a=(uiState:())');
+      startRouter('');
+      assert.equal(enteredAnotherApplication(), true, 'a page loaded again');
+    }));
 
   it('takes the second address this product opens the dashboards at for the dashboards', () => {
     const storage = fakeStorage();
