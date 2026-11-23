@@ -90,4 +90,8 @@ The drawing of Timeline charts (web/vis/timeline/plot.ts) is derived from Flot 0
 time, stack, symbol, crosshair, selection, canvas and axis-label plug-ins, under the MIT License,
 Copyright (c) 2007-2014 IOLA and Ole Laursen.
 
+The pictures the URL format of an index pattern shows in its samples
+(web/static/plugins/indexPatternManagement/assets/icons) are those OpenSearch Dashboards ships for
+it, under the MIT License, Copyright (c) 2014 Steven Skelton (licenses/url-format-icons.txt).
+
 "OpenSearch" is a trademark of its owner. InfraDashboard is not an OpenSearch project.
