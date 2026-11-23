@@ -33,13 +33,12 @@ export const UNIT_NAMES: Record<TimeUnit, [string, string]> = {
 export function addUnits(date: Date, amount: number, unit: TimeUnit): Date {
   const result = new Date(date.getTime());
   switch (unit) {
+    // A year is twelve months, as the original counts it: a year from 29 February is 28 February
     case 'y':
-      result.setFullYear(result.getFullYear() + amount);
-      break;
     case 'M': {
       const day = result.getDate();
       result.setDate(1);
-      result.setMonth(result.getMonth() + amount);
+      result.setMonth(result.getMonth() + (unit === 'y' ? amount * 12 : amount));
       const last = new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate();
       result.setDate(Math.min(day, last));
       break;
