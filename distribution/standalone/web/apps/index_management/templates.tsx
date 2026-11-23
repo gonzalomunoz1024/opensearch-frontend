@@ -468,7 +468,7 @@ function AssociatedTemplatesModal({
       </Modal>
       {unlinking && (
         <UnlinkConfirm
-          template={unlinking}
+          template={unlinking.name}
           component={component}
           wording="This will affect any new indexes created with the template."
           onClose={() => setUnlinking(undefined)}
@@ -500,7 +500,7 @@ export function DeleteComponentModal({
     setBusy(true);
     // A component in use is taken out of its templates first
     for (const template of linked) {
-      if (!(await unlink(template, row.name))) {
+      if (!(await unlink(template.name, row.name))) {
         setBusy(false);
         return;
       }
