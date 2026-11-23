@@ -449,53 +449,11 @@
   stroke-width: 4;
 }
 
-.tvbQueryBar {
-  display: flex;
-}
-
-.tvbQueryBar .shlQuery {
-  flex: 1 1 auto;
-  /* The original's language button ends at the field's border */
-  padding-right: 0;
-}
-
-/* As the original's field, as wide as its row: it gives way to the language button and its padding
-   alone when the row is narrow. As there, the text is a box of its own over the light frame, from
-   the frame's top left corner to a pixel before the language button, and the focus rings it and not
-   the frame; no line parts it from the button */
-.tvbQueryBar .shlQuery textarea {
-  align-self: flex-start;
-  width: 100%;
-  /* 29 px while it is left and 30 px while it has the focus, as the original sizes it */
-  height: 29px;
-  margin: -1px 1px 0 -1px;
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-md);
-  box-shadow: inset 0 0 0 1px var(--color-border-light);
-}
-
-/* "Search" while empty, in the colour of the original's placeholders */
-.tvbQueryBar .shlQuery textarea::placeholder {
-  color: var(--color-text-tertiary);
-  opacity: 1;
-}
-
-.tvbQueryBar .shlQuery:not(.atlField--invalid):focus-within {
-  border-color: var(--color-border-light);
-  box-shadow: none;
-}
-
-.tvbQueryBar .shlQuery:not(.atlField--invalid) textarea:focus {
+/* The product's query bar draws the original's field. Here, as there, its text box is 29 px tall
+   while it is left and 30 px with the focus: the original's style sheet gives it 30 px before it
+   grows with its text, and the bar reads that height when the focus comes */
+.tvbQueryBar .shlQuery__textarea:focus {
   height: 30px;
-  box-shadow:
-    inset 0 0 0 1px var(--color-accent),
-    0 0 0 2px var(--color-focus-ring);
-}
-
-/* Its word on a line 21 px tall, as the original's empty button */
-.tvbQueryBar .shlQuery__language {
-  border-left-color: transparent;
-  line-height: 21px;
 }
 
 /* --- Colours ----------------------------------------------------------------------------------------- */
@@ -636,8 +594,9 @@
   color: var(--color-text-primary);
 }
 
+/* The component library's subdued icon */
 .tvbAggRow__visibilityIcon--subdued {
-  color: var(--color-text-tertiary);
+  color: var(--color-text-secondary);
 }
 
 .tvbAggRow__children {
@@ -669,8 +628,27 @@
   margin-top: var(--space-2);
 }
 
-.tvbAggRow textarea.atlField {
-  min-height: 80px;
+/* A script, in the original's compressed text area: three lines of 21 px within 8 px and its
+   hairline drawn inside. As there it stands on a line of text as tall as its type, whose descent
+   leaves 2 px under it */
+.tvbScript {
+  line-height: 1;
+}
+
+.tvbScript .atlField.tvbScript__area {
+  display: inline-block;
+  min-height: 0;
+  padding: var(--space-2);
+  border: 0;
+  box-shadow: inset 0 0 0 1px var(--color-border-light);
+  line-height: 1.5;
+  vertical-align: baseline;
+}
+
+.tvbScript .tvbScript__area:focus {
+  box-shadow:
+    inset 0 0 0 1px var(--color-accent),
+    0 0 0 2px var(--color-focus-ring);
 }
 
 .tvbLinkIcon {
