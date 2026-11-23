@@ -37,6 +37,7 @@ import { registerSqlConsole } from './sql_console';
 import { contentSecurityPolicy, readBuild, renderPage, serveStatic } from './static';
 import { registerTsvbFields } from './tsvb_fields';
 import { UiSettings } from './ui_settings';
+import { registerValueSuggestions } from './value_suggestions';
 
 export const PRODUCT_NAME = 'InfraDashboard';
 
@@ -395,6 +396,10 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
   // --- TSVB ------------------------------------------------------------------------------------
 
   registerTsvbFields(router, client, repository, uiSettings);
+
+  // --- Value suggestions of the filter editor --------------------------------------------------
+
+  registerValueSuggestions(router, client, repository);
 
   // --- Short URLs ------------------------------------------------------------------------------
 

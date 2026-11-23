@@ -95,6 +95,10 @@ const PATHS = {
   star: 'M8 2l1.800 3.800 4.200.500-3.100 2.900.800 4.100L8 11.300l-3.700 2 .800-4.100L2 6.300l4.200-.500z',
   stop: 'M4 4h8v8H4z',
   beaker: 'M6 2.500h4M6.500 2.500v4L3 13a.700.700 0 0 0 .600 1h8.800a.700.700 0 0 0 .600-1L9.500 6.500v-4M5 10h6',
+  /* The return key: what takes the option picked in a list */
+  returnKey: 'M12.5 3.5v4.5a1.5 1.5 0 0 1-1.5 1.5H3.5M6 7L3.5 9.5 6 12',
+  /* A circle half filled: what turns each of a set round */
+  invert: 'M8 14A6 6 0 1 0 8 2a6 6 0 0 0 0 12zM8 2a6 6 0 0 1 0 12z',
   sql: 'M3 4.500C3 3.400 5.200 2.500 8 2.500s5 .900 5 2-2.200 2-5 2-5-.900-5-2zM3 4.500v7c0 1.100 2.200 2 5 2s5-.900 5-2v-7',
 } as const;
 
@@ -110,7 +114,7 @@ export interface IconProps {
 }
 
 // Shapes that read better filled than outlined
-const FILLED = new Set<IconName>(['play', 'stop', 'bolt']);
+const FILLED = new Set<IconName>(['play', 'stop', 'bolt', 'invert']);
 
 export function Icon({ name, size = 'm', className, title }: IconProps) {
   const classes = ['atlIcon'];
@@ -125,7 +129,8 @@ export function Icon({ name, size = 'm', className, title }: IconProps) {
       aria-label={title}
       style={FILLED.has(name) ? { fill: 'currentcolor' } : undefined}
     >
-      <path d={PATHS[name]} />
+      {/* Where a shape lies over another it is left open: the half of a circle that is not filled */}
+      <path d={PATHS[name]} fillRule="evenodd" />
     </svg>
   );
 }

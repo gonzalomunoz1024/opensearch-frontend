@@ -53,6 +53,10 @@ export interface FilterMeta {
   value?: unknown;
   params?: unknown;
   controlledBy?: string;
+  /** The scripted field a script filter asks about: a script names no field of its own */
+  field?: string;
+  /** What the bucket a range was made from is called; the pill of a range that is all of a field says it */
+  formattedValue?: string;
 }
 
 export interface Filter {

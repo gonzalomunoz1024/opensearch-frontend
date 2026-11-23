@@ -167,7 +167,9 @@ function SearchPanel({
         onFilter={
           onFilter
             ? (name, value, negate) => {
-                const filter = phraseFilter({ name }, value, indexPattern.id);
+                // The field as the index pattern has it, as the original's generateFilters takes it
+                const field = indexPattern.fields.find((candidate) => candidate.name === name) ?? { name };
+                const filter = phraseFilter(field, value, indexPattern.id);
                 filter.meta.negate = negate;
                 onFilter([filter]);
               }

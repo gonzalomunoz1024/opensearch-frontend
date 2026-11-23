@@ -3,8 +3,9 @@
 /*
  * A place to write JSON, a query or a request. The text is drawn line by line, numbered and in
  * colour, and a text area of the same size lies over it with its own text unseen: what is typed
- * goes to the text area, what is read is the drawing. It keeps indentation, closes brackets and
- * indents with the Tab key's two spaces.
+ * goes to the text area, what is read is the drawing. It keeps indentation, closes brackets, puts
+ * a selection between the bracket or quote typed over it and its pair, and indents with the Tab
+ * key's two spaces.
  */
 
 import {
@@ -228,6 +229,19 @@ export function CodeEditor({
         edit(
           `${value.slice(0, start)}\n${indent}${deeper}${value.slice(end)}`,
           start + 1 + indent.length + deeper.length
+        );
+      }
+    } else if (PAIRS[event.key] && start !== end && !event.ctrlKey && !event.metaKey) {
+      // What is selected goes between the pair, as the original's editors put it, unless it is
+      // that brace or a quote alone
+      const selected = value.slice(start, end);
+      const lone = event.key === '"' ? /^["'`]$/.test(selected) : event.key === '{' && selected === '{';
+      if (!lone) {
+        event.preventDefault();
+        edit(
+          `${value.slice(0, start)}${event.key}${selected}${PAIRS[event.key]}${value.slice(end)}`,
+          start + 1,
+          end + 1
         );
       }
     } else if (PAIRS[event.key] && start === end && !event.ctrlKey && !event.metaKey) {

@@ -9,10 +9,10 @@ import { useState, type ReactNode } from 'react';
 import { Accordion, Button, FieldToken, IconButton, Segments } from '../../components/basic';
 import { ComboBox, type ComboOption } from '../../components/combo_box';
 import { FormRow, NumberField, Select, Switch, TextArea, TextField } from '../../components/form';
-import { AGG_TITLES, BUCKET_TYPES, aggLabel, dateInterval, fieldNameOf, type AggConfig, type AggContext } from '../../lib/aggs';
+import { BUCKET_TYPES, aggLabel, dateInterval, fieldNameOf, type AggConfig, type AggContext } from '../../lib/aggs';
 import type { IndexPattern, Query } from '../../lib/types';
 import { defaultQueryLanguage } from '../../shell/query_bar';
-import { PARENT_PIPELINES, SIBLING_PIPELINES, aggGroup, changeAggType, fieldsFor, orderableMetric, takesField } from './defaults';
+import { PARENT_PIPELINES, SIBLING_PIPELINES, aggTypeOptions, changeAggType, fieldsFor, orderableMetric, takesField } from './defaults';
 import { GeohashParams } from './maps/geohash_params';
 
 export interface AggEditorProps {
@@ -174,7 +174,7 @@ export function AggEditor({ agg, types, indexPattern, aggs, context, onChange, s
   const field = indexPattern?.fields.find((candidate) => candidate.name === fieldName);
   const [labelled, setLabelled] = useState<Record<number, boolean>>({});
 
-  const typeOptions: ComboOption[] = types.map((type) => ({ value: type, label: AGG_TITLES[type] ?? type, group: nested ? undefined : aggGroup(type) }));
+  const typeOptions = aggTypeOptions(types, nested);
   const fieldOptions = (purpose: 'field' | 'sort' = 'field'): ComboOption[] =>
     fieldsFor(agg.type, indexPattern, purpose).map((candidate) => ({
       value: candidate.name,
@@ -190,6 +190,7 @@ export function AggEditor({ agg, types, indexPattern, aggs, context, onChange, s
         compact
         fullWidth
         clearable={false}
+        sortMatchesBy="startsWith"
         options={fieldOptions()}
         selected={fieldName ? [fieldName] : []}
         placeholder="Select a field"
@@ -571,6 +572,7 @@ export function AggEditor({ agg, types, indexPattern, aggs, context, onChange, s
               single
               compact
               fullWidth
+              sortMatchesBy="startsWith"
               options={fieldOptions('sort')}
               selected={sortField ? [sortField] : []}
               placeholder="Select a field"
@@ -624,6 +626,7 @@ export function AggEditor({ agg, types, indexPattern, aggs, context, onChange, s
           compact
           fullWidth
           clearable={false}
+          sortMatchesBy="startsWith"
           options={typeOptions}
           selected={agg.type ? [agg.type] : []}
           placeholder="Select an aggregation"
