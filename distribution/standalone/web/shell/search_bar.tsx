@@ -276,8 +276,8 @@ export function SearchBar({
 function TimePickerLess({ loading, dirty, onClick }: { loading?: boolean; dirty?: boolean; onClick: () => void }) {
   return (
     <Button
-      variant={dirty ? 'primary' : 'default'}
-      icon={dirty ? 'arrowRight' : 'refresh'}
+      variant={dirty ? 'healthyOutline' : 'default'}
+      icon="refresh"
       loading={loading && !dirty}
       onClick={onClick}
       className="shlTime__submit"

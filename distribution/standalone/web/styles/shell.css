@@ -175,6 +175,14 @@
   cursor: pointer;
 }
 
+.shlNav__arrow {
+  transition: transform var(--duration-normal) var(--ease-out-quint);
+}
+
+.shlNav__groupTitle[aria-expanded="true"] > .shlNav__arrow {
+  transform: rotate(90deg);
+}
+
 .shlNav__links {
   display: flex;
   flex-direction: column;
@@ -332,7 +340,7 @@
   padding: 0;
   border-right: 1px solid var(--color-border-light);
   border-radius: var(--radius-md);
-  color: var(--color-accent);
+  color: var(--color-accent-button-text);
 }
 
 /* Tinted while its list is open, as the original's is */
@@ -546,7 +554,7 @@
   height: calc(var(--control-height) - 2px);
   border-left: 1px solid var(--color-border-light);
   border-radius: 0;
-  color: var(--color-accent);
+  color: var(--color-accent-button-text);
   font-weight: var(--font-weight-medium);
 }
 
@@ -591,8 +599,13 @@
   border-right: 1px solid var(--color-border-light);
   border-radius: var(--radius-md) 0 0 var(--radius-md);
   background: none;
-  color: var(--color-accent);
+  color: var(--color-accent-button-text);
   cursor: pointer;
+}
+
+/* The original draws its small arrow centred in the width of a full icon */
+.shlTime__quick > .atlIcon--s {
+  width: 16px;
 }
 
 .shlTime__range {
@@ -631,8 +644,13 @@
   color: var(--color-critical-text);
 }
 
+/* The original's delimiter of a range: an arrow of text, small and subdued, 8 pixels around it */
 .shlTime__arrow {
-  color: var(--color-text-tertiary);
+  flex: none;
+  padding: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  line-height: var(--font-size-s);
 }
 
 /* The interval beside the button of a picker without dates */
