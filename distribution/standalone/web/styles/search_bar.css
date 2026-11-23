@@ -390,3 +390,272 @@
     display: none;
   }
 }
+
+/* --- Saved queries: the button before the query, its list, the form that saves one ---------- */
+
+/* An empty small button with a line between it and the query */
+.shlQuery__saved {
+  flex: none;
+  width: 36px;
+  height: 100%;
+  padding: 0;
+  border: 1px solid transparent;
+  border-right-color: var(--color-border-light);
+  border-radius: var(--radius-md);
+  color: var(--color-accent-button-text);
+}
+
+/* Tinted while its list is open, as the original's is */
+.shlQuery__saved[aria-expanded="true"] {
+  background: var(--color-accent-tint);
+}
+
+/* The list: as wide as its text, up to the original's 400 px */
+.shlSavedQueries {
+  display: flex;
+  flex-direction: column;
+  max-width: 400px;
+}
+
+.shlSavedQueries__title {
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--color-border-light);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+.shlSavedQueries__text {
+  margin: 0;
+  padding: var(--space-3) var(--space-3) 6px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+/* With none saved, the text has a small space under it */
+.shlSavedQueries__text--empty {
+  margin-bottom: var(--space-2);
+}
+
+/* 16 px more than a form is wide, so that a row cut off says there are more; its ends fade */
+.shlSavedQueries__list {
+  max-height: 416px;
+  margin: 0;
+  padding: 6px var(--space-1);
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-width: thin;
+  mask-image: linear-gradient(
+    rgb(255 0 0 / 10%) 0%,
+    rgb(255 0 0) 7.5px,
+    rgb(255 0 0) calc(100% - 7.5px),
+    rgb(255 0 0 / 10%) 100%
+  );
+}
+
+/* A row as the theme draws a list's: the line's colour under the pointer or round the focus */
+.shlSavedQueries__item {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  transition: background-color var(--duration-fast);
+}
+
+.shlSavedQueries__item:hover,
+.shlSavedQueries__item:focus-within {
+  background-color: var(--color-border-light);
+}
+
+.shlSavedQueries__item--selected,
+.shlSavedQueries__item--selected:hover,
+.shlSavedQueries__item--selected:focus-within {
+  background-color: var(--color-accent-tint);
+}
+
+/* A link of a list in small type, the check 12 px before the name of the loaded one */
+.shlSavedQueries__load {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  min-height: 32px;
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  background: none;
+  color: var(--color-accent);
+  font: inherit;
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 24px;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Underlined while the pointer is on the row, not for the focus alone */
+.shlSavedQueries__item:hover .shlSavedQueries__load {
+  text-decoration: underline;
+}
+
+/* The name gives way before its icon, which stays */
+.shlSavedQueries__label {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.shlSavedQueries__name {
+  margin-right: var(--space-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The icon of the description sits in a line of the row's height, as the original's */
+.shlSavedQueries__label > .atlTooltipAnchor {
+  display: block;
+}
+
+.shlSavedQueries__tip {
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+/* With the focus, the theme's background of a focused icon */
+.shlSavedQueries__tip:focus {
+  background: var(--color-accent-callout-fill);
+}
+
+/* The bin: a round extra small button in the critical colour, shown on the row the pointer is on */
+.shlSavedQueries__delete {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-right: var(--space-2);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--color-critical-button-text);
+  cursor: pointer;
+  opacity: 0;
+  transition: background-color var(--duration-fast) ease-out;
+}
+
+.shlSavedQueries__item:hover .shlSavedQueries__delete,
+.shlSavedQueries__delete:focus {
+  opacity: 1;
+}
+
+/* A tenth of the critical colour in both themes, as the theme tints its icon buttons */
+.shlSavedQueries__delete:hover,
+.shlSavedQueries__delete:focus {
+  background-color: color-mix(in srgb, var(--color-critical) 10%, transparent);
+}
+
+/* The pages: the original's 6 px over them and 12 px round the rest */
+.shlSavedQueries__pages {
+  padding: 6px var(--space-3) var(--space-3);
+}
+
+.shlSavedQueries__pages .atlPagination {
+  justify-content: center;
+  margin-top: 0;
+}
+
+.shlSavedQueries__pages .atlPagination > .atlRow:empty {
+  display: none;
+}
+
+.shlSavedQueries__footer {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-top: 1px solid var(--color-border-light);
+}
+
+/* Small buttons: a line of nothing round them, the filled ones 112 px at least */
+.shlSavedQueries__footer .atlButton {
+  border: 1px solid transparent;
+}
+
+.shlSavedQueries__footer .atlButton:not(.atlButton--empty) {
+  min-width: 112px;
+}
+
+/* Flush with the text on its left */
+.shlSavedQueries__clear {
+  padding: 0;
+}
+
+/* The question before one is deleted is its title alone, its buttons 8 px under its line */
+.shlSavedQueries__confirm .atlModal__body {
+  display: none;
+}
+
+.shlSavedQueries__confirm .atlModal__footer {
+  padding-top: var(--space-2);
+}
+
+/* While it is asked, the list is under the dialog's mask, as the original's */
+.atlPopover.shlSavedQueries__panel--behind {
+  z-index: 3999;
+}
+
+/* The form that saves a query: as wide as its rows of 400 px, which are 16 px apart */
+.atlModal.shlSaveQuery {
+  width: auto;
+}
+
+.shlSaveQuery__form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+
+.shlSaveQuery__form > .atlFormRow,
+.shlSaveQuery__errorBox {
+  width: 100%;
+}
+
+.shlSaveQuery__text {
+  max-width: 400px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+/* The original's compressed switch: a thumb of 14 px, 1 px in, filled with the dialog's colour
+   and ringed with the track's */
+.shlSaveQuery__form .atlSwitch--compressed .atlSwitch__track::after {
+  top: 1px;
+  left: 1px;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.shlSaveQuery__form .atlSwitch--compressed .atlSwitch__track[aria-checked="true"]::after {
+  border-color: var(--color-accent);
+}
+
+/* The errors over the form, which takes the focus as the original's call-out does */
+.shlSaveQuery__errorBox {
+  border-radius: var(--radius-md);
+}
+
+/* A list of small text, in by one and a half of its letters */
+.shlSaveQuery__errors {
+  margin: 0;
+  padding-left: 1.5em;
+}

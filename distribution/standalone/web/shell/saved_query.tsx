@@ -7,11 +7,11 @@
  * with it. The texts and the names tests find them by are the original's.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, CallOut, cx } from '../components/basic';
 import { FormRow, Switch, TextField } from '../components/form';
 import { Icon } from '../components/icon';
-import { ConfirmModal, Modal, Popover } from '../components/overlay';
+import { Modal, Popover, Tooltip } from '../components/overlay';
 import { Pagination } from '../components/table';
 import { errorMessage } from '../services/http';
 import {
@@ -82,9 +82,12 @@ function SavedQueryItem({
         <span className="shlSavedQueries__label" title={title} data-test-subj="osdSavedQueryListItemLabel">
           <span className="shlSavedQueries__name">{title}</span>
           {description && (
-            <span className="shlSavedQueries__description" title={description}>
-              <Icon name="info" title={`${title} description`} />
-            </span>
+            // The description in a tip over its icon, which Tab stops at, as the original's
+            <Tooltip content={description} delay="regular">
+              <span className="shlSavedQueries__tip" tabIndex={0}>
+                <Icon name="info" title={`${title} description`} />
+              </span>
+            </Tooltip>
           )}
         </span>
       </button>
@@ -96,7 +99,7 @@ function SavedQueryItem({
         title={`Delete saved query ${title}`}
         data-test-subj={`delete-saved-query-${title}-button`}
       >
-        <Icon name="trash" />
+        <Icon name="trash" size="s" />
       </button>
     </li>
   );
@@ -118,9 +121,11 @@ function SavedQueryList({
   onSaveAsNew: () => void;
   onDelete: (savedQuery: SavedQuery) => void;
 }) {
+  const root = useRef<HTMLDivElement>(null);
   const [queries, setQueries] = useState<SavedQuery[]>([]);
   const [count, setCount] = useState(0);
   const [page, setPage] = useState(0);
+  const [listed, setListed] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -131,18 +136,29 @@ function SavedQueryList({
         setCount(total);
         setQueries(sortSavedQueries(found));
       })
-      .catch((failure) => live && services.toasts.error(failure, 'The saved queries could not be listed'));
+      .catch((failure) => live && services.toasts.error(failure, 'The saved queries could not be listed'))
+      .finally(() => live && setListed(true));
     return () => {
       live = false;
     };
   }, [page]);
+
+  // The focus comes in once the list is there, as into the original's once its opening has
+  // settled: on the first saved query, else on the first button
+  useEffect(() => {
+    const element = root.current;
+    if (!listed || !element) return;
+    const panel = element.closest<HTMLElement>('.atlPopover') ?? element;
+    if (panel.contains(document.activeElement)) return;
+    element.querySelector<HTMLElement>('button:not(:disabled), [tabindex="0"]')?.focus({ preventScroll: true });
+  }, [listed]);
 
   // The loaded one comes first when it is on this page
   const others = queries.filter((query) => query.id !== loaded?.id);
   const rows = loaded && others.length !== queries.length ? [loaded, ...others] : others;
 
   return (
-    <div className="shlSavedQueries" data-test-subj="saved-query-management-popover">
+    <div ref={root} className="shlSavedQueries" data-test-subj="saved-query-management-popover">
       <div className="shlSavedQueries__title" id="savedQueryManagementPopoverTitle">
         Saved Queries
       </div>
@@ -229,9 +245,18 @@ export function SavedQueryManagement({
 }) {
   const [open, setOpen] = useState(false);
   const [deleting, setDeleting] = useState<SavedQuery>();
+  const deleteOpener = useRef<HTMLElement | null>(null);
   // The question over the list is part of it: answering it does not close the list
   const close = useCallback(() => {
     if (!deleting) setOpen(false);
+  }, [deleting]);
+
+  // Cancelled, the question gives the focus back to the bin it was asked from, as the original's
+  useEffect(() => {
+    if (deleting) return;
+    const back = deleteOpener.current;
+    deleteOpener.current = null;
+    if (back?.isConnected) back.focus();
   }, [deleting]);
 
   const remove = async (savedQuery: SavedQuery) => {
@@ -250,6 +275,10 @@ export function SavedQueryManagement({
       <Popover
         open={open}
         onClose={close}
+        position="downLeft"
+        // The list gives itself the focus once it has come (below)
+        initialFocus={false}
+        className={deleting ? 'shlSavedQueries__panel--behind' : undefined}
         anchorStyle={{ alignSelf: 'stretch' }}
         button={
           <Button
@@ -279,18 +308,33 @@ export function SavedQueryManagement({
             setOpen(false);
             onSaveAsNew();
           }}
-          onDelete={setDeleting}
+          onDelete={(savedQuery) => {
+            deleteOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+            setDeleting(savedQuery);
+          }}
         />
       </Popover>
       {deleting && (
-        <ConfirmModal
+        // The original's confirmation, 400 px wide, with a title and no text; the dialog itself
+        // has the focus, neither of its buttons
+        <Modal
           title={`Delete "${deleting.attributes.title}"?`}
-          confirmLabel="Delete"
-          cancelLabel="Cancel"
-          danger
-          onConfirm={() => void remove(deleting)}
-          onCancel={() => setDeleting(undefined)}
-        />
+          className="atlModal--confirm shlSavedQueries__confirm"
+          testId="confirmModal"
+          onClose={() => setDeleting(undefined)}
+          footer={
+            <>
+              <Button variant="empty" onClick={() => setDeleting(undefined)} testId="confirmModalCancelButton">
+                Cancel
+              </Button>
+              <Button variant="dangerFill" onClick={() => void remove(deleting)} testId="confirmModalConfirmButton">
+                Delete
+              </Button>
+            </>
+          }
+        >
+          {null}
+        </Modal>
       )}
     </>
   );
@@ -320,6 +364,7 @@ export function SaveQueryForm({
   const [includeTime, setIncludeTime] = useState(Boolean(savedQuery?.timefilter));
   const [existing, setExisting] = useState<SavedQuery[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
+  const form = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let live = true;
@@ -330,6 +375,13 @@ export function SaveQueryForm({
     return () => {
       live = false;
     };
+  }, []);
+
+  // Its name cannot change when its changes are saved: the dialog itself has the focus then, as
+  // the original's, whose first focus, the name, cannot take it. As it opens only.
+  useEffect(() => {
+    if (savedQuery) form.current?.closest<HTMLElement>('.atlModal')?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const save = () => {
@@ -351,9 +403,13 @@ export function SaveQueryForm({
   };
 
   const invalid = errors.length > 0;
+  // Called once, as the errors appear; not on each change of the form while they show
+  const focusOnMount = useCallback((node: HTMLDivElement | null) => node?.focus(), []);
   return (
     <Modal
       title="Save query"
+      titleSize="l"
+      className="shlSaveQuery"
       onClose={onClose}
       testId="saveQueryFormModal"
       footer={
@@ -367,25 +423,29 @@ export function SaveQueryForm({
         </>
       }
     >
-      <div className="atlStack" data-test-subj="saveQueryForm">
+      {/* The original's form of compressed rows, 400 px wide and 16 px apart */}
+      <div ref={form} className="shlSaveQuery__form" data-test-subj="saveQueryForm">
         {invalid && (
-          <CallOut tone="critical" title="Please address the errors in your form.">
-            <ul className="shlSaveQuery__errors">
-              {errors.map((error) => (
-                <li key={error}>{error}</li>
-              ))}
-            </ul>
-          </CallOut>
+          // Given the focus as it comes, as the original's, so that it is read out
+          <div className="shlSaveQuery__errorBox" tabIndex={-1} ref={focusOnMount}>
+            <CallOut tone="critical" title="Please address the errors in your form.">
+              <ul className="shlSaveQuery__errors">
+                {errors.map((error) => (
+                  <li key={error}>{error}</li>
+                ))}
+              </ul>
+            </CallOut>
+          </div>
         )}
-        <span className="atlSubdued">{DESCRIPTION_TEXT}</span>
+        <div className="shlSaveQuery__text">{DESCRIPTION_TEXT}</div>
         <FormRow
-          label={<span className={cx(invalid && 'shlSaveQuery__invalid')}>Name</span>}
+          label={<span className={cx(invalid && 'atlFormRow__label--invalid')}>Name</span>}
           help="Name is required and must be unique without leading or trailing spaces."
-          full
         >
           <TextField
             name="title"
             value={title}
+            compact
             disabled={Boolean(savedQuery)}
             invalid={invalid}
             onChange={(value) => {
@@ -400,14 +460,21 @@ export function SaveQueryForm({
             testId="saveQueryFormTitle"
           />
         </FormRow>
-        <FormRow label="Description" full>
-          <TextField name="description" value={description} onChange={setDescription} testId="saveQueryFormDescription" />
+        <FormRow label="Description">
+          <TextField
+            name="description"
+            value={description}
+            compact
+            onChange={setDescription}
+            testId="saveQueryFormDescription"
+          />
         </FormRow>
         {showFilterOption && (
           <Switch
             checked={includeFilters}
             onChange={setIncludeFilters}
             label="Include filters"
+            compressed
             testId="saveQueryFormIncludeFiltersOption"
           />
         )}
@@ -416,6 +483,7 @@ export function SaveQueryForm({
             checked={includeTime}
             onChange={setIncludeTime}
             label="Include time filter"
+            compressed
             testId="saveQueryFormIncludeTimeFilterOption"
           />
         )}
