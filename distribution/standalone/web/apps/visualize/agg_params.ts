@@ -182,6 +182,8 @@ const PARAMS: Record<string, ParamDef[]> = {
     JSON_INPUT,
     CUSTOM_LABEL,
   ],
+  // Its precision has no editor in the original: it is what a saved object carries, or 0
+  geotile_grid: [FIELD, { name: 'useGeocentroid', value: is(true) }, { name: 'precision', value: is(0) }, JSON_INPUT, CUSTOM_LABEL],
 };
 
 /** The names of a type's parameters, in their order */
@@ -291,6 +293,7 @@ const FIELD_RULES: Record<string, FieldRule> = {
   terms: { types: ['number', 'boolean', 'date', 'ip', 'string'] },
   significant_terms: { types: ['string'], scriptable: false },
   geohash_grid: { types: ['geo_point'] },
+  geotile_grid: { types: ['geo_point'] },
 };
 
 /** The types of field an aggregation's field accepts, as its error names them */
