@@ -22,6 +22,9 @@ keeps working, and parts of it are derived from it under the Apache License, Ver
     (web/static/plugins/home/assets/common, copied as it is from
     src/plugins/home/public/assets/common) and the shapes behind it (web/static/core_app/images,
     copied as they are from src/core/public/core_app/images),
+  - the pictures of the overview of a new instance
+    (web/static/plugins/opensearchDashboardsOverview/assets, copied as they are from
+    src/plugins/opensearch_dashboards_overview/public/assets),
   - the colours of the console and the reading of its requests
     (web/apps/dev_tools/console_highlight.ts and console_model.ts): the rules of the console's
     modes for the Ace editor (src/plugins/console/public/application/models/legacy_core_editor/mode
