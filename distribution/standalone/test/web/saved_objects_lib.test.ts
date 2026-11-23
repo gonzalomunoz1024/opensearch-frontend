@@ -15,7 +15,8 @@ import {
   type RetryDecision,
   type RetryObject,
 } from '../../web/apps/management/saved_objects_lib';
-import { pageButtons } from '../../web/apps/management/saved_objects_parts';
+// The table's pages are the kit's
+import { pageButtons } from '../../web/components/table';
 
 const meta = (title: string) => ({ title, icon: 'visualizeApp' });
 

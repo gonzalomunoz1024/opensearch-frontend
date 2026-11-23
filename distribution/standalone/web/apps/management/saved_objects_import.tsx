@@ -244,7 +244,7 @@ export function ImportFlyout({ onClose, onDone }: { onClose: () => void; onDone:
   if (status === 'loading') {
     body = (
       <div className="sobImportLoading">
-        <Spinner size="l" />
+        <Spinner size="xl" />
       </div>
     );
   } else if (!isLegacyFile && status === 'success') {
