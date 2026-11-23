@@ -603,10 +603,13 @@ export function Legend({
 }) {
   const elastic = elasticSize !== undefined;
   const beside = position === 'left' || position === 'right';
+  // Above or below the chart elastic-charts gives a legend of a single item the whole width, and
+  // the columns of at least 200 pixels only to more items
+  const across = items.length === 1 ? { gridTemplateColumns: '1fr' } : {};
   return (
     <ul
       className={`chtLegend chtLegend--${position}${classic ? ' chtLegend--classic' : ''}${elastic ? ' chtLegend--elastic' : ''}`}
-      style={elastic ? (beside ? { width: elasticSize } : { height: elasticSize }) : undefined}
+      style={elastic ? (beside ? { width: elasticSize } : { height: elasticSize, ...across }) : undefined}
       data-test-subj="legendContainer"
     >
       {items.map((item) => (

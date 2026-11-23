@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { decodeEntities, Markdown } from '../../web/lib/markdown';
+import { Markdown } from '../../web/lib/markdown';
 import { compileTemplate, renderTemplate, TemplateError } from '../../web/lib/template';
 import { valueTemplate } from '../../web/vis/tsvb/data';
 
@@ -157,8 +157,12 @@ describe('the character references of a Markdown text', () => {
   const html = (text: string) => renderToStaticMarkup(<Markdown text={text} />);
 
   it('stand for their characters outside code, as markdown-it reads them', () => {
-    assert.equal(decodeEntities('&lt;b&gt; &amp; &quot;q&quot; &#x27;s&#x27; a&#x3D;b &#96;'), `<b> & "q" 's' a=b \``);
-    assert.equal(decodeEntities('&copy; &eacute; &Omega; &hellip; &nbsp;|&#0; &#xD800; &unknown; & amp;'), '© é Ω …  |� � &unknown; & amp;');
+    assert.equal(html('&lt;b&gt; &amp; &quot;q&quot; &#x27;s&#x27; a&#x3D;b &#96;'), '<div class="atlMarkdown"><p>&lt;b&gt; &amp; &quot;q&quot; \'s\' a=b `</p>\n</div>');
+    // A reference to no character, or to one no text may hold, is the replacement character; an unknown name stays
+    assert.equal(
+      html('&copy; &eacute; &Omega; &hellip; &nbsp;|&#0; &#xD800; &unknown; & amp;'),
+      `<div class="atlMarkdown"><p>© é Ω … ${String.fromCharCode(160)}|${String.fromCharCode(0xfffd)} ${String.fromCharCode(0xfffd)} &amp;unknown; &amp; amp;</p>\n</div>`
+    );
     assert.match(html('Count &amp; bytes: &lt;b&gt;'), /<p>Count &amp; bytes: &lt;b&gt;<\/p>/);
     assert.match(html('`&amp;` and &amp;'), /<code>&amp;amp;<\/code> and &amp;/);
     assert.match(html('&ast;not emphasis&ast; \\*nor this\\*'), /<p>\*not emphasis\* \*nor this\*<\/p>/);
