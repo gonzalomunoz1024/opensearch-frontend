@@ -100,12 +100,136 @@
   white-space: nowrap;
 }
 
-.ismTable--fixed th .atlTable__sort {
-  max-width: 100%;
-}
-
 .ismTable--fixed th .atlTable__sort > span {
   min-width: 0;
+}
+
+/* A header's name on one line, cut with an ellipsis, as the theme's header cells */
+.ismTable--fixed th > span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A column of numbers has its header at the right too, as the theme's right-aligned columns */
+.ismTable--fixed th.ismTable__right .atlTable__sort {
+  justify-content: flex-end;
+}
+
+/* What a list says when it has nothing to show sits in the cell as the theme's empty prompt does */
+.ismTable--fixed .ismTable__empty {
+  display: block;
+  max-width: none;
+  padding: 0;
+}
+
+/* --- The lists of data streams, aliases and templates ---------------------------------------------- */
+
+/* A name that leads to its page: the plugin's link is a button in the link, which takes neither the
+   table's figures nor its line */
+.ismCellLink {
+  line-height: normal;
+  font-feature-settings: normal;
+}
+
+/* A health or a type written as it comes, shown with a capital, as the plugin's */
+.ismCapitalize {
+  text-transform: capitalize;
+}
+
+/* The title of a list that is the theme's medium title, not a heading of a text */
+.ismContentPanel__title--m {
+  display: block;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  line-height: 28px;
+  letter-spacing: -0.021em;
+}
+
+/* The help under a list's title in half the width, as the aliases' */
+.ismContentPanel__half {
+  width: 50%;
+}
+
+/* The search box alone, on the panel's edges: the plugin's row of a small gutter */
+.ismListControls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ismListControls > :first-child {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+/* The status filter beside the aliases' search: a compressed combo box 300 px wide */
+.ismAliasStatus {
+  flex: none;
+  width: 300px;
+}
+
+/* The theme's empty prompt: 36 em at most, 24 px around, its text subdued, its buttons 24 px under */
+.ismListEmpty {
+  max-width: 36em;
+  margin: auto;
+  padding: var(--space-6);
+  text-align: center;
+}
+
+.ismListEmpty__text {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+.ismListEmpty__text p {
+  margin: 0;
+}
+
+.ismListEmpty__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  margin-top: var(--space-6);
+}
+
+/* What can be done to a row: its buttons 8 px apart, faint and grey until the pointer is on the row */
+.ismRowActions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ismRowActions > * {
+  flex: none;
+  opacity: 0.7;
+  filter: grayscale(100%);
+  transition:
+    opacity var(--duration-normal) var(--ease-out-quint),
+    filter var(--duration-normal) var(--ease-out-quint);
+}
+
+tr:hover .ismRowActions > *,
+.ismRowActions > *:focus-within {
+  opacity: 1;
+  filter: none;
+}
+
+.ismRowActions__info {
+  color: var(--color-accent);
+}
+
+.ismRowActions__danger {
+  color: var(--color-critical);
+}
+
+/* "N more" after the first names of a cell */
+.ismFewNames__more {
+  margin-left: var(--space-2);
 }
 
 /* --- Indexes ---------------------------------------------------------------------------------- */
@@ -731,6 +855,16 @@ button.ismTreeView__inner {
    title where the call-out's own text would be 8 */
 .ismModalNames--underTitle {
   margin-top: 18px;
+}
+
+/* A list outside the theme's text (the plugin's DeleteModal): from the edge, its bullets inside */
+.ismModalNames--plain {
+  margin-left: 0;
+}
+
+/* Cancel of the alias dialog: the plugin's plain small button, 20 px before the other */
+.ismAliasCancel {
+  margin-right: 20px;
 }
 
 .ismModal__body .atlField {

@@ -359,6 +359,7 @@ export function Table<Row>({
                 return (
                   <th
                     key={column.field}
+                    className={column.align === 'right' ? 'ismTable__right' : undefined}
                     style={{ width: column.width, textAlign: column.align }}
                     data-test-subj={`tableHeaderCell_${column.field}_${index}`}
                     aria-sort={sorted ? (query.sortDirection === 'asc' ? 'ascending' : 'descending') : undefined}

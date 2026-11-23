@@ -214,7 +214,9 @@ export function DataStreams() {
       name: 'Data stream name',
       sortable: true,
       render: (row) => (
-        <a href={`#${ROUTES.CREATE_DATA_STREAM}/${row.name}/readonly`}>{row.name}</a>
+        <a className="ismCellLink" href={`#${ROUTES.CREATE_DATA_STREAM}/${row.name}/readonly`}>
+          {row.name}
+        </a>
       ),
     },
     {
@@ -222,10 +224,11 @@ export function DataStreams() {
       name: 'Status',
       sortable: true,
       render: (row) => {
+        // written as it comes, shown with a capital
         const health = (row.status || '').toLowerCase();
         return (
           <Tooltip content={HEALTH_TIPS[health] || ''}>
-            <span className="ismCapital">
+            <span className="ismCapitalize">
               <Health tone={HEALTH_TONES[health]}>{health}</Health>
             </span>
           </Tooltip>
@@ -236,7 +239,11 @@ export function DataStreams() {
       field: 'template',
       name: 'Template',
       sortable: true,
-      render: (row) => <a href={`#${ROUTES.CREATE_TEMPLATE}/${row.template}`}>{row.template}</a>,
+      render: (row) => (
+        <a className="ismCellLink" href={`#${ROUTES.CREATE_TEMPLATE}/${row.template}`}>
+          {row.template}
+        </a>
+      ),
     },
     {
       field: 'backing_indices',

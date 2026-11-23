@@ -643,6 +643,17 @@ export function inheritedBody(template: StreamTemplate): TemplateBody {
   return { ...body, settings: flatten(body.settings ?? {}), mappings: localMappings(body.mappings) };
 }
 
+/**
+ * What is wrong with the name of an alias, as the plugin's dialog says it: one sentence whatever is
+ * wrong, an empty name too (its rule tests the empty text against the naming pattern)
+ */
+export const aliasNameError = (name: string | undefined): string | undefined =>
+  INDEX_NAMING_PATTERN.test(name || '') ? undefined : 'Invalid alias name.';
+
+/** An alias needs one index or pattern at least */
+export const aliasIndexesError = (indexes: string[] | undefined): string | undefined =>
+  indexes && indexes.length > 0 ? undefined : 'At least one index should be selected.';
+
 /** What is wrong with the name of a data stream that is to be created */
 export function dataStreamNameErrors(name: string, matched: boolean): string[] {
   const errors: string[] = [];

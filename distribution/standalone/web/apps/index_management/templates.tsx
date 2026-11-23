@@ -111,7 +111,8 @@ function UnlinkConfirm({
       }}
     >
       <p>
-        The component {component} will be removed from the template {template}. {wording}
+        The component {component} will be removed from the template {template}
+        {`. ${wording}`}
       </p>
     </SimpleModal>
   );
@@ -255,7 +256,11 @@ export function Templates() {
       field: 'name',
       name: 'Template name',
       sortable: true,
-      render: (row) => <a href={`#${ROUTES.CREATE_TEMPLATE}/${row.name}`}>{row.name}</a>,
+      render: (row) => (
+        <a className="ismCellLink" href={`#${ROUTES.CREATE_TEMPLATE}/${row.name}`}>
+          {row.name}
+        </a>
+      ),
     },
     {
       field: 'templateType',
@@ -272,9 +277,14 @@ export function Templates() {
           <FewNames
             names={patterns}
             // "in in" is the plugin's
-            title={`Index patterns in in ${row.name} (${patterns.length})`}
+            title={
+              <>
+                Index patterns in in {row.name} ({patterns.length})
+              </>
+            }
             hint={`Index patterns in ${row.name} (${patterns.length})`}
             column="Index pattern"
+            field="pattern"
             testId="indexPatternsTable"
           />
         );

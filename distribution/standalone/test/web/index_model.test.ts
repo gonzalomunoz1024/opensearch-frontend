@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   addedFields,
+  aliasIndexesError,
+  aliasNameError,
   changedSettings,
   comparableComponent,
   countChanges,
@@ -476,5 +478,22 @@ describe('the template of a data stream', () => {
       'No matching index template found for data stream []',
     ]);
     assert.deepEqual(dataStreamNameErrors('Logs', true), ['Invalid data stream name.']);
+  });
+});
+
+describe('an alias in its dialog', () => {
+  it('has a name an index could have, and one sentence for whatever is wrong with it', () => {
+    assert.equal(aliasNameError('logs'), undefined);
+    assert.equal(aliasNameError('logs-1_all'), undefined);
+    for (const name of ['', undefined, 'Logs', '-logs', '_logs', 'lo*gs', 'logs?', 'a/b']) {
+      assert.equal(aliasNameError(name), 'Invalid alias name.');
+    }
+  });
+
+  it('points to one index at least', () => {
+    assert.equal(aliasIndexesError(['logs-1']), undefined);
+    assert.equal(aliasIndexesError(['logs-*', 'audit']), undefined);
+    assert.equal(aliasIndexesError([]), 'At least one index should be selected.');
+    assert.equal(aliasIndexesError(undefined), 'At least one index should be selected.');
   });
 });

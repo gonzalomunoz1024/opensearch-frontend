@@ -25,9 +25,9 @@ import {
 } from './common';
 import { ContentPanel, ContentPanelActions, ListEmpty, TitleHelp } from './content_panel';
 import { FormRow } from './form_row';
+import { aliasIndexesError, aliasNameError } from './index_model';
 import {
   INDEX_NAMING_MESSAGE,
-  INDEX_NAMING_PATTERN,
   SYSTEM_ALIAS,
   SYSTEM_INDEX,
   aliasActions,
@@ -51,16 +51,19 @@ const STATUS_OPTIONS = ['open', 'closed', 'hidden', 'none', 'all'];
 export function FewNames({
   names,
   title,
-  hint = title,
+  hint,
   column,
+  field,
   testId,
 }: {
   names: string[];
-  /** What the flyout with all of them is called */
-  title: string;
+  /** What the flyout with all of them is called, in the pieces the plugin writes it in */
+  title: ReactNode;
   /** What the title says when pointed at */
-  hint?: string;
+  hint: string;
   column: string;
+  /** The column's field, which names its header's test id */
+  field: string;
   testId: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -70,7 +73,7 @@ export function FewNames({
       {names.length > 3 && (
         <button
           type="button"
-          className="atlLinkButton ismFewNames__more"
+          className="atlLinkButton ismCellLink ismFewNames__more"
           onClick={() => setOpen(!open)}
           data-test-subj={`${names.length - 3} more`}
         >
@@ -82,7 +85,7 @@ export function FewNames({
           <div data-test-subj={testId}>
             <LocalTable
               fixed
-              columns={[{ field: 'name', name: column, render: (row: { name: string }) => row.name }]}
+              columns={[{ field, name: column, render: (row: { name: string }) => row.name }]}
               rows={names.map((name) => ({ name }))}
               rowId={(row) => row.name}
               pageSizes={[10, 25, 50]}
@@ -154,13 +157,6 @@ function IndexSelect({
     />
   );
 }
-
-/** What is wrong with a name, as the plugin's form says it: one sentence whatever is wrong, an empty name too */
-export const aliasNameError = (name: string | undefined): string | undefined =>
-  INDEX_NAMING_PATTERN.test(name || '') ? undefined : 'Invalid alias name.';
-
-export const aliasIndexesError = (indexes: string[] | undefined): string | undefined =>
-  indexes && indexes.length > 0 ? undefined : 'At least one index should be selected.';
 
 function CreateAlias({
   alias,
@@ -373,7 +369,7 @@ export function Aliases() {
       render: (row) => (
         <button
           type="button"
-          className="atlLinkButton"
+          className="atlLinkButton ismCellLink"
           onClick={() => {
             setEditing(row);
             setDialog('edit');
@@ -396,8 +392,14 @@ export function Aliases() {
       render: (row) => (
         <FewNames
           names={row.indexArray}
-          title={`Indices in ${row.alias} (${row.indexArray.length})`}
+          title={
+            <>
+              Indices in {row.alias} ({row.indexArray.length})
+            </>
+          }
+          hint={`Indices in ${row.alias} (${row.indexArray.length})`}
           column="Index"
+          field="index"
           testId="indices-table"
         />
       ),
