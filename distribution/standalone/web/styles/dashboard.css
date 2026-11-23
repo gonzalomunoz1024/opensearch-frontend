@@ -109,6 +109,94 @@
   border-radius: 0;
 }
 
+/* A panel far from the window, not drawn yet: the original's loading chart (its mono, large one)
+   in the middle of its place, with nothing around it */
+.dshWaiting {
+  position: relative;
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 26px;
+}
+
+.dshWaiting__chart {
+  display: inline-block;
+  height: var(--space-6);
+  overflow: hidden;
+}
+
+.dshWaiting__bar {
+  display: inline-block;
+  width: var(--space-1);
+  height: 100%;
+  margin-bottom: var(--space-3);
+  margin-left: 2px;
+  background-color: var(--color-border);
+}
+
+/* Each bar a little nearer the text's colour, as the component library's shadeOrTint makes them:
+   4, 8 and 12 hundredths of it */
+.dshWaiting__bar:nth-child(2) {
+  background-color: color-mix(in srgb, var(--color-text-primary) 4%, var(--color-border));
+}
+
+.dshWaiting__bar:nth-child(3) {
+  background-color: color-mix(in srgb, var(--color-text-primary) 8%, var(--color-border));
+}
+
+.dshWaiting__bar:nth-child(4) {
+  background-color: color-mix(in srgb, var(--color-text-primary) 12%, var(--color-border));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .dshWaiting__bar {
+    animation: dshWaiting 1s ease infinite;
+  }
+
+  .dshWaiting__bar:nth-child(2) {
+    animation-delay: 0.1s;
+  }
+
+  .dshWaiting__bar:nth-child(3) {
+    animation-delay: 0.2s;
+  }
+
+  .dshWaiting__bar:nth-child(4) {
+    animation-delay: 0.3s;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dshWaiting__bar:nth-child(1) {
+    transform: translateY(66%);
+  }
+
+  .dshWaiting__bar:nth-child(2) {
+    transform: translateY(44%);
+  }
+
+  .dshWaiting__bar:nth-child(3) {
+    transform: translateY(22%);
+  }
+}
+
+@keyframes dshWaiting {
+  0% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(66%);
+  }
+
+  100% {
+    transform: translateY(0);
+  }
+}
+
 body.dshDragging {
   cursor: grabbing;
   user-select: none;

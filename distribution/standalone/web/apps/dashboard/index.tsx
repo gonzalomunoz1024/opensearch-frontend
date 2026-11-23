@@ -459,6 +459,9 @@ function DashboardPage({ savedId }: { savedId?: string }) {
   const turnOrder = readingOrder(panels).join('\n');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const turns = useMemo(() => makeTurns(turnOrder === '' ? [] : turnOrder.split('\n')), [turnOrder, input, tick]);
+  // A panel not drawn yet, far from the window, holds up none after it: it takes its colours when
+  // it comes to be drawn, as the original's charts take theirs as they are drawn
+  const onWaiting = useCallback((id: string) => turns.get(id)?.done(), [turns]);
 
   const setFilters = useCallback(
     (next: Filter[]) => {
@@ -805,6 +808,7 @@ function DashboardPage({ savedId }: { savedId?: string }) {
           editing={editing && !fullScreen}
           dashboardState={dashboardState}
           expanded={expanded && panelOf(expanded) ? expanded : undefined}
+          onWaiting={onWaiting}
           onLayoutChange={onLayoutChange}
           renderPanel={(item, handlers) => {
             const panel = panelOf(item.i);

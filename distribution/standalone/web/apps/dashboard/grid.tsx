@@ -38,6 +38,8 @@ export interface GridProps {
   dashboardState: string;
   /** The one panel shown when a panel is maximized */
   expanded?: string;
+  /** A panel is not drawn yet, being far from the window (see `WhenSeen`) */
+  onWaiting?: (id: string) => void;
   /**
    * The layout changed: a panel was moved or sized, or, `settled`, the grid packed the panels it
    * was given, as the original's grid packs a layout with gaps or overlaps when it gets it.
@@ -106,6 +108,44 @@ function useNarrowWindow(): boolean {
 /** How near the window's bottom the corner of a panel being sized starts the page scrolling */
 const WINDOW_BUFFER = 10;
 
+/**
+ * A panel drawn once it comes within 200 pixels of the window, as the original's grid draws its
+ * panels (embeddable_child_panel.tsx), and kept from then on; until then its place shows the
+ * original's loading chart and nothing asks for its data. `onWaiting` is told while it waits.
+ */
+export function WhenSeen({ id, onWaiting, children }: { id: string; onWaiting?: (id: string) => void; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  // Where nothing can tell (a page drawn without a window), it is drawn at once
+  const [seen, setSeen] = useState(() => typeof IntersectionObserver === 'undefined');
+  useEffect(() => {
+    if (seen) return undefined;
+    onWaiting?.(id);
+    const element = ref.current;
+    if (!element) return undefined;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting) return;
+        observer.disconnect();
+        setSeen(true);
+      },
+      { rootMargin: '200px' }
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [seen, id, onWaiting]);
+  if (seen) return <>{children}</>;
+  return (
+    <div ref={ref} className="dshWaiting">
+      <span className="dshWaiting__chart">
+        <span className="dshWaiting__bar" />
+        <span className="dshWaiting__bar" />
+        <span className="dshWaiting__bar" />
+        <span className="dshWaiting__bar" />
+      </span>
+    </div>
+  );
+}
+
 /** The width of a column of a grid `width` wide, its margin around and between the panels */
 const columnWidthOf = (width: number, margin: number) => Math.max(1, (width - margin * (GRID_COLUMNS - 1) - margin * 2) / GRID_COLUMNS);
 
@@ -133,7 +173,7 @@ export function placeOf(
 
 const byReading = (a: GridItem, b: GridItem) => (a.y === b.y ? a.x - b.x : a.y - b.y);
 
-export function DashboardGrid({ layout, useMargins, editing, dashboardState, expanded, onLayoutChange, renderPanel }: GridProps) {
+export function DashboardGrid({ layout, useMargins, editing, dashboardState, expanded, onWaiting, onLayoutChange, renderPanel }: GridProps) {
   const reading = useRef<string[]>([]);
   const [ref, size] = useSize<HTMLDivElement>();
   const [shown, setShown] = useState<Shown>();
@@ -257,7 +297,9 @@ export function DashboardGrid({ layout, useMargins, editing, dashboardState, exp
       <div ref={ref} className="dshGrid dshGrid--stacked" style={{ gap: margin }} data-test-subj="dashboardGrid">
         {[...current].sort(byReading).map((item) => (
           <div key={item.i} style={{ height: item.h * ROW_HEIGHT + (item.h - 1) * margin }} data-test-subj="dashboardPanel">
-            {renderPanel(item, { dragging: false, ...handlers })}
+            <WhenSeen id={item.i} onWaiting={onWaiting}>
+              {renderPanel(item, { dragging: false, ...handlers })}
+            </WhenSeen>
           </div>
         ))}
       </div>
@@ -297,7 +339,9 @@ export function DashboardGrid({ layout, useMargins, editing, dashboardState, exp
               style={inHand ? held() : box(item)}
               data-test-subj="dashboardPanel"
             >
-              {renderPanel(item, { dragging: inHand, ...handlers })}
+              <WhenSeen id={item.i} onWaiting={onWaiting}>
+                {renderPanel(item, { dragging: inHand, ...handlers })}
+              </WhenSeen>
             </div>
           );
         })}

@@ -57,7 +57,7 @@ import {
   type GridItem,
   type PanelState,
 } from '../../web/apps/dashboard/model';
-import { DashboardGrid, NARROW_WINDOW, placeOf } from '../../web/apps/dashboard/grid';
+import { DashboardGrid, NARROW_WINDOW, placeOf, WhenSeen } from '../../web/apps/dashboard/grid';
 import { PanelMenu } from '../../web/apps/dashboard/panel_menu';
 import { PanelTitle } from '../../web/apps/dashboard/panel_title';
 import { existsFilter, phraseFilter, uniqueFilters } from '../../web/lib/query';
@@ -283,6 +283,33 @@ describe('a dashboard in a narrow window', () => {
   it('keeps the grid while it is edited, and in a wider window', () => {
     assert.ok(!grid(true, true).includes('dshGrid--stacked'));
     assert.ok(!grid(false, false).includes('dshGrid--stacked'));
+  });
+});
+
+// As the original's grid draws a panel (embeddable_child_panel.tsx): once it comes near the window,
+// its loading chart until then, measured on the demo dashboard of the logs, 7 of its 53 drawn
+describe('a panel far from the window', () => {
+  const drawn = (observing: boolean) => {
+    const holder = globalThis as { IntersectionObserver?: unknown };
+    if (observing) holder.IntersectionObserver = class {};
+    try {
+      return renderToStaticMarkup(createElement(WhenSeen, { id: 'a', children: createElement('i', null, 'the panel') }));
+    } finally {
+      delete holder.IntersectionObserver;
+    }
+  };
+
+  it('shows the loading chart in its place until it is seen', () => {
+    assert.equal(
+      drawn(true),
+      '<div class="dshWaiting"><span class="dshWaiting__chart">' +
+        '<span class="dshWaiting__bar"></span><span class="dshWaiting__bar"></span><span class="dshWaiting__bar"></span><span class="dshWaiting__bar"></span>' +
+        '</span></div>'
+    );
+  });
+
+  it('is drawn at once where nothing can tell where the window is', () => {
+    assert.equal(drawn(false), '<i>the panel</i>');
   });
 });
 
