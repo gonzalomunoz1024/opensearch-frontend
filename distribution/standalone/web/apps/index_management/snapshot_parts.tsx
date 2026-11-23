@@ -7,10 +7,11 @@
  */
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Accordion, Button, CallOut } from '../../components/basic';
+import { Accordion, Button, CallOut, cx } from '../../components/basic';
 import { ComboBox, type ComboOption } from '../../components/combo_box';
 import { Checkbox, NumberField, Select, TextField } from '../../components/form';
-import { Flyout, Popover } from '../../components/overlay';
+import { Icon } from '../../components/icon';
+import { Flyout, MenuButton, Popover, type MenuItem } from '../../components/overlay';
 import { ExternalLink, JsonEditor, Labeled, ism, toasts } from './common';
 import { loadNames } from './job_parts';
 import {
@@ -47,6 +48,88 @@ const FS_REPOSITORY_DOCS =
   'https://opensearch.org/docs/latest/opensearch/snapshots/snapshot-restore/#shared-file-system';
 const S3_REPOSITORY_DOCS =
   'https://opensearch.org/docs/latest/opensearch/snapshots/snapshot-restore/#amazon-s3';
+
+/**
+ * The panel around a list of Snapshot Management, drawn as the plugin's: the title and what it
+ * says on the left, the buttons on the right, a rule under them and the list 16 px in.
+ */
+export function ListPanel({
+  title,
+  description,
+  actions,
+  children,
+}: {
+  title: string;
+  description?: ReactNode;
+  actions: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="ismListPanel">
+      <header className="ismListPanel__header">
+        <div className="ismListPanel__heading">
+          <h1 className="atlTitleL">{title}</h1>
+          {description && <p className="ismListPanel__description">{description}</p>}
+        </div>
+        <div className="ismListPanel__actions">{actions}</div>
+      </header>
+      <hr className="ismListPanel__rule" />
+      <div className="ismListPanel__body">{children}</div>
+    </section>
+  );
+}
+
+/** The filters beside the search box of a list, joined in one group as the plugin's */
+export function FilterGroup({ children }: { children: ReactNode }) {
+  return <div className="ismFilterGroup">{children}</div>;
+}
+
+/** One filter of a group: a list of values, any of which a row may have */
+export function GroupFilter({
+  name,
+  options,
+  selected,
+  onChange,
+}: {
+  name: string;
+  options: string[];
+  selected: string[];
+  onChange: (selected: string[]) => void;
+}) {
+  const items: MenuItem[] =
+    options.length > 0
+      ? options.map((option) => ({
+          id: option,
+          label: option,
+          selected: selected.includes(option),
+          testId: `FilterGroupSelectItem-${option}`,
+          onClick: () =>
+            onChange(
+              selected.includes(option)
+                ? selected.filter((value) => value !== option)
+                : [...selected, option]
+            ),
+        }))
+      : [{ id: 'none', label: 'No options found', disabled: true }];
+  return (
+    <MenuButton
+      align="right"
+      items={items}
+      button={(toggle, open) => (
+        <button
+          type="button"
+          className={cx('ismFilterGroup__button', selected.length > 0 && 'ismFilterGroup__button--active')}
+          aria-expanded={open}
+          onClick={toggle}
+        >
+          <span className="ismFilterGroup__name">{name}</span>
+          {selected.length > 0 && <span className="ismFilterCount">{selected.length}</span>}
+          <Icon name="chevronDown" />
+        </button>
+      )}
+    />
+  );
+}
 
 /** A field under its name, the name set as a heading */
 export function Field({

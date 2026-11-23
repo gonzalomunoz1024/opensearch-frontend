@@ -15,11 +15,9 @@ import { searchItems } from '../../lib/search_syntax';
 import { useBreadcrumbs } from '../../shell/state';
 import {
   ConfirmationModal,
-  ContentPanel,
   Detail,
   Details,
   ExternalLink,
-  FilterButton,
   LocalTable,
   SearchRow,
   go,
@@ -71,9 +69,12 @@ import {
 import {
   AdvancedSnapshotSettings,
   Field,
+  FilterGroup,
   FlyoutFooter,
+  GroupFilter,
   INDEX_SETTINGS_DOCS,
   IndicesRepositoryInput,
+  ListPanel,
   REPOSITORY_REQUIRED,
   RESTORE_DOCS,
   TickLabel,
@@ -819,11 +820,10 @@ function RestoreActivities({
 
   return (
     <>
-      <ContentPanel
+      <ListPanel
         title="Restore activities in progress"
         actions={
           <Button
-            size="s"
             icon="refresh"
             disabled={!restore}
             onClick={() => void check()}
@@ -840,7 +840,7 @@ function RestoreActivities({
           paged={false}
           empty="There are no restore activities."
         />
-      </ContentPanel>
+      </ListPanel>
       {listed && restore && (
         <IndexList
           title="Indices being restored"
@@ -984,8 +984,7 @@ export function Snapshots() {
 
   const filter = (field: string) => (values: string[]) =>
     setSearch(withFieldValues(search, field, values));
-  const filterOptions = (values: Array<string | undefined>) =>
-    distinct(values).map((value) => ({ value }));
+  const filterOptions = (values: Array<string | undefined>) => distinct(values);
 
   const columns: Array<TableColumn<SnapshotRow>> = [
     {
@@ -1063,16 +1062,15 @@ export function Snapshots() {
           }}
         />
       ) : (
-        <ContentPanel
+        <ListPanel
           title="Snapshots"
           description={DESCRIPTION}
           actions={
             <>
-              <Button size="s" icon="refresh" onClick={() => void load()} testId="refreshButton">
+              <Button icon="refresh" onClick={() => void load()} testId="refreshButton">
                 Refresh
               </Button>
               <Button
-                size="s"
                 variant="danger"
                 disabled={selected.length === 0}
                 onClick={() => setDialog('delete')}
@@ -1080,16 +1078,10 @@ export function Snapshots() {
               >
                 Delete
               </Button>
-              <Button
-                size="s"
-                disabled={selected.length !== 1}
-                onClick={clickRestore}
-                testId="restoreButton"
-              >
+              <Button disabled={selected.length !== 1} onClick={clickRestore} testId="restoreButton">
                 Restore
               </Button>
               <Button
-                size="s"
                 variant="primary"
                 icon="plus"
                 onClick={() => setDialog('create')}
@@ -1101,26 +1093,26 @@ export function Snapshots() {
           }
         >
           <SearchRow search={search} onSearch={setSearch} placeholder="Search snapshot">
-            <div className="ismFilterGroup">
-              <FilterButton
+            <FilterGroup>
+              <GroupFilter
                 name="Repository"
                 options={filterOptions(snapshots.map((row) => row.repository))}
                 selected={fieldValues(search, 'repository')}
                 onChange={filter('repository')}
               />
-              <FilterButton
+              <GroupFilter
                 name="Status"
                 options={filterOptions(snapshots.map((row) => row.status))}
                 selected={fieldValues(search, 'status')}
                 onChange={filter('status')}
               />
-              <FilterButton
+              <GroupFilter
                 name="Policy"
                 options={filterOptions(snapshots.map((row) => row.policy))}
                 selected={fieldValues(search, 'policy')}
                 onChange={filter('policy')}
               />
-            </div>
+            </FilterGroup>
           </SearchRow>
           <LocalTable
             columns={columns}
@@ -1133,7 +1125,7 @@ export function Snapshots() {
             onSelect={setSelected}
             empty={loading ? 'Loading snapshots...' : 'No items found'}
           />
-        </ContentPanel>
+        </ListPanel>
       )}
 
       {shown && (

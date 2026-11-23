@@ -7,11 +7,10 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Accordion, Button, CodeBlock, Health, Panel } from '../../components/basic';
 import { SearchField } from '../../components/form';
+import { MenuButton } from '../../components/overlay';
 import { navigateHash, useLocation } from '../../router';
 import { useBreadcrumbs } from '../../shell/state';
 import {
-  ActionsMenu,
-  ContentPanel,
   DeleteModal,
   Detail,
   Details,
@@ -44,7 +43,7 @@ import {
   type PolicyMetadata,
   type SMPolicy,
 } from './snapshot_model';
-import { SNAPSHOT_DOCS } from './snapshot_parts';
+import { ListPanel, SNAPSHOT_DOCS } from './snapshot_parts';
 
 const policyPath = (id: string) => `smPolicies/${encodeURIComponent(id)}`;
 
@@ -209,7 +208,7 @@ export function SnapshotPolicies() {
   const none = selected.length === 0;
   return (
     <>
-      <ContentPanel
+      <ListPanel
         title="Snapshot policies"
         description={
           <>
@@ -219,18 +218,28 @@ export function SnapshotPolicies() {
         }
         actions={
           <>
-            <Button size="s" icon="refresh" onClick={() => void load()} testId="refreshButton">
+            <Button icon="refresh" onClick={() => void load()} testId="refreshButton">
               Refresh
             </Button>
-            <Button size="s" disabled={none} onClick={() => void turn(false)}>
+            <Button disabled={none} onClick={() => void turn(false)}>
               Disable
             </Button>
-            <Button size="s" disabled={none} onClick={() => void turn(true)}>
+            <Button disabled={none} onClick={() => void turn(true)}>
               Enable
             </Button>
-            <ActionsMenu
-              testId="actionButton"
-              disabled={none}
+            <MenuButton
+              align="left"
+              button={(toggle) => (
+                <Button
+                  icon="chevronDown"
+                  iconSide="right"
+                  disabled={none}
+                  onClick={toggle}
+                  testId="actionButton"
+                >
+                  Actions
+                </Button>
+              )}
               items={[
                 {
                   label: 'Edit',
@@ -246,15 +255,16 @@ export function SnapshotPolicies() {
                 },
               ]}
             />
-            <Button size="s" variant="primary" icon="plus" onClick={create}>
+            <Button variant="primary" icon="plus" onClick={create}>
               Create policy
             </Button>
           </>
         }
       >
-        <div className="ismSearchRow">
+        <div className="ismSearchRow ismSearchRow--alone">
           <div className="atlGrow">
             <SearchField
+              compact
               value={text}
               onChange={(value) => {
                 setText(value);
@@ -301,7 +311,7 @@ export function SnapshotPolicies() {
             </div>
           }
         />
-      </ContentPanel>
+      </ListPanel>
       {deleting && (
         <DeletePolicyModal
           policyIds={selected.map((policy) => policy.name).join(', ')}
