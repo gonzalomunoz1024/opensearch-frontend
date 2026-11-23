@@ -37,7 +37,7 @@ export function DocsLink({ href, children = 'Learn more' }: { href: string; chil
   return (
     <a className="ismDocs" href={href} target="_blank" rel="noopener noreferrer">
       {children}
-      <Icon name="external" size="s" className="ismDocs__icon" />
+      <Icon name="external" size="s" className="ismDocs__icon" title="External link" />
       <span className="atlScreenReaderOnly">(opens in a new tab or window)</span>
     </a>
   );
@@ -595,25 +595,38 @@ export function useListLoad(load: () => Promise<void> | void, deps: unknown[]) {
   return useCallback(() => debounced.current?.call(), []);
 }
 
-/** The steps of a form at its left: the ones not reached yet are pale */
+/**
+ * The steps of a form at its left, as the plugin's small steps: a numbered circle and a 15 px title
+ * each, a line down to the next one, the steps not reached yet grey, and what a screen reader says
+ * of each number
+ */
 export function Steps({ titles, step }: { titles: string[]; step: number }) {
   return (
-    <ol className="ismSteps">
-      {titles.map((title, at) => (
-        <li
-          key={title}
-          className={cx('ismSteps__step', at + 1 > step && 'ismSteps__step--disabled')}
-          aria-current={at + 1 === step ? 'step' : undefined}
-        >
-          <span className="ismSteps__number">{at + 1}</span>
-          <span className="ismSteps__title">{title}</span>
-        </li>
-      ))}
-    </ol>
+    <div className="ismJobSteps">
+      {titles.map((title, at) => {
+        const disabled = at + 1 > step;
+        return (
+          <div key={title} className={cx('ismJobStep', disabled && 'ismJobStep--disabled')}>
+            <div className="ismJobStep__titleWrapper">
+              <span className="ismJobStep__number">
+                <span className="atlScreenReaderOnly">{disabled ? `Step ${at + 1} is disabled` : `Step ${at + 1}`}</span>
+                <span aria-hidden="true">{at + 1}</span>
+              </span>
+              <h6 className="ismJobStep__title">{title}</h6>
+            </div>
+            <div className="ismJobStep__content" />
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
-/** A form in steps: the steps, the step that is open, and the buttons that move between them */
+/**
+ * A form in steps as the plugin lays it out: padded 5 px and 50 px, the steps at the left as wide as
+ * their titles, the open step beside them under its 28 px title, and the buttons under both at the
+ * right. The steps' panels bring their own spacers.
+ */
 export function Wizard({
   titles,
   headings = titles,
@@ -629,17 +642,21 @@ export function Wizard({
   buttons: ReactNode;
 }) {
   return (
-    <div className="ismPage ismPage--form">
-      <div className="ismWizard">
-        <aside className="ismWizard__steps">
-          <Steps titles={titles} step={step} />
-        </aside>
-        <div className="ismWizard__body">
-          <h1 className="ismPageTitle">{headings[step - 1]}</h1>
-          {children}
+    <div className="ismJobForm">
+      <div className="ismJobWizard">
+        <div className="ismJobWizard__row">
+          <div className="ismJobWizard__steps">
+            <Steps titles={titles} step={step} />
+          </div>
+          <div className="ismJobWizard__body">
+            <h1 className="atlTitleL">{headings[step - 1]}</h1>
+            <Spacer />
+            {children}
+          </div>
         </div>
+        <Spacer />
       </div>
-      <div className="ismButtons">{buttons}</div>
+      <div className="ismJobWizard__buttons">{buttons}</div>
     </div>
   );
 }
@@ -1019,15 +1036,14 @@ export function AddFieldsModal({
     <Modal
       title="Add fields"
       onClose={onClose}
-      wide
+      className="ismAddFieldsModal ismMasked"
       footer={
         <>
-          <Button variant="empty" size="s" onClick={onClose} testId={cancelTestId}>
+          <Button variant="empty" onClick={onClose} testId={cancelTestId}>
             Cancel
           </Button>
           <Button
             variant="primary"
-            size="s"
             onClick={() => {
               onClose();
               onAdd(chosen);
@@ -1049,6 +1065,7 @@ export function AddFieldsModal({
           onSelect={setChosen}
           selectable={selectable}
           empty={empty}
+          fixed
         />
       </div>
     </Modal>

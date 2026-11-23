@@ -14,7 +14,7 @@ import { Icon } from '../../components/icon';
 import { Popover } from '../../components/overlay';
 import { useBreadcrumbs } from '../../shell/state';
 import { Detail, Details, ExternalLink, JsonEditor, go, ism, toasts } from './common';
-import { ConfigureJob, FieldRow, FormPanel, Wizard, nameOptions, useIndexNames } from './job_parts';
+import { ConfigureJob, FieldRow, FormPanel, Spacer, Wizard, nameOptions, useIndexNames } from './job_parts';
 import {
   CALENDAR_TIMEUNITS,
   FIXED_TIMEUNITS,
@@ -1107,6 +1107,7 @@ export function CreateTransform() {
               change((before) => withDescription(before, text));
             }}
           />
+          <Spacer />
           <TransformIndices
             sourceIndex={sourceIndex}
             sourceIndexError={errors.sourceIndex}
@@ -1135,6 +1136,7 @@ export function CreateTransform() {
               change((before) => withTargetIndex(before, index || undefined));
             }}
           />
+          <Spacer />
           <CallOut tone="warning">
             You can&apos;t change indices after creating a job. Double-check the source and target index names before
             proceeding.
@@ -1184,6 +1186,7 @@ export function CreateTransform() {
               </Details>
             </div>
           </FormPanel>
+          <Spacer />
           <FormPanel title="Define transforms" actions={edit(2)}>
             <Definitions items={reviewItems(aggList)} />
             <Accordion title="Sample source index and transform result" initiallyOpen={false}>
@@ -1199,6 +1202,7 @@ export function CreateTransform() {
               </div>
             </Accordion>
           </FormPanel>
+          <Spacer />
           <FormPanel title="Specify schedule" actions={edit(3)}>
             <div className="ismSmallDetails">
               <Details columns={4}>
@@ -1210,6 +1214,7 @@ export function CreateTransform() {
               </Details>
             </div>
           </FormPanel>
+          <Spacer />
           <CallOut tone="warning" size="s">
             You can only change the description and schedule after creating a job. Double-check your choices before
             proceeding.

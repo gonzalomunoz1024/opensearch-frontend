@@ -1829,7 +1829,8 @@
 }
 
 .ismPr__error {
-  color: var(--color-critical-text);
+  /* the theme's form error, measured #ff3b30 in both modes */
+  color: var(--color-critical);
 }
 
 /* What the panel of the new policy says under its title: the theme's smallest text */
@@ -2895,74 +2896,228 @@
 
 /* --- Rollup jobs and transform jobs --------------------------------------------------------------- */
 
-/* A form in steps: the steps at the left, the step that is open beside them */
-.ismWizard {
+/*
+ * A form in steps, as the plugin's: a box padded 5 px and 50 px holding a large-gutter flex group
+ * (-12 px, its items 12 px in), the steps as wide as their titles, the open step taking the rest
+ * as a column; the buttons in a row of their own, padded the same, 8 px apart
+ */
+.ismJobWizard {
+  padding: 5px 50px;
+}
+
+.ismJobWizard__row {
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-6);
+  align-items: stretch;
+  margin: -12px;
 }
 
-.ismWizard__steps {
+.ismJobWizard__steps {
   flex: 0 0 auto;
-  width: 290px;
+  min-width: 1px;
   max-width: 300px;
-  padding-left: var(--space-3);
+  margin: 12px;
+  padding-left: 10px;
 }
 
-.ismWizard__body {
-  flex: 1 1 0;
-  min-width: 0;
+.ismJobWizard__body {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  flex: 1 1 0%;
+  min-width: 1px;
+  margin: 12px;
 }
 
-.ismSteps {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.ismSteps__step {
-  position: relative;
+.ismJobWizard__buttons {
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-4);
-  min-height: 88px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  /* a small-gutter flex group: 4 px out, its items 4 px in */
+  margin-top: -4px;
+  padding: 9px 50px;
 }
 
-/* The line from a step to the next one */
-.ismSteps__step:not(:last-child)::before {
-  content: '';
-  position: absolute;
-  left: 11px;
-  top: 28px;
-  bottom: 4px;
-  border-left: 2px solid var(--color-border-light);
+/* The small steps: a 24 px circle 16 px left of a 15 px title, and 48 px of empty content */
+.ismJobStep:not(:last-of-type) {
+  background-image: linear-gradient(
+    90deg,
+    transparent 0,
+    transparent 15px,
+    var(--color-border-light) 15px,
+    var(--color-border-light) 17px,
+    transparent 17px,
+    transparent 100%
+  );
+  background-position: -4px 32px;
+  background-repeat: no-repeat;
 }
 
-.ismSteps__number {
-  flex: 0 0 auto;
+.ismJobStep__titleWrapper {
+  display: flex;
+}
+
+.ismJobStep__number {
+  display: inline-block;
+  flex-shrink: 0;
   width: 24px;
   height: 24px;
-  border-radius: 50%;
-  background: var(--color-accent);
-  color: var(--color-on-accent);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
+  margin-right: 16px;
+  border-radius: 24px;
+  background-color: var(--color-accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
   line-height: 24px;
   text-align: center;
+  vertical-align: top;
 }
 
-.ismSteps__title {
+:root.themeDark .ismJobStep__number {
+  color: #000;
+}
+
+.ismJobStep--disabled .ismJobStep__number {
+  background-color: #f1f1f1;
+  color: #6a6a6f;
+}
+
+:root.themeDark .ismJobStep--disabled .ismJobStep__number {
+  background-color: #424245;
+  color: #afafb3;
+}
+
+.ismJobStep__title {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.ismJobStep__content {
+  margin: 8px 0 8px 12px;
+  padding: 16px 16px 32px 28px;
+}
+
+/* A tick box on a line of 24 px, its box 3 px from the top, as the plugin's compressed ones */
+.ismCheckRow {
+  display: flex;
+  align-items: center;
+  height: 24px;
+}
+
+.ismCheckRow .atlCheckbox input {
+  position: relative;
+  top: -1px;
+}
+
+/* The interval of a rollup's date histogram: a number of 100 px (or "Every 1") and its unit, 24 px
+   apart in 300 px, straight under their title */
+.ismIntervalPair {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  max-width: 276px;
+}
+
+.ismIntervalPair > .atlField.ismIntervalPair__number {
+  flex: none;
+  width: 100px;
+}
+
+.ismIntervalPair > .ismIntervalPair__unit {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.ismIntervalPair__every {
+  flex: none;
+  margin: 0;
   font-size: var(--font-size-s);
-  font-weight: var(--font-weight-semibold);
-  line-height: 24px;
+  line-height: 21px;
 }
 
-.ismSteps__step--disabled .ismSteps__number {
-  background: var(--color-surface-tertiary);
-  color: var(--color-text-secondary);
+/* The top of the panel of a rollup's further aggregations: the title, "– optional" and a line of
+   help at the left, in the middle of the 56 px its button takes at the right, 10 px in */
+.ismAggHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.ismAggHead__text {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ismAggHead__button {
+  flex: none;
+  padding: 0 10px 24px;
+}
+
+.ismAggTitle {
+  display: flex;
+  gap: 4px;
+}
+
+.ismAggTitle h2 {
+  margin: 0;
+}
+
+/* The top of the panel of a rollup's metrics: the title beside its three buttons, then the help
+   on three fifths of the width, 12 px under them and 8 px over the rule */
+.ismMetHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  height: 32px;
+}
+
+.ismMetHead__buttons {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+
+.ismMetHelp {
+  width: calc((100% - 24px) * 0.6);
+  margin-top: 12px;
+}
+
+.ismMetBody {
+  padding-left: 10px;
+}
+
+/* A table of the fields chosen, laid out on what its cells hold; with none, the plugin's line and
+   button in its one cell: 24 px over the line and under it, the button in the middle */
+.ismAggTable {
+  padding-top: 1px;
+}
+
+.ismAggTable .ismTable__empty {
+  display: block;
+  max-width: none;
+  padding: 24px 0 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+.ismAggTable .ismTable__empty p {
+  margin: 0 0 24px;
+}
+
+.ismAggTable--padded .ismTable__empty p {
+  margin-bottom: 29px;
+}
+
+.ismAggTable--padded .ismTable__empty {
+  padding-bottom: 5px;
 }
 
 .ismFormPanel__header {
@@ -3048,16 +3203,81 @@
   font-size: var(--font-size-xs);
 }
 
+/* "Move up" at the left and "Move down" at the right of their cell, 24 px apart, each breaking
+   where the table leaves it no room */
 .ismMoves {
   display: flex;
   justify-content: space-between;
-  gap: var(--space-3);
-  min-width: 140px;
+  gap: var(--space-6);
+}
+
+.ismMoves .atlLinkButton {
+  line-height: normal;
+  text-align: left;
+}
+
+/* What takes a field out again: the plugin's bare 16 px icon */
+.ismAggTable .atlButton.ismRowDelete {
+  width: 16px;
+  min-width: 0;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  vertical-align: middle;
+}
+
+/* A metric's icon is the table's action of its row: pale until the pointer is on the row */
+.ismAggTable:not(.ismAggTable--padded) .atlButton.ismRowDelete {
+  opacity: 0.7;
+}
+
+.ismAggTable:not(.ismAggTable--padded) tr:hover .atlButton.ismRowDelete,
+.ismAggTable:not(.ismAggTable--padded) .atlButton.ismRowDelete:focus {
+  opacity: 1;
+}
+
+/* where the plugin's icon sits on the line of an aggregation */
+.ismAggTable--padded .atlButton.ismRowDelete {
+  position: relative;
+  top: -1.7px;
+}
+
+/* A box of a metric in the middle of its 42 px row, as the plugin's */
+.ismAggTable td > .atlCheckbox {
+  position: relative;
+  top: 2.5px;
+}
+
+/* The tables of a job's aggregations and metrics in their own panels, as its page and the review
+   show them: the table 1 px down, its pages straight under it */
+.ismAggPanel .ismTable {
+  padding-top: 1px;
+}
+
+.ismAggPanel .ismTable .atlPagination {
+  padding: 0;
+}
+
+/* The pages under such a table, straight in its panel */
+.ismAggTable .atlPagination {
+  padding: 0;
+}
+
+/* The method of a field is as wide as its own text, not as its column */
+.ismAggTable select.atlField {
+  width: auto;
+}
+
+/* The dialog that adds fields to a job: the plugin's, 768 px wide and padded 5 px and 30 px around
+   the dialog's own parts, its table of two equal columns scrolling in its body */
+.atlModal.ismAddFieldsModal {
+  max-width: 768px;
+  max-height: calc(75vh + 12px);
+  padding: 5px 30px;
 }
 
 .ismAddFields {
-  max-height: 60vh;
-  overflow: auto;
+  padding-top: 1px;
 }
 
 /* What a job is doing, as the plugin writes it: a 12 px icon level with the top of the smallest

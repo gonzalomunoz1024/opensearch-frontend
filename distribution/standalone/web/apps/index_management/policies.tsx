@@ -496,7 +496,7 @@ export function PolicyDetails() {
   if (!document) {
     return (
       <div className="ismLoadingCenter">
-        <Spinner size="l" />
+        <Spinner size="xl" />
       </div>
     );
   }
