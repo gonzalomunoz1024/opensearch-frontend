@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import {
   ROW,
@@ -593,5 +594,23 @@ describe('the Grok debugger', () => {
     assert.equal(grokValue({ a: 1 }), '{"a":1}');
     assert.equal(grokValue(null), 'null');
     assert.equal(grokValue(200), '200');
+  });
+});
+
+describe("the console's flyouts", () => {
+  // The z-index a rule of the console's stylesheet gives
+  const stackOf = (selector: string): number => {
+    const sheet = readFileSync('web/styles/dev_tools.css', 'utf8');
+    const start = sheet.indexOf(`\n${selector} {`);
+    assert.ok(start >= 0, `${selector} has a rule`);
+    const found = /z-index:\s*(-?\d+)/.exec(sheet.slice(start, sheet.indexOf('}', start)));
+    assert.ok(found, `${selector} sets a z-index`);
+    return Number(found?.[1]);
+  };
+
+  it('stack no lower than the mask that dims the page behind them', () => {
+    // Under its mask a flyout is dimmed and blurred, and a click on it closes it; at the same
+    // level it is drawn over the mask, which comes before it in the page
+    assert.ok(stackOf('.atlFlyout.dvtFlyout') >= stackOf('.dvtMask'));
   });
 });

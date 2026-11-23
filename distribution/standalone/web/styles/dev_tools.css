@@ -298,9 +298,11 @@
   }
 }
 
+/* The flyout stacks with its mask and comes after it, as the original's does inside its mask: under
+   the mask it would be dimmed, blurred and closed by any click on it */
 .atlFlyout.dvtFlyout {
   top: var(--header-height);
-  z-index: 960;
+  z-index: 1000;
   width: min(384px, 100vw);
 }
 
