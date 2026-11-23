@@ -40,9 +40,9 @@ async function serverWith(answer: (seen: Seen) => { status?: number; body: strin
     req.on('end', () => {
       const request = { method: req.method ?? '', url: req.url ?? '', body: Buffer.concat(chunks).toString('utf8') };
       if (request.url.startsWith('/.kibana/_doc/config')) {
-        // no advanced setting is stored
-        res.writeHead(404, { 'content-type': 'application/json' });
-        res.end('{"found":false}');
+        // the stored document of the advanced settings, with none set
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end('{"_index":".kibana","_id":"config:0.0.0","found":true,"_source":{"type":"config","config":{}}}');
         return;
       }
       seen.push(request);

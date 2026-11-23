@@ -17,6 +17,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from '../components/icon';
+import { standardColor } from './standard_color';
 
 /*
  * The series colours of OpenSearch Dashboards (its component library's palette), so that a
@@ -101,11 +102,11 @@ export function assignColors(labels: string[], overrides?: Record<string, string
   const keys = [...new Set(labels)];
   const taken: string[] = [];
   const fresh: string[] = [];
-  const configuredColors = Object.values(configured).map((color) => color.toLowerCase());
+  const configuredColors = Object.values(configured).map((color: unknown) => standardColor(color));
   for (const key of keys) {
     if (configured[key]) {
       mapped.delete(key);
-      taken.push(configured[key].toLowerCase());
+      taken.push(standardColor(configured[key]) ?? '');
       continue;
     }
     // A label whose colour has since been set aside for another in the setting takes a new one.

@@ -566,11 +566,17 @@ describe('the routes of the advanced settings', () => {
   });
 
   it('take an empty body of changes as no change, as the original does', async () => {
-    const server = await run();
+    // A stored document of advanced settings with none set, as OpenSearch answers for it
+    const server = await run({}, (path) =>
+      path.startsWith('/.kibana/_doc/config')
+        ? { _index: '.kibana', _id: 'config:3.9.0', found: true, _source: { type: 'config', config: {} } }
+        : undefined
+    );
     try {
       const answer = await call(server.port, 'POST', '/api/opensearch-dashboards/settings', { headers: XSRF, body: '{}' });
       assert.equal(answer.status, 200);
       assert.deepEqual(bodyOf(answer), { settings: {} });
+      assert.deepEqual(server.seen.filter((line) => line.includes('_update') || line.includes('_create')), []);
     } finally {
       await server.stop();
     }

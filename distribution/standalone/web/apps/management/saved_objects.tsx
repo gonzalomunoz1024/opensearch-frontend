@@ -32,6 +32,7 @@ import {
   type Column,
   type FieldFilter,
   type SearchChange,
+  allowedObjectTypes,
 } from './saved_objects_parts';
 import { filterQuery, readSearchQuery, type Clause } from './saved_objects_query';
 import '../../styles/saved_objects.css';
@@ -80,8 +81,8 @@ function ObjectsTablePage() {
   const [allowedTypes, setAllowedTypes] = useState<string[]>();
   useEffect(() => {
     let live = true;
-    services.http.get<{ types: string[] }>(`${API}/_allowed_types`).then(
-      (answer) => live && setAllowedTypes(answer.types),
+    allowedObjectTypes().then(
+      (types) => live && setAllowedTypes(types),
       (error) => live && services.toasts.danger('Unable find saved objects', errorText(error))
     );
     return () => {
