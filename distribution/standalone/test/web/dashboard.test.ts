@@ -57,7 +57,7 @@ import {
   type GridItem,
   type PanelState,
 } from '../../web/apps/dashboard/model';
-import { DashboardGrid, NARROW_WINDOW } from '../../web/apps/dashboard/grid';
+import { DashboardGrid, NARROW_WINDOW, placeOf } from '../../web/apps/dashboard/grid';
 import { PanelMenu } from '../../web/apps/dashboard/panel_menu';
 import { PanelTitle } from '../../web/apps/dashboard/panel_title';
 import { existsFilter, phraseFilter, uniqueFilters } from '../../web/lib/query';
@@ -260,6 +260,7 @@ describe('a dashboard in a narrow window', () => {
           layout,
           useMargins: true,
           editing,
+          dashboardState: '',
           onLayoutChange: () => undefined,
           renderPanel: (item: GridItem) => createElement('i', null, item.i),
         })
@@ -282,6 +283,40 @@ describe('a dashboard in a narrow window', () => {
   it('keeps the grid while it is edited, and in a wider window', () => {
     assert.ok(!grid(true, true).includes('dshGrid--stacked'));
     assert.ok(!grid(false, false).includes('dshGrid--stacked'));
+  });
+});
+
+// As the original's grid (react-grid-layout without CSS transforms) writes its panels' places, read
+// on its page in a window 1400 pixels wide, where the browser puts its first panel at 7.984375 until
+// the grid is drawn again (a query submitted, Edit), and at 8 from then on
+describe("a panel's place on the grid", () => {
+  it('is first in hundredths of the grid across, to the last digit, and in pixels down, the margin around all', () => {
+    assert.deepEqual(placeOf({ x: 0, y: 0, w: 24, h: 12, i: 'a' }, 1400, 8, true), {
+      left: '0.5714285714285714%',
+      top: '8px',
+      width: '49.142857142857146%',
+      height: '328px',
+    });
+    assert.deepEqual(placeOf({ x: 24, y: 12, w: 24, h: 15, i: 'b' }, 1400, 8, true), {
+      left: '50.28571428571429%',
+      top: '344px',
+      width: '49.142857142857146%',
+      height: '412px',
+    });
+  });
+
+  it('is in pixels once the grid is drawn again', () => {
+    assert.deepEqual(placeOf({ x: 24, y: 0, w: 24, h: 12, i: 'b' }, 1400, 8, false), { left: '704px', top: '8px', width: '688px', height: '328px' });
+  });
+
+  it('spans the page without margins', () => {
+    assert.deepEqual(placeOf({ x: 24, y: 0, w: 24, h: 12, i: 'b' }, 1400, 0, true), { left: '50%', top: '0px', width: '50%', height: '240px' });
+  });
+
+  it('is where the panel in hand is, while one is moved or sized', () => {
+    const item = { x: 0, y: 0, w: 24, h: 12, i: 'a' };
+    assert.deepEqual(placeOf(item, 1400, 8, false, { left: 50.4, top: 20.6 }), { left: '50px', top: '21px', width: '688px', height: '328px' });
+    assert.deepEqual(placeOf(item, 1400, 8, false, { left: 8, top: 8, width: 700.2, height: 400.7 }).height, '401px');
   });
 });
 

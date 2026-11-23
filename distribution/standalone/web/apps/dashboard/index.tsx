@@ -450,6 +450,11 @@ function DashboardPage({ savedId }: { savedId?: string }) {
   useAutoRefresh(global.refreshInterval, refresh);
 
   const input = useMemo<VisInput>(() => ({ time: global.time, query, filters }), [global.time, query, filters]);
+  // The dashboard's state as the original's container holds it: a change of it draws its grid again
+  const dashboardState = useMemo(
+    () => JSON.stringify({ panels, input, tick, refresh: global.refreshInterval, editing, options, expanded, fullScreen, title, description, timeRestore }),
+    [panels, input, tick, global.refreshInterval, editing, options, expanded, fullScreen, title, description, timeRestore]
+  );
   // Each time the page asks for its data, the panels take their colours in reading order
   const turnOrder = readingOrder(panels).join('\n');
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -798,6 +803,7 @@ function DashboardPage({ savedId }: { savedId?: string }) {
           layout={layout}
           useMargins={options.useMargins === true}
           editing={editing && !fullScreen}
+          dashboardState={dashboardState}
           expanded={expanded && panelOf(expanded) ? expanded : undefined}
           onLayoutChange={onLayoutChange}
           renderPanel={(item, handlers) => {

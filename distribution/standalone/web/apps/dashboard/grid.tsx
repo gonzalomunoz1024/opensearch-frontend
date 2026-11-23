@@ -30,6 +30,12 @@ export interface GridProps {
   layout: GridItem[];
   useMargins: boolean;
   editing: boolean;
+  /**
+   * The dashboard's state as the original's container holds it (its input): its panels, its query,
+   * filters and time, a refresh asked for, its options and mode. A change of it draws the
+   * original's grid again.
+   */
+  dashboardState: string;
   /** The one panel shown when a panel is maximized */
   expanded?: string;
   /**
@@ -100,17 +106,53 @@ function useNarrowWindow(): boolean {
 /** How near the window's bottom the corner of a panel being sized starts the page scrolling */
 const WINDOW_BUFFER = 10;
 
+/** The width of a column of a grid `width` wide, its margin around and between the panels */
+const columnWidthOf = (width: number, margin: number) => Math.max(1, (width - margin * (GRID_COLUMNS - 1) - margin * 2) / GRID_COLUMNS);
+
+/**
+ * A panel's place as the original's grid (react-grid-layout, without CSS transforms) writes it, its
+ * margin around all the panels as its padding: in pixels, and, `inHundredths`, as it first draws
+ * its panels, the left edge and the width in hundredths of its width to the last digit, for the
+ * browser to put the panel on the same fraction of a pixel. `at` is where the panel in hand is.
+ */
+export function placeOf(
+  item: GridItem,
+  width: number,
+  margin: number,
+  inHundredths: boolean,
+  at?: { left: number; top: number; width?: number; height?: number }
+): CSSProperties {
+  const column = columnWidthOf(width, margin);
+  const left = at ? Math.round(at.left) : Math.round((column + margin) * item.x + margin);
+  const top = at ? Math.round(at.top) : Math.round((ROW_HEIGHT + margin) * item.y + margin);
+  const across = at?.width !== undefined ? Math.round(at.width) : Math.round(column * item.w + Math.max(0, item.w - 1) * margin);
+  const down = at?.height !== undefined ? Math.round(at.height) : Math.round(ROW_HEIGHT * item.h + Math.max(0, item.h - 1) * margin);
+  if (!inHundredths) return { left: `${left}px`, top: `${top}px`, width: `${across}px`, height: `${down}px` };
+  return { left: `${(left / width) * 100}%`, top: `${top}px`, width: `${(across / width) * 100}%`, height: `${down}px` };
+}
+
 const byReading = (a: GridItem, b: GridItem) => (a.y === b.y ? a.x - b.x : a.y - b.y);
 
-export function DashboardGrid({ layout, useMargins, editing, expanded, onLayoutChange, renderPanel }: GridProps) {
+export function DashboardGrid({ layout, useMargins, editing, dashboardState, expanded, onLayoutChange, renderPanel }: GridProps) {
   const reading = useRef<string[]>([]);
   const [ref, size] = useSize<HTMLDivElement>();
   const [shown, setShown] = useState<Shown>();
   const gesture = useRef<Gesture | undefined>(undefined);
 
   const margin = useMargins ? GRID_MARGIN : 0;
-  const columnWidth = Math.max(1, (size.width - margin * (GRID_COLUMNS - 1)) / GRID_COLUMNS);
+  const columnWidth = columnWidthOf(size.width, margin);
   const narrow = useNarrowWindow() && !editing;
+
+  // The places as the original's grid writes them: in hundredths as it first draws its panels, in
+  // pixels once it draws them again, which a change of the dashboard or of the grid's width does,
+  // and a panel being taken
+  const firstDrawn = useRef<string>();
+  const drawnAgain = useRef(false);
+  const drawing = `${size.width}\n${dashboardState}`;
+  if (size.width > 0 && layout.length > 0) {
+    if (firstDrawn.current === undefined) firstDrawn.current = drawing;
+    else if (firstDrawn.current !== drawing) drawnAgain.current = true;
+  }
 
   // The grid packs what it is given, and says so once, as the original's grid does when mounted
   const layoutKey = JSON.stringify(layout);
@@ -175,6 +217,7 @@ export function DashboardGrid({ layout, useMargins, editing, expanded, onLayoutC
     const origin = settled.find((item) => item.i === id);
     if (!origin) return;
     event.preventDefault();
+    drawnAgain.current = true;
     // The grid holds the panels in reading order of the places it was given
     const given = (JSON.parse(layoutKey) as GridItem[]).sort(byReading).map((item) => item.i);
     const before = given.flatMap((key) => settled.filter((item) => item.i === key));
@@ -221,41 +264,28 @@ export function DashboardGrid({ layout, useMargins, editing, expanded, onLayoutC
     );
   }
 
-  const box = (item: GridItem): CSSProperties => ({
-    transform: `translate(${Math.round((columnWidth + margin) * item.x)}px, ${(ROW_HEIGHT + margin) * item.y}px)`,
-    width: Math.round(columnWidth * item.w + margin * (item.w - 1)),
-    height: ROW_HEIGHT * item.h + margin * (item.h - 1),
-  });
+  const box = (item: GridItem): CSSProperties => placeOf(item, size.width, margin, !drawnAgain.current);
   // The panel in hand goes where the pointer takes it, from where it was when taken; one being
   // sized stays there and takes the size the corner gives it
   const held = (): CSSProperties => {
     const origin = gesture.current?.origin;
     if (!origin || !shown) return {};
-    const left = Math.round((columnWidth + margin) * origin.x);
-    const top = (ROW_HEIGHT + margin) * origin.y;
-    if (shown.kind === 'resize') {
-      return {
-        transform: `translate(${left}px, ${top}px)`,
-        width: Math.round(shown.sizing.width),
-        height: Math.round(shown.sizing.height),
-      };
-    }
-    return {
-      transform: `translate(${left + shown.offset.dx}px, ${top + shown.offset.dy}px)`,
-      width: Math.round(columnWidth * origin.w + margin * (origin.w - 1)),
-      height: ROW_HEIGHT * origin.h + margin * (origin.h - 1),
-    };
+    const left = (columnWidth + margin) * origin.x + margin;
+    const top = (ROW_HEIGHT + margin) * origin.y + margin;
+    if (shown.kind === 'resize') return placeOf(origin, size.width, margin, false, { left, top, width: shown.sizing.width, height: shown.sizing.height });
+    return placeOf(origin, size.width, margin, false, { left: left + shown.offset.dx, top: top + shown.offset.dy });
   };
 
+  // The grid's height, its padding with it, as the original's
   const rows = current.reduce((max, item) => Math.max(max, item.y + item.h), 0);
-  const height = rows * ROW_HEIGHT + Math.max(0, rows - 1) * margin;
+  const height = rows * ROW_HEIGHT + Math.max(0, rows - 1) * margin + margin * 2;
   // Panels are in the page in reading order, as in OpenSearch Dashboards: that is the order the
   // keyboard goes through them and the order they ask for their data, which decides which chart
   // gives a label its colour first. The order holds still while a panel is being moved.
   if (!shown) reading.current = [...current].sort(byReading).map((item) => item.i);
   const inOrder = [...current].sort((a, b) => reading.current.indexOf(a.i) - reading.current.indexOf(b.i));
   return (
-    <div ref={ref} className={`dshGrid${useMargins ? '' : ' dshGrid--flush'}`} style={{ height }} data-test-subj="dashboardGrid">
+    <div ref={ref} className={`dshGrid dshGrid--placed${useMargins ? '' : ' dshGrid--flush'}`} style={{ height }} data-test-subj="dashboardGrid">
       {shown?.placeholder && <div className="dshGrid__placeholder" style={box(shown.placeholder)} aria-hidden="true" />}
       {size.width > 0 &&
         inOrder.map((item) => {
