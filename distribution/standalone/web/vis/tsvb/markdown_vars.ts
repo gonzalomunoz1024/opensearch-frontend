@@ -7,7 +7,7 @@
  */
 
 import { formatDate } from '../../lib/dates';
-import { getLastValue, type TsvbParams, type TsvbSeriesData } from './data';
+import { getLastValue, valueTemplate, type TsvbParams, type TsvbSeriesData } from './data';
 
 // Lodash's snake case, which names the variables. Letters with accents first lose them, as lodash's
 // deburr writes them, and apostrophes go. A text of plain words is then split at what is not a
@@ -88,7 +88,7 @@ export function convertSeriesToVars(series: TsvbSeriesData[], params: TsvbParams
       const name = [snakeCase(row.label), snakeCase(model.var_name)].filter(Boolean).join('.');
       // A missing value is written as nothing in the series' template, as the product's formatter
       // writes it
-      const empty = (model.value_template || '{{value}}').replace(/\{\{\s*value\s*\}\}/g, '');
+      const empty = valueTemplate(model.value_template)(null);
       const format = (value: number | null) => (value === null || value === undefined ? empty : row.format(value));
       const lastValue = getLastValue(row.data);
       setPath(variables, name, {

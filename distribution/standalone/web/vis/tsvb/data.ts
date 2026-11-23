@@ -12,6 +12,7 @@ import { DEFAULT_FORMAT_SETTINGS } from '../../lib/field_formats';
 import { evaluateMath, type MathValue } from '../../lib/math_expression';
 import { formatNumber } from '../../lib/numeral';
 import { buildQuery, type BoolQuery } from '../../lib/query';
+import { compileTemplate } from '../../lib/template';
 import type { IndexPattern, Query } from '../../lib/types';
 import { services } from '../../services';
 import type { RequestRecord } from '../../services/search';
@@ -208,6 +209,22 @@ const asQuery = (value: Query | string | undefined): Query | undefined => {
  * named format takes its pattern from the advanced settings, as the product's field formats do; a
  * series that names none is written with the product's own default.
  */
+/**
+ * A series' value template filled in as the product's tick formatter fills it: `{{value}}` is the
+ * formatted value, HTML-escaped as Handlebars escapes it, and a template that cannot be filled in
+ * gives the value alone
+ */
+export function valueTemplate(template: string | undefined): (value: unknown) => string {
+  const fill = compileTemplate(template || '{{value}}');
+  return (value) => {
+    try {
+      return fill({ value });
+    } catch {
+      return String(value);
+    }
+  };
+}
+
 export function seriesFormatter(formatter: string | undefined, template?: string): (value: number | null) => string {
   const settings = services ? services.formatSettings() : DEFAULT_FORMAT_SETTINGS;
   const pattern =
@@ -219,6 +236,7 @@ export function seriesFormatter(formatter: string | undefined, template?: string
           ? settings.numberPattern
           : formatter || '0,0.[00]';
   const duration = /^(ms|s|m|h|d|w|M|Y|ps|ns|us),(ms|s|m|h|d|w|M|Y|humanize),(\d*)$/.exec(formatter ?? '');
+  const fill = valueTemplate(template);
   return (value) => {
     if (value === null || value === undefined || Number.isNaN(value)) return '-';
     let text: string;
@@ -227,7 +245,7 @@ export function seriesFormatter(formatter: string | undefined, template?: string
       const ms = value * (scale[duration[1]] ?? 1);
       text = duration[2] === 'humanize' ? `${(ms / 1000).toFixed(0)}s` : `${(ms / (scale[duration[2]] ?? 1)).toFixed(Number(duration[3] || 0))}${duration[2]}`;
     } else text = formatNumber(value, pattern);
-    return template ? template.replace(/\{\{\s*value\s*\}\}/g, text) : text;
+    return fill(text);
   };
 }
 

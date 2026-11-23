@@ -8,7 +8,7 @@ import { XYChart, type XYAxis, type XYSeries } from '../../charts/xy';
 import { Icon } from '../../components/icon';
 import { formatDate, scaledDateFormat, type TimeRange } from '../../lib/dates';
 import { Markdown } from '../../lib/markdown';
-import { renderTemplate, TemplateError } from '../../lib/template';
+import { renderTemplate } from '../../lib/template';
 import type { UiState, Vis } from '../../lib/vis';
 import { services } from '../../services';
 import type { RequestRecord } from '../../services/search';
@@ -361,18 +361,19 @@ const MARKDOWN_ERROR = 'Error processing your markdown';
 
 /**
  * The text of a markdown panel filled in as the product fills it, in strict mode: while it is not
- * well formed (being typed) it shows as written, and a name it has no variable for, or a block it
- * cannot use, is an error the panel shows instead of the text
+ * well formed (being typed) it shows as written, and a name it has no variable for, or anything
+ * else that stops it, is an error the panel shows instead of the text, told apart by the words of
+ * the failure as the product tells them apart
  */
 function fillMarkdown(markdown: string, variables: Record<string, unknown>): { text?: string; error?: TsvbPanelError } {
   try {
     return { text: renderTemplate(markdown, { _all: variables, ...variables, args: {} }, { strict: true }) };
   } catch (failure) {
-    if (failure instanceof TemplateError && failure.kind === 'parse') return { text: markdown };
-    const reason =
-      failure instanceof TemplateError && failure.kind === 'unknown'
-        ? `{{${failure.variable}}} is an unknown variable`
-        : 'Please verify you are only using markdown, known variables, and built-in Handlebars expressions';
+    if (String(failure).includes('Parse error')) return { text: markdown };
+    const message = failure instanceof Error ? failure.message : String(failure);
+    const reason = message.includes('not defined in')
+      ? `{{${String(message.split('"')[1])}}} is an unknown variable`
+      : 'Please verify you are only using markdown, known variables, and built-in Handlebars expressions';
     return { error: { error: { caused_by: { title: MARKDOWN_ERROR, reason } } } };
   }
 }

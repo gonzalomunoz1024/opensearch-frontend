@@ -69,7 +69,7 @@ describe('the text of a TSVB Markdown panel', () => {
 
   it('says what is wrong with a text it cannot use', () => {
     assert.throws(() => renderTemplate('{{#each hosts}}x', scope), /never closed/);
-    assert.throws(() => renderTemplate('{{#lookup hosts}}x{{/lookup}}', scope), /not something/);
+    assert.throws(() => renderTemplate('{{#lookup hosts}}x{{/lookup}}', scope), /lookup needs/);
   });
 });
 
