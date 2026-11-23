@@ -213,6 +213,23 @@ describe('numbers', () => {
       ['1', '0', 'us', 'maybe', '2', '-1']
     );
   });
+
+  it('looks a value up as the original: an empty answer is no answer', () => {
+    const entries = [{ key: 'css', value: 'Style sheet' }, { key: 'gz', value: '' }, { key: 'deb' }, { key: 404, value: 'Not found' }, {}];
+    // What the original's editor saves once the text for the others was typed and cleared
+    const cleared = createFormatter({ id: 'static_lookup', params: { lookupEntries: entries, unknownKeyValue: '' } });
+    assert.deepEqual(
+      ['css', 'gz', 'deb', 'png', 404, '404'].map((value) => cleared(value).text),
+      ['Style sheet', 'gz', 'deb', 'png', 'Not found', 'Not found']
+    );
+    const others = createFormatter({ id: 'static_lookup', params: { lookupEntries: entries, unknownKeyValue: 'other' } });
+    assert.deepEqual(
+      ['css', 'gz', 'deb', 'png'].map((value) => others(value).text),
+      ['Style sheet', 'other', 'other', 'other']
+    );
+    assert.equal(createFormatter({ id: 'static_lookup', params: { lookupEntries: entries, unknownKeyValue: null } })('png').text, 'png');
+    assert.equal(createFormatter({ id: 'static_lookup' })('png').text, 'png');
+  });
 });
 
 const pattern: IndexPattern = {

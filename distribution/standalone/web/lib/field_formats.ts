@@ -407,9 +407,10 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
       const entries = Array.isArray(params.lookupEntries)
         ? (params.lookupEntries as Array<{ key: unknown; value: unknown }>)
         : [];
-      const lookup = new Map(entries.map((entry) => [String(entry.key), String(entry.value)]));
-      const unknown = typeof params.unknownKeyValue === 'string' ? params.unknownKeyValue : undefined;
-      return (value) => text(lookup.get(String(value)) ?? unknown ?? stringify(value));
+      const lookup = new Map(entries.map((entry) => [String(entry.key), entry.value]));
+      // An entry without an answer and an empty text for the other values are none, as the original
+      // reads them: the value itself is shown
+      return (value) => text(stringify(lookup.get(String(value)) || params.unknownKeyValue || value));
     }
     case 'color': {
       const rules = Array.isArray(params.colors)
