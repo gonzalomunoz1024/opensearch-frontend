@@ -13,7 +13,18 @@ import { Icon } from '../../components/icon';
 import { MenuButton } from '../../components/overlay';
 import { useBreadcrumbs } from '../../shell/state';
 import { Detail, Details, ExternalLink, PAGE_SIZES, Table, go, ism, toasts, type TableColumn } from './common';
-import { AddFieldsModal, ConfigureJob, FieldRow, FormPanel, Paired, Wizard, nameOptions, useIndexNames } from './job_parts';
+import {
+  AddFieldsModal,
+  ConfigureJob,
+  CountedTitle,
+  FieldRow,
+  FormPanel,
+  Paired,
+  Spacer,
+  Wizard,
+  nameOptions,
+  useIndexNames,
+} from './job_parts';
 import {
   CALENDAR_TIMEUNITS,
   DELAY_TIMEUNITS,
@@ -710,32 +721,56 @@ const TYPED_AGGREGATION_COLUMNS: Array<TableColumn<DimensionItem>> = [
 const METRIC_COLUMNS: Array<TableColumn<MetricItem>> = [
   { field: 'source_field', name: 'Field Name', render: (row) => row.source_field.label },
   ...METRIC_KINDS.map(
-    (kind): TableColumn<MetricItem> => ({ field: kind, name: METRIC_NAMES[kind], render: (row) => ticked(row[kind]) })
+    (kind): TableColumn<MetricItem> => ({
+      field: kind,
+      name: METRIC_NAMES[kind],
+      align: 'center',
+      render: (row) => ticked(row[kind]),
+    })
   ),
 ];
 
-/** The aggregations after the date histogram and the metrics of a job, each in a table */
+/** What the plugin writes where a job has no field of a kind: the smallest text, in a `dd` */
+const NoFields = ({ children }: { children: string }) => (
+  <div className="ismInfoGrid--xs">
+    <dd>{children}</dd>
+  </div>
+);
+
+/**
+ * The aggregations after the date histogram and the metrics of a job, each under its title and
+ * number in a table in a panel, 8 px apart, as the plugin's details and review draw them
+ */
 export function AggregationTables({
   dimensions,
   metrics,
-  withTypes,
+  review,
 }: {
   dimensions: DimensionItem[];
   metrics: MetricItem[];
-  /** In the form the types of the fields are known; a job read back does not tell them */
-  withTypes?: boolean;
+  /**
+   * In the form's review the types of the fields are known (a job read back does not tell them),
+   * and the title of the aggregations holds their number
+   */
+  review?: boolean;
 }) {
   const dimensionPage = usePage(dimensions, 'sequence');
   const metricPage = usePage(metrics, 'sequence');
   return (
     <>
-      <h3 className="ismRow__title">Additional aggregations ({dimensions.length})</h3>
-      {dimensions.length === 0 ? (
-        <div className="ismLabeled__help">No fields added for aggregation</div>
+      {review ? (
+        <div className="ismCounted">
+          <h3>Additional aggregations ({dimensions.length})</h3>
+        </div>
       ) : (
-        <Panel>
+        <CountedTitle title="Additional aggregations" count={dimensions.length} />
+      )}
+      {dimensions.length === 0 ? (
+        <NoFields>No fields added for aggregation</NoFields>
+      ) : (
+        <Panel className="ismAggPanel">
           <Table
-            columns={withTypes ? TYPED_AGGREGATION_COLUMNS : AGGREGATION_COLUMNS}
+            columns={review ? TYPED_AGGREGATION_COLUMNS : AGGREGATION_COLUMNS}
             rows={dimensionPage.shown}
             total={dimensions.length}
             query={dimensionPage.query}
@@ -745,11 +780,12 @@ export function AggregationTables({
           />
         </Panel>
       )}
-      <h3 className="ismRow__title">Additional metrics ({metrics.length})</h3>
+      <Spacer size="s" />
+      <CountedTitle title="Additional metrics" count={metrics.length} />
       {metrics.length === 0 ? (
-        <div className="ismLabeled__help">No fields added for metrics</div>
+        <NoFields>No fields added for metrics</NoFields>
       ) : (
-        <Panel>
+        <Panel className="ismAggPanel">
           <Table
             columns={METRIC_COLUMNS}
             rows={metricPage.shown}
@@ -793,7 +829,7 @@ function Review({ form, onChangeStep }: { form: RollupForm; onChangeStep: (step:
             <Detail name="Timezone">{form.timezone}</Detail>
           </Details>
         </div>
-        <AggregationTables dimensions={form.dimensions} metrics={form.metrics} withTypes />
+        <AggregationTables dimensions={form.dimensions} metrics={form.metrics} review />
       </FormPanel>
       <FormPanel title="Schedule" actions={edit(3)}>
         <Details columns={4}>

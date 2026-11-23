@@ -1243,6 +1243,169 @@
   font-weight: var(--font-weight-semibold);
 }
 
+/* The page of one rollup or transform job, as the plugin pads it */
+.ismJd {
+  padding: 5px 50px;
+}
+
+/* Its name, whether it is enabled and its buttons: a row 10 px in, its parts 24 px apart */
+.ismJdHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  padding: 0 10px;
+}
+
+.ismJdHeader__title {
+  flex: none;
+  min-width: 0;
+}
+
+.ismJdHeader__health {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+.ismJdHeader__health .atlHealth {
+  line-height: 21px;
+}
+
+.ismJdHeader__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* The title of a panel in an item of the plugin's row: no offset, level with the top of its
+   buttons (the row stretches its items) */
+.ismTp__header.ismTp__header--item {
+  align-items: flex-start;
+  margin: 0;
+}
+
+.ismTp__header--item > .ismTp__actions {
+  margin: 0;
+}
+
+/* Terms over their values, as the theme's flex grid of three or four columns with its 24 px
+   gutter: each item a quarter or a third less the gutter, wider where a long word holds it open */
+.ismInfoGrid {
+  display: flex;
+  flex-wrap: wrap;
+  margin: -12px;
+}
+
+.ismInfoGrid__item {
+  flex: 0 1 calc(25% - 24px);
+  margin: 12px;
+}
+
+.ismInfoGrid--3 > .ismInfoGrid__item {
+  flex-basis: calc(33.3% - 24px);
+}
+
+.ismInfoGrid dt,
+.ismInfoGrid dd,
+.ismInfoGrid--xs dd {
+  margin: 0;
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+.ismInfoGrid dt {
+  font-weight: var(--font-weight-semibold);
+}
+
+.ismInfoGrid--xs dt,
+.ismInfoGrid--xs dd {
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+}
+
+/* A job's JSON as the plugin's copyable code block: the code at 14 px on lines of 21, 16 px in and
+   44 px off the right where the round buttons are, at most 600 px high */
+.ismJobJson {
+  position: relative;
+}
+
+.ismJobJson .ismCodeBlock__code {
+  font-size: var(--font-size-s);
+}
+
+.ismJobJson .ismCodeBlock__pre {
+  max-height: 600px;
+  font-size: var(--font-size-s);
+  padding: var(--space-4) 44px var(--space-4) var(--space-4);
+  line-height: 21px;
+}
+
+.ismJobJson__controls {
+  position: absolute;
+  top: 17px;
+  right: 17px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.ismJobJson__control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.ismJobJson__control:hover,
+.ismJobJson__control:focus-visible {
+  background: var(--color-surface-secondary);
+}
+
+/* In full screen the block covers the window over a mask, its code 32 px in */
+.ismJobJsonFull {
+  position: fixed;
+  inset: 0;
+  z-index: 6000;
+}
+
+.ismJobJson--full,
+.ismJobJson--full .ismCodeBlock {
+  height: 100%;
+}
+
+.ismJobJson--full .ismCodeBlock__pre {
+  height: 100%;
+  max-height: none;
+  padding: var(--space-8);
+  box-sizing: border-box;
+}
+
+.ismJobJson--full .ismJobJson__controls {
+  top: 5px;
+  right: 5px;
+}
+
+/* A title and its number in brackets, two headings 4 px apart */
+.ismCounted {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.ismCounted h3 {
+  margin: 0;
+  font-size: var(--font-size-l);
+  line-height: 22px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.022em;
+}
+
 /* A panel of a form or of details: its title, a line, what it holds */
 .ismTp__header {
   display: flex;

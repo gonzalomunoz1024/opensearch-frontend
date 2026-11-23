@@ -6,9 +6,9 @@ import { useEffect, useState } from 'react';
 import { Button, Health } from '../../components/basic';
 import { useLocation } from '../../router';
 import { useBreadcrumbs } from '../../shell/state';
-import { Detail, Details, JSONModal, go, ism, renderTime, toasts } from './common';
+import { go, ism, renderTime, toasts } from './common';
 import { AggregationTables, ConfigureRollup, Schedule } from './create_rollup';
-import { FormPanel } from './job_parts';
+import { InfoGrid, JobDetailsHeader, JobDetailsPage, JobJsonModal, Spacer, TitledPanel } from './job_parts';
 import {
   INTERVAL_REQUIRED,
   editOf,
@@ -71,85 +71,96 @@ export function RollupDetails() {
     if (await switchRollup(rollupId, on)) await load(rollupId);
   };
 
+  const status = rollupStatus(metadata);
   return (
-    <div className="ismPage ismPage--form">
-      <header className="ismPageHeader ismPageHeader--center">
-        <h1 className="ismPageTitle">{rollupId}</h1>
-        <div className="atlGrow">
-          {enabled ? (
-            <Health tone="healthy">Enabled on {lastUpdated}</Health>
-          ) : (
-            <Health tone="critical">Disabled</Health>
-          )}
-        </div>
-        <div className="ismPanel__actions">
-          <Button size="s" disabled={!enabled} onClick={() => void turn(false)} testId="disableButton">
-            Disable
-          </Button>
-          <Button size="s" disabled={enabled} onClick={() => void turn(true)} testId="enableButton">
-            Enable
-          </Button>
-          <Button size="s" onClick={() => setDialog('json')}>
-            View JSON
-          </Button>
-          <Button size="s" variant="danger" onClick={() => setDialog('delete')} testId="deleteButton">
-            Delete
-          </Button>
-        </div>
-      </header>
-
-      <FormPanel
-        title="General information"
+    <JobDetailsPage>
+      <JobDetailsHeader
+        title={rollupId}
+        health={
+          enabled ? <Health tone="healthy">Enabled on {lastUpdated}</Health> : <Health tone="critical">Disabled</Health>
+        }
         actions={
-          <Button size="s" onClick={() => rollupId && go(ROUTES.EDIT_ROLLUP, { id: rollupId })} testId="EditButton">
+          <>
+            <Button disabled={!enabled} onClick={() => void turn(false)} testId="disableButton">
+              Disable
+            </Button>
+            <Button disabled={enabled} onClick={() => void turn(true)} testId="enableButton">
+              Enable
+            </Button>
+            <Button onClick={() => setDialog('json')}>View JSON</Button>
+            <Button variant="danger" onClick={() => setDialog('delete')} testId="deleteButton">
+              Delete
+            </Button>
+          </>
+        }
+      />
+
+      <TitledPanel
+        title="General information"
+        itemTitle
+        actions={
+          <Button onClick={() => rollupId && go(ROUTES.EDIT_ROLLUP, { id: rollupId })} testId="EditButton">
             Edit
           </Button>
         }
       >
-        <Details columns={4}>
-          <Detail name="Name">{rollupId}</Detail>
-          <Detail name="Source index">{rollup?.source_index}</Detail>
-          <Detail name="Target index">{rollup?.target_index}</Detail>
-          <Detail name="Schedule">{rollup ? scheduleText(rollup) : ''}</Detail>
-          <Detail name="Description">{rollup?.description || '-'}</Detail>
-          <Detail name="Last updated">{lastUpdated}</Detail>
-          <Detail name="Pages per execution">{rollup ? rollup.page_size : 1000}</Detail>
-        </Details>
-      </FormPanel>
+        <InfoGrid
+          items={[
+            { term: 'Name', value: rollupId },
+            { term: 'Source index', value: rollup?.source_index ?? '' },
+            { term: 'Target index', value: rollup?.target_index ?? '' },
+            { term: 'Schedule', value: rollup ? scheduleText(rollup) : '' },
+            { term: 'Description', value: rollup?.description || '-' },
+            { term: 'Last updated', value: lastUpdated },
+            { term: 'Pages per execution', value: rollup ? rollup.page_size : 1000 },
+          ]}
+        />
+        <Spacer size="s" />
+      </TitledPanel>
+      <Spacer />
 
-      <FormPanel title="Rollup status">
-        <Details columns={4}>
-          <Detail name="Current rollup window">{windowText(metadata)}</Detail>
-          <Detail name="Status">
-            <JobStatusText status={rollupStatus(metadata)} />
-          </Detail>
-          <Detail name="Rollup indexed">{stat('rollups_indexed')}</Detail>
-          <Detail name="Indexed time (ms)">{stat('index_time_in_millis')}</Detail>
-          <Detail name="Document processed">{stat('documents_processed')}</Detail>
-          <Detail name="Search time (ms)">{stat('search_time_in_millis')}</Detail>
-          <Detail name="Page processed">{stat('pages_processed')}</Detail>
-        </Details>
-      </FormPanel>
+      <TitledPanel title="Rollup status" itemTitle>
+        <InfoGrid
+          items={[
+            { term: 'Current rollup window', value: windowText(metadata) },
+            // As the plugin's, a job without a status has a dash under the term
+            { term: 'Status', value: status ? <JobStatusText status={status} /> : <dd>-</dd>, bare: true },
+            { term: 'Rollup indexed', value: stat('rollups_indexed') },
+            { term: 'Indexed time (ms)', value: stat('index_time_in_millis') },
+            { term: 'Document processed', value: stat('documents_processed') },
+            { term: 'Search time (ms)', value: stat('search_time_in_millis') },
+            { term: 'Page processed', value: stat('pages_processed') },
+          ]}
+        />
+        <Spacer size="s" />
+      </TitledPanel>
+      <Spacer />
 
-      <FormPanel title="Aggregation and metrics settings">
+      <TitledPanel title="Aggregation and metrics settings" itemTitle>
         {/* The plugin gives the time aggregation this title */}
-        <h3 className="ismRow__title">Additional metrics</h3>
-        <div className="ismSmallDetails">
-          <Details columns={3}>
-            <Detail name="Timestamp field">{histogram?.source_field}</Detail>
-            <Detail name="Interval">
-              {histogramIntervalText(histogram?.fixed_interval ? histogram.fixed_interval : histogram?.calendar_interval)}
-            </Detail>
-            <Detail name="Timezone">{rollup ? histogram?.timezone : 'UTC +0'}</Detail>
-          </Details>
-        </div>
+        <h3 className="atlTitleS">Additional metrics</h3>
+        <InfoGrid
+          columns={3}
+          size="xs"
+          items={[
+            { term: 'Timestamp field', value: histogram?.source_field ?? '' },
+            {
+              term: 'Interval',
+              value: histogramIntervalText(histogram?.fixed_interval ? histogram.fixed_interval : histogram?.calendar_interval),
+            },
+            { term: 'Timezone', value: rollup ? histogram?.timezone : 'UTC +0' },
+          ]}
+        />
+        <Spacer size="s" />
         <AggregationTables
           dimensions={rollup ? parseDimensions(rollup.dimensions) : []}
           metrics={rollup ? parseMetrics(rollup.metrics) : []}
         />
-      </FormPanel>
+        <Spacer size="s" />
+      </TitledPanel>
+      <Spacer />
 
-      {dialog === 'json' && job && <JSONModal title={`View JSON of ${rollupId}`} json={job} onClose={close} />}
+      {dialog === 'json' && job && <JobJsonModal title={`View JSON of ${rollupId}`} json={job} onClose={close} />}
       {dialog === 'delete' && (
         <DeleteRollupModal
           rollupId={rollupId}
@@ -162,7 +173,7 @@ export function RollupDetails() {
           }}
         />
       )}
-    </div>
+    </JobDetailsPage>
   );
 }
 

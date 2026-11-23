@@ -10,10 +10,11 @@ import { Button, Panel, cx } from '../../components/basic';
 import { CodeEditor } from '../../components/code_editor';
 import { SearchField, TextArea, TextField } from '../../components/form';
 import { Icon } from '../../components/icon';
-import { ContextMenu, Modal, Popover, type ContextMenuItem } from '../../components/overlay';
+import { ContextMenu, Modal, Popover, Portal, copyText, type ContextMenuItem } from '../../components/overlay';
 import { Pagination } from '../../components/table';
 import { LocalTable, ism, toasts, type Answer, type TableColumn } from './common';
 import { useSpaced } from './index_select';
+import { JsonBlock } from './json_block';
 import { leadingDebounce } from './jobs';
 import { ModalButtons, PluginModal } from './plugin_modal';
 import { aceActiveLine, aceEditorTokens, aceGutterWidth, aceLineRange } from './policy_model';
@@ -149,6 +150,7 @@ export function TitledPanel({
   optional,
   description,
   actions,
+  itemTitle,
   children,
   testId,
 }: {
@@ -156,12 +158,17 @@ export function TitledPanel({
   optional?: boolean | 'title';
   description?: ReactNode;
   actions?: ReactNode;
+  /**
+   * The title in an item of the plugin's row, as the pages of one job have it: the row's -2 px and
+   * the item's 2 px cancel out, and the title is level with the top of the buttons beside it
+   */
+  itemTitle?: boolean;
   children?: ReactNode;
   testId?: string;
 }) {
   return (
     <section className="atlPanel ismTp" data-test-subj={testId}>
-      <div className={cx('ismTp__header', optional && 'ismTp__header--optional')}>
+      <div className={cx('ismTp__header', optional && 'ismTp__header--optional', itemTitle && 'ismTp__header--item')}>
         <h2 className="atlTitleS ismTp__title">{title}</h2>
         {optional && <i className={cx('ismTp__optional', optional === 'title' && 'ismTp__optional--title')}>– optional</i>}
         {actions && <div className="ismTp__actions">{actions}</div>}
@@ -633,6 +640,135 @@ export function Wizard({
         </div>
       </div>
       <div className="ismButtons">{buttons}</div>
+    </div>
+  );
+}
+
+// --- The page of one job -----------------------------------------------------------------------------
+
+/** The page of one rollup or transform job, padded 5 px and 50 px as the plugin pads it */
+export function JobDetailsPage({ children }: { children: ReactNode }) {
+  return <div className="ismJd">{children}</div>;
+}
+
+/**
+ * The row over a job's details, as the plugin's: its name at 28 px, whether it is enabled, and its
+ * buttons, 10 px in from the panels' edges and 24 px over the first of them
+ */
+export function JobDetailsHeader({ title, health, actions }: { title: string; health: ReactNode; actions: ReactNode }) {
+  return (
+    <>
+      <div className="ismJdHeader">
+        <h1 className="ismJdHeader__title atlTitleL">{title}</h1>
+        <div className="ismJdHeader__health">{health}</div>
+        <div className="ismJdHeader__actions">{actions}</div>
+      </div>
+      <Spacer />
+    </>
+  );
+}
+
+export interface InfoItem {
+  term: string;
+  value: ReactNode;
+  /** What stands under the term as it is, where the plugin puts it there without a `dd` */
+  bare?: boolean;
+}
+
+/**
+ * Terms over their values in the plugin's grid of three or four columns 24 px apart (an
+ * EuiFlexGrid of EuiText): a long word widens its column, and what no longer fits in the row moves
+ * to the next, as there. `xs` is the smaller text of the time aggregation's terms.
+ */
+export function InfoGrid({ items, columns = 4, size = 's' }: { items: InfoItem[]; columns?: 3 | 4; size?: 's' | 'xs' }) {
+  return (
+    <div className={`ismInfoGrid ismInfoGrid--${columns} ismInfoGrid--${size}`}>
+      {items.map((item) => (
+        <div className="ismInfoGrid__item" key={item.term}>
+          <dt>{item.term}</dt>
+          {item.bare ? item.value : <dd>{item.value}</dd>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * JSON as the plugin's EuiCodeBlock with `isCopyable` and `overflowHeight={600}` shows it: the
+ * code at 14 px, 16 px in, at most 600 px high, and two round buttons at its top right: full
+ * screen and copy. Full screen covers the window with the code, 32 px in, until Collapse or Escape
+ * (which leaves the dialog under it open).
+ */
+function CopyableJson({ text }: { text: string }) {
+  const [full, setFull] = useState(false);
+  useEffect(() => {
+    if (!full) return undefined;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      setFull(false);
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, [full]);
+  const block = (
+    <div className={cx('ismJobJson', full && 'ismJobJson--full')}>
+      <JsonBlock text={text} />
+      <div className="ismJobJson__controls">
+        <button
+          type="button"
+          className="ismJobJson__control"
+          aria-label={full ? 'Collapse' : 'Expand'}
+          onClick={() => setFull(!full)}
+        >
+          <Icon name={full ? 'fullScreenExit' : 'fullScreen'} />
+        </button>
+        <button type="button" className="ismJobJson__control" aria-label="Copy" onClick={() => copyText(text)}>
+          <Icon name="copyClipboard" />
+        </button>
+      </div>
+    </div>
+  );
+  return full ? (
+    <Portal>
+      <div className="ismJobJsonFull">{block}</div>
+    </Portal>
+  ) : (
+    block
+  );
+}
+
+/**
+ * "View JSON" of a job as the plugin's: its EuiModal in an EuiOverlayMask (two masks), the title
+ * in EuiText s, the code block, and Close
+ */
+export function JobJsonModal({ title, json, onClose }: { title: string; json: unknown; onClose: () => void }) {
+  const body = useDialogFocus<HTMLDivElement>();
+  return (
+    <PluginModal
+      title={title}
+      onClose={onClose}
+      className="ismWideModal ismMasked"
+      footer={
+        <Button variant="empty" onClick={onClose}>
+          Close
+        </Button>
+      }
+    >
+      <div ref={body}>
+        <CopyableJson text={JSON.stringify(json, null, 4)} />
+      </div>
+    </PluginModal>
+  );
+}
+
+/** A title of a part of a panel and how many it holds, the number apart, as the plugin sets them */
+export function CountedTitle({ title, count }: { title: string; count: number }) {
+  return (
+    <div className="ismCounted">
+      <h3>{title}</h3>
+      <h3>({count})</h3>
     </div>
   );
 }

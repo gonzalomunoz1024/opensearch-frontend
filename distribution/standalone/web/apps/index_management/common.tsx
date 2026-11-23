@@ -286,7 +286,7 @@ export interface TableColumn<Row> {
   name: string;
   sortable?: boolean;
   width?: string;
-  align?: 'right';
+  align?: 'right' | 'center';
   render: (row: Row) => ReactNode;
   /** What a table sorted in the browser sorts by; the field of the row when left out */
   value?: (row: Row) => unknown;
