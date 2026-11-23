@@ -426,6 +426,12 @@
   transition: transform var(--duration-normal) var(--ease-out-quint);
 }
 
+/* In the dark the original lifts an aggregation off its group: the second surface on the first */
+:root.themeDark .vzeAgg,
+:root.themeDark .vzeSection {
+  background: var(--color-surface-secondary);
+}
+
 .vzeAgg--dragging {
   z-index: 1;
 }
@@ -825,46 +831,19 @@
   padding-left: calc(var(--space-2) - 1px);
 }
 
-/* The original writes the choice 4px from the top on a 22px line: an input centres it 2px lower */
 .vzeForm .atlCombo > input {
-  position: relative;
-  top: -2px;
   padding-left: 0;
 }
 
-/* The original writes its placeholder, and what is typed, 4px further in and on the middle line */
+/* The original writes its placeholder, and what is typed, 4px further in */
 .vzeForm .atlCombo > input:placeholder-shown,
 .vzeForm .atlCombo > input[aria-expanded="true"] {
-  top: -1px;
   padding-left: var(--space-1);
 }
 
 .vzeForm .atlCombo__caret.atlIcon {
   margin-right: -1px;
   color: var(--color-text-primary);
-}
-
-/* Its clear button: the original's small grey disc with a white cross, 6px before the arrow */
-.vzeForm .atlCombo__clear {
-  align-items: center;
-  justify-content: center;
-  width: 12px;
-  height: 12px;
-  margin-right: 2px;
-  padding: 0;
-  border-radius: 50%;
-  background: var(--color-text-tertiary);
-  color: var(--color-surface);
-}
-
-.vzeForm .atlCombo__clear:hover {
-  color: var(--color-surface);
-}
-
-.vzeForm .atlCombo__clear .atlIcon {
-  width: 12px;
-  height: 12px;
-  stroke-width: 2;
 }
 
 /* A select draws the theme's small arrow 8px from its right edge */
@@ -1010,7 +989,7 @@
   height: 14px;
   border: 1px solid var(--color-border);
   border-radius: 50%;
-  background: #ffffff;
+  background: var(--color-surface);
   box-shadow: var(--shadow-sm);
   transition:
     left var(--duration-normal) ease-in,
