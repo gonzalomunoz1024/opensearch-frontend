@@ -630,6 +630,17 @@
   font-weight: var(--font-weight-medium);
 }
 
+/* The original's tooltip stays dark in the dark theme: white on the secondary surface, its labels
+   the light grey they are in the light one */
+:root.themeDark .visTooltip {
+  background-color: var(--color-surface-secondary);
+  color: var(--color-full-shade);
+}
+
+:root.themeDark .visTooltip__label {
+  color: color-mix(in srgb, var(--color-full-shade) 80%, var(--color-surface-secondary));
+}
+
 .visTooltip__header {
   display: flex;
   align-items: center;

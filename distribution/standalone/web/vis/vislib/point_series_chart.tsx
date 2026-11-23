@@ -16,7 +16,7 @@ import { useSize } from '../../charts/core';
 import type { AxisScaleInfo, AxisTick, DrawnAxis } from './axis';
 import { isHorizontal, titleSize } from './axis';
 import { HandlerError } from './handler_error';
-import { VisLegend, type LegendPosition, type VisLegendProps } from './legend';
+import { hoverAfter, VisLegend, type Hover, type LegendPosition, type VisLegendProps } from './legend';
 import { layoutPointSeries, type LayoutAxisInput, type PlacedAxis, type PlacedSplitTitles, type Rect } from './point_series_layout';
 import {
   axisPoints,
@@ -81,12 +81,6 @@ export interface PointSeriesChartProps {
   onBrush?: (range: BrushRange) => void;
   /** The time of the time marker: now */
   now?: number;
-}
-
-interface Hover {
-  label?: string;
-  /** Once a series has been pointed at, the marks keep the opacity it left them */
-  touched: boolean;
 }
 
 /** EUI's test of a dark colour, for the labels written on stacked bars */
@@ -921,9 +915,7 @@ export function PointSeriesChart({ model, charts, rows, colorOf, offsetAt, dimmi
     }
   }, [model, size.width, size.height, offsetAt, split, rows, count, titleRow]);
 
-  const highlight = useCallback((label: string | undefined) => {
-    setHover((current) => (label === undefined ? { touched: current.touched || current.label !== undefined } : { label, touched: true }));
-  }, []);
+  const highlight = useCallback((label: string | undefined) => setHover((current) => hoverAfter(current, label)), []);
 
   // Areas that do not stack light up and dim in their own way, for every mark of every chart
   const overlapAreas = model.series.some((item) => item.type === 'area' && item.mode !== 'stacked');

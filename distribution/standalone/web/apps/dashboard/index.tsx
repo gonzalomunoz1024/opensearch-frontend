@@ -2,7 +2,7 @@
 
 /* Dashboards: the list of them, and one of them on screen, looked at or edited. */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, EmptyPrompt, Link, Loading } from '../../components/basic';
 import { ConfirmModal, ContextMenu, Flyout, Popover } from '../../components/overlay';
 import type { TimeRange } from '../../lib/dates';
@@ -10,12 +10,12 @@ import { uniqueFilters } from '../../lib/query';
 import { parseSearchSource } from '../../lib/search_source';
 import type { Filter, IndexPattern, Query } from '../../lib/types';
 import { appUrl, decodeState, encodeQueryValue, encodeState } from '../../lib/url';
-import { getLocation, href, locationState, navigate, setHashParams, setLeaveGuard, setLocationState, useLocation } from '../../router';
+import { enteredAnotherApplication, getLocation, href, locationState, navigate, setHashParams, setLocationState, useLocation } from '../../router';
 import { services } from '../../services';
 import { errorMessage } from '../../services/http';
 import type { SavedObject } from '../../services/saved_objects';
 import { TopNav, type TopNavItem } from '../../shell/chrome';
-import { isPinned, splitFilters } from '../../shell/filter_bar';
+import { FilterBar, isPinned, splitFilters } from '../../shell/filter_bar';
 import { Inspector } from '../../shell/inspect';
 import { Listing, ListingEmpty, type ListingColumn } from '../../shell/listing';
 import { defaultQueryLanguage } from '../../shell/query_bar';
@@ -27,7 +27,19 @@ import type { VisInput } from '../../vis/request';
 import { makeTurns } from '../../vis/turns';
 import { NewVisModal } from '../visualize';
 import { VIS_BUILDER_TITLE, VIS_BUILDER_TYPE } from '../vis_builder/model';
-import { asHeld, cloneBase, cloneTitle, fullAppState, ownTime, restoredOptions, sameQuery, sameState, type UrlAppState } from './app_state';
+import {
+  asHeld,
+  cloneBase,
+  cloneTitle,
+  fullAppState,
+  marksDiffer,
+  openingMarks,
+  ownTime,
+  restoredOptions,
+  viewedFromAddress,
+  type ChangeMarks,
+  type UrlAppState,
+} from './app_state';
 import {
   CloneModal,
   CustomizePanelModal,
@@ -40,13 +52,17 @@ import {
 import { DashboardGrid } from './grid';
 import {
   DEFAULT_PANEL,
+  createNewState,
+  dashboardBars,
   dashboardFromSavedObject,
+  dashboardQuery,
   dashboardToSavedObject,
   emptyDashboard,
   findPlace,
   handedPanel,
   layoutsDiffer,
   newPanelIndex,
+  openedEmbedded,
   orderAsOriginal,
   panelsDiffer,
   panelsFromUrl,
@@ -69,6 +85,10 @@ import type { PanelAction } from './panel_menu';
 import '../../styles/dashboard.css';
 
 const BASE = '/app/dashboards';
+
+// The header stays hidden while a page opened to be embedded in another is open, as the
+// original's: what the dashboard shows over its panels then follows from it
+const HEADER_SHOWN = !openedEmbedded(window.location.hash);
 
 const FINDER_TYPES: PanelFinderType[] = [
   { type: 'visualization', name: 'Visualization', icon: 'visualize' },
@@ -211,7 +231,10 @@ function DashboardPage({ savedId }: { savedId?: string }) {
   const fullScreen = Boolean(urlState.fullScreenMode);
   const expanded = urlState.expandedPanelId;
   const defaultQuery = useMemo<Query>(() => ({ query: '', language: defaultQueryLanguage() }), []);
-  const query: Query = useMemo(() => urlState.query ?? saved?.query ?? defaultQuery, [urlState.query, saved?.query, defaultQuery]);
+  const query: Query = useMemo(
+    () => (urlState.query === undefined ? saved?.query ?? defaultQuery : dashboardQuery(urlState.query)),
+    [urlState.query, saved?.query, defaultQuery]
+  );
   const appFilters = useMemo(() => urlState.filters ?? saved?.filters ?? [], [urlState.filters, saved?.filters]);
   const filters = useMemo(() => [...global.filters, ...appFilters.filter((filter) => !isPinned(filter))], [global.filters, appFilters]);
   const options: DashboardOptions = urlState.options ?? saved?.options ?? {};
@@ -224,8 +247,9 @@ function DashboardPage({ savedId }: { savedId?: string }) {
   const description = urlState.description ?? saved?.description ?? '';
   const timeRestore = urlState.timeRestore ?? saved?.timeRestore ?? false;
 
-  // While the dashboard is edited its panels are in the address, as the original keeps them
-  const urlPanelsKey = editing && urlState.panels !== undefined ? JSON.stringify(urlState.panels) : '';
+  // While the dashboard is edited its panels are in the address, as the original keeps them; those
+  // an address carries while it is looked at are the ones shown, as the original takes them
+  const urlPanelsKey = urlState.panels !== undefined ? JSON.stringify(urlState.panels) : '';
   const urlPanels = useMemo(() => (urlPanelsKey ? panelsFromUrl(JSON.parse(urlPanelsKey)) : undefined), [urlPanelsKey]);
   const panels = useStablePanels(urlPanels ?? viewPanels ?? saved?.panels ?? NO_PANELS);
   const panelsNow = useRef(panels);
@@ -284,13 +308,21 @@ function DashboardPage({ savedId }: { savedId?: string }) {
     };
   }, [savedId]);
 
-  // Once open, the address holds the dashboard's whole state, as the original writes it
+  // Once open, the address holds the dashboard's whole state, as the original writes it: while the
+  // dashboard is looked at, without its panels, those it carried kept as the ones shown before
+  // they leave it (else, between the two, the page would show the saved ones for a moment)
   useEffect(() => {
     if (!saved) return;
     const raw = getLocation().hashParams._a;
-    const full = encodeState(fullAppState(saved, decodeState<UrlAppState>(raw), panelsNow.current, defaultQuery));
+    const current = decodeState<UrlAppState>(raw);
+    const shown = viewedFromAddress(saved, current);
+    if (shown && (!viewPanels || panelsDiffer(shown, viewPanels))) {
+      setViewPanels(shown);
+      return;
+    }
+    const full = encodeState(fullAppState(saved, current, panelsNow.current, defaultQuery));
     if (full !== raw) setHashParams({ _a: full }, { replace: true });
-  }, [saved, rawApp, defaultQuery]);
+  }, [saved, rawApp, defaultQuery, viewPanels]);
 
   // A panel an editor hands back as it comes back, as the original's dashboard takes it when it
   // opens: the panel sent there, given what the editor gives it, or else a new one. It is taken
@@ -370,31 +402,36 @@ function DashboardPage({ savedId }: { savedId?: string }) {
   }, [patternIds]);
 
   // --- The page's state ---
-  // Changed since saved, as the original counts it: the panels, the query and filters, and the
-  // time when the dashboard keeps its own (its options are not counted)
-  const dirty = useMemo(() => {
-    if (!saved || !editing) return false;
-    const timeChanged =
-      saved.timeRestore && (global.time.from !== saved.timeFrom || global.time.to !== saved.timeTo);
-    return (
-      panelsDiffer(panels, saved.panels) ||
-      !sameQuery(query, saved.query ?? defaultQuery) ||
-      !sameState(appFilters.filter((filter) => !isPinned(filter)), saved.filters) ||
-      Boolean(timeChanged)
-    );
-  }, [saved, editing, panels, query, appFilters, global.time, defaultQuery]);
+  // Changed, as the original counts it (its `isDirty`): the panels, the query or the filters, or
+  // the time while the dashboard keeps its own (not its options), changed after the page opened
+  // it, even if changed back since; a save or a discard clears it. A page that opens the
+  // dashboard again, by a reload or on the way back from an editor, starts unchanged, whatever its
+  // address carries. Being left, the original asks nothing: its address keeps the changes.
+  const [changed, setChanged] = useState(false);
+  const openedWith = useRef<ChangeMarks>();
+  const marks = useMemo<ChangeMarks>(
+    () => ({ panels, query, filters, ...(timeRestore ? { time: global.time, refreshInterval: global.refreshInterval } : {}) }),
+    [panels, query, filters, timeRestore, global.time, global.refreshInterval]
+  );
+  useEffect(() => {
+    if (!saved) return;
+    if (!openedWith.current) openedWith.current = openingMarks(marks, saved, cameWithGlobal.current);
+    else if (!changed && marksDiffer(marks, openedWith.current)) setChanged(true);
+  }, [saved, marks, changed]);
+  const dirty = editing && changed;
 
   const trailTitle = savedId ? saved?.title ?? '' : 'New Dashboard';
   useBreadcrumbs([
     { text: 'Dashboards', to: appUrl(BASE, '/list') },
     { text: editing ? `Editing ${trailTitle}${dirty ? ' (unsaved)' : ''}` : trailTitle || 'Dashboard' },
   ]);
-
+  // The document's title as the original's: a saved dashboard's own title before the product's
+  // name; a new one leaves it as it was, which is the product's name when the page opens on it
+  const [titleBefore] = useState(() => (enteredAnotherApplication() ? services.boot.name : document.title));
+  const docTitle = savedId && saved ? [saved.title, services.boot.name].join(' - ') : titleBefore;
   useEffect(() => {
-    if (!editing || !dirty) return undefined;
-    setLeaveGuard(() => window.confirm('Leave this dashboard? Changes you made to it have not been saved.'));
-    return () => setLeaveGuard(undefined);
-  }, [editing, dirty]);
+    document.title = docTitle;
+  });
 
   useEffect(() => {
     setFullScreen(fullScreen);
@@ -413,10 +450,18 @@ function DashboardPage({ savedId }: { savedId?: string }) {
   useAutoRefresh(global.refreshInterval, refresh);
 
   const input = useMemo<VisInput>(() => ({ time: global.time, query, filters }), [global.time, query, filters]);
+  // The dashboard's state as the original's container holds it: a change of it draws its grid again
+  const dashboardState = useMemo(
+    () => JSON.stringify({ panels, input, tick, refresh: global.refreshInterval, editing, options, expanded, fullScreen, title, description, timeRestore }),
+    [panels, input, tick, global.refreshInterval, editing, options, expanded, fullScreen, title, description, timeRestore]
+  );
   // Each time the page asks for its data, the panels take their colours in reading order
   const turnOrder = readingOrder(panels).join('\n');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const turns = useMemo(() => makeTurns(turnOrder === '' ? [] : turnOrder.split('\n')), [turnOrder, input, tick]);
+  // A panel not drawn yet, far from the window, holds up none after it: it takes its colours when
+  // it comes to be drawn, as the original's charts take theirs as they are drawn
+  const onWaiting = useCallback((id: string) => turns.get(id)?.done(), [turns]);
 
   const setFilters = useCallback(
     (next: Filter[]) => {
@@ -589,7 +634,6 @@ function DashboardPage({ savedId }: { savedId?: string }) {
       return;
     }
     setDialog(undefined);
-    setLeaveGuard(undefined);
     services.toasts.success(`Dashboard '${result.title}' was saved`);
     const shown: Partial<UrlAppState> = { title: result.title, description: result.description, timeRestore: result.timeRestore, viewMode: 'view' };
     if (object.id !== savedId) {
@@ -600,17 +644,20 @@ function DashboardPage({ savedId }: { savedId?: string }) {
       );
       return;
     }
-    // What was saved, read back as a dashboard is read
+    // What was saved, read back as a dashboard is read; it is not changed any more
     setSaved(dashboardFromSavedObject({ id: object.id, attributes, references, version: object.version }));
     setViewPanels(undefined);
+    openedWith.current = undefined;
+    setChanged(false);
     writeApp(shown);
   };
 
   const discard = () => {
     if (!saved) return;
     setDialog(undefined);
-    setLeaveGuard(undefined);
     setViewPanels(undefined);
+    openedWith.current = undefined;
+    setChanged(false);
     held.current = { query: saved.query ?? defaultQuery, options: restoredOptions(saved.options) };
     // In place of the step being discarded, as the original writes it
     writeApp(
@@ -696,6 +743,9 @@ function DashboardPage({ savedId }: { savedId?: string }) {
           icon: 'pencil',
           onClick: () => writeApp({ viewMode: 'edit', panels: panelsToUrl(panelsNow.current) }),
           testId: 'dashboardEditMode',
+          // As the original's (`eui-hideFor--s eui-hideFor--xs`): not in a window narrower than
+          // 768 pixels, where the panels are stacked and the grid cannot be edited
+          hideFor: ['xs', 's'],
         },
       ];
 
@@ -706,12 +756,27 @@ function DashboardPage({ savedId }: { savedId?: string }) {
   const inspected = dialog?.kind === 'inspect' ? panelOf(dialog.panel) : undefined;
   const renamed = dialog?.kind === 'rename' ? panelOf(dialog.panel) : undefined;
   const replaced = dialog?.kind === 'replace' ? panelOf(dialog.panel) : undefined;
+  const bars = dashboardBars(location.hashParams, {
+    headerShown: HEADER_SHOWN,
+    fullScreen,
+    hasFilters: appFilters.some((filter) => !isPinned(filter)),
+  });
 
   return (
     <div className={`dshPage${fullScreen ? ' dshPage--fullScreen' : ''}`} data-test-subj="dashboardViewport">
-      {!fullScreen && <TopNav items={navItems} />}
-      {!fullScreen && (
+      {bars.topMenu && (bars.inlineMenu ? <InlineTopNav items={navItems} /> : <TopNav items={navItems} />)}
+      {!bars.queryInput && !bars.datePicker ? (
+        bars.filterBar && (
+          // The filters alone, without the row of the query and the time, as the original's bar has them
+          <div className="shlSearchBar" data-test-subj="globalQueryBar">
+            <FilterBar filters={filters} onChange={setFilters} indexPatterns={patterns} />
+          </div>
+        )
+      ) : (
         <SearchBar
+          showQuery={bars.queryInput}
+          showTime={bars.datePicker}
+          showFilters={bars.filterBar}
           indexPatterns={patterns}
           query={query}
           onQuerySubmit={(next) => {
@@ -741,7 +806,9 @@ function DashboardPage({ savedId }: { savedId?: string }) {
           layout={layout}
           useMargins={options.useMargins === true}
           editing={editing && !fullScreen}
+          dashboardState={dashboardState}
           expanded={expanded && panelOf(expanded) ? expanded : undefined}
+          onWaiting={onWaiting}
           onLayoutChange={onLayoutChange}
           renderPanel={(item, handlers) => {
             const panel = panelOf(item.i);
@@ -798,12 +865,9 @@ function DashboardPage({ savedId }: { savedId?: string }) {
         />
       )}
       {dialog?.kind === 'create' && (
-        // As the original's "Create new": the editor is told the application and the dashboard to come back to
-        <NewVisModal
-          originatingApp="dashboards"
-          containerInfo={{ containerId: container.containerId, containerName: container.containerName }}
-          onClose={() => setDialog(undefined)}
-        />
+        // As the original's visualization factory opens it from a dashboard: the editor is told the
+        // application and the dashboard it came from, to go back there with what it saves
+        <NewVisModal onClose={() => setDialog(undefined)} {...createNewState(container)} />
       )}
       {dialog?.kind === 'discard' && (
         <ConfirmModal
@@ -873,6 +937,32 @@ function DashboardPage({ savedId }: { savedId?: string }) {
 }
 
 const NO_PANELS: PanelState[] = [];
+
+/** The dashboard's menu in the page, where the original's goes when there is no header to hold it */
+function InlineTopNav({ items }: { items: TopNavItem[] }) {
+  return (
+    <div className="dshTopNav" data-test-subj="top-nav">
+      {items.map((item) => {
+        const button = (
+          <Button
+            key={item.id}
+            variant={item.emphasize ? 'default' : 'empty'}
+            icon={item.icon}
+            onClick={item.onClick}
+            to={item.to}
+            disabled={item.disabled}
+            title={item.title}
+            testId={item.testId ?? `topNav-${item.id}`}
+            className={item.hideFor?.map((size) => `shlTopNav__item--hideFor-${size}`).join(' ') || undefined}
+          >
+            {item.label}
+          </Button>
+        );
+        return item.wrap ? <Fragment key={item.id}>{item.wrap(button)}</Fragment> : button;
+      })}
+    </div>
+  );
+}
 
 /** The original's "Create new" of the "Add panels" flyout: a button and the kinds it creates */
 function CreateNewMenu({ onCreate }: { onCreate: () => void }) {

@@ -31,9 +31,10 @@ function Crumb({ item, last, inPopover }: { item: Item; last: boolean; inPopover
   const className = names('shlCrumb', last && 'shlCrumb--last');
   // The original reads a crumb's title from what is drawn, and in the popover nothing is yet
   const title = inPopover ? undefined : crumb.text;
-  if (crumb.to !== undefined) {
+  const address = crumb.href ?? (crumb.to === undefined ? undefined : href(crumb.to));
+  if (address !== undefined) {
     return (
-      <a className={className} href={href(crumb.to)} rel="noreferrer" title={title} data-test-subj={subject}>
+      <a className={className} href={address} rel="noreferrer" title={title} data-test-subj={subject}>
         {crumb.text}
       </a>
     );
