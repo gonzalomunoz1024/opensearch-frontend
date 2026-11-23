@@ -117,19 +117,24 @@ function parsePattern(pattern: string): Parsed {
   return parsed;
 }
 
+// numeral's toFixed: the value moved by the decimals as text, then rounded half up with its sign,
+// so that 1.005 is 1.01 and -2.5 is -2, as the original's numeral writes them
+const roundAsNumeral = (value: number, decimals: number) => Math.round(Number(`${value}e+${decimals}`)) / 10 ** decimals;
+
 function digits(value: number, parsed: Parsed): string {
-  const fixed = Math.abs(value).toFixed(Math.min(parsed.maxDecimals, 20));
+  const decimals = Math.min(parsed.maxDecimals, 20);
+  const fixed = Math.abs(roundAsNumeral(value, decimals)).toFixed(decimals);
   let [whole, fraction = ''] = fixed.split('.');
   while (fraction.length > parsed.minDecimals && fraction.endsWith('0')) fraction = fraction.slice(0, -1);
   if (parsed.thousands) whole = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   return fraction ? `${whole}.${fraction}` : whole;
 }
 
+// numeral's English ordinal, of the value as it is, not as it is rounded: 3.14 is "3th"
 function ordinalSuffix(value: number): string {
-  const whole = Math.round(Math.abs(value));
-  const tens = whole % 100;
-  if (tens >= 11 && tens <= 13) return 'th';
-  return ['th', 'st', 'nd', 'rd'][whole % 10] ?? 'th';
+  if (Math.trunc((value % 100) / 10) === 1) return 'th';
+  const last = value % 10;
+  return last === 1 ? 'st' : last === 2 ? 'nd' : last === 3 ? 'rd' : 'th';
 }
 
 export function formatNumber(value: number, pattern: string): string {
@@ -163,7 +168,15 @@ export function formatNumber(value: number, pattern: string): string {
     unit = ordinalSuffix(value);
   }
 
-  const text = digits(scaled, parsed);
+  // A number JavaScript writes with an exponent (before it is abbreviated) is written so, without
+  // decimals, as numeral writes it
+  const exponent = /e[+-]/.test(String(parsed.abbreviate ? value : scaled));
+  const shown = String(Math.abs(scaled));
+  const text = !exponent
+    ? digits(scaled, parsed)
+    : parsed.thousands
+      ? shown.replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1,')
+      : shown;
   // What rounds to zero carries no sign
   const negative = scaled < 0 && Number(text.replace(/,/g, '')) !== 0;
   const sign = negative ? (parsed.parentheses ? '' : '-') : parsed.forceSign ? '+' : '';

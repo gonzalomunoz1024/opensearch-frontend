@@ -158,6 +158,32 @@ describe('numbers', () => {
     assert.equal(formatNumber(141, '0'), '141');
   });
 
+  it('rounds as numeral 2.5.1 of the original rounds, and writes exponents and ordinals as it does', () => {
+    // What the reference's numeral writes for each
+    const cases: Array<[number, string, string]> = [
+      [-17.5, '0,0', '-17'],
+      [-0.5, '0', '0'],
+      [1.005, '0.00', '1.01'],
+      [2.675, '0.00', '2.68'],
+      [1.45, '0.0', '1.5'],
+      [-0.125, '0.00', '-0.12'],
+      [-0.05, '0.0', '0.0'],
+      [-1234.5675, '0,0.[000]', '-1,234.567'],
+      [0.0045, '0.0%', '0.5%'],
+      [-1.5, '(0)', '(1)'],
+      [-1.5, '+0', '-1'],
+      [1e-7, '0.000', '1e-7'],
+      [1e21, '0.0a', '1000000000t'],
+      [Number.MAX_VALUE, '0,0', '1.7,976,931,348,623,157e+308'],
+      [0.5, '0o', '1th'],
+      [10.5, '0o', '11th'],
+    ];
+    assert.deepEqual(
+      cases.map(([value, pattern]) => formatNumber(value, pattern)),
+      cases.map(([, , expected]) => expected)
+    );
+  });
+
   it('formats a field by its format', () => {
     assert.equal(createFormatter({ id: 'number' })(1234.5).text, '1,234.5');
     assert.equal(createFormatter({ id: 'bytes' })(2048).text, '2KB');
