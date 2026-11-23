@@ -72,6 +72,14 @@ export interface CodeEditorProps {
 const PAIRS: Record<string, string> = { '{': '}', '[': ']', '(': ')', '"': '"' };
 const LINE_HEIGHT = 18;
 
+/**
+ * Where the line of an offset of a text starts, as the original's editor reads it: at 0 for the
+ * text's start, whatever follows it (a search before 0 would find a line break at 0)
+ */
+export function lineStartOf(text: string, offset: number): number {
+  return offset <= 0 ? 0 : text.lastIndexOf('\n', offset - 1) + 1;
+}
+
 const sameTokens = (a: CodeToken[], b: CodeToken[]) =>
   a.length === b.length && a.every((token, index) => token.text === b[index].text && token.kind === b[index].kind);
 
@@ -203,7 +211,7 @@ export function CodeEditor({
         return;
       }
       // Several lines move in or out together
-      const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+      const lineStart = lineStartOf(value, start);
       const block = value.slice(lineStart, end);
       const moved = event.shiftKey
         ? block.replace(/^ {1,2}/gm, '')
@@ -215,7 +223,7 @@ export function CodeEditor({
       );
     } else if (event.key === 'Enter' && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
       event.preventDefault();
-      const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+      const lineStart = lineStartOf(value, start);
       const indent = /^[ \t]*/.exec(value.slice(lineStart, start))?.[0] ?? '';
       const before = value[start - 1];
       const after = value[end];
@@ -256,7 +264,8 @@ export function CodeEditor({
     } else if (/^[}\])]$/.test(event.key) && start === end && value[start] === event.key) {
       event.preventDefault();
       target.setSelectionRange(start + 1, start + 1);
-    } else if (event.key === 'Backspace' && start === end && start > 0) {
+    } else if (event.key === 'Backspace' && start === end && start > 0 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      // A pair goes as one, as the original's; held with a key that takes a word, the word goes
       const before = value[start - 1];
       if (PAIRS[before] && value[start] === PAIRS[before]) {
         event.preventDefault();

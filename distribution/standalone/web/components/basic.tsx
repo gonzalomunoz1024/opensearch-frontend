@@ -255,7 +255,8 @@ export function EmptyPrompt({
   );
 }
 
-export function Spinner({ size }: { size?: 'l' }) {
+/** The original's spinner: 16 px, or its sizes "l" (24 px) and "xl" (32 px) */
+export function Spinner({ size }: { size?: 'l' | 'xl' }) {
   return <span className={cx('atlSpinner', size && `atlSpinner--${size}`)} role="progressbar" />;
 }
 
@@ -306,17 +307,21 @@ export interface TabItem {
   testId?: string;
 }
 
+/** Tabs as the theme draws the original's: pills, the one shown on the secondary surface */
 export function Tabs({
   tabs,
   selected,
   onSelect,
+  size = 'm',
 }: {
   tabs: TabItem[];
   selected: string;
   onSelect?: (id: string) => void;
+  /** The original's sizes: 'm', its own, and 's', a little tighter */
+  size?: 's' | 'm';
 }) {
   return (
-    <div className="atlTabs" role="tablist">
+    <div className={cx('atlTabs', size === 's' && 'atlTabs--s')} role="tablist">
       {tabs.map((tab) =>
         tab.to !== undefined ? (
           <a

@@ -304,7 +304,7 @@ export function AdvancedSettings({ query = '' }: { query?: string }) {
       <CallOuts />
       {status === 'loading' ? (
         <div className="mgtSettings__loading">
-          <span className="atlSpinner atlSpinner--l" role="progressbar" data-test-subj="advancedSettingsLoading" />
+          <span className="atlSpinner atlSpinner--xl" role="progressbar" data-test-subj="advancedSettingsLoading" />
         </div>
       ) : status === 'failed' ? (
         <div className="atlEmpty mgtSettings__loadError" data-test-subj="advancedSettingsLoadError">

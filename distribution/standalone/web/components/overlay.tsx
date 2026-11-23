@@ -457,6 +457,7 @@ export function ContextMenu({
   initial,
   onDone,
   small,
+  width,
   testId,
 }: {
   panels: ContextMenuPanel[];
@@ -465,6 +466,12 @@ export function ContextMenu({
   onDone?: () => void;
   /** The original's small menu: rows of 37px rather than 33px */
   small?: boolean;
+  /**
+   * Given, the original's menu of panels (EuiContextMenu, 256 px wide of its own): this wide, its
+   * rows cut at its round corners as that one's are. Left out, a panel of items alone
+   * (EuiContextMenuPanel): as wide as its items, cutting nothing, not even the ring of the focus.
+   */
+  width?: number;
   testId?: string;
 }) {
   const [trail, setTrail] = useState<string[]>([]);
@@ -512,7 +519,8 @@ export function ContextMenu({
   return (
     <div
       ref={menu}
-      className={cx('atlContextMenu', small && 'atlContextMenu--small')}
+      className={cx('atlContextMenu', small && 'atlContextMenu--small', width !== undefined && 'atlContextMenu--framed')}
+      style={width !== undefined ? { width } : undefined}
       role="menu"
       data-test-subj={testId}
       onKeyDown={onKeyDown}
@@ -1057,8 +1065,10 @@ export function Tooltip({
   const [shown, setShown] = useState(false);
   const timer = useRef<number | undefined>(undefined);
   const id = useId();
+  // As the original's, a tooltip with nothing to say draws no box
+  const drawn = shown && Boolean(content);
   useLayoutEffect(() => {
-    if (!shown || !anchor.current || !box.current) return;
+    if (!drawn || !anchor.current || !box.current) return;
     // The window as the original measures it: without its scroll bars
     const { clientWidth, clientHeight } = document.documentElement;
     const { left, top } = placeTooltip(
@@ -1068,10 +1078,10 @@ export function Tooltip({
       position
     );
     setPlace({ left, top });
-  }, [shown, content, position]);
+  }, [drawn, content, position]);
   // As the original's, what the tooltip is about is described by it while it shows
   const anchored = isValidElement<{ 'aria-describedby'?: string }>(children)
-    ? cloneElement(children, { 'aria-describedby': describedBy(children.props['aria-describedby'], id, shown) })
+    ? cloneElement(children, { 'aria-describedby': describedBy(children.props['aria-describedby'], id, drawn) })
     : children;
   useEffect(() => () => window.clearTimeout(timer.current), []);
   const show = () => {
@@ -1094,7 +1104,7 @@ export function Tooltip({
       onBlur={hide}
     >
       {anchored}
-      {shown && (
+      {drawn && (
         <Portal>
           <div
             ref={box}

@@ -379,7 +379,7 @@ function ObjectsTable({ allowedTypes }: { allowedTypes: string[] }) {
         {deleteState === 'deleting' && (
           <Portal>
             <div className="atlScrim sobBusy">
-              <Spinner size="l" />
+              <Spinner size="xl" />
             </div>
           </Portal>
         )}
@@ -649,7 +649,7 @@ function Relationships({ object, allowedTypes, onClose }: { object: ManagedObjec
           <p>{state.error}</p>
         </Callout>
       ) : !state.relationships ? (
-        <Spinner size="l" />
+        <Spinner size="xl" />
       ) : (
         <div>
           <Callout tone="primary">

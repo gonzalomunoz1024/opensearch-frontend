@@ -804,11 +804,17 @@ select.atlField {
   animation: atlSpin 0.6s linear infinite;
 }
 
+/* The original's sizes: "l" 24 px, "xl" 32 px, with the thick border */
 .atlSpinner--l,
+.atlSpinner--xl {
+  width: 24px;
+  height: 24px;
+  border-width: 2px;
+}
+
 .atlSpinner--xl {
   width: 32px;
   height: 32px;
-  border-width: 2px;
 }
 
 @keyframes atlSpin {
@@ -857,42 +863,46 @@ select.atlField {
 
 /* --- Tabs ---------------------------------------------------------------------------------- */
 
+/* As the theme draws the original's tabs: pills 4 px apart and no line under them, the one shown
+   in the colour of the text on the secondary surface, the others in the secondary colour until the
+   pointer or the focus comes */
 .atlTabs {
   display: flex;
-  gap: var(--space-4);
-  border-bottom: 1px solid var(--color-border-light);
+  gap: var(--space-1);
   overflow-x: auto;
 }
 
 .atlTab {
   position: relative;
-  padding: var(--space-2) 0;
+  padding: 6px var(--space-3);
   border: 0;
-  background: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
   color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
   font-weight: var(--font-weight-medium);
+  line-height: 1.5;
   white-space: nowrap;
   cursor: pointer;
+  transition:
+    color var(--duration-fast) ease-out,
+    background-color var(--duration-fast) ease-out;
 }
 
-.atlTab:hover {
+.atlTabs--s .atlTab {
+  padding: var(--space-1) 10px;
+}
+
+.atlTab:hover,
+.atlTab:focus {
   color: var(--color-text-primary);
   text-decoration: none;
 }
 
 .atlTab[aria-selected="true"] {
-  color: var(--color-accent);
-}
-
-.atlTab[aria-selected="true"]::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1px;
-  height: 2px;
-  border-radius: 1px;
-  background: var(--color-accent);
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  cursor: default;
 }
 
 /* A segmented control: the kit's way to pick one of a few */
@@ -1344,6 +1354,13 @@ select.atlField {
   line-height: 21px;
 }
 
+/* The original's menu of panels: its rows cut at the panel's round corners */
+.atlContextMenu--framed {
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+}
+
 .atlContextMenu__item:hover,
 .atlContextMenu__item:focus {
   background: var(--color-surface-secondary);
@@ -1443,7 +1460,8 @@ select.atlField {
   flex-direction: column;
   width: 100%;
   max-width: 480px;
-  max-height: 75vh;
+  /* As the original's, three quarters of the window inside its border */
+  max-height: calc(75vh + 2px);
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-xl);
   background: var(--color-surface);

@@ -6,11 +6,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { Button, IconButton } from '../../web/components/basic';
-import { CodeEditor } from '../../web/components/code_editor';
+import { Button, IconButton, Spinner, Tabs } from '../../web/components/basic';
+import { CodeEditor, lineStartOf } from '../../web/components/code_editor';
 import { ComboBox } from '../../web/components/combo_box';
 import { Icon, iconDrawing } from '../../web/components/icon';
-import { describedBy, initialModalFocus, placeTooltip } from '../../web/components/overlay';
+import { ContextMenu, describedBy, initialModalFocus, placeTooltip } from '../../web/components/overlay';
 import { Pagination, pageButtons } from '../../web/components/table';
 
 /**
@@ -110,6 +110,36 @@ describe('the fields and boxes, as the original draws them', () => {
     }
   });
 
+  it("reads the line of a text's first offset as starting there, as the original's editor", () => {
+    assert.equal(lineStartOf('\nabc', 0), 0);
+    assert.equal(lineStartOf('\nabc', 1), 1);
+    assert.equal(lineStartOf('ab\ncd', 4), 3);
+    assert.equal(lineStartOf('abc', 2), 0);
+  });
+
+  it('draws its tabs as the theme draws the original\'s: pills, the one shown on the secondary surface', () => {
+    const tabs = [
+      { id: 'a', label: 'Alpha' },
+      { id: 'b', label: 'Beta' },
+    ];
+    assert.match(renderToStaticMarkup(<Tabs tabs={tabs} selected="a" />), /^<div class="atlTabs" role="tablist">/);
+    assert.match(renderToStaticMarkup(<Tabs tabs={tabs} selected="a" size="s" />), /^<div class="atlTabs atlTabs--s" role="tablist">/);
+    assert.ok(!declarationsOf('.atlTabs').includes('border-bottom'));
+    assert.match(declarationsOf('.atlTab'), /border-radius: var\(--radius-sm\);/);
+    assert.match(declarationsOf('.atlTab[aria-selected="true"]'), /background: var\(--color-surface-secondary\);/);
+    assert.match(declarationsOf('.atlTabs--s .atlTab'), /padding: var\(--space-1\) 10px;/);
+  });
+
+  it('spins in the sizes of the original: "l" 24 px, "xl" 32 px', () => {
+    assert.equal(renderToStaticMarkup(<Spinner size="xl" />), '<span class="atlSpinner atlSpinner--xl" role="progressbar"></span>');
+    assert.match(declarationsOf('.atlSpinner--l,\n.atlSpinner--xl'), /width: 24px;/);
+    assert.match(declarationsOf('.atlSpinner--xl'), /width: 32px;/);
+  });
+
+  it('lets a dialog be three quarters of the window high inside its border, as the original', () => {
+    assert.match(declarationsOf('.atlModal'), /max-height: calc\(75vh \+ 2px\);/);
+  });
+
   it('sets the arrows of its pages in the font of the page buttons, as the original', () => {
     const arrow = declarationsOf('.atlPagination__arrow');
     assert.match(arrow, /font-size: var\(--font-size-s\);/);
@@ -172,6 +202,19 @@ describe('the pages of a table', () => {
     );
     assert.match(sized, /^<div class="atlPagination ownPager">/);
     assert.match(sized, /data-test-subj="tablePaginationPopoverButton">Rows per page: (<!-- -->)?20</);
+  });
+});
+
+describe('the context menu', () => {
+  const panels = [{ id: 'main', items: [{ id: 'one', label: 'One', onClick: () => undefined }] }];
+
+  it('is a panel of items as wide as they are, or, given a width, the original\'s menu of panels', () => {
+    assert.match(markupOf(<ContextMenu panels={panels} />), /^<div class="atlContextMenu" role="menu">/);
+    assert.match(markupOf(<ContextMenu panels={panels} width={256} />), /^<div class="atlContextMenu atlContextMenu--framed" style="width:256px" role="menu">/);
+    // Its rows cut at its round corners, as the original's
+    const framed = declarationsOf('.atlContextMenu--framed');
+    assert.match(framed, /overflow: hidden;/);
+    assert.match(framed, /border-radius: var\(--radius-lg\);/);
   });
 });
 
