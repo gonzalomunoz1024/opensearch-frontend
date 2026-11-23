@@ -14,6 +14,8 @@
   /* EuiLink's primary colour under the pointer and its fill with the focus */
   --qwb-link-hover: #0062cc;
   --qwb-link-focus: #e6f2ff;
+  /* The theme's chosen button of a group, which is raised above the page in dark */
+  --qwb-switch-selected: var(--color-surface);
 
   display: flex;
   flex: none;
@@ -26,6 +28,7 @@
   --qwb-focus-from: rgb(10 132 255 / 0%);
   --qwb-link-hover: #006bd6;
   --qwb-link-focus: #16416d;
+  --qwb-switch-selected: var(--color-surface-tertiary);
 }
 
 /* The theme's ring stands 2 px off what has the keyboard's focus */
@@ -283,7 +286,7 @@
   text-align: center;
 }
 
-/* EuiIcon's "subdued" colour */
+/* The theme's colour for the icon of an empty prompt */
 .qwbPrompt__icon {
   color: var(--color-text-tertiary);
 }
@@ -342,7 +345,7 @@
 .qwbSwitch__button--selected {
   position: relative;
   z-index: 0;
-  background: var(--color-surface);
+  background: var(--qwb-switch-selected);
   box-shadow: var(--shadow-sm);
   color: var(--color-text-primary);
 }
@@ -981,14 +984,14 @@
 .themeDark .qwbComplete {
   --qwb-code-gutter-line: #38383a;
   --qwb-code-keyword: hsl(196deg 47.83% 57.37%);
-  --qwb-code-language: rgb(149.7 152.3 249.3);
-  --qwb-code-function: rgb(154.9 163.1 182.6);
-  --qwb-code-operator: rgb(162 162 166.6);
-  --qwb-code-string: rgb(76.9 183.8 103.5);
+  --qwb-code-language: rgb(149.75 152.27 249.33);
+  --qwb-code-function: rgb(154.9 163.11 182.62);
+  --qwb-code-operator: rgb(162.04 162.04 166.56);
+  --qwb-code-string: rgb(76.92 183.77 103.46);
   --qwb-code-comment: hsl(151deg 20.13% 59.2%);
   --qwb-code-selection: rgb(23.3 59.9 98.2);
   --qwb-code-cursor: #fff;
-  --qwb-code-match: rgb(36.4 178.7 169.3);
+  --qwb-code-match: rgb(36.37 178.69 169.26);
 }
 
 .qwbCode {
