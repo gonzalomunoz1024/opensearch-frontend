@@ -95,7 +95,7 @@ function withDefaults(defaults: Params, params: Params): Params {
   return merged;
 }
 
-export function GaugeVis({ vis, data, uiState, onUiState, split }: VisRenderProps) {
+export function GaugeVis({ vis, data, uiState, onUiState, split, splits }: VisRenderProps) {
   const params = useMemo(() => withDefaults(vis.type === 'goal' ? GOAL_DEFAULTS : GAUGE_DEFAULTS, vis.params), [vis.type, vis.params]);
   const config = useMemo(() => meterConfig(params.gauge), [params]);
   const { table, context } = data;
@@ -105,41 +105,48 @@ export function GaugeVis({ vis, data, uiState, onUiState, split }: VisRenderProp
   const gauge = params.gauge;
   const percentageMode = typeof gauge === 'object' && gauge !== null && 'percentageMode' in gauge && gauge.percentageMode === true;
 
-  const prepared = useMemo(() => {
+  // The chart, or a chart per bucket of a split: each of its own rows, with its bucket
+  const parts = useMemo(() => splits?.parts.map((part) => ({ table: part.table, split: part.split })) ?? [{ table, split }], [splits, table, split]);
+
+  const charts = useMemo(() => {
     const percent = createFormatter({ id: 'percent' }, settings);
-    const metricAggs = new Set(table.columns.filter((column) => column.kind === 'metric').map((column) => column.agg.id));
-    const points = buildPointSeries(table.columns, table.rows, {
-      percentFormat: (value) => percent(value).text,
-      percentAggs: percentageMode ? metricAggs : undefined,
+    const drawn = parts.map((part) => {
+      const metricAggs = new Set(part.table.columns.filter((column) => column.kind === 'metric').map((column) => column.agg.id));
+      const points = buildPointSeries(part.table.columns, part.table.rows, {
+        percentFormat: (value) => percent(value).text,
+        percentAggs: percentageMode ? metricAggs : undefined,
+      });
+      const parent = points.groupColumns[0];
+      const bucket = part.split;
+      // A chart of a split names its bucket in the tooltip by its key as it is
+      const splitDetail: TooltipDetail | undefined = bucket
+        ? {
+            label: bucket.column.name,
+            value: bucket.key !== null && typeof bucket.key === 'object' ? keyLabel(bucket.column, bucket.key) : String(bucket.key),
+          }
+        : undefined;
+      const series: GaugeSeries[] = points.series.map((item) => {
+        const point = item.values[0];
+        const y = point?.y ?? null;
+        const details: TooltipDetail[] = [{ label: points.xLabel, value: points.xFormat(point?.x ?? '_all') }];
+        if (y !== null) details.push({ label: points.columnCount > 2 ? item.metric.name : item.label, value: item.format(y) });
+        if (parent && point?.series) details.push({ label: parent.name, value: point.series });
+        if (splitDetail) details.push(splitDetail);
+        return {
+          label: item.label,
+          y,
+          // A value that is not there is written as the number formats write it: not at all
+          format: (value: number | null) => (value === null ? '' : item.format(value)),
+          details,
+        };
+      });
+      const title = bucket ? `${keyLabel(bucket.column, bucket.key)}: ${bucket.column.name}` : points.yLabel;
+      return { series, title };
     });
-    // The series take their place in the page's memory of colours, as in OpenSearch Dashboards
-    assignColors([...new Set(points.series.map((series) => series.label))]);
-    const parent = points.groupColumns[0];
-    // A chart of a split names its bucket in the tooltip by its key as it is
-    const splitDetail: TooltipDetail | undefined = split
-      ? {
-          label: split.column.name,
-          value: split.key !== null && typeof split.key === 'object' ? keyLabel(split.column, split.key) : String(split.key),
-        }
-      : undefined;
-    const series: GaugeSeries[] = points.series.map((item) => {
-      const point = item.values[0];
-      const y = point?.y ?? null;
-      const details: TooltipDetail[] = [{ label: points.xLabel, value: points.xFormat(point?.x ?? '_all') }];
-      if (y !== null) details.push({ label: points.columnCount > 2 ? item.metric.name : item.label, value: item.format(y) });
-      if (parent && point?.series) details.push({ label: parent.name, value: point.series });
-      if (splitDetail) details.push(splitDetail);
-      return {
-        label: item.label,
-        y,
-        // A value that is not there is written as the number formats write it: not at all
-        format: (value: number | null) => (value === null ? '' : item.format(value)),
-        details,
-      };
-    });
-    const title = split ? `${keyLabel(split.column, split.key)}: ${split.column.name}` : points.yLabel;
-    return { series, title };
-  }, [table, settings, percentageMode, split]);
+    // The series of every chart take their place in the page's memory of colours, as in OpenSearch Dashboards
+    assignColors([...new Set(drawn.flatMap((chart) => chart.series.map((item) => item.label)))]);
+    return drawn;
+  }, [parts, settings, percentageMode]);
 
   const labels = useMemo(() => gaugeLabels(config), [config]);
   const rangeColors = useMemo(() => gaugeColors(config, dark), [config, dark]);
@@ -157,8 +164,8 @@ export function GaugeVis({ vis, data, uiState, onUiState, split }: VisRenderProp
   return (
     <GaugeChart
       config={config}
-      series={prepared.series}
-      title={prepared.title}
+      charts={charts}
+      rows={splits?.rows}
       labels={labels}
       colorOf={colorOf}
       addTooltip={Boolean(params.addTooltip)}

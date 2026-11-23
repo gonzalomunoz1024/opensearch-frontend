@@ -93,12 +93,9 @@ export const takesTurn = (type: string) => type in DRAWN;
 // The maps filter as they always have; the other drawings' clicks go as the original's value click
 const MAPS = new Set(['region_map', 'tile_map']);
 
-// vislib's gauge layout has no titles over the charts of a split: each names itself under its gauges
-const UNTITLED_SPLITS = new Set(['gauge', 'goal']);
-
 // The kinds that lay out the charts of a split themselves, in vislib's frame: one legend for them
-// all and the titles beside the rows or under the columns
-const VISLIB_SPLITS = new Set(['pie']);
+// all, and a pie's titles beside the rows or under the columns (a gauge names itself under its gauges)
+const VISLIB_SPLITS = new Set(['pie', 'gauge', 'goal']);
 
 function AggVisualization({ vis: saved, input, tick, uiState, onUiState, onFilter, onTimeChange, onData, turn, onError }: VisualizationProps) {
   // Params a drawing sets on an aggregation (a map's bounds and precision), until the aggregations change
@@ -180,7 +177,7 @@ function AggVisualization({ vis: saved, input, tick, uiState, onUiState, onFilte
       <div className={`visSplit ${asRows ? 'visSplit--rows' : 'visSplit--columns'}`}>
         {parts.map((part) => (
           <div key={part.label} className="visSplit__part">
-            {!UNTITLED_SPLITS.has(vis.type) && <div className="visSplit__title">{part.label}</div>}
+            <div className="visSplit__title">{part.label}</div>
             <div className="visSplit__body">{draw({ ...props, data: { ...data, table: part.table }, split: part.split })}</div>
           </div>
         ))}

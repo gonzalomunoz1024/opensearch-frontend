@@ -3,15 +3,17 @@
 /*
  * The gauges of a chart as vislib lays them out (its gauge layout and GaugeChart): in the chart's
  * room, centred on a line or one under the other, each in an SVG of its own, with the name of the
- * measure, or of the chart in a split, under them. Pointing at a gauge's value shows its tooltip;
- * pointing at a range in the legend dims the gauges whose value is in another. A gauge is not
- * clicked on.
+ * measure, or of the chart in a split, under them. A split puts its charts side by side in
+ * columns or one under another in rows, five pixels apart, with one legend for them all and no
+ * title beside them. Pointing at a gauge's value shows its tooltip; pointing at a range in the
+ * legend dims the gauges whose value is in another, in every chart. A gauge is not clicked on.
  */
 
 import { useCallback, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useSize } from '../../charts/core';
 import { drawMeter, gaugeSize, type MeterConfig } from './gauge';
 import { VisLegend, type VisLegendProps } from './legend';
+import { SplitCharts } from './split';
 import { measureText } from './text';
 import { VislibTooltip, type Placement, type TooltipDetail, type TooltipState } from './tooltip';
 
@@ -25,11 +27,18 @@ export interface GaugeSeries {
   details: TooltipDetail[];
 }
 
+/** The gauges of one chart and the name under them */
+export interface GaugeChartPart {
+  series: GaugeSeries[];
+  title: string;
+}
+
 export interface GaugeChartProps {
   config: MeterConfig;
-  series: GaugeSeries[];
-  /** The name under the gauges */
-  title: string;
+  /** The chart, or the charts of a split */
+  charts: GaugeChartPart[];
+  /** In a split, whether its charts are rows, one under another, or columns side by side */
+  rows?: boolean;
   /** The names of the ranges, which the legend lists */
   labels: string[];
   colorOf: (label: string) => string;
@@ -51,12 +60,16 @@ const textStyle = (hidden: boolean, large = false): CSSProperties => ({
   display: hidden ? 'none' : 'initial',
 });
 
-export function GaugeChart({ config, series, title, labels, colorOf, addTooltip, dimming, legend }: GaugeChartProps) {
+interface GaugeCanvasProps extends Pick<GaugeChartProps, 'config' | 'colorOf' | 'addTooltip'>, GaugeChartPart {
+  opacityOf: (label: string) => number | undefined;
+  onUnhighlight: () => void;
+  onTooltip: (state: TooltipState | undefined) => void;
+  onLeave: () => void;
+}
+
+/** The gauges of a chart in its room */
+function GaugeCanvas({ config, series, title, colorOf, addTooltip, opacityOf, onUnhighlight, onTooltip, onLeave }: GaugeCanvasProps) {
   const [chartRef, size] = useSize<HTMLDivElement>();
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  const [hover, setHover] = useState<Hover>({ touched: false });
-  const [tooltip, setTooltip] = useState<TooltipState>();
-  const placement = useRef<Placement | undefined>(undefined);
 
   const drawn = useMemo(() => {
     // The room as the chart's clientWidth and clientHeight give it
@@ -76,6 +89,76 @@ export function GaugeChart({ config, series, title, labels, colorOf, addTooltip,
     };
   }, [size, config, series, colorOf, chartRef]);
 
+  const outline = config.outline ? 'visGauge__meter--outline' : undefined;
+  return (
+    <div className="chart" ref={chartRef} style={{ textAlign: 'center', overflowY: 'auto' }} onMouseLeave={onLeave}>
+      {drawn?.gauges.map((gauge, index) => {
+        const item = series[index];
+        return (
+          <svg key={index} style={{ display: 'inline-block', overflow: 'hidden' }} focusable="false" width={drawn.width} height={drawn.height}>
+            <g transform={gauge.transform}>
+              <g data-label={gauge.holderLabel} style={{ opacity: opacityOf(gauge.holderLabel) }}>
+                <path d={gauge.background} className={outline} style={{ fill: config.style.bgFill }} />
+                <path
+                  d={gauge.value}
+                  className={outline}
+                  style={{ fill: gauge.valueColor }}
+                  onMouseOut={onUnhighlight}
+                  onMouseMove={
+                    addTooltip ? (event) => onTooltip({ clientX: event.clientX, clientY: event.clientY, details: item.details }) : undefined
+                  }
+                  onMouseLeave={() => onTooltip(undefined)}
+                />
+                <text className="chart-label" y={-5} style={textStyle(gauge.valueText.hidden, true)}>
+                  {gauge.valueText.text}
+                </text>
+              </g>
+              {gauge.label && (
+                <text className="chart-label" y={-30} style={textStyle(gauge.label.hidden)}>
+                  {gauge.label.text}
+                </text>
+              )}
+              {gauge.subText && (
+                <text className="chart-label" y={20} style={textStyle(gauge.subText.hidden)}>
+                  {gauge.subText.text}
+                </text>
+              )}
+              {gauge.scale && (
+                <g>
+                  {gauge.scale.arcs.map((arc, at) => (
+                    <path key={at} d={arc.d} style={{ stroke: arc.color, fill: arc.color }} />
+                  ))}
+                  {gauge.scale.ticks.map((tick, at) => (
+                    <line
+                      key={`tick${at}`}
+                      x1={tick.x1}
+                      x2={tick.x2}
+                      y1={tick.y1}
+                      y2={tick.y2}
+                      style={{ strokeWidth: config.scale.width, stroke: tick.color }}
+                    />
+                  ))}
+                </g>
+              )}
+            </g>
+          </svg>
+        );
+      })}
+      {drawn && (
+        <div className="chart-title" style={{ textAlign: 'center' }}>
+          {title}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function GaugeChart({ config, charts, rows, labels, colorOf, addTooltip, dimming, legend }: GaugeChartProps) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [hover, setHover] = useState<Hover>({ touched: false });
+  const [tooltip, setTooltip] = useState<TooltipState>();
+  const placement = useRef<Placement | undefined>(undefined);
+
   const highlight = useCallback((label: string | undefined) => {
     setHover((current) => (label === undefined ? { touched: current.touched || current.label !== undefined } : { label, touched: true }));
   }, []);
@@ -85,8 +168,23 @@ export function GaugeChart({ config, series, title, labels, colorOf, addTooltip,
     if (hover.label !== undefined) return hover.label === label ? 1 : dimming;
     return hover.touched ? 1 : undefined;
   };
+  const onLeave = useCallback(() => (placement.current = undefined), []);
 
-  const outline = config.outline ? 'visGauge__meter--outline' : undefined;
+  const canvases = charts.map((chart, index) => (
+    <GaugeCanvas
+      key={index}
+      config={config}
+      series={chart.series}
+      title={chart.title}
+      colorOf={colorOf}
+      addTooltip={addTooltip}
+      opacityOf={opacityOf}
+      onUnhighlight={unhighlight}
+      onTooltip={setTooltip}
+      onLeave={onLeave}
+    />
+  ));
+
   const legendPosition = legend?.position;
   return (
     <div className={`visLib${legendPosition ? ` visLib--legend-${legendPosition}` : ''}`} data-test-subj="visLib">
@@ -94,74 +192,7 @@ export function GaugeChart({ config, series, title, labels, colorOf, addTooltip,
         <div className="visWrapper" ref={wrapperRef} data-test-subj="visChart">
           <div className="visAxis__splitTitles--y" />
           <div className="visWrapper__column">
-            <div className="visWrapper__chart">
-              <div
-                className="chart"
-                ref={chartRef}
-                style={{ textAlign: 'center', overflowY: 'auto' }}
-                onMouseLeave={() => (placement.current = undefined)}
-              >
-                {drawn?.gauges.map((gauge, index) => {
-                  const item = series[index];
-                  return (
-                    <svg key={index} style={{ display: 'inline-block', overflow: 'hidden' }} focusable="false" width={drawn.width} height={drawn.height}>
-                      <g transform={gauge.transform}>
-                        <g data-label={gauge.holderLabel} style={{ opacity: opacityOf(gauge.holderLabel) }}>
-                          <path d={gauge.background} className={outline} style={{ fill: config.style.bgFill }} />
-                          <path
-                            d={gauge.value}
-                            className={outline}
-                            style={{ fill: gauge.valueColor }}
-                            onMouseOut={unhighlight}
-                            onMouseMove={
-                              addTooltip
-                                ? (event) => setTooltip({ clientX: event.clientX, clientY: event.clientY, details: item.details })
-                                : undefined
-                            }
-                            onMouseLeave={() => setTooltip(undefined)}
-                          />
-                          <text className="chart-label" y={-5} style={textStyle(gauge.valueText.hidden, true)}>
-                            {gauge.valueText.text}
-                          </text>
-                        </g>
-                        {gauge.label && (
-                          <text className="chart-label" y={-30} style={textStyle(gauge.label.hidden)}>
-                            {gauge.label.text}
-                          </text>
-                        )}
-                        {gauge.subText && (
-                          <text className="chart-label" y={20} style={textStyle(gauge.subText.hidden)}>
-                            {gauge.subText.text}
-                          </text>
-                        )}
-                        {gauge.scale && (
-                          <g>
-                            {gauge.scale.arcs.map((arc, at) => (
-                              <path key={at} d={arc.d} style={{ stroke: arc.color, fill: arc.color }} />
-                            ))}
-                            {gauge.scale.ticks.map((tick, at) => (
-                              <line
-                                key={`tick${at}`}
-                                x1={tick.x1}
-                                x2={tick.x2}
-                                y1={tick.y1}
-                                y2={tick.y2}
-                                style={{ strokeWidth: config.scale.width, stroke: tick.color }}
-                              />
-                            ))}
-                          </g>
-                        )}
-                      </g>
-                    </svg>
-                  );
-                })}
-                {drawn && (
-                  <div className="chart-title" style={{ textAlign: 'center' }}>
-                    {title}
-                  </div>
-                )}
-              </div>
-            </div>
+            {rows === undefined ? <div className="visWrapper__chart">{canvases}</div> : <SplitCharts rows={rows}>{canvases}</SplitCharts>}
             <div className="visWrapper__alerts" />
             <div className="visAxis__splitTitles--x" />
           </div>
