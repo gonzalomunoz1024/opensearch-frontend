@@ -21,6 +21,14 @@
   border-bottom: 1px solid var(--color-border-light);
 }
 
+/* A button of the header that says why it cannot be pressed is inside what shows that: it stays
+   the header's main button, as wide and with its icon as far from its text */
+.shlHeader__actions > .atlTooltipAnchor > .atlButton:not(.atlButton--empty) {
+  gap: var(--space-2);
+  min-width: 112px;
+  border: 1px solid transparent;
+}
+
 .vbdLayout {
   display: grid;
   flex: 1 1 auto;
@@ -54,9 +62,13 @@
   background: var(--color-surface);
 }
 
+/* As the component library's scroll with shadows: what scrolls fades out over the last 7.5 px
+   at the top and at the bottom */
 .vbdSide__style {
   min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
+  mask-image: linear-gradient(to bottom, rgb(0 0 0 / 10%), #000 7.5px, #000 calc(100% - 7.5px), rgb(0 0 0 / 10%));
 }
 
 /* The index pattern: a field with "Data Source" in front, as the original's form control layout
@@ -104,6 +116,7 @@
   color: var(--color-text-primary);
   font: inherit;
   font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
   line-height: 21px;
   text-align: left;
   white-space: nowrap;
@@ -276,6 +289,35 @@
   padding: 0;
 }
 
+/* The original's button that clears the search, not the browser's: a 12 px disc with a cross,
+   8 px from the outer edge, which leaves the text 32 px short of the end */
+.vbdFields__search.atlFieldGroup > input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.vbdFields__clear {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  margin-right: -1px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-text-tertiary);
+  color: var(--color-surface);
+  cursor: pointer;
+}
+
+.vbdFields__clear > .atlIcon {
+  width: 6px;
+  height: 6px;
+  stroke: currentcolor;
+  stroke-width: 4;
+}
+
 .vbdFields__groups {
   margin: var(--space-2) calc(-1 * var(--space-2)) 0;
   padding: 0 var(--space-2);
@@ -330,7 +372,9 @@
   outline-offset: -1px;
 }
 
+/* The title is a title's colour inside the accent's button, whose arrow keeps the accent */
 .vbdFieldGroup__title {
+  color: var(--color-text-primary);
   font-size: var(--font-size-s);
   font-weight: var(--font-weight-semibold);
   line-height: 20px;
@@ -344,6 +388,7 @@
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
   line-height: 20px;
   text-align: center;
 }
@@ -352,6 +397,11 @@
   display: flex;
   flex-direction: column;
   padding-bottom: var(--space-1);
+}
+
+/* A group with no field is its title alone */
+.vbdFieldGroup__fields:empty {
+  padding-bottom: 0;
 }
 
 .vbdFields__item {
@@ -568,6 +618,7 @@
   background: var(--color-surface-secondary);
   overflow-x: hidden;
   overflow-y: auto;
+  mask-image: linear-gradient(to bottom, rgb(0 0 0 / 10%), #000 7.5px, #000 calc(100% - 7.5px), rgb(0 0 0 / 10%));
 }
 
 .vbdConfig__section {

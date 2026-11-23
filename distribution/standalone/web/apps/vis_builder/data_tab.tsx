@@ -9,6 +9,7 @@
  */
 
 import {
+  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -69,8 +70,21 @@ const FILTERABLE_TYPES = ['string', 'number', 'date', 'ip', 'boolean', 'histogra
 const filterable = (field: Field) =>
   field.name === '_id' || Boolean(field.scripted) || (field.searchable && FILTERABLE_TYPES.includes(field.type));
 
-/** A name that may break after each dot: a long field name wraps where it reads well */
-const wrapOnDot = (name: string) => name.replace(/\./g, '.​');
+/**
+ * A name that may break after each dot, as the original writes one: a long field name wraps where
+ * it reads well, and is copied as it is
+ */
+const wrapOnDot = (name: string): ReactNode =>
+  name.split('.').map((part, index) => (
+    <Fragment key={index}>
+      {index > 0 && (
+        <>
+          .<wbr />
+        </>
+      )}
+      {part}
+    </Fragment>
+  ));
 
 const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
@@ -188,6 +202,7 @@ function FieldSelector({
   onAddFilters,
 }: Pick<DataTabProps, 'state' | 'update' | 'indexPattern' | 'hits' | 'onAddFilters'> & { dnd: DragAndDrop }) {
   const search = state.visualization.searchField;
+  const setSearch = (searchField: string) => update((current) => ({ ...current, visualization: { ...current.visualization, searchField } }));
   const metaFields = services.uiSettings.get<string[]>('metaFields', META_FIELDS);
   const groups = useMemo(() => {
     const result: Record<FieldCategory, Field[]> = { categorical: [], numerical: [], meta: [] };
@@ -207,8 +222,24 @@ function FieldSelector({
           value={search}
           placeholder="Search field names"
           aria-label="Search field names"
-          onChange={(searchField) => update((current) => ({ ...current, visualization: { ...current.visualization, searchField } }))}
+          onChange={setSearch}
           testId="fieldFilterSearchInput"
+          append={
+            // The original's button that clears the search, which gives the focus back to it
+            search ? (
+              <button
+                type="button"
+                className="vbdFields__clear"
+                aria-label="Clear input"
+                onClick={(event) => {
+                  setSearch('');
+                  event.currentTarget.parentElement?.querySelector('input')?.focus();
+                }}
+              >
+                <Icon name="cross" />
+              </button>
+            ) : undefined
+          }
         />
       </form>
       <div className="vbdFields__groups">
