@@ -99,7 +99,8 @@ describe('the two ways from a page to OpenSearch', () => {
       // A name from a request that a route puts into a path
       await ask(server.url, 'GET', '/api/index_patterns/_fields_for_wildcard?pattern=..');
       const seen = opensearch.seen.filter((line) => !/^(GET \/|HEAD \/\.kibana)$/.test(line));
-      assert.equal(seen[0], 'POST /../_search');
+      // with the time limit of a shard the original's searches carry (opensearch.shardTimeout)
+      assert.equal(seen[0], 'POST /../_search?timeout=30000ms');
       assert.match(seen[1], /^GET \/\.\.\/_field_caps\?/);
       assert.equal(seen.length, 2);
     } finally {

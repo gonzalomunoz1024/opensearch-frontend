@@ -7,17 +7,28 @@
  * Where it costs nothing the API keeps the paths and shapes of OpenSearch Dashboards 3.9.0
  * (`/api/status`, `/api/saved_objects/...`, `/api/opensearch-dashboards/settings`,
  * `/api/console/proxy`), so that scripts and probes written for it keep working.
+ *
+ * Every request goes the way it goes in the original's server (src/core/server/http): the base
+ * path is taken off when server.rewriteBasePath says requests carry it, a request that changes
+ * something needs the osd-xsrf header, an osd-version header must name this version, and every
+ * answer carries server.customResponseHeaders and osd-name.
  */
 
-import { randomUUID } from 'node:crypto';
+import { constants as cryptoConstants, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import http from 'node:http';
+import https from 'node:https';
+import type { Socket } from 'node:net';
 import { join } from 'node:path';
-import type { Config } from './config';
+import type { Duplex } from 'node:stream';
+import type { Config, ServerSslConfig } from './config';
 import {
+  ClientClosedError,
   HttpError,
   Router,
   badRequest,
   errorBody,
+  parseBody,
   readBody,
   sendReply,
   type Handler,
@@ -29,10 +40,17 @@ import { registerIndexPatternManagement } from './index_pattern_management';
 import { registerGeospatial } from './geospatial';
 import { fieldsForWildcard } from './index_pattern_fields';
 import type { Logger } from './logger';
-import { OpenSearchClient, OpenSearchError, OpenSearchUnavailableError } from './opensearch';
+import {
+  OpenSearchAnswerRefusedError,
+  OpenSearchClient,
+  OpenSearchError,
+  OpenSearchUnavailableError,
+  withForwardedHeaders,
+} from './opensearch';
 import { SavedObjectsRepository } from './saved_objects';
 import { registerSavedObjectsManagement } from './saved_objects_management';
 import { registerSavedObjects } from './saved_objects_routes';
+import { any, literal, maybe, object, oneOf, queryObject, validateRequestPart } from './route_validation';
 import { registerSampleData } from './sample_data/routes';
 import { registerShortUrls } from './short_urls';
 import { registerSqlConsole } from './sql_console';
@@ -48,6 +66,92 @@ const PROXY_METHODS = new Set(['GET', 'POST', 'PUT', 'DELETE', 'HEAD', 'PATCH'])
 const HEALTHY_EVERY_MS = 10000;
 const UNHEALTHY_EVERY_MS = 2500;
 
+/** The header size the original's start script allows (--max-http-header-size=65536) */
+const MAX_HEADER_BYTES = 65536;
+/** What the original's routes say of caching when they say nothing */
+const NO_CACHE = 'private, no-cache, no-store, must-revalidate';
+const SAFE_METHODS = new Set(['GET', 'HEAD']);
+
+/** The TLS options of the original (http_tools.ts getServerOptions, ssl_config.ts) */
+function tlsOptions(ssl: ServerSslConfig): https.ServerOptions {
+  const turnedOff: Record<string, number> = {
+    TLSv1: cryptoConstants.SSL_OP_NO_TLSv1,
+    'TLSv1.1': cryptoConstants.SSL_OP_NO_TLSv1_1,
+    'TLSv1.2': cryptoConstants.SSL_OP_NO_TLSv1_2,
+    'TLSv1.3': cryptoConstants.SSL_OP_NO_TLSv1_3,
+  };
+  let secureOptions = 0;
+  for (const [protocol, option] of Object.entries(turnedOff)) {
+    if (!ssl.supportedProtocols.includes(protocol)) secureOptions |= option;
+  }
+  return {
+    // The files are read when they are named, whether TLS is on or not, as the original reads them
+    ca: ssl.certificateAuthorities.length ? ssl.certificateAuthorities.map((file) => readFileSync(file)) : undefined,
+    cert: ssl.certificate === undefined ? undefined : readFileSync(ssl.certificate),
+    key: ssl.key === undefined ? undefined : readFileSync(ssl.key),
+    passphrase: ssl.keyPassphrase,
+    ciphers: ssl.cipherSuites.join(':'),
+    // The server's order of ciphers, not the client's (the original: against the BEAST attack)
+    honorCipherOrder: true,
+    secureOptions,
+    requestCert: ssl.clientAuthentication !== 'none',
+    rejectUnauthorized: ssl.clientAuthentication === 'required',
+  };
+}
+
+/** What of an HTTP or HTTPS server the set-up of its listener touches */
+interface Listening {
+  headersTimeout: number;
+  keepAliveTimeout: number;
+  setTimeout(msecs: number, callback: (socket: Socket) => void): unknown;
+  on(event: 'clientError', listener: (error: Error, socket: Duplex) => void): unknown;
+}
+
+/** How the original sets up the listener of a server (http_tools.ts createServer) */
+function setUpListener(server: Listening, settings: Config['server']) {
+  server.headersTimeout = settings.keepaliveTimeout + 2 * server.headersTimeout;
+  server.keepAliveTimeout = settings.keepaliveTimeout;
+  server.setTimeout(settings.socketTimeout, (socket) => socket.destroy());
+  // A request that cannot be read is answered with a bare 400, a header too large too
+  server.on('clientError', (error, socket) => {
+    if (socket.writable) socket.end(Buffer.from('HTTP/1.1 400 Bad Request\r\n\r\n', 'ascii'));
+    else socket.destroy(error);
+  });
+}
+
+/** A route's path with its parts' names left out, `/a/{}/{}`: the names of a route in server.xsrf.whitelist need not be ours */
+const routeShape = (pattern: string) => pattern.replace(/\{[^}]*\}/g, '{}');
+
+/** The shapes of the routes server.xsrf.whitelist names; `/a/{id?}` names `/a` too */
+function xsrfExempt(allowlist: string[]): Set<string> {
+  const shapes = new Set<string>();
+  for (const entry of allowlist) {
+    shapes.add(routeShape(entry));
+    const optional = /\/\{[^}]*\?\}$/.exec(entry);
+    if (optional) shapes.add(routeShape(entry.slice(0, optional.index) || '/'));
+  }
+  return shapes;
+}
+
+/** A search's path with the original's shard time limit (getShardTimeout), unless it has one */
+export function withShardTimeout(path: string, ms: number): string {
+  const at = path.indexOf('?');
+  const pathname = at === -1 ? path : path.slice(0, at);
+  const search = at === -1 ? '' : path.slice(at + 1);
+  if (ms <= 0 || !/(^|\/)_search$/.test(pathname) || new URLSearchParams(search).has('timeout')) return path;
+  return `${pathname}?${search ? `${search}&` : ''}timeout=${ms}ms`;
+}
+
+/** The host name of an address the redirect of the plain port leads to */
+function redirectHost(configured: string, hostHeader: string | undefined): string {
+  // An address of every interface leads nowhere: the browser's own name of the server does
+  if (configured === '0.0.0.0' || configured === '::' || configured === '') {
+    const named = /^(\[[0-9a-fA-F:.]+\]|[A-Za-z0-9.-]+)(:\d+)?$/.exec(hostHeader ?? '');
+    return named ? named[1] : 'localhost';
+  }
+  return configured.includes(':') ? `[${configured}]` : configured;
+}
+
 interface Health {
   state: 'green' | 'red';
   message: string;
@@ -56,7 +160,9 @@ interface Health {
 }
 
 export interface App {
-  server: http.Server;
+  server: http.Server | https.Server;
+  /** With server.ssl.redirectHttpFromPort: the plain HTTP server that sends browsers to HTTPS */
+  redirectServer?: http.Server;
   /** Starts listening and watching OpenSearch; resolves once the port is open */
   start(): Promise<void>;
   /** Stops taking requests, lets the running ones finish, then closes */
@@ -96,7 +202,8 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
       const info = await client.request<{ version?: { number?: string } }>({
         method: 'GET',
         path: '/',
-        timeout: Math.min(config.opensearch.requestTimeout, 10000),
+        // The time limit of a look at whether OpenSearch answers: opensearch.pingTimeout
+        timeout: config.opensearch.pingTimeout ?? Math.min(config.opensearch.requestTimeout, 10000),
       });
       const made = await repository.ensureIndex();
       if (made === 'created') logger.info(`Created the saved objects index ${config.index}_1`);
@@ -173,39 +280,45 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
       return [value];
     });
 
-  const object = async <T extends object>(context: RequestContext): Promise<T> => {
-    const body = await context.json<T>();
-    if (body === undefined || body === null || typeof body !== 'object') {
-      throw badRequest('The request needs a JSON body');
-    }
-    return body;
-  };
-
   registerSavedObjects(router, repository, config.savedObjects);
   registerSavedObjectsManagement(router, repository);
 
   // --- Advanced settings -----------------------------------------------------------------------
 
-  router.get('/api/opensearch-dashboards/settings', async () => ({
-    body: { settings: await uiSettings.getAll() },
-  }));
+  // The checks of the original's routes (src/core/server/ui_settings/routes), with their words:
+  // the scopes each route names (there is one scope here, the global one, whichever is named),
+  // a body of the keys the route knows. Whether a setting may take a value is the settings' own.
+  const scopes = (...names: string[]) =>
+    object({ scope: maybe(oneOf(names.map((name) => literal(name)))) }, { unknowns: 'allow' });
+  const anyScope = scopes('global', 'user', 'workspace', 'dashboard_admin');
+  const oneSettingScope = scopes('global', 'user');
+  // An empty body is null to the original's checks
+  const settingsBody = async (context: RequestContext) => (await context.json()) ?? null;
+
+  router.get('/api/opensearch-dashboards/settings', async ({ query }) => {
+    validateRequestPart(anyScope, queryObject(query), 'query');
+    return { body: { settings: await uiSettings.getAll() } };
+  });
 
   router.post('/api/opensearch-dashboards/settings', async (context) => {
-    const body = await object<{ changes?: Record<string, unknown> }>(context);
-    if (!body.changes || typeof body.changes !== 'object') {
-      throw badRequest('[request body.changes]: expected an object');
-    }
-    await uiSettings.setMany(body.changes);
+    const body = await settingsBody(context);
+    validateRequestPart(anyScope, queryObject(context.query), 'query');
+    // `{}` is no change at all, as `changes` defaults to an empty object
+    const { changes } = validateRequestPart(object({ changes: object({}, { unknowns: 'allow' }) }), body, 'body');
+    await uiSettings.setMany(changes);
     return { body: { settings: await uiSettings.getAll() } };
   });
 
   router.post('/api/opensearch-dashboards/settings/{key}', async (context) => {
-    const body = await object<{ value?: unknown }>(context);
-    await uiSettings.setMany({ [context.params.key]: body.value ?? null });
+    const body = await settingsBody(context);
+    validateRequestPart(oneSettingScope, queryObject(context.query), 'query');
+    const { value } = validateRequestPart(object({ value: any() }), body, 'body');
+    await uiSettings.setMany({ [context.params.key]: value });
     return { body: { settings: await uiSettings.getAll() } };
   });
 
-  router.delete('/api/opensearch-dashboards/settings/{key}', async ({ params }) => {
+  router.delete('/api/opensearch-dashboards/settings/{key}', async ({ params, query }) => {
+    validateRequestPart(oneSettingScope, queryObject(query), 'query');
     await uiSettings.setMany({ [params.key]: null });
     return { body: { settings: await uiSettings.getAll() } };
   });
@@ -244,6 +357,10 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
     if (context.path === '/api/console/proxy') {
       const typed = new URL(`http://localhost${path}`);
       path = typed.pathname + typed.search;
+    } else if (method === 'POST' || method === 'GET') {
+      // A search of the pages: the original makes it through its search strategy, which asks
+      // OpenSearch to give up on a shard after opensearch.shardTimeout
+      path = withShardTimeout(path, config.opensearch.shardTimeout);
     }
     const response = await client.raw({
       method,
@@ -258,10 +375,17 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
           : {}),
       },
     });
-    const headers: Record<string, string> = {
-      'content-type': String(response.headers['content-type'] ?? 'text/plain; charset=utf-8'),
-    };
-    if (response.headers.warning) headers.warning = String(response.headers.warning);
+    const type = String(response.headers['content-type'] ?? 'text/plain; charset=utf-8');
+    const headers: Record<string, string> = { 'content-type': type };
+    if (context.path === '/api/console/proxy') {
+      // As the console's proxy of the original answers: JSON as JSON in UTF-8, and a warning
+      // header always, empty when OpenSearch sent none (other text keeps OpenSearch's type,
+      // where the original calls it HTML)
+      if (type.includes('application/json')) headers['content-type'] = 'application/json; charset=utf-8';
+      headers.warning = String(response.headers.warning ?? '');
+    } else if (response.headers.warning) {
+      headers.warning = String(response.headers.warning);
+    }
     return { status: response.status, headers, body: response.body };
   };
   const proxyOptions = { maxBytes: config.savedObjects.maxImportPayloadBytes };
@@ -347,12 +471,19 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
     };
   };
 
-  const errorReply = (error: unknown): Reply => {
+  const errorReply = (error: unknown, req: http.IncomingMessage): Reply => {
     if (error instanceof HttpError) {
       return { status: error.status, body: errorBody(error.status, error.message, error.attributes) };
     }
+    if (error instanceof ClientClosedError) {
+      logger.debug('The client went away before its request was read', { method: req.method, url: req.url });
+      return { status: 400, body: errorBody(400, error.message) };
+    }
     if (error instanceof OpenSearchUnavailableError) {
       return { status: 503, body: errorBody(503, error.message) };
+    }
+    if (error instanceof OpenSearchAnswerRefusedError) {
+      return { status: 502, body: errorBody(502, error.message) };
     }
     if (error instanceof OpenSearchError) {
       const status = error.status >= 400 && error.status < 600 ? error.status : 502;
@@ -362,12 +493,69 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
     return { status: 500, body: errorBody(500, 'An internal server error occurred.') };
   };
 
+  const notFoundReply = (): Reply => ({ status: 404, body: errorBody(404, 'Not Found') });
+  const exempt = xsrfExempt(config.server.xsrf.allowlist);
+
+  // A request that changes something needs a header that a page of another site cannot make a
+  // browser send, as in the original (lifecycle_handlers.ts)
+  const checkXsrf = (req: http.IncomingMessage, method: string, pattern: string) => {
+    if (SAFE_METHODS.has(method) || config.server.xsrf.disableProtection || exempt.has(routeShape(pattern))) return;
+    if (req.headers['osd-xsrf'] === undefined && req.headers['osd-version'] === undefined) {
+      throw badRequest('Request must contain the osd-xsrf header.');
+    }
+  };
+
+  // A page of another version is told to load again, with the original's words
+  const checkVersion = (req: http.IncomingMessage) => {
+    const version = req.headers['osd-version'];
+    if (version && version !== build.version) {
+      throw new HttpError(
+        400,
+        'Browser client is out of date, please refresh the page ' +
+          `("osd-version" header was "${version}" but should be "${build.version}")`,
+        { expected: build.version, got: version }
+      );
+    }
+  };
+
+  // The headers of the request that go on to OpenSearch (opensearch.requestHeadersWhitelist),
+  // with an id of the request, as the scoped client of the original sends them. What frames a
+  // request is never passed on: it would make OpenSearch read another request than the one sent
+  const FRAMING = new Set(['host', 'content-length', 'transfer-encoding', 'connection', 'keep-alive', 'upgrade', 'te', 'trailer']);
+  const passedOn = config.opensearch.requestHeadersAllowlist
+    .map((name) => name.trim().toLowerCase())
+    .filter((name) => !FRAMING.has(name));
+  const forwardedHeaders = (req: http.IncomingMessage): Record<string, string> => {
+    const headers: Record<string, string> = {};
+    for (const name of passedOn) {
+      const value = req.headers[name];
+      if (value !== undefined) headers[name] = Array.isArray(value) ? value.join(', ') : value;
+    }
+    headers['x-opaque-id'] = randomUUID();
+    return headers;
+  };
+
+  /** Where `/` leads: the advanced setting defaultRoute, as in the original (core_app.ts) */
+  const defaultRoute = async (): Promise<string> => {
+    const fallback = '/app/home';
+    // An OpenSearch that does not answer is not asked, as for the page
+    const value =
+      health.state === 'green'
+        ? await uiSettings.peek<unknown>('defaultRoute', fallback)
+        : config.uiSettings.overrides.defaultRoute ?? fallback;
+    // A path of this server only, as the setting's own check asks ("Must be a relative URL")
+    return typeof value === 'string' && /^\/(?![/\\])[^\\\s]*$/.test(value) ? value : fallback;
+  };
+
+  // The original's pages: /app/{id} and what is under it
+  const APP_PATH = /^\/app\/[^/]+(\/.*)?$/;
+
   const handle = async (req: http.IncomingMessage): Promise<Reply> => {
     const method = req.method ?? 'GET';
     const target = req.url ?? '/';
     // Nothing is at a path that starts with two slashes, as in OpenSearch Dashboards; new URL()
-    // would read what follows them as the name of another host, or fail to
-    if (target.startsWith('//')) return { status: 404, body: errorBody(404, 'Not Found') };
+    // would read what follows them as the name of another host, or fail to (a "\" is a "/" to it)
+    if (/^[/\\][/\\]/.test(target)) return notFoundReply();
     let url: URL;
     try {
       url = new URL(target, 'http://localhost');
@@ -375,118 +563,207 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
       throw badRequest('The address of the request cannot be read');
     }
     let path = url.pathname;
-    const { basePath } = config.server;
-    if (basePath && (path === basePath || path.startsWith(`${basePath}/`))) {
-      path = path.slice(basePath.length) || '/';
+    const { basePath, rewriteBasePath } = config.server;
+    // With server.rewriteBasePath requests carry the base path, and one without it is not for
+    // this server; without it, the proxy in front has taken the base path off (setupBasePathRewrite)
+    if (basePath && rewriteBasePath) {
+      if (path === basePath) path = '/';
+      else if (path.startsWith(`${basePath}/`)) path = path.slice(basePath.length);
+      else return notFoundReply();
     }
 
-    const { route, params, allowed } = router.match(method, path);
+    const { route, params } = router.match(method, path);
     if (route) {
-      // A page of another site cannot set this header on a request it makes a browser send
-      if (method !== 'GET' && method !== 'HEAD') {
-        if (req.headers['osd-xsrf'] === undefined && req.headers['osd-version'] === undefined) {
-          throw badRequest('Request must contain the osd-xsrf header.');
-        }
-      }
+      checkXsrf(req, method, route.pattern);
+      checkVersion(req);
       let cached: Promise<Buffer> | undefined;
       const body = () =>
         (cached ??= readBody(req, route.maxBytes ?? config.server.maxPayloadBytes));
-      const reply = await route.handler({
+      const context: RequestContext = {
         req,
         method,
         path,
         query: url.searchParams,
         params,
         body,
-        json: async <T>() => {
-          const text = (await body()).toString('utf8').trim();
-          if (!text) return undefined;
-          try {
-            return JSON.parse(text) as T;
-          } catch {
-            throw badRequest('Invalid request payload JSON format');
-          }
-        },
-      });
-      return {
-        ...reply,
-        headers: { 'cache-control': 'private, no-cache, no-store, must-revalidate', ...reply.headers },
+        json: async <T>() => parseBody(await body(), req.headers['content-type']) as T | undefined,
       };
+      return withForwardedHeaders(forwardedHeaders(req), () => route.handler(context));
     }
-    if (allowed.length) {
-      return {
-        status: 405,
-        headers: { allow: allowed.join(', ') },
-        body: errorBody(405, 'Method Not Allowed'),
-      };
-    }
+    // A path that only another method has: hapi answers that it is not there
+    if (!SAFE_METHODS.has(method)) return notFoundReply();
 
-    if (method === 'GET' || method === 'HEAD') {
-      if (path === '/') {
-        return { status: 302, headers: { location: `${basePath}/app/home` } };
-      }
-      if (path === '/app' || path.startsWith('/app/')) return page();
-      const file = serveStatic(publicDirectory, req, path);
-      if (file) return file;
+    // Each GET has a route in the original (the pages, the files, its catch-all), which checks
+    // the version as any other
+    checkVersion(req);
+    if (path === '/') return { status: 302, headers: { location: `${basePath}${await defaultRoute()}` } };
+    if (APP_PATH.test(path)) return page();
+    const file = serveStatic(publicDirectory, req, path);
+    if (file) return file;
+    // A path with a slash at its end is sent to the one without it (src/legacy/server/http)
+    if (path.endsWith('/')) {
+      return {
+        status: 301,
+        headers: { location: `${basePath}${path.slice(0, -1)}${url.search}`, 'content-type': 'text/html; charset=utf-8' },
+        body: '',
+      };
     }
-    return { status: 404, body: errorBody(404, 'Not Found') };
+    return notFoundReply();
   };
 
-  const server = http.createServer((req, res) => {
+  // What every answer carries, over what its route says: server.customResponseHeaders, then
+  // osd-name, as the original's onPreResponse handler puts them
+  const answerHeaders: Record<string, string | string[]> = {
+    ...config.server.customResponseHeaders,
+    'osd-name': config.server.name,
+  };
+  for (const [name, value] of Object.entries(answerHeaders)) {
+    try {
+      http.validateHeaderName(name);
+      for (const one of Array.isArray(value) ? value : [value]) http.validateHeaderValue(name, one);
+    } catch (error) {
+      throw new Error(`server.customResponseHeaders: ${(error as Error).message}`);
+    }
+  }
+
+  // server.compression: off, or only for the pages of the hosts its list names
+  const compressionAllowed = (req: http.IncomingMessage): boolean => {
+    const { enabled, referrerAllowlist } = config.server.compression;
+    if (!enabled) return false;
+    const referrer = String(req.headers.referrer ?? req.headers.referer ?? '');
+    if (!referrerAllowlist || referrer === '') return true;
+    try {
+      const { hostname } = new URL('', referrer);
+      return hostname !== '' && referrerAllowlist.includes(hostname);
+    } catch {
+      return false;
+    }
+  };
+
+  const respond = async (req: http.IncomingMessage, res: http.ServerResponse) => {
     const began = process.hrtime.bigint();
-    void handle(req)
-      .catch(errorReply)
-      .then((reply) => {
-        sendReply(req, res, {
-          ...reply,
-          headers: {
-            'osd-name': config.server.name,
-            'x-content-type-options': 'nosniff',
-            'referrer-policy': 'no-referrer-when-downgrade',
-            ...reply.headers,
-          },
+    let reply: Reply;
+    try {
+      reply = await handle(req);
+    } catch (error) {
+      reply = errorReply(error, req);
+    }
+    // A client that has gone is not answered, and that is no failure
+    if (res.destroyed || req.socket.destroyed) {
+      logger.debug('The client went away before the answer', { method: req.method, url: req.url });
+      return;
+    }
+    await sendReply(
+      req,
+      res,
+      {
+        ...reply,
+        headers: {
+          'cache-control': NO_CACHE,
+          'x-content-type-options': 'nosniff',
+          'referrer-policy': 'no-referrer-when-downgrade',
+          ...reply.headers,
+        },
+      },
+      { compress: compressionAllowed(req), headers: answerHeaders }
+    );
+    logger.debug('request', {
+      method: req.method,
+      url: req.url,
+      status: reply.status ?? 200,
+      ms: Number((process.hrtime.bigint() - began) / 1000000n),
+    });
+  };
+
+  const listener = (req: http.IncomingMessage, res: http.ServerResponse) => {
+    void respond(req, res).catch((error: unknown) => {
+      logger.error('An answer could not be sent', { error: String(error) });
+      // A header that cannot be sent (an address to go to with a character no header may
+      // hold) leaves nothing sent: the request is answered as a failure, not cut off
+      if (res.headersSent) {
+        res.destroy();
+        return;
+      }
+      const failure = { status: 500, headers: { 'cache-control': NO_CACHE }, body: errorBody(500, 'An internal server error occurred.') };
+      void sendReply(req, res, failure, { headers: answerHeaders }).catch(() => res.destroy());
+    });
+  };
+
+  const { ssl } = config.server;
+  // The files are read now whether TLS is on or not, as the original reads them
+  const tls = tlsOptions(ssl);
+  const server = ssl.enabled
+    ? https.createServer({ ...tls, maxHeaderSize: MAX_HEADER_BYTES }, listener)
+    : http.createServer({ maxHeaderSize: MAX_HEADER_BYTES }, listener);
+  setUpListener(server, config.server);
+
+  // server.ssl.redirectHttpFromPort: plain HTTP there is sent to the same path over HTTPS
+  // (https_redirect_server.ts), with no other answer
+  const redirectPort = ssl.enabled ? ssl.redirectHttpFromPort : undefined;
+  const redirectServer =
+    redirectPort === undefined
+      ? undefined
+      : http.createServer({ maxHeaderSize: MAX_HEADER_BYTES }, (req, res) => {
+          const target = req.url ?? '/';
+          let location: string | undefined;
+          if (!/^[/\\][/\\]/.test(target)) {
+            try {
+              const url = new URL(target, 'http://localhost');
+              const host = redirectHost(config.server.host, req.headers.host);
+              location = `https://${host}:${config.server.port}${url.pathname}${url.search}`;
+            } catch {
+              location = undefined;
+            }
+          }
+          const reply: Reply = location
+            ? { status: 302, headers: { location, 'cache-control': NO_CACHE } }
+            : { status: 404, headers: { 'cache-control': NO_CACHE }, body: errorBody(404, 'Not Found') };
+          void sendReply(req, res, reply).catch(() => res.destroy());
         });
-        logger.debug('request', {
-          method: req.method,
-          url: req.url,
-          status: reply.status ?? 200,
-          ms: Number((process.hrtime.bigint() - began) / 1000000n),
-        });
-      })
-      .catch((error: unknown) => {
-        logger.error('An answer could not be sent', { error: String(error) });
-        // A header that cannot be sent (an address to go to with a character no header may
-        // hold) leaves nothing sent: the request is answered as a failure, not cut off
-        if (res.headersSent) res.destroy();
-        else sendReply(req, res, { status: 500, body: errorBody(500, 'An internal server error occurred.') });
+  if (redirectServer) setUpListener(redirectServer, config.server);
+
+  const listen = (target: http.Server | https.Server, port: number) =>
+    new Promise<void>((resolve, reject) => {
+      target.once('error', reject);
+      target.listen(port, config.server.host, () => {
+        target.off('error', reject);
+        resolve();
       });
-  });
-  // Longer than the usual 60 seconds a load balancer keeps an idle connection, so that it is the
-  // balancer that closes it and no request meets a connection this server has just closed
-  server.keepAliveTimeout = 75000;
-  server.headersTimeout = 76000;
+    });
+  const close = (target: http.Server | https.Server) =>
+    new Promise<void>((resolve) => {
+      target.close(() => resolve());
+      target.closeIdleConnections();
+    });
 
   return {
     server,
+    redirectServer,
     checkHealth,
-    start: () =>
-      new Promise((resolve, reject) => {
-        server.once('error', reject);
-        server.listen(config.server.port, config.server.host, () => {
-          server.off('error', reject);
-          void checkHealth().finally(scheduleHealthCheck);
-          resolve();
+    start: async () => {
+      // The redirect first, as the original starts it
+      if (redirectServer && redirectPort !== undefined) {
+        await listen(redirectServer, redirectPort).catch((error: NodeJS.ErrnoException) => {
+          if (error.code !== 'EADDRINUSE') throw error;
+          throw new Error(
+            `The redirect server failed to start up because port ${redirectPort} is already in use. ` +
+              'Ensure the port specified in `server.ssl.redirectHttpFromPort` is available.'
+          );
         });
-      }),
-    stop: () =>
-      new Promise((resolve) => {
-        stopping = true;
-        clearTimeout(healthTimer);
-        server.close(() => {
-          client.close();
-          resolve();
-        });
-        server.closeIdleConnections();
-      }),
+      }
+      try {
+        await listen(server, config.server.port);
+      } catch (error) {
+        if (redirectServer) await close(redirectServer);
+        throw error;
+      }
+      void checkHealth().finally(scheduleHealthCheck);
+    },
+    stop: async () => {
+      stopping = true;
+      clearTimeout(healthTimer);
+      await Promise.all([close(server), ...(redirectServer ? [close(redirectServer)] : [])]);
+      client.close();
+    },
   };
 }

@@ -250,6 +250,7 @@ export function recordOf<V>(keyType: Schema<string>, valueType: Schema<V>): Sche
       }
       const result: Record<string, V> = {};
       for (const [key, item] of Object.entries(value)) {
+        if (key === '__proto__') continue;
         keyType.validate(key, [...path, `key("${key}")`]);
         result[key] = valueType.validate(item, [...path, key]);
       }
@@ -289,7 +290,8 @@ export function object<P extends Props>(
         if (checked !== undefined) result[key] = checked;
       }
       for (const key of Object.keys(source)) {
-        if (Object.prototype.hasOwnProperty.call(props, key)) continue;
+        // A key __proto__ (from JSON read here) is left out, as the original's schema leaves it out
+        if (key === '__proto__' || Object.prototype.hasOwnProperty.call(props, key)) continue;
         const unknowns = options.unknowns ?? 'forbid';
         if (unknowns === 'forbid') throw new SchemaTypeError('definition for this key is missing', [...path, key]);
         if (unknowns === 'allow') result[key] = source[key];
