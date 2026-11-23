@@ -198,6 +198,7 @@ export function Visualization(props: VisualizationProps) {
         onUiState={props.onUiState}
         onTimeChange={props.onTimeChange}
         onData={props.onData}
+        onError={props.onError}
       />
     );
   } else if (vis.type === 'vega') {

@@ -786,104 +786,216 @@
 
 /* TSVB */
 
-.visTsvbMetric {
+/*
+ * A TSVB metric or gauge writes its label and values in the product's colours: the theme's text
+ * at 40% for a label and 70% for a value, or, over a panel colour that reads as the other theme,
+ * the theme's surface at 60% and 80%; and at the product's sizes from its base of 14px, before
+ * they are scaled to the panel
+ */
+.visTsvbMetric,
+.visTsvbGauge {
+  --vis-tsvb-text: color-mix(in srgb, var(--color-text-primary) 40%, transparent);
+  --vis-tsvb-value: color-mix(in srgb, var(--color-text-primary) 70%, transparent);
+
+  position: relative;
   display: flex;
-  flex: 1 1 auto;
+  flex: 1 0 auto;
   flex-direction: column;
-  gap: var(--space-1);
-  align-items: center;
-  justify-content: center;
-  min-height: 0;
-  padding: var(--space-3);
-  border-radius: var(--radius-sm);
-  text-align: center;
+  font-size: var(--font-size-s);
+}
+
+.visTsvbMetric--reversed,
+.visTsvbGauge--reversed {
+  --vis-tsvb-text: color-mix(in srgb, var(--color-surface) 60%, transparent);
+  --vis-tsvb-value: color-mix(in srgb, var(--color-surface) 80%, transparent);
+}
+
+.visTsvbMetric__resize {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.visTsvbMetric__inner {
+  position: absolute;
+  padding: var(--space-1) var(--space-2) var(--space-2);
 }
 
 .visTsvbMetric__label {
-  font-size: var(--font-size-m);
-  opacity: 0.8;
+  margin-bottom: 0.25em;
+  color: var(--vis-tsvb-text);
+  font-size: 0.5em;
+  line-height: 1em;
+  text-align: center;
 }
 
 .visTsvbMetric__value {
-  font-size: 44px;
-  font-variant-numeric: tabular-nums;
+  color: var(--vis-tsvb-value);
+  font-size: 1em;
   font-weight: var(--font-weight-semibold);
-  line-height: 1.1;
+  line-height: 1em;
+  text-align: center;
 }
 
 .visTsvbMetric__secondary {
-  font-size: var(--font-size-s);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.05em;
+}
+
+.visTsvbMetric__secondaryLabel,
+.visTsvbMetric__secondaryValue {
+  color: var(--vis-tsvb-value);
+  font-size: 0.35em;
+  line-height: 1em;
+}
+
+.visTsvbMetric__secondaryLabel {
+  margin-right: 0.3em;
+  color: var(--vis-tsvb-text);
 }
 
 /* The name of the part of a split metric, under its values */
 .visTsvbMetric__additional {
   max-width: 100%;
-  font-size: var(--font-size-xs);
-  line-height: 1.2;
+  padding: calc(var(--space-1) / 2) 0 0;
   overflow: hidden;
+  color: var(--vis-tsvb-value);
+  font-size: 0.25em;
+  line-height: 1.2;
+  text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* A TSVB Top N as the product draws it, in its colours and at its base size */
 .visTsvbTopN {
-  flex: 1 1 auto;
-  min-height: 0;
-  padding: var(--space-2);
+  --vis-tsvb-text: color-mix(in srgb, var(--color-text-primary) 40%, transparent);
+  --vis-tsvb-value: color-mix(in srgb, var(--color-text-primary) 70%, transparent);
+  --vis-tsvb-hover: color-mix(in srgb, var(--color-text-primary) 10%, transparent);
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
   overflow: auto;
+  font-size: var(--font-size-s);
+  line-height: normal;
 }
 
-.visTsvbTopN table {
-  width: 100%;
+.visTsvbTopN--reversed {
+  --vis-tsvb-text: color-mix(in srgb, var(--color-surface) 60%, transparent);
+  --vis-tsvb-value: color-mix(in srgb, var(--color-surface) 80%, transparent);
+  --vis-tsvb-hover: color-mix(in srgb, var(--color-surface) 10%, transparent);
+}
+
+.visTsvbTopN__table {
   border-collapse: collapse;
-  font-size: var(--font-size-xs);
+  border-spacing: 0;
 }
 
-.visTsvbTopN td {
-  padding: var(--space-1) var(--space-2);
-  vertical-align: middle;
+.visTsvbTopN tr:hover td {
+  background-color: var(--vis-tsvb-hover);
 }
 
 .visTsvbTopN__label {
-  max-width: 180px;
+  padding: var(--space-1) 0;
   overflow: hidden;
+  color: var(--vis-tsvb-text);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .visTsvbTopN__bar {
-  width: 60%;
+  padding: var(--space-1) var(--space-3);
+  vertical-align: middle;
 }
 
-.visTsvbTopN__bar span {
-  display: block;
-  height: 14px;
-  border-radius: 0 4px 4px 0;
+.visTsvbTopN__innerBar {
+  position: relative;
+}
+
+.visTsvbTopN__innerBar > div {
+  width: 100%;
+  min-height: var(--space-4);
 }
 
 .visTsvbTopN__value {
-  font-variant-numeric: tabular-nums;
-  font-weight: var(--font-weight-medium);
+  padding: var(--space-1) var(--space-1) 0;
+  color: var(--vis-tsvb-value);
+  line-height: 0;
   text-align: right;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* The box a gauge writes its label and value in: the foot of 100 by 70 for a half circle */
+.visTsvbGauge__metrics {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100px;
+  height: 100px;
+  padding: var(--space-2);
+  text-align: center;
+}
+
+.visTsvbGauge__metrics--half {
+  justify-content: flex-end;
+  height: 70px;
+  padding: 0 var(--space-3) var(--space-2);
+}
+
+.visTsvbGauge__label {
+  padding: 0 var(--space-2) var(--space-1);
+  color: var(--vis-tsvb-text);
+  font-size: 0.5em;
+  line-height: 1em;
+  text-align: center;
+}
+
+.visTsvbGauge__value {
+  color: var(--vis-tsvb-value);
+  font-size: 0.9em;
+  line-height: 1em;
+  text-align: center;
+}
+
+/* The name of the part of a split gauge, under its value */
+.visTsvbGauge__additional {
+  width: 100%;
+  max-width: 100%;
+  padding: calc(var(--space-1) / 2) var(--space-1);
+  overflow: hidden;
+  color: var(--vis-tsvb-value);
+  font-size: 0.4em;
+  line-height: 1.2em;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.visTsvbGauge {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
-  min-height: 0;
+/* The ring is drawn over the text, and cut to the panel */
+.visTsvbGauge__rings {
+  position: absolute;
+  inset: 0;
   overflow: hidden;
 }
 
-.visTsvbGauge text {
-  font-variant-numeric: tabular-nums;
+.visTsvbGauge__ring {
+  position: absolute;
+}
+
+.visTsvbGauge__ring svg {
+  display: block;
 }
 
 /*
  * A metric or a gauge split by terms or filters: one for each part, as the product lays them out,
- * at least a quarter of the width and 192 by 154 pixels each, spread over as many rows as they need
+ * at least a quarter of the width, 192 pixels wide and a fifth less high each, spread over as many
+ * rows as they need
  */
 .visTsvbSplit {
   display: flex;
@@ -901,7 +1013,7 @@
   flex: 1 0 25%;
   flex-direction: column;
   min-width: 192px;
-  min-height: 154px;
+  min-height: calc(192px / 1.25);
   border: var(--space-2) solid transparent;
 }
 
