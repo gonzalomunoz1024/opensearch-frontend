@@ -842,7 +842,8 @@
 .dvtSearch {
   position: absolute;
   top: 0;
-  z-index: 99;
+  /* Over the request's buttons, which it covers in the original too */
+  z-index: 1001;
   margin: 0;
   padding: 4px 6px 0 4px;
   overflow: hidden;

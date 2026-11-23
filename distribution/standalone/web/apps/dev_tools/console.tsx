@@ -931,7 +931,9 @@ export function Console() {
   };
 
   const openMenu = (value: string, offset: number) => {
-    const found = suggest(value, offset, names);
+    // Read from what was read before, as the page's own reading is
+    read.current = readConsole(value, read.current);
+    const found = suggest(value, offset, names, read.current);
     setMenu(found ? { ...found, active: 0 } : undefined);
   };
 

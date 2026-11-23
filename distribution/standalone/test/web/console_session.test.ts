@@ -316,3 +316,18 @@ describe('finding text in a console editor', () => {
     assert.equal(session.getValue(), '{\n  "a": {\n    "needle": 1\n  }\n}\nneedle');
   });
 });
+
+describe('a fold made around the cursor', () => {
+  it('leaves the cursor where it is, as Ace does, so the fold keys after it act on the same place', () => {
+    const session = input('GET _search\n{\n  "filter": {\n    "term": { "c": 3 }\n  }\n}\n');
+    session.gotoLine(4);
+    session.exec('toggleParentFoldWidget');
+    assert.equal(session.folds.length, 1);
+    assert.deepEqual(session.lead, { row: 3, column: 0 });
+    session.exec('unfoldall');
+    assert.deepEqual(session.lead, { row: 3, column: 0 });
+    // "Fold" at the start of a line with no bracket beside the cursor folds nothing
+    session.exec('fold');
+    assert.equal(session.folds.length, 0);
+  });
+});

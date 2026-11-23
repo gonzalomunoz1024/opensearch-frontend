@@ -323,6 +323,15 @@ export function drawnRange(layout: ScreenLayout, scrollTop: number, height: numb
 }
 
 /**
+ * Where the pane is scrolled to for Ace's "go to line": as it is when the row is wholly in view,
+ * else with the row's top in the middle of the height (half a pixel is drawn as none)
+ */
+export function centredTop(rowTop: number, top: number, height: number, lineHeight: number): number {
+  if (rowTop >= top && rowTop + lineHeight <= top + height) return top;
+  return Math.max(0, Math.floor(rowTop - height / 2));
+}
+
+/**
  * Where to scroll to so that a place is in view (Ace's scrollCursorIntoView): no further than
  * needed, or, with an offset, by that part of the height further when the place was out of view
  */
@@ -527,7 +536,13 @@ export function ConsoleEditor({
     const view = { height: box.clientHeight, width: Math.max(0, box.clientWidth - gutterWidth), lineHeight, charWidth };
     let now = { top: box.scrollTop, left: box.scrollLeft };
     if (request.rows) now = { ...now, top: Math.max(0, now.top + request.rows * lineHeight) };
-    if (request.centerRow !== undefined) now = { ...now, top: Math.max(0, pixelsOf({ row: request.centerRow, column: 0 }).top - view.height / 2) };
+    if (request.centerRow !== undefined) {
+      // Ace's gotoLine: a row that is not wholly in view is put in the middle; half a pixel is drawn as none
+      now = { ...now, top: centredTop(pixelsOf({ row: request.centerRow, column: 0 }).top, now.top, view.height, lineHeight) };
+    }
+    if (request.alignRow !== undefined) {
+      now = { ...now, top: Math.max(0, Math.floor(pixelsOf({ row: request.alignRow, column: 0 }).top - (view.height - lineHeight) / 2)) };
+    }
     if (request.rowStart !== undefined) now = scrollIntoView(pixelsOf({ row: request.rowStart, column: 0 }), now, view);
     if (request.selection !== undefined) {
       now = scrollIntoView(pixelsOf(current.anchor), now, view, request.selection);

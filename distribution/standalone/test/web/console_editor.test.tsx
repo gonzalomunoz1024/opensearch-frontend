@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { ConsoleEditor, drawnRange, drawnRows, linePieces, scrollIntoView } from '../../web/apps/dev_tools/console_editor';
+import { ConsoleEditor, centredTop, drawnRange, drawnRows, linePieces, scrollIntoView } from '../../web/apps/dev_tools/console_editor';
 import { highlight } from '../../web/apps/dev_tools/console_highlight';
 import { ScreenLayout, lineSplits } from '../../web/apps/dev_tools/console_layout';
 
@@ -93,5 +93,20 @@ describe('the console editor draws the rows in view, as Ace’s renderer does', 
     assert.deepEqual(scrollIntoView({ left: 20, top: 1600 }, { top: 0, left: 0 }, view, 0.5), { top: 1536, left: 0 });
     // To the right: the column comes to the right edge
     assert.deepEqual(scrollIntoView({ left: 804, top: 0 }, { top: 0, left: 0 }, view), { top: 0, left: 412 });
+  });
+});
+
+describe('"go to line" in the console editor', () => {
+  it('leaves the pane where it is when the line is wholly in view, as Ace’s gotoLine', () => {
+    assert.equal(centredTop(400, 100, 791, 18), 100);
+    assert.equal(centredTop(100, 100, 791, 18), 100);
+    assert.equal(centredTop(873, 100, 791, 18), 100);
+  });
+
+  it('puts the top of a line out of view in the middle of the height, half a pixel drawn as none', () => {
+    assert.equal(centredTop(874, 100, 791, 18), 478);
+    assert.equal(centredTop(15642, 0, 791, 18), 15246);
+    assert.equal(centredTop(90, 100, 791, 18), 0);
+    assert.equal(centredTop(8000, 9000, 800, 18), 7600);
   });
 });

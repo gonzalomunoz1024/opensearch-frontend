@@ -68,8 +68,10 @@ export interface ScrollRequest {
   selectionPart?: boolean;
   /** Bring the cursor into view, this far from the edge as a part of the height */
   cursor?: number;
-  /** Put a row of the text in the middle of the height (Ace's centerSelection) */
+  /** Put a row of the text in the middle of the height unless it is wholly in view (Ace's gotoLine) */
   centerRow?: number;
+  /** A row to put in the middle of the pane whether in view or not (Ace's alignCursor at one half) */
+  alignRow?: number;
   /** Bring the start of a row of the text into view */
   rowStart?: number;
 }
@@ -683,7 +685,7 @@ export class ConsoleSession {
         return;
       case 'centerselection': {
         const range = this.getRange();
-        this.scroll = { centerRow: Math.floor(range.start.row + (range.end.row - range.start.row) / 2) };
+        this.scroll = { alignRow: Math.floor(range.start.row + (range.end.row - range.start.row) / 2) };
         return;
       }
       case 'fold':
@@ -1003,12 +1005,7 @@ export class ConsoleSession {
     this.folds = folds;
     this.layoutCache = undefined;
     this.foldsChanged = true;
-    // The cursor does not stay inside a fold
-    const lead = placeCursor(this.doc, this.lead.row, this.lead.column, this.lead);
-    if (!same(lead, this.lead)) {
-      this.lead = lead;
-      this.selectionChanged = true;
-    }
+    // The cursor stays where it is, also inside a fold, as Ace leaves it: it is drawn at the fold
   }
 
   /** Folds set from outside: a click on a mark of the gutter or on a fold */

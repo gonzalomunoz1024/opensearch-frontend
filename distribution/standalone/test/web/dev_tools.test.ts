@@ -755,3 +755,21 @@ describe('the console, as the original in its smaller ways', () => {
     assert.equal(importedText(null), undefined);
   });
 });
+
+describe('what could be typed next in a long request', () => {
+  it('is found in the text as the page has already read it, without reading ten thousand lines again', () => {
+    const lines = ['POST _bulk'];
+    for (let index = 0; index < 5000; index += 1) lines.push(`{ "index": { "_id": "${index}" } }`, `{ "field": "value ${index}" }`);
+    const text = `${lines.join('\n')}\n\nGET _search\n{\n  "qu`;
+    const doc = readConsole(text);
+    const names: ClusterNames = { indices: [], aliases: [], templates: [], fields: () => [] };
+    const known = suggest(text, text.length, names, doc);
+    assert.deepEqual(known, suggest(text, text.length, names));
+    assert.ok(known?.items.some((item) => item.label === 'query'));
+    // What it reads is the reading it was given: one with no request at the cursor finds nothing there
+    assert.equal(suggest(text, text.length, names, readConsole(`${lines.join('\n')}\n\n\n\n\n`)), undefined);
+    const started = Date.now();
+    for (let times = 0; times < 20; times += 1) suggest(text, text.length, names, doc);
+    assert.ok(Date.now() - started < 400, `twenty in ${Date.now() - started} ms`);
+  });
+});

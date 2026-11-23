@@ -928,14 +928,15 @@ export function typedOnLine(text: string, offset: number): boolean {
 
 /**
  * What could be typed at a place of the editor: a method at the start of a line, a path after
- * it, and in the body of a search the names OpenSearch knows there.
+ * it, and in the body of a search the names OpenSearch knows there. The text as already read is
+ * given by a caller that has it, which spares reading a long text again at every key.
  */
-export function suggest(text: string, offset: number, names: ClusterNames): Suggestions | undefined {
+export function suggest(text: string, offset: number, names: ClusterNames, doc: ConsoleText = readConsole(text)): Suggestions | undefined {
   const lineStart = text.lastIndexOf('\n', offset - 1) + 1;
   const before = text.slice(lineStart, offset);
   const row = lineOf(text, offset);
   // The request the cursor is in, its body closed or not yet
-  const request = requestAt(readConsole(text), row);
+  const request = requestAt(doc, row);
 
   if (!request || request.startLine === row) {
     if (isComment(before)) return undefined;
