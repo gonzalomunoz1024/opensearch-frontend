@@ -130,7 +130,9 @@ export function createServices(boot: BootData): Services {
     formatSettings,
     queryConfig: () => ({
       queryStringOptions: uiSettings.get<Record<string, unknown>>('query:queryString:options', {}),
-      dateFormatTZ: timeZone(),
+      // "Browser" too: a date typed in a query is then read on the clock of the browser, as the
+      // original's getOpenSearchQueryConfig hands the setting on whatever it says
+      dateFormatTZ: uiSettings.get<string>('dateFormat:tz', 'Browser'),
       ignoreFilterIfFieldNotInIndex: uiSettings.get('courier:ignoreFilterIfFieldNotInIndex', false),
       allowLeadingWildcards: uiSettings.get('query:allowLeadingWildcards', true),
     }),
