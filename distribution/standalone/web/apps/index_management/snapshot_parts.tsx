@@ -12,7 +12,7 @@ import { ComboBox, type ComboOption } from '../../components/combo_box';
 import { Checkbox, NumberField, Select, TextField } from '../../components/form';
 import { Icon } from '../../components/icon';
 import { Flyout, MenuButton, Popover, type MenuItem } from '../../components/overlay';
-import { ExternalLink, JsonEditor, Labeled, ism, toasts } from './common';
+import { ExternalLink, JsonEditor, ism, toasts } from './common';
 import { loadNames } from './job_parts';
 import {
   CUSTOM_CONFIGURATION_TEXT,
@@ -48,6 +48,54 @@ const FS_REPOSITORY_DOCS =
   'https://opensearch.org/docs/latest/opensearch/snapshots/snapshot-restore/#shared-file-system';
 const S3_REPOSITORY_DOCS =
   'https://opensearch.org/docs/latest/opensearch/snapshots/snapshot-restore/#amazon-s3';
+
+/** Facts of a policy or a snapshot, three in a row as the plugin's grid has them, or two, or one */
+export function Facts({
+  items,
+  columns = 3,
+}: {
+  items: Array<[string, ReactNode]>;
+  columns?: 1 | 2 | 3;
+}) {
+  return (
+    <dl
+      className={cx(
+        'ismPolicyFacts',
+        columns === 2 && 'ismPolicyFacts--two',
+        columns === 1 && 'ismPolicyFacts--one'
+      )}
+    >
+      {items.map(([name, value]) => (
+        <div key={name}>
+          <dt>{name}</dt>
+          <dd>{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** A panel of the page of a policy, as the plugin's: its title, and a rule over what it holds */
+export function PolicyPanel({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="ismPolicyPanel">
+      <div className={cx('ismPolicyPanel__header', action !== undefined && 'ismPolicyPanel__header--action')}>
+        <h2 className="atlTitleS">{title}</h2>
+        {action}
+      </div>
+      <hr className="ismPolicyPanel__rule" />
+      {children}
+    </section>
+  );
+}
 
 /**
  * The panel around a list of Snapshot Management, drawn as the plugin's: the title and what it
@@ -131,7 +179,16 @@ export function GroupFilter({
   );
 }
 
-/** A field under its name, the name set as a heading */
+/** The plugin's spacer: an empty line of 4, 8, 16, 24 or 40 px between the parts of a form */
+export function Spacer({ size = 'l' }: { size?: 'xs' | 's' | 'm' | 'l' | 'xxl' }) {
+  return <div className={`ismSpacer ismSpacer--${size}`} />;
+}
+
+/**
+ * A field under its name, as the plugin's label draws it: the name as a heading with, when the
+ * field may be left empty, "x – optional" beside it (the "x" is the plugin's), what it means in
+ * small light letters, and 8 px under them the field with what is wrong with it.
+ */
 export function Field({
   title,
   help,
@@ -146,27 +203,29 @@ export function Field({
   children?: ReactNode;
 }) {
   return (
-    <Labeled
-      title={
-        <h3>
-          {title}
-          {optional && <i> – optional</i>}
-        </h3>
-      }
-      help={help}
-      error={error || undefined}
-    >
-      {children}
-    </Labeled>
+    <div className="ismSnapField">
+      <div className="ismSnapField__label">
+        <h3 className="atlTitleS">{title}</h3>
+        {optional && (
+          <span className="ismSnapField__optional">
+            x<i> – optional</i>
+          </span>
+        )}
+      </div>
+      {help && <span className="ismSnapField__help">{help}</span>}
+      <Spacer size="s" />
+      <div className="ismSnapField__body">{children}</div>
+      {error && <div className="ismSnapField__error">{error}</div>}
+    </div>
   );
 }
 
-/** The label of a tick: what it does, and under it what that means */
+/** The label of a tick, as the plugin's: what it does, and under it in light letters what that means */
 export function TickLabel({ title, help }: { title: string; help?: string }) {
   return (
     <span className="ismTickLabel">
-      <span>{title}</span>
-      {help && <small>{help}</small>}
+      <span className="ismTickLabel__title">{title}</span>
+      {help && <span className="ismTickLabel__help">{help}</span>}
     </span>
   );
 }
@@ -187,12 +246,16 @@ export function FlyoutFooter({
 }) {
   return (
     <div className="atlRow ismFlyoutFooter">
-      <Button variant="empty" size="s" onClick={onCancel} testId="flyout-footer-cancel-button">
+      <Button
+        variant="empty"
+        className="ismFlyoutFooter__cancel"
+        onClick={onCancel}
+        testId="flyout-footer-cancel-button"
+      >
         Cancel
       </Button>
       <Button
         variant="primary"
-        size="s"
         disabled={disabled}
         loading={busy}
         onClick={onAction}
@@ -435,8 +498,11 @@ export function IndicesRepositoryInput({
   repository: string;
   onRepository: (repository: string) => void;
   repositoryError?: string;
-  /** Called once a repository was registered from here, for the list to be read again */
-  onRepositoryCreated: () => void | Promise<void>;
+  /**
+   * Called once a repository was registered from here, for the list to be read again. Without
+   * it there is no "Create repository" button, as in the plugin's flyout that takes a snapshot.
+   */
+  onRepositoryCreated?: () => void | Promise<void>;
 }) {
   const [creating, setCreating] = useState(false);
   return (
@@ -455,6 +521,7 @@ export function IndicesRepositoryInput({
           testId="indicesComboBoxInput"
         />
       </Field>
+      <Spacer size="m" />
       <div className="ismSnapshotForm__repository">
         <Field title="Select a repository for snapshots" error={repositoryError}>
           <Select
@@ -466,11 +533,13 @@ export function IndicesRepositoryInput({
             aria-label="Select a repository"
           />
         </Field>
-        <Button size="s" icon="plus" onClick={() => setCreating(true)}>
-          Create repository
-        </Button>
+        {onRepositoryCreated && (
+          <Button icon="plus" onClick={() => setCreating(true)}>
+            Create repository
+          </Button>
+        )}
       </div>
-      {creating && (
+      {creating && onRepositoryCreated && (
         <CreateRepositoryFlyout
           onClose={() => setCreating(false)}
           onCreated={async () => {
@@ -508,6 +577,7 @@ export function AdvancedSnapshotSettings({
         label={<TickLabel title="Include cluster state in snapshots" />}
         testId="include_global_state"
       />
+      <Spacer size="m" />
       <Checkbox
         checked={ignoreUnavailable}
         onChange={(value) => onChange('ignore_unavailable', value)}
@@ -519,6 +589,7 @@ export function AdvancedSnapshotSettings({
         }
         testId="ignore_unavailable"
       />
+      <Spacer size="m" />
       <Checkbox
         checked={partial}
         onChange={(value) => onChange('partial', value)}
