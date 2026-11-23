@@ -22,13 +22,14 @@ interface Answer {
 /** The server as it is built, with the given settings, asked for each target in turn */
 async function served(targets: string[], settings: Record<string, string> = {}): Promise<Answer[]> {
   const opensearch = await fakeOpenSearch();
-  const { config } = loadConfig({
-    env: { SERVER_HOST: '127.0.0.1', SERVER_PORT: '0', OPENSEARCH_HOSTS: JSON.stringify([opensearch.url]), ...settings },
-  });
-  const app = createApp({ config, logger: silentLogger, distDirectory: resolve(__dirname, '..', '..') });
-  await app.start();
-  const { port } = app.server.address() as AddressInfo;
+  let app: ReturnType<typeof createApp> | undefined;
   try {
+    const { config } = loadConfig({
+      env: { SERVER_HOST: '127.0.0.1', SERVER_PORT: '0', OPENSEARCH_HOSTS: JSON.stringify([opensearch.url]), ...settings },
+    });
+    app = createApp({ config, logger: silentLogger, distDirectory: resolve(__dirname, '..', '..') });
+    await app.start();
+    const { port } = app.server.address() as AddressInfo;
     const answers: Answer[] = [];
     for (const target of targets) {
       answers.push(
@@ -47,7 +48,7 @@ async function served(targets: string[], settings: Record<string, string> = {}):
     }
     return answers;
   } finally {
-    await app.stop();
+    await app?.stop();
     await opensearch.close();
   }
 }
@@ -98,5 +99,8 @@ describe("the page's nonce", () => {
     assert.deepEqual(one.styles, [one.meta]);
     assert.deepEqual(two.styles, [two.meta]);
     assert.notEqual(one.meta, two.meta);
+    // and the header of each page lets that nonce's style elements apply
+    assert.ok(String(first.headers['content-security-policy']).includes(`; style-src-elem 'self' 'nonce-${one.meta}'; `));
+    assert.ok(String(second.headers['content-security-policy']).includes(`; style-src-elem 'self' 'nonce-${two.meta}'; `));
   });
 });
