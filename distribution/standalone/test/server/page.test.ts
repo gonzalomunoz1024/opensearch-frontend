@@ -3,8 +3,60 @@
 /* The one page of the product, as server/static.ts writes it. */
 
 import assert from 'node:assert/strict';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { resolve } from 'node:path';
 import { describe, it } from 'node:test';
+import { createApp } from '../../server/app';
+import { loadConfig } from '../../server/config';
+import { silentLogger } from '../../server/logger';
 import { cspNonce, renderPage, type PageOptions } from '../../server/static';
+import { fakeOpenSearch } from './fake_opensearch';
+
+interface Answer {
+  status: number;
+  headers: http.IncomingHttpHeaders;
+  body: string;
+}
+
+/** The server as it is built, with the given settings, asked for each target in turn */
+async function served(targets: string[], settings: Record<string, string> = {}): Promise<Answer[]> {
+  const opensearch = await fakeOpenSearch();
+  const { config } = loadConfig({
+    env: { SERVER_HOST: '127.0.0.1', SERVER_PORT: '0', OPENSEARCH_HOSTS: JSON.stringify([opensearch.url]), ...settings },
+  });
+  const app = createApp({ config, logger: silentLogger, distDirectory: resolve(__dirname, '..', '..') });
+  await app.start();
+  const { port } = app.server.address() as AddressInfo;
+  try {
+    const answers: Answer[] = [];
+    for (const target of targets) {
+      answers.push(
+        await new Promise<Answer>((done, failed) => {
+          const request = http.request({ host: '127.0.0.1', port, path: target, agent: false }, (response) => {
+            const chunks: Buffer[] = [];
+            response.on('data', (chunk: Buffer) => chunks.push(chunk));
+            response.on('end', () =>
+              done({ status: response.statusCode ?? 0, headers: response.headers, body: Buffer.concat(chunks).toString('utf8') })
+            );
+          });
+          request.on('error', failed);
+          request.end();
+        })
+      );
+    }
+    return answers;
+  } finally {
+    await app.stop();
+    await opensearch.close();
+  }
+}
+
+/** The nonce of a page's meta element, and those its style elements carry */
+const noncesOf = (html: string) => ({
+  meta: /<meta name="csp-nonce" content="([^"]*)">/.exec(html)?.[1],
+  styles: [...html.matchAll(/<style nonce="([^"]*)">/g)].map((match) => match[1]),
+});
 
 const BUILD: PageOptions['build'] = {
   version: '3.9.0',
@@ -36,5 +88,15 @@ describe("the page's nonce", () => {
     const html = page();
     assert.equal(html.includes('csp-nonce'), false);
     assert.equal(html.includes('nonce='), false);
+  });
+
+  it('is made by the server for each page it sends, and is the same in the meta element and on the style', async () => {
+    const [first, second] = await served(['/app/home', '/app/dashboards']);
+    const one = noncesOf(first.body);
+    const two = noncesOf(second.body);
+    assert.match(one.meta ?? '', /^[A-Za-z0-9+/]{22}==$/);
+    assert.deepEqual(one.styles, [one.meta]);
+    assert.deepEqual(two.styles, [two.meta]);
+    assert.notEqual(one.meta, two.meta);
   });
 });
