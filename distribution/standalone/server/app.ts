@@ -11,7 +11,6 @@
 
 import http from 'node:http';
 import { join } from 'node:path';
-import type { SavedObject, SavedObjectReference } from '../common/saved_objects';
 import type { Config } from './config';
 import {
   HttpError,
@@ -24,18 +23,20 @@ import {
   type Reply,
   type RequestContext,
 } from './http';
-import { exportObjects, fileFromMultipart, importObjects } from './import_export';
 import { registerIndexManagement } from './index_management';
 import { registerGeospatial } from './geospatial';
 import { fieldsForWildcard } from './index_pattern_fields';
 import type { Logger } from './logger';
 import { OpenSearchClient, OpenSearchError, OpenSearchUnavailableError } from './opensearch';
-import { SavedObjectsRepository, type FindOptions } from './saved_objects';
+import { SavedObjectsRepository } from './saved_objects';
+import { registerSavedObjectsManagement } from './saved_objects_management';
+import { registerSavedObjects } from './saved_objects_routes';
 import { registerSampleData } from './sample_data/routes';
 import { registerShortUrls } from './short_urls';
 import { registerSqlConsole } from './sql_console';
 import { contentSecurityPolicy, readBuild, renderPage, serveStatic } from './static';
 import { registerTsvbFields } from './tsvb_fields';
+import { registerTimeline } from './timeline';
 import { UiSettings } from './ui_settings';
 import { registerValueSuggestions } from './value_suggestions';
 
@@ -170,14 +171,6 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
       return [value];
     });
 
-  const integer = (query: URLSearchParams, name: string): number | undefined => {
-    const raw = query.get(name);
-    if (raw === null || raw === '') return undefined;
-    const value = Number(raw);
-    if (!Number.isInteger(value) || value < 0) throw badRequest(`${name} must be a whole number`);
-    return value;
-  };
-
   const object = async <T extends object>(context: RequestContext): Promise<T> => {
     const body = await context.json<T>();
     if (body === undefined || body === null || typeof body !== 'object') {
@@ -186,127 +179,8 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
     return body;
   };
 
-  router.get('/api/saved_objects/_find', async ({ query }) => {
-    const type = all(query, 'type');
-    if (type.length === 0) throw badRequest('[request query.type]: expected at least one value');
-    const sortOrder = query.get('sort_order');
-    const operator = query.get('default_search_operator');
-    const findOptions: FindOptions = {
-      type,
-      search: query.get('search') ?? undefined,
-      searchFields: all(query, 'search_fields'),
-      defaultSearchOperator: operator === 'AND' ? 'AND' : 'OR',
-      page: integer(query, 'page'),
-      perPage: integer(query, 'per_page'),
-      sortField: query.get('sort_field') ?? undefined,
-      sortOrder: sortOrder === 'desc' ? 'desc' : sortOrder === 'asc' ? 'asc' : undefined,
-      fields: all(query, 'fields'),
-    };
-    const hasReference = query.get('has_reference');
-    if (hasReference) {
-      try {
-        findOptions.hasReference = JSON.parse(hasReference) as { type: string; id: string };
-      } catch {
-        throw badRequest('has_reference must be JSON with a type and an id');
-      }
-    }
-    return { body: await repository.find(findOptions) };
-  });
-
-  router.post('/api/saved_objects/_bulk_get', async (context) => {
-    const objects = await object<Array<{ type: string; id: string }>>(context);
-    if (!Array.isArray(objects)) throw badRequest('The request needs a list of objects');
-    return { body: { saved_objects: await repository.bulkGet(objects) } };
-  });
-
-  router.post(
-    '/api/saved_objects/_bulk_create',
-    async (context) => {
-      const objects = await object<SavedObject[]>(context);
-      if (!Array.isArray(objects)) throw badRequest('The request needs a list of objects');
-      const overwrite = context.query.get('overwrite') === 'true';
-      return { body: { saved_objects: await repository.bulkCreate(objects, { overwrite }) } };
-    },
-    { maxBytes: config.savedObjects.maxImportPayloadBytes }
-  );
-
-  router.post('/api/saved_objects/_export', async (context) => {
-    const request = await object<Parameters<typeof exportObjects>[1]>(context);
-    const file = await exportObjects(repository, request, config.savedObjects.maxImportExportSize);
-    return {
-      headers: {
-        'content-type': 'application/ndjson',
-        'content-disposition': 'attachment; filename="export.ndjson"',
-      },
-      body: file,
-    };
-  });
-
-  router.post(
-    '/api/saved_objects/_import',
-    async (context) => {
-      const body = await context.body();
-      const type = String(context.req.headers['content-type'] ?? '');
-      const text = type.includes('multipart/form-data')
-        ? fileFromMultipart(body, type)
-        : body.toString('utf8');
-      return {
-        body: await importObjects(repository, text, {
-          overwrite: context.query.get('overwrite') === 'true',
-          createNewCopies: context.query.get('createNewCopies') === 'true',
-          limit: config.savedObjects.maxImportExportSize,
-        }),
-      };
-    },
-    { maxBytes: config.savedObjects.maxImportPayloadBytes }
-  );
-
-  router.get('/api/saved_objects/{type}/{id}', async ({ params }) => ({
-    body: await repository.get(params.type, params.id),
-  }));
-
-  const create: Handler = async (context) => {
-    const body = await object<{
-      attributes?: Record<string, unknown>;
-      references?: SavedObjectReference[];
-      migrationVersion?: Record<string, string>;
-    }>(context);
-    if (!body.attributes || typeof body.attributes !== 'object') {
-      throw badRequest('[request body.attributes]: expected an object');
-    }
-    return {
-      body: await repository.create(context.params.type, body.attributes, {
-        id: context.params.id,
-        overwrite: context.query.get('overwrite') === 'true',
-        references: body.references,
-        migrationVersion: body.migrationVersion,
-      }),
-    };
-  };
-  router.post('/api/saved_objects/{type}', create);
-  router.post('/api/saved_objects/{type}/{id}', create);
-
-  router.put('/api/saved_objects/{type}/{id}', async (context) => {
-    const body = await object<{
-      attributes?: Record<string, unknown>;
-      references?: SavedObjectReference[];
-      version?: string;
-    }>(context);
-    if (!body.attributes || typeof body.attributes !== 'object') {
-      throw badRequest('[request body.attributes]: expected an object');
-    }
-    return {
-      body: await repository.update(context.params.type, context.params.id, body.attributes, {
-        references: body.references,
-        version: body.version,
-      }),
-    };
-  });
-
-  router.delete('/api/saved_objects/{type}/{id}', async ({ params }) => {
-    await repository.delete(params.type, params.id);
-    return { body: {} };
-  });
+  registerSavedObjects(router, repository, config.savedObjects);
+  registerSavedObjectsManagement(router, repository);
 
   // --- Advanced settings -----------------------------------------------------------------------
 
@@ -392,6 +266,7 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
   // --- Index Management ------------------------------------------------------------------------
 
   registerIndexManagement(router, client);
+  registerTimeline(router, { client, repository, uiSettings, config, logger });
 
   // --- TSVB ------------------------------------------------------------------------------------
 
@@ -461,7 +336,7 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
       return { status, body: errorBody(status, error.message, { body: error.body }) };
     }
     logger.error('A request failed', { error: (error as Error).stack ?? String(error) });
-    return { status: 500, body: errorBody(500, 'An internal server error occurred') };
+    return { status: 500, body: errorBody(500, 'An internal server error occurred.') };
   };
 
   const handle = async (req: http.IncomingMessage): Promise<Reply> => {

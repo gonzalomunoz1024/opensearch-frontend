@@ -28,7 +28,7 @@ export function FormRow({
 }) {
   return (
     <label className={cx('atlFormRow', full && 'atlFormRow--full')}>
-      {label && <span className="atlFormRow__label">{label}</span>}
+      {label && <span className={cx('atlFormRow__label', Boolean(error) && 'atlFormRow__label--invalid')}>{label}</span>}
       {children}
       {error && <span className="atlFormRow__error">{error}</span>}
       {help && <span className="atlFormRow__help">{help}</span>}
@@ -54,7 +54,8 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function T
   if (icon || append) {
     return (
       <span className={cx(classes, 'atlFieldGroup')}>
-        {icon && <Icon name={icon} />}
+        {/* As the original's: a compressed field draws its icon small */}
+        {icon && <Icon name={icon} size={compact ? 's' : 'm'} />}
         <input
           ref={ref}
           type="text"

@@ -124,7 +124,6 @@ export function Listing({
           .find<ListedAttributes>({
             type: typeKey.split(','),
             search: filter ? `${filter}*` : undefined,
-            rawSearch: true,
             searchFields: searchFieldKey.split(','),
             fields: fieldKey.split(','),
             perPage: limit,

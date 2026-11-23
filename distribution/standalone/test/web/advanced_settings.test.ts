@@ -166,18 +166,17 @@ describe('the rows of the advanced settings page', () => {
     assert.equal(rows.find((row) => row.name === 'csv:separator')?.value, ';');
   });
 
-  it('leaves out what the product leaves out, and locks what the server or the browser sets', () => {
+  it('lists the Timeline settings in their section, and locks what the server or the browser sets', () => {
     const rows = toFieldSettings(
       source(
-        { 'timeline:es.timefield': '@timestamp' },
-        {
-          leftOut: (key) => key.startsWith('timeline:'),
-          isOverridden: (key) => key === 'csv:separator',
-          userControl: true,
-        }
+        { 'timeline:es.timefield': 'timestamp' },
+        { isOverridden: (key) => key === 'csv:separator', userControl: true }
       )
     );
-    assert.equal(rows.some((row) => row.name.startsWith('timeline:')), false);
+    const timeline = rows.filter((row) => row.name.startsWith('timeline:'));
+    assert.equal(timeline.length, 7);
+    assert.ok(timeline.every((row) => row.category[0] === 'timeline'));
+    assert.equal(timeline.find((row) => row.name === 'timeline:es.timefield')?.value, 'timestamp');
     assert.equal(rows.find((row) => row.name === 'csv:separator')?.isOverridden, true);
     assert.equal(rows.find((row) => row.name === 'theme:darkMode')?.preferBrowserSetting, true);
     assert.equal(ROWS.find((row) => row.name === 'theme:darkMode')?.preferBrowserSetting, false);

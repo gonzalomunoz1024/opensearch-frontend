@@ -110,6 +110,9 @@ export interface QueryBarProps {
   invalid?: boolean;
   /** What sits before the query, inside the field: the saved queries' button */
   prepend?: ReactNode;
+  /** Takes the focus when it appears, its suggestions closed until something is typed */
+  autoFocus?: boolean;
+  testId?: string;
 }
 
 export function QueryBar({
@@ -122,13 +125,15 @@ export function QueryBar({
   placeholder = 'Search',
   invalid,
   prepend,
+  autoFocus,
+  testId = 'queryInput',
 }: QueryBarProps) {
   const area = useRef<HTMLTextAreaElement>(null);
   const [focused, setFocused] = useState(false);
   const [cursor, setCursor] = useState(0);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [active, setActive] = useState(-1);
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissed, setDismissed] = useState(Boolean(autoFocus));
   const pendingCursor = useRef<number | undefined>(undefined);
 
   const fields = useMemo(() => {
@@ -195,6 +200,12 @@ export function QueryBar({
     area.current?.focus();
   };
 
+  useEffect(() => {
+    if (autoFocus) area.current?.focus();
+    // Only when it appears
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const open = focused && !dismissed && suggestions.length > 0;
   const multiline = value.includes('\n');
 
@@ -237,7 +248,7 @@ export function QueryBar({
             spellCheck={false}
             autoComplete="off"
             aria-label="Search"
-            data-test-subj="queryInput"
+            data-test-subj={testId}
             onChange={(event) => {
               onChange(event.target.value);
               setCursor(event.target.selectionStart);

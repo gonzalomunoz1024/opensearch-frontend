@@ -75,7 +75,7 @@ export function navGroups(): NavGroup[] {
     {
       id: 'management',
       label: 'Management',
-      icon: 'gear',
+      icon: 'managementApp',
       links: [
         { id: 'managementOverview', label: 'Overview', path: '/app/opensearch_management_overview' },
         {
@@ -175,7 +175,8 @@ function Navigation({ docked, onDock, onClose }: { docked: boolean; onDock: () =
       <button type="button" className="shlNav__groupTitle" aria-expanded={!closed[id]} onClick={() => toggle(id)}>
         {icon}
         <span className="atlGrow">{label}</span>
-        <Icon name={closed[id] ? 'chevronRight' : 'chevronDown'} />
+        {/* The original's arrow of an accordion: pointing right, turned down while open */}
+        <Icon name="chevronRight" className="shlNav__arrow" />
       </button>
       {!closed[id] && <div className="shlNav__links">{body}</div>}
     </section>
@@ -202,7 +203,7 @@ function Navigation({ docked, onDock, onClose }: { docked: boolean; onDock: () =
           section(
             group.id,
             group.label,
-            group.icon === 'logo' ? <Logo /> : group.icon ? <Icon name={group.icon} size="l" /> : null,
+            group.icon === 'logo' ? <Logo /> : group.icon ? <Icon name={group.icon} size="l" app /> : null,
             group.links.map((link) => (
               <a
                 key={link.id}

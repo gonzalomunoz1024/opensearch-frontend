@@ -84,7 +84,6 @@ export function PanelFinder({
           type: typeKey.split(','),
           fields: ['title', 'displayName', 'visState'],
           search: query ? `${query}*` : undefined,
-          rawSearch: true,
           page: 1,
           perPage: services.uiSettings.get<number>('savedObjects:listingLimit', 1000),
           searchFields: ['title^3', 'description'],

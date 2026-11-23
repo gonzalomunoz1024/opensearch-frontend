@@ -10,6 +10,16 @@ import type { Config } from './config';
 import { badRequest } from './http';
 import { OpenSearchError, type OpenSearchClient } from './opensearch';
 
+/**
+ * The original stores the Timeline settings under their old `timelion` names, and gives them back
+ * under the new ones: the first occurrence in a key is changed, as its settings client does
+ */
+function translateKeys(values: Record<string, unknown>, source: string, destination: string) {
+  const translated: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(values)) translated[key.replace(source, destination)] = value;
+  return translated;
+}
+
 export class UiSettings {
   private cached?: { at: number; values: Record<string, unknown> };
 
@@ -38,7 +48,7 @@ export class UiSettings {
       const document = JSON.parse(response.body.toString('utf8')) as {
         _source?: { config?: Record<string, unknown> };
       };
-      stored = document._source?.config ?? {};
+      stored = translateKeys(document._source?.config ?? {}, 'timelion', 'timeline');
     } else if (response.status !== 404) {
       throw new OpenSearchError(response.status, undefined, `OpenSearch answered ${response.status}`);
     }
@@ -83,15 +93,16 @@ export class UiSettings {
         throw badRequest(`Unable to update "${key}" because it is overridden`);
       }
     }
+    const stored = translateKeys(changes, 'timeline', 'timelion');
     await this.client.request({
       method: 'POST',
       path: `${this.path}/_update/${encodeURIComponent(this.id)}`,
       query: { refresh: 'wait_for', retry_on_conflict: 3 },
       body: {
-        doc: { config: changes, updated_at: new Date().toISOString() },
+        doc: { config: stored, updated_at: new Date().toISOString() },
         upsert: {
           type: 'config',
-          config: changes,
+          config: stored,
           references: [],
           updated_at: new Date().toISOString(),
         },

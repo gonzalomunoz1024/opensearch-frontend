@@ -91,7 +91,7 @@ function DashboardList() {
   useEffect(() => {
     if (!titleParam) return;
     services.savedObjects
-      .find<{ title?: string }>({ type: 'dashboard', search: `"${titleParam}"`, rawSearch: true, searchFields: ['title'] })
+      .find<{ title?: string }>({ type: 'dashboard', search: `"${titleParam}"`, searchFields: ['title'] })
       .then((answer) => {
         const matching = answer.saved_objects.filter(
           (object) => (object.attributes.title ?? '').toLowerCase() === titleParam.toLowerCase()
@@ -455,7 +455,6 @@ function DashboardPage({ savedId }: { savedId?: string }) {
           fields: ['title'],
           searchFields: ['title'],
           search: `"${cloneBase(objectTitle)}"`,
-          rawSearch: true,
         });
         const copy = await services.savedObjects.create(
           panel.type,

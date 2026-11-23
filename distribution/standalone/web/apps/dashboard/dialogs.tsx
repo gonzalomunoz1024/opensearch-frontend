@@ -94,7 +94,6 @@ export async function titleTaken(title: string, type = 'dashboard'): Promise<boo
   const found = await services.savedObjects.find<{ title?: string }>({
     type,
     search: `"${title}"`,
-    rawSearch: true,
     searchFields: ['title'],
     fields: ['title'],
     perPage: 10,

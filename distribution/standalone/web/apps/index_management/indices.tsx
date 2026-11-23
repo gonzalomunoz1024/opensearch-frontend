@@ -59,7 +59,7 @@ const ROLLOVER_DOCS = 'https://opensearch.org/docs/latest/im-plugin/ism/policies
 export function IndexName({ index }: { index: string }) {
   return (
     <span className="ismIndexName">
-      <IconButton icon="copy" label="Copy" size="s" onClick={() => copyText(index)} />
+      <IconButton icon="copyClipboard" iconSize="s" label="Copy" size="s" onClick={() => copyText(index)} />
       <a href={`#/index-detail/${index}`} data-test-subj={`viewIndexDetailButton-${index}`}>
         {index}
       </a>
@@ -250,6 +250,8 @@ export function ApplyPolicyModal({ indices, onClose }: { indices: string[]; onCl
         ) : (
           <CallOut
             tone="warning"
+            size="s"
+            icon="warning"
             title="You are applying a policy with rollover to multiple indices. You will need to add a unique rollover_alias setting to each index."
           />
         ))}
@@ -365,7 +367,7 @@ export function IndicesActions({
           confirmTestId="Delete Confirm button"
         >
           {names.some((name) => matchesAny(name, SYSTEM_INDEX)) && (
-            <CallOut tone="warning">
+            <CallOut tone="warning" size="s">
               These indexes may contain critical system data. Deleting system indexes may break OpenSearch.
             </CallOut>
           )}
@@ -384,7 +386,7 @@ export function IndicesActions({
           confirmTestId="Close Confirm button"
         >
           {names.some((name) => matchesAny(name, SYSTEM_INDEX)) && (
-            <CallOut tone="warning">
+            <CallOut tone="warning" size="s">
               This index may contain critical system data. Closing system indexes may break OpenSearch.
             </CallOut>
           )}

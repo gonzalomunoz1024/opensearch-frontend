@@ -59,6 +59,8 @@ export interface PopoverProps {
    * or on the other side, or beside it, wherever it fits first (see `placeLikeOriginal`)
    */
   position?: PopoverPosition;
+  /** Above its button when there is room, as the original's `up` positions */
+  above?: boolean;
 }
 
 /** Where the popovers open now hang from: a dialog under one of them leaves the Escape key to it */
@@ -81,6 +83,7 @@ export function Popover({
   anchorStyle,
   anchorClassName,
   position,
+  above: preferAbove = false,
 }: PopoverProps) {
   const anchor = useRef<HTMLSpanElement>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -121,7 +124,9 @@ export function Popover({
     left = Math.max(margin, Math.min(left, window.innerWidth - panelWidth - margin));
     const below = window.innerHeight - anchorBox.bottom - margin;
     const above = anchorBox.top - margin;
-    const fitsBelow = panelBox.height + offset <= below || below >= above;
+    const fitsBelow = preferAbove
+      ? panelBox.height + offset > above && below >= above
+      : panelBox.height + offset <= below || below >= above;
     const next: CSSProperties = {
       left,
       minWidth: matchWidth ? anchorBox.width : undefined,
@@ -132,7 +137,7 @@ export function Popover({
     else next.bottom = window.innerHeight - anchorBox.top + offset;
     setStyle(next);
     setPlacement(fitsBelow ? 'bottom' : 'top');
-  }, [align, side, matchWidth, fitWidth, width, offset, buffer, position]);
+  }, [align, side, matchWidth, fitWidth, width, offset, buffer, position, preferAbove]);
 
   useLayoutEffect(() => {
     if (!open) {
@@ -591,11 +596,12 @@ export function Flyout({
   );
 }
 
-// The original's icons: a check, an i, a question mark in a ring, and a triangle for what failed
+// The original's icons: a check, an i in a ring, OUI's `help` (a ring buoy) for a warning, and a
+// triangle for what failed
 const TOAST_ICONS: Record<string, IconName> = {
   healthy: 'check',
   info: 'info',
-  warning: 'help',
+  warning: 'lifebuoy',
   critical: 'warning',
 };
 
@@ -713,8 +719,11 @@ export function Tooltip({
   block?: boolean;
   /** A class for the box of the text */
   className?: string;
-  /** Above its anchor, or under it; on the other side when there is no room */
-  position?: 'top' | 'bottom';
+  /**
+   * Where it is drawn, as the original's `position`: above its anchor or under it, on the other
+   * side when there is no room, or on its right
+   */
+  position?: 'top' | 'bottom' | 'right';
   /** Shown after the original's delay; at once when left out */
   delay?: keyof typeof TOOLTIP_DELAYS;
 }) {
@@ -727,6 +736,10 @@ export function Tooltip({
     if (!shown || !anchor.current || !box.current) return;
     const target = anchor.current.getBoundingClientRect();
     const own = box.current.getBoundingClientRect();
+    if (position === 'right' && target.right + 16 + own.width <= window.innerWidth - 8) {
+      setPlace({ left: target.right + 16, top: Math.max(8, target.top + target.height / 2 - own.height / 2) });
+      return;
+    }
     const left = Math.max(8, Math.min(target.left + target.width / 2 - own.width / 2, window.innerWidth - own.width - 8));
     // 16 px from its anchor, as the original's, on the side asked unless there is no room
     const above = target.top - own.height - 16;

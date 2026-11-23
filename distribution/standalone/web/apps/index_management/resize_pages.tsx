@@ -256,10 +256,10 @@ export function SplitIndex() {
           <SourceDetails index={index.index}>
             <Reasons>
               {problems.includes('red') && (
-                <CallOut tone="critical" title="The source index must not have a Red health status." />
+                <CallOut tone="critical" icon="warning" title="The source index must not have a Red health status." />
               )}
               {problems.includes('closed') && (
-                <CallOut tone="critical" title="The source index must be open.">
+                <CallOut tone="critical" icon="warning" title="The source index must be open.">
                   <p>
                     You must first open the index before splitting it. Depending on the size of the source index,
                     this may take additional time to complete. The index will be in the Red state while the index is
@@ -280,7 +280,7 @@ export function SplitIndex() {
                 </CallOut>
               )}
               {problems.includes('writable') && (
-                <CallOut tone="critical" title="The source index must block write operations before splitting.">
+                <CallOut tone="critical" icon="warning" title="The source index must block write operations before splitting.">
                   <p>In order to split an existing index, you must first set the index to block write operations.</p>
                   <Button variant="primary" size="s" testId="set-indexsetting-button" onClick={blockWrites}>
                     Block write operations
@@ -523,7 +523,7 @@ export function ShrinkIndex() {
       <SourceDetails index={index.index}>
         <Reasons>
           {problems.includes('red') && (
-            <CallOut tone="critical" title="The source index must be in green health status.">
+            <CallOut tone="critical" icon="warning" title="The source index must be in green health status.">
               <p>
                 The index is in red health status and may be running operations in the background. We recommend to
                 wait until the index becomes green to continue shrinking.
@@ -531,10 +531,10 @@ export function ShrinkIndex() {
             </CallOut>
           )}
           {problems.includes('oneShard') && (
-            <CallOut tone="critical" title="Cannot shrink source index with only one primary shard." />
+            <CallOut tone="critical" icon="warning" title="Cannot shrink source index with only one primary shard." />
           )}
           {problems.includes('writable') && (
-            <CallOut tone="critical" title="The source index must block write operations before shrinking.">
+            <CallOut tone="critical" icon="warning" title="The source index must block write operations before shrinking.">
               <p>In order to shrink an existing index, you must first set the index to block write operations.</p>
               <Button variant="primary" size="s" testId="onSetIndexWriteBlockButton" onClick={blockWrites}>
                 Block write operations
@@ -542,7 +542,7 @@ export function ShrinkIndex() {
             </CallOut>
           )}
           {problems.includes('closed') && (
-            <CallOut tone="critical" title="The source index must be open.">
+            <CallOut tone="critical" icon="warning" title="The source index must be open.">
               <p>
                 You must first open the index before shrinking it. Depending on the size of the source index, this
                 may take additional time to complete. The index will be in red health status while the index is
@@ -563,7 +563,7 @@ export function ShrinkIndex() {
             </CallOut>
           )}
           {problems.includes('yellow') && (
-            <CallOut tone="warning" title="We recommend shrinking index with a green health status.">
+            <CallOut tone="warning" icon="lifebuoy" title="We recommend shrinking index with a green health status.">
               <p>
                 The source index is in yellow health status. To prevent issues with initializing the new shrunken
                 index, we recommend shrinking an index with a green health status.
@@ -571,7 +571,7 @@ export function ShrinkIndex() {
             </CallOut>
           )}
           {problems.includes('readOnly') && (
-            <CallOut tone="warning" title="Index setting [index.blocks.read_only] is [true].">
+            <CallOut tone="warning" icon="lifebuoy" title="Index setting [index.blocks.read_only] is [true].">
               <p>
                 Index setting [index.blocks.read_only] of the source index is [true], it will be copied to the new
                 shrunken index and then cause the new shrunken index&apos;s shards to be unassigned, you can set the
