@@ -44,6 +44,25 @@ declare module 'markdown-it' {
     lib: { mdurl: { encode(url: string): string } };
     /** A text with its backslash escapes and character references read */
     unescapeAll(text: string): string;
+    /** Whether a character code is a space or a tab */
+    isSpace(code: number): boolean;
+  }
+
+  /** What a rule of the inline parser sees: the text, where it is in it, and what is not yet a token */
+  export interface StateInline {
+    src: string;
+    pos: number;
+    posMax: number;
+    pending: string;
+    push(type: string, tag: string, nesting: 1 | 0 | -1): Token;
+  }
+
+  /** Reads what starts at `state.pos`, and says whether it did; `silent` asks only whether it would */
+  export type InlineRule = (state: StateInline, silent: boolean) => boolean;
+
+  export interface Ruler<Rule> {
+    /** Puts a rule in place of the one of that name */
+    at(name: string, rule: Rule): void;
   }
 
   export default class MarkdownIt {
@@ -51,6 +70,7 @@ declare module 'markdown-it' {
     constructor(options?: Options);
     readonly renderer: Renderer;
     readonly utils: Utils;
+    readonly inline: { ruler: Ruler<InlineRule> };
     validateLink: (url: string) => boolean;
     normalizeLink: (url: string) => string;
     normalizeLinkText: (url: string) => string;

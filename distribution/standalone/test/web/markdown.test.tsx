@@ -256,6 +256,25 @@ describe('the custom banner, as react-markdown 6 draws it', () => {
     assert.equal(banner('- item\n  ```\n  in list\n  ```\n- next'), '<ul>\n<li>item\n<pre><code>in list\n</code></pre>\n</li>\n<li>next</li>\n</ul>');
   });
 
+  // micromark drops the spaces and tabs that end a line, and breaks the line only after two spaces
+  // or more with no tab; mdast-util-to-hast takes spaces and tabs from beside a line end in a
+  // text, and white space from the start of what follows a hard break
+  it('ends lines as react-markdown does', () => {
+    assert.equal(banner('a\t\nb'), 'a\nb');
+    assert.equal(banner('a \t\nb'), 'a\nb');
+    assert.equal(banner('a\t  \nb'), 'a\nb');
+    assert.equal(banner('a   \nb'), 'a<br/>\nb');
+    assert.equal(banner('a\t\\\nb'), 'a\t<br/>\nb');
+    assert.equal(banner('*a*\t\nb'), '<em>a</em>\nb');
+    assert.equal(banner('[a\t\nb](x)'), '<a href="x">a\nb</a>');
+    assert.equal(banner('![a\t\nb](x)'), '<img src="x" alt="a\nb"/>');
+    assert.equal(banner('a &#10; b'), 'a\nb');
+    assert.equal(banner('a  \n&nbsp;b'), 'a<br/>\nb');
+    assert.equal(banner('a\\\n` b`'), 'a<br/>\n<code>b</code>');
+    assert.equal(banner('a  \n[&#32;l](x)'), 'a<br/>\n<a href="x">l</a>');
+    assert.equal(banner('**a  \n**b'), '**a<br/>\n**b');
+  });
+
   it('reads CommonMark only: no tables, struck text or links found in the text, and HTML as text', () => {
     assert.equal(
       banner('https://opensearch.org and www.example.com stay text; ~~no strike~~\n\na | b\n--|--\n1 | 2'),

@@ -141,6 +141,23 @@ function commonMarkParser(): MarkdownIt {
   markdownIt.validateLink = () => true;
   markdownIt.normalizeLink = (url) => markdownIt.utils.lib.mdurl.encode(url);
   markdownIt.normalizeLinkText = (url) => url;
+  // The end of a line as micromark reads it: the spaces and tabs before it are not text, and make
+  // a hard break only when they are two spaces or more with no tab among them
+  markdownIt.inline.ruler.at('newline', (state, silent) => {
+    if (state.src.charCodeAt(state.pos) !== 0x0a) return false;
+    if (!silent) {
+      let start = state.pending.length;
+      while (start > 0 && (state.pending[start - 1] === ' ' || state.pending[start - 1] === '\t')) start -= 1;
+      const run = state.pending.slice(start);
+      state.pending = state.pending.slice(0, start);
+      state.push(run.length >= 2 && !run.includes('\t') ? 'hardbreak' : 'softbreak', 'br', 0);
+    }
+    let pos = state.pos + 1;
+    // Nor are the spaces and tabs the next line starts with
+    while (pos < state.posMax && markdownIt.utils.isSpace(state.src.charCodeAt(pos))) pos += 1;
+    state.pos = pos;
+    return true;
+  });
   commonMark = markdownIt;
   return markdownIt;
 }
@@ -182,30 +199,72 @@ function element(type: string, props: Record<string, unknown> | null, children: 
   return children.length ? createElement(type, { ...props, key }, children) : createElement(type, { ...props, key });
 }
 
+const isBlank = (char: string) => char === ' ' || char === '\t';
+
+/**
+ * mdast-util-to-hast's text: no space or tab beside a line end. In one pass, where a pattern would
+ * go over a long run of spaces again from each of them.
+ */
+function trimLines(text: string): string {
+  if (!text.includes('\n')) return text;
+  const lines = text.split('\n');
+  return lines
+    .map((line, index) => {
+      let start = 0;
+      let end = line.length;
+      if (index > 0) while (start < end && isBlank(line[start])) start += 1;
+      if (index < lines.length - 1) while (end > start && isBlank(line[end - 1])) end -= 1;
+      return line.slice(start, end);
+    })
+    .join('\n');
+}
+
 function inlineNodes(tokens: Token[]): ReactNode[] {
   const root: ReactNode[] = [];
-  const open: Array<{ token: Token; children: ReactNode[] }> = [];
+  const open: Array<{ token: Token; children: ReactNode[]; afterBreak: boolean }> = [];
   const siblings = () => (open.length ? open[open.length - 1].children : root);
+  // Texts and soft breaks in a row are one text in mdast
+  let text = '';
+  // mdast-util-to-hast takes the white space off the start of what follows a hard break
+  let afterBreak = false;
+  const flush = () => {
+    if (text === '') return;
+    const value = afterBreak ? trimLines(text).trimStart() : trimLines(text);
+    text = '';
+    afterBreak = false;
+    if (value) siblings().push(value);
+  };
   for (const token of tokens) {
+    if (token.type === 'text' || token.type === 'softbreak') {
+      text += token.type === 'text' ? token.content : '\n';
+      continue;
+    }
+    flush();
     const into = siblings();
-    if (token.type === 'text') into.push(token.content);
-    else if (token.type === 'softbreak') into.push('\n');
-    else if (token.type === 'hardbreak') into.push(element('br', null, [], into.length), '\n');
-    else if (token.type === 'code_inline') into.push(element('code', null, [token.content], into.length));
-    else if (token.type === 'image') {
+    const breakBefore = afterBreak;
+    afterBreak = false;
+    if (token.type === 'hardbreak') {
+      into.push(element('br', null, [], into.length), '\n');
+      afterBreak = true;
+    } else if (token.type === 'code_inline') {
+      into.push(element('code', null, [breakBefore ? token.content.trimStart() : token.content], into.length));
+    } else if (token.type === 'image') {
       const title = token.attrGet('title');
       const props = { src: token.attrGet('src') ?? '', alt: altText(token.children ?? []), ...(title === null ? {} : { title }) };
       into.push(element('img', props, [], into.length));
-    } else if (token.nesting === 1) open.push({ token, children: [] });
+    } else if (token.nesting === 1) open.push({ token, children: [], afterBreak: breakBefore });
     else if (token.nesting === -1) {
       const closed = open.pop();
       if (!closed) continue;
+      const first = closed.children[0];
+      if (closed.afterBreak && typeof first === 'string') closed.children[0] = first.trimStart();
       const title = closed.token.attrGet('title');
       const props = closed.token.type === 'link_open' ? { href: uriTransformer(closed.token.attrGet('href') ?? ''), ...(title === null ? {} : { title }) } : null;
       const parent = siblings();
       parent.push(element(closed.token.tag, props, closed.children, parent.length));
     }
   }
+  flush();
   return root;
 }
 
