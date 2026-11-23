@@ -261,6 +261,60 @@ export function firstTab(results: TableResult[], queries: string[]) {
     : { id: OUTPUT_TAB, name: OUTPUT_TAB };
 }
 
+// --- Explain ------------------------------------------------------------------------------------
+
+export const NOT_EXPLAINABLE = 'This query is not explainable.';
+
+/** What Explain shows: each translation as JSON, or that the first could not be had */
+export const explainText = (translations: Array<{ fulfilled: boolean; data?: unknown }>) =>
+  translations.length > 0 && translations[0].fulfilled
+    ? translations.map((translation) => JSON.stringify(translation.data, null, 2)).join('\n')
+    : NOT_EXPLAINABLE;
+
+export type ExplainKind =
+  | 'property'
+  | 'string'
+  | 'number'
+  | 'boolean'
+  | 'null'
+  | 'punctuation'
+  | 'operator';
+
+/** A run of the Explain text, of the kind the code block's highlighter gives it */
+export interface ExplainToken {
+  text: string;
+  kind?: ExplainKind;
+}
+
+// The highlighter's JSON: a string, a number, true or false, null, a bracket or comma, a colon
+const EXPLAIN_TOKEN =
+  /"(?:\\.|[^\\"\r\n])*"|-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b|\b(?:false|true)\b|\bnull\b|[{}[\],]|:/g;
+
+/**
+ * The Explain text in the runs the component library's code block colours, by its highlighter's
+ * JSON: a string before a colon is a property's name, any other a string.
+ */
+export function explainTokens(text: string): ExplainToken[] {
+  const tokens: ExplainToken[] = [];
+  let at = 0;
+  for (const match of text.matchAll(EXPLAIN_TOKEN)) {
+    const found = match[0];
+    const start = match.index ?? 0;
+    if (start > at) tokens.push({ text: text.slice(at, start) });
+    at = start + found.length;
+    let kind: ExplainKind;
+    if (found.startsWith('"')) kind = /^\s*:/.test(text.slice(at)) ? 'property' : 'string';
+    else if (found === 'true' || found === 'false') kind = 'boolean';
+    else if (found === 'null') kind = 'null';
+    else if (found === ':') kind = 'operator';
+    else if (/^[{}[\],]$/.test(found)) kind = 'punctuation';
+    else kind = 'number';
+    tokens.push({ text: found, kind });
+  }
+  if (at < text.length) tokens.push({ text: text.slice(at) });
+  return tokens;
+}
+
 // --- Cells and rows that open -------------------------------------------------------------------
 
 export interface CellText {

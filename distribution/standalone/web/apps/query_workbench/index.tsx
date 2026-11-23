@@ -7,12 +7,11 @@
  * switch and the link to the documentation above the editor's panel, then the results' panel.
  */
 
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import '../../styles/query_workbench.css';
-import { Button, Spinner, cx } from '../../components/basic';
+import { Button, IconButton, Spinner, cx } from '../../components/basic';
 import { Icon } from '../../components/icon';
 import { Modal, Tooltip, downloadFile } from '../../components/overlay';
-import { tokenizeJson } from '../../lib/json_text';
 import { useLocation } from '../../router';
 import { HttpFetchError } from '../../services/http';
 import { services } from '../../services';
@@ -28,6 +27,8 @@ import {
   dataSourceOf,
   downloadKinds,
   downloadRoute,
+  explainText,
+  explainTokens,
   fileContent,
   firstTab,
   getQueries,
@@ -87,57 +88,71 @@ function readTranslation(response: unknown): Translation {
   return { fulfilled: true, data: data.resp };
 }
 
-/** What Explain shows: each translation as JSON, or that the first could not be had */
-const explainText = (translations: Translation[]) =>
-  translations.length > 0 && translations[0].fulfilled
-    ? translations.map((translation) => JSON.stringify(translation.data, null, 2)).join('\n')
-    : 'This query is not explainable.';
+/**
+ * Copies a text as the component library does: the text selected in a hidden span and the
+ * browser's copy command, which needs no secure page
+ */
+function copyToClipboard(text: string): boolean {
+  const selection = window.getSelection();
+  const span = document.createElement('span');
+  span.textContent = text;
+  span.style.all = 'unset';
+  span.style.position = 'fixed';
+  span.style.top = '0';
+  span.style.clip = 'rect(0, 0, 0, 0)';
+  span.style.whiteSpace = 'pre';
+  span.style.userSelect = 'text';
+  document.body.appendChild(span);
+  const range = document.createRange();
+  range.selectNode(span);
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  let copied = false;
+  try {
+    copied = document.execCommand('copy');
+  } catch {
+    copied = false;
+  }
+  selection?.removeAllRanges();
+  span.remove();
+  return copied;
+}
 
-/** JSON coloured as the component library's code block colours it */
-function JsonCode({ text }: { text: string }) {
-  const kinds: Record<string, string> = {
-    String: 'qwbTok--string',
-    Number: 'qwbTok--number',
-    Keyword: 'qwbTok--keyword',
-  };
+/** The JSON in the runs and colours of the component library's code block */
+function ExplainCode({ text }: { text: string }) {
   return (
-    <code>
-      {tokenizeJson(text).map((tokens, line) => (
-        <Fragment key={line}>
-          {line > 0 && '\n'}
-          {tokens.map((token, at) =>
-            token.kind && kinds[token.kind] ? (
-              <span key={at} className={kinds[token.kind]}>
-                {token.text}
-              </span>
-            ) : (
-              token.text
-            )
-          )}
-        </Fragment>
-      ))}
+    <code className="qwbExplain__code">
+      {explainTokens(text).map((token, at) =>
+        token.kind ? (
+          <span key={at} className={`qwbTok--${token.kind}`}>
+            {token.text}
+          </span>
+        ) : (
+          token.text
+        )
+      )}
     </code>
   );
 }
 
-/** The component library's code block's copy button: "Copy" over it, "Copied" once it has */
+/**
+ * The code block's copy button: no tooltip until it has copied, then "Copied" until the pointer
+ * leaves it
+ */
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <span className="qwbCopy" onMouseLeave={() => setCopied(false)}>
-      <Tooltip content={copied ? 'Copied' : 'Copy'}>
-        <button
-          type="button"
-          className="qwbCopy__button"
-          aria-label="Copy"
-          onClick={() => {
-            void navigator.clipboard?.writeText(text).then(() => setCopied(true));
-          }}
-        >
-          <Icon name="copy" />
-        </button>
+    <div className="qwbExplain__controls" onMouseLeave={() => setCopied(false)}>
+      <Tooltip content={copied ? 'Copied' : ''} className={copied ? undefined : 'qwbTipEmpty'}>
+        <IconButton
+          icon="copy"
+          label="Copy"
+          title=""
+          className="qwbExplain__copy"
+          onClick={() => setCopied(copyToClipboard(text))}
+        />
       </Tooltip>
-    </span>
+    </div>
   );
 }
 
@@ -444,8 +459,8 @@ export function QueryWorkbench() {
             <Spinner size="l" />
           ) : (
             <div className="qwbExplain">
-              <pre className="qwbExplain__code">
-                <JsonCode text={explainText(translations)} />
+              <pre className="qwbExplain__pre">
+                <ExplainCode text={explainText(translations)} />
               </pre>
               <CopyButton text={explainText(translations)} />
             </div>

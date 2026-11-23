@@ -29,6 +29,7 @@ import {
 } from '../../web/apps/query_workbench/editing';
 import {
   DEFAULT_CAPABILITIES,
+  NOT_EXPLAINABLE,
   SQL_WORDS,
   TREE_EMPTY,
   TREE_FAILED,
@@ -42,6 +43,8 @@ import {
   completionsDone,
   downloadKinds,
   downloadRoute,
+  explainText,
+  explainTokens,
   fileContent,
   firstTab,
   getQueries,
@@ -292,6 +295,69 @@ describe('the index tree and the addresses', () => {
     assert.equal(dataSourceOf('/a%20b'), 'a b');
     assert.equal(dataSourceOf('/a/b'), '');
     assert.equal(dataSourceOf('/accelerate/a/b'), '');
+  });
+});
+
+describe('Explain', () => {
+  it('shows each translation as JSON, or that the first one failed', () => {
+    assert.equal(explainText([]), NOT_EXPLAINABLE);
+    assert.equal(explainText([{ fulfilled: false }, { fulfilled: true, data: {} }]), NOT_EXPLAINABLE);
+    assert.equal(
+      explainText([
+        { fulfilled: true, data: { root: { name: 'Project' } } },
+        { fulfilled: false },
+      ]),
+      // A later translation that failed is written as nothing, as the plugin's join writes it
+      '{\n  "root": {\n    "name": "Project"\n  }\n}\n'
+    );
+  });
+
+  it('colours JSON as the code block\'s highlighter: names, strings, numbers, words, marks', () => {
+    const kinds = (text: string) =>
+      explainTokens(text).map((token) => (token.kind ? `${token.kind}:${token.text}` : token.text));
+    assert.deepEqual(kinds('{\n  "a": "b",\n  "n": -1.5e3,\n  "t": [true, false, null]\n}'), [
+      'punctuation:{',
+      '\n  ',
+      'property:"a"',
+      'operator::',
+      ' ',
+      'string:"b"',
+      'punctuation:,',
+      '\n  ',
+      'property:"n"',
+      'operator::',
+      ' ',
+      'number:-1.5e3',
+      'punctuation:,',
+      '\n  ',
+      'property:"t"',
+      'operator::',
+      ' ',
+      'punctuation:[',
+      'boolean:true',
+      'punctuation:,',
+      ' ',
+      'boolean:false',
+      'punctuation:,',
+      ' ',
+      'null:null',
+      'punctuation:]',
+      '\n',
+      'punctuation:}',
+    ]);
+  });
+
+  it('keeps escaped quotes inside their string, and a name before a colon on the next line', () => {
+    const kinds = (text: string) =>
+      explainTokens(text).map((token) => (token.kind ? `${token.kind}:${token.text}` : token.text));
+    assert.deepEqual(kinds('"say \\"hi\\": now"\n  :'), [
+      'property:"say \\"hi\\": now"',
+      '\n  ',
+      'operator::',
+    ]);
+    assert.deepEqual(kinds('This query is not explainable.'), ['This query is not explainable.']);
+    assert.deepEqual(kinds('"open'), ['"open']);
+    assert.deepEqual(kinds('nullable truely 12ab'), ['nullable truely 12ab']);
   });
 });
 

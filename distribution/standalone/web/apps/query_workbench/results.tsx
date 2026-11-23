@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { flushSync } from 'react-dom';
 import { Button, cx } from '../../components/basic';
 import { CodeEditor } from '../../components/code_editor';
 import { SearchField } from '../../components/form';
@@ -267,14 +268,15 @@ function Downloads({
       open={open}
       onClose={() => setOpen(false)}
       position="downLeft"
+      className="qwbDownloadMenu"
       button={
         <Button className="qwbButton" icon="chevronDown" iconSide="right" onClick={() => setOpen(!open)}>
           Download
         </Button>
       }
     >
+      {/* As the plugin's, the menu stays open once a format is picked */}
       <ContextMenu
-        onDone={() => setOpen(false)}
         panels={[
           {
             id: 'downloads',
@@ -422,8 +424,46 @@ function TableView({
 
 /** The messages of the queries, in a read-only editor as the plugin's */
 function Output({ text }: { text: string }) {
+  const box = useRef<HTMLDivElement>(null);
+  const hint = useRef<HTMLButtonElement>(null);
+  const [editing, setEditing] = useState(false);
+  const frame = () => box.current?.querySelector<HTMLElement>('.atlCodeEditor') ?? undefined;
+
+  useLayoutEffect(() => {
+    // As the original's editors: the text is reached through the hint, not with the Tab key
+    const around = frame();
+    if (around) around.tabIndex = -1;
+  }, []);
+
   return (
-    <div className="qwbCode qwbCode--sql qwbCode--output">
+    <div
+      ref={box}
+      className={cx('qwbCode qwbCode--sql qwbCode--output', editing && 'qwbCode--editing')}
+      onFocus={(event) => {
+        if (event.target === frame()) setEditing(true);
+      }}
+      onBlur={(event) => {
+        if (event.target === frame()) setEditing(false);
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape' || event.target !== frame()) return;
+        // Out of the text, to the hint the Tab key stops on
+        event.preventDefault();
+        event.stopPropagation();
+        flushSync(() => setEditing(false));
+        hint.current?.focus();
+      }}
+    >
+      <button
+        ref={hint}
+        type="button"
+        className={cx('qwbCode__hint', editing && 'qwbCode__hint--inactive')}
+        onClick={() => frame()?.focus()}
+        data-test-subj="codeEditorHint"
+      >
+        <p>Press Enter to start editing.</p>
+        <p>{"When you're done, press Escape to stop editing."}</p>
+      </button>
       <CodeEditor
         className="qwbCode__editor"
         value={text}
@@ -610,6 +650,7 @@ export function DownloadError({ message, onClose }: { message: string; onClose: 
     <Modal
       title="Error"
       onClose={onClose}
+      className="qwbDownloadError"
       footer={
         <Button variant="primary" onClick={onClose}>
           Close

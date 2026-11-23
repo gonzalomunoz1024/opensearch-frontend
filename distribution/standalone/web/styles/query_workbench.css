@@ -365,61 +365,83 @@
 }
 
 /* Explain: the answer as the component library's code block, with its copy button */
-.qwbExplainModal {
-  width: 800px;
-  max-width: calc(100vw - 16px);
+/* The plugin puts its modals in a mask of its own over the modal's: the window is dimmed twice */
+.atlScrim:has(> .qwbExplainModal),
+.atlScrim:has(> .qwbDownloadError) {
+  background: linear-gradient(var(--scrim), var(--scrim)), var(--scrim);
 }
 
+/* The plugin asks for 800 px; the component library's modal stops at 768 */
+.qwbExplainModal {
+  width: 800px;
+  max-width: min(768px, calc(100vw - 16px));
+}
+
+/* The component library's code block: a hairline, padded 24 px, 52 at the right for the button */
 .qwbExplain {
   position: relative;
-  border-radius: var(--radius-sm);
+  max-width: 100%;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
   background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-s);
+  overflow: hidden;
+}
+
+.qwbExplain__pre {
+  height: 100%;
+  margin: 0;
+  padding: var(--space-6) 52px var(--space-6) var(--space-6);
+  font-size: inherit;
+  white-space: pre-wrap;
+  overflow: auto;
+  scrollbar-width: thin;
 }
 
 .qwbExplain__code {
-  margin: 0;
-  padding: var(--space-6);
+  display: block;
   font-family: var(--font-family-code);
-  font-size: var(--font-size-s);
+  font-size: inherit;
+  font-weight: var(--font-weight-regular);
   line-height: 1.5;
-  white-space: pre-wrap;
-  overflow: auto;
+  letter-spacing: normal;
+}
+
+.qwbExplain .qwbTok--punctuation {
+  opacity: 0.7;
 }
 
 .qwbExplain .qwbTok--string {
   color: var(--code-block-string);
 }
 
-.qwbExplain .qwbTok--number {
+.qwbExplain .qwbTok--number,
+.qwbExplain .qwbTok--boolean {
   color: var(--code-block-number);
 }
 
-.qwbExplain .qwbTok--keyword {
+.qwbExplain .qwbTok--null {
   color: var(--code-block-keyword);
 }
 
-.qwbCopy {
+.qwbExplain__controls {
   position: absolute;
-  top: var(--space-1);
-  right: var(--space-1);
+  top: var(--space-6);
+  right: var(--space-6);
+  line-height: 0;
 }
 
-.qwbCopy__button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text-primary);
-  cursor: pointer;
+/* The component library's smallest round icon button */
+.qwbExplain__copy.atlButton {
+  width: var(--space-6);
+  height: var(--space-6);
+  border-radius: 50%;
 }
 
-.qwbCopy__button:hover {
-  background: var(--color-hover);
+/* The tooltip of the copy button says nothing until the text is copied */
+.qwbTipEmpty {
+  display: none;
 }
 
 /* --- The results --------------------------------------------------------------------------- */
@@ -615,6 +637,11 @@
 
 .qwbTableTop__search .atlFieldGroup {
   gap: var(--space-3);
+}
+
+/* The Download menu: the component library's context menu, 256 px wide */
+.qwbDownloadMenu.atlPopover {
+  width: 256px;
 }
 
 /* Two scroll bars as the plugin's: one over the table, one under it, scrolled together */
@@ -834,8 +861,8 @@
   margin-top: 0;
 }
 
-/* The Output tab: Ace's read-only editor, 500 px tall */
-.qwbCode--output {
+/* The Output tab: Ace's read-only editor, 500 px tall (over the editors' 140 px below) */
+.qwbCode.qwbCode--output {
   height: 500px;
 }
 
