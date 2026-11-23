@@ -114,4 +114,56 @@ describe('the routes of the index pattern pages', () => {
         '"conflictDescriptions":{"text":["logs"],"object":[".other_1"]}}'
     );
   });
+
+  it('reads what a field can do as the original: what some of its indices can do, it can', () => {
+    const fields = readFieldCaps(
+      {
+        // A number of two types, searched and aggregated on in one index only
+        count: {
+          long: { type: 'long', searchable: true, aggregatable: true, indices: ['a'] },
+          integer: { type: 'integer', searchable: false, aggregatable: false, indices: ['b'] },
+        },
+        // One type, not searched and not aggregated on in one of its indices
+        code: {
+          keyword: { type: 'keyword', searchable: false, aggregatable: false, non_searchable_indices: ['b'], non_aggregatable_indices: ['b'] },
+        },
+        off: { keyword: { type: 'keyword', searchable: false, aggregatable: false } },
+      },
+      []
+    );
+    const flags = (name: string) => {
+      const field = fields.find((item) => item.name === name);
+      return [field?.type, field?.searchable, field?.aggregatable, field?.readFromDocValues];
+    };
+    assert.deepEqual(flags('count'), ['number', true, true, true]);
+    assert.deepEqual(flags('code'), ['string', true, true, true]);
+    assert.deepEqual(flags('off'), ['string', false, false, false]);
+  });
+
+  it('describes a meta field OpenSearch does not know as a text nothing can be done with, as the original', () => {
+    const fields = readFieldCaps({ bytes: { long: { type: 'long', searchable: true, aggregatable: true } } }, ['_source', 'made_up']);
+    assert.deepEqual(fields.find((field) => field.name === 'made_up'), {
+      name: 'made_up',
+      type: 'string',
+      searchable: false,
+      aggregatable: false,
+      readFromDocValues: false,
+    });
+  });
+
+  it('writes the keyword of a text under a nested field as the original: its parent, then the nested path', () => {
+    const fields = readFieldCaps(
+      {
+        items: { nested: { type: 'nested', searchable: false, aggregatable: false } },
+        'items.name': { text: { type: 'text', searchable: true, aggregatable: false } },
+        'items.name.keyword': { keyword: { type: 'keyword', searchable: true, aggregatable: true } },
+      },
+      []
+    );
+    assert.equal(
+      JSON.stringify(fields.find((field) => field.name === 'items.name.keyword')?.subType),
+      '{"multi":{"parent":"items.name"},"nested":{"path":"items"}}'
+    );
+    assert.equal(JSON.stringify(fields.find((field) => field.name === 'items.name')?.subType), '{"nested":{"path":"items"}}');
+  });
 });
