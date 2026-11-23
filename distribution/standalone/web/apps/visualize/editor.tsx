@@ -38,7 +38,15 @@ import type { TsvbData, TsvbTableData } from '../../vis/tsvb/data';
 import { specIndexPatterns } from '../../vis/vega/index_patterns';
 import { Visualization, canDraw, type VisInspectData } from '../../vis/visualization';
 import { serializeAggs } from './agg_params';
-import { editorStateDefaults, initialAppState, paramsWithDefaults, unlinkSavedSearch, type AppVisState, type VisualizeAppState } from './app_state';
+import {
+  editorStateDefaults,
+  initialAppState,
+  paramsWithDefaults,
+  savedVisState,
+  unlinkSavedSearch,
+  type AppVisState,
+  type VisualizeAppState,
+} from './app_state';
 import { DataTab } from './data_tab';
 import { newVis, syncParams, visProblems, withoutDisabledBuckets } from './defaults';
 import {
@@ -456,8 +464,9 @@ export function VisEditor({ savedId }: { savedId?: string }) {
   const doSave = async ({ title: newTitle, description, asNew, returnToOrigin: returning }: SaveResult & { returnToOrigin: boolean }) => {
     const newlyCreated = !vis.id || asNew;
     const latest = decodeState<VisualizeAppState>(getLocation().hashParams._a).vis;
-    const visState: AppVisState = { title: newTitle, type: vis.type, aggs: latest?.aggs ?? applied.aggs, params: latest?.params ?? applied.params };
-    ownApp.current = writeApp({ vis: { ...(latest ?? visState), title: newTitle } });
+    const visState = savedVisState(latest, applied, newTitle, vis.type);
+    // The original's `setVis`: the title and the kind into what the address has
+    ownApp.current = writeApp({ vis: { ...(latest ?? visState), title: newTitle, type: vis.type } });
     setHasUnsavedChanges(false);
     const toSave: Vis = {
       ...vis,

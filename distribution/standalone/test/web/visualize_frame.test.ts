@@ -13,6 +13,7 @@ import {
   initialAppState,
   migrateAppState,
   paramsWithDefaults,
+  savedVisState,
   unlinkSavedSearch,
   type VisualizeAppState,
 } from '../../web/apps/visualize/app_state';
@@ -128,6 +129,28 @@ describe('the state the editor writes to the address once a visualization has lo
     assert.deepEqual(initialAppState(defaults, { vis }).vis, vis);
     // A visualization of another kind in the address is not this one's
     assert.deepEqual(initialAppState(defaults, { vis: { ...vis, type: 'line' } }).vis, defaults.vis);
+  });
+
+  it('keeps a visualization of the address that names no kind, as the original writes it', () => {
+    const defaults = editorStateDefaults(SAMPLE_PIE, undefined, KUERY);
+    const partial = { params: { isDonut: false } } as unknown as VisualizeAppState['vis'];
+    assert.deepEqual(initialAppState(defaults, { vis: partial }).vis, { params: { isDonut: false } });
+    // Something that is not a visualization at all is not taken
+    assert.deepEqual(initialAppState(defaults, { vis: 'pie' as unknown as VisualizeAppState['vis'] }).vis, defaults.vis);
+  });
+
+  it("saves the kind's settings over their defaults when the address names only some, or none", () => {
+    const applied = { aggs: SAMPLE_PIE.aggs, params: SAMPLE_PIE.params };
+    // A bar chart Discover's "Visualize" opened: `params:()` in the address
+    const fromDiscover = savedVisState({ type: 'histogram', aggs: [], params: {} }, { aggs: [], params: {} }, 'Bars', 'histogram');
+    assert.deepEqual(fromDiscover.params, paramsWithDefaults('histogram', {}));
+    assert.equal(fromDiscover.params.type, 'histogram');
+    assert.equal(fromDiscover.params.legendPosition, 'right');
+    // A pie whose address holds only one of its settings: the others are the kind's defaults
+    const pie = savedVisState({ params: { isDonut: false } }, applied, 'Pie', 'pie');
+    assert.deepEqual(pie, { title: 'Pie', type: 'pie', aggs: SAMPLE_PIE.aggs, params: paramsWithDefaults('pie', { isDonut: false }) });
+    // An address without a visualization: what is applied
+    assert.deepEqual(savedVisState(undefined, applied, 'Pie', 'pie'), { title: 'Pie', type: 'pie', ...applied });
   });
 
   it("merges a kind's settings over its defaults one key deep, the settings first", () => {
