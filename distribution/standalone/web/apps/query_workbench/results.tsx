@@ -542,6 +542,7 @@ function ResultTabs({
       {overflows && (
         <div className="qwbTabsArrow">
           <Popover
+            className="qwbTabsMenu"
             open={menu}
             onClose={() => setMenu(false)}
             position="downLeft"

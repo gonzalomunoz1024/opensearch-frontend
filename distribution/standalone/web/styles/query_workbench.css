@@ -270,15 +270,27 @@
   text-align: center;
 }
 
-/* The prompt at the address of a data source: an icon over a sentence, both subdued */
+/*
+ * The prompt at the address of a data source, as EuiEmptyPrompt: the icon in a line as tall as the
+ * type, then the words in EuiText's lines
+ */
 .qwbPrompt {
   max-width: 36em;
   margin: auto;
   padding: var(--space-6);
-  color: var(--color-text-secondary);
   font-size: var(--font-size-s);
-  line-height: 21px;
+  line-height: 1;
   text-align: center;
+}
+
+/* EuiIcon's "subdued" colour */
+.qwbPrompt__icon {
+  color: var(--color-text-tertiary);
+}
+
+.qwbPrompt__body {
+  color: var(--color-text-secondary);
+  line-height: 21px;
 }
 
 .qwbPrompt p {
@@ -595,9 +607,15 @@
   cursor: default;
 }
 
+/* The arrow at the top of its column, as the flex item the original puts it in */
 .qwbTabsArrow {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+}
+
+/* The plugin's own margin on each tab of its menu: the menu is that much wider */
+.qwbTabsMenu .atlContextMenu__item {
+  margin-right: 27px;
 }
 
 .qwbTabsArrow__button {
