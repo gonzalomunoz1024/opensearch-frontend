@@ -242,7 +242,7 @@
   border: 0;
   border-radius: var(--radius-xs);
   background: none;
-  color: var(--dvt-link);
+  color: var(--color-accent-button-text);
   line-height: inherit;
   cursor: pointer;
 }
@@ -456,15 +456,11 @@
 
 /* "Clear": a button of text in the theme's red for text */
 .dvtHistory__clear.atlButton--empty:not(:disabled) {
-  color: #d5352d;
+  color: var(--color-critical-button-text);
 }
 
 .dvtHistory__clear.atlButton--empty:hover:not(:disabled) {
   background: var(--color-critical-tint);
-}
-
-:root.themeDark .dvtHistory__clear.atlButton--empty:not(:disabled) {
-  color: var(--color-critical);
 }
 
 /* The original's buttons with a fill are never narrower than this */
@@ -929,7 +925,6 @@
 
 .dvtSuggest,
 .dvtApp {
-  --dvt-link: rgb(3, 113, 233);
   --dvt-resizer-hover: rgb(204, 228, 255);
   --dvt-history-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   --dvt-list-border: rgb(211, 218, 230);
@@ -940,7 +935,6 @@
 
 :root.themeDark .dvtSuggest,
 :root.themeDark .dvtApp {
-  --dvt-link: rgb(10, 132, 255);
   --dvt-resizer-hover: rgb(21, 70, 121);
   --dvt-history-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   --dvt-list-border: rgb(52, 55, 65);
@@ -1014,11 +1008,6 @@
 
 .dvtGrok__form .atlButton--primary:disabled {
   border-color: var(--color-border);
-  color: rgb(143, 143, 147);
-}
-
-:root.themeDark .dvtGrok__form .atlButton--primary:disabled {
-  color: rgb(101, 101, 103);
 }
 
 .dvtGrok__advanced,
@@ -1153,36 +1142,14 @@
 
 /* --- Round two: the parts the measures of the original asked for -------------------------------- */
 
-.dvtFlyout,
-.dvtSettings,
-.dvtMenu {
-  --dvt-link: rgb(3, 113, 233);
-}
-
-:root.themeDark .dvtFlyout,
-:root.themeDark .dvtSettings,
-:root.themeDark .dvtMenu {
-  --dvt-link: rgb(10, 132, 255);
-}
-
-/* The theme's buttons: a border that shows no colour, a shadow under a filled one, links in the
-   colour of links */
+/* The theme's buttons: a border that shows no colour, links in the colour of links */
 .dvtApp .atlButton,
 .dvtFlyout .atlButton,
 .dvtSettings .atlButton {
   border: 1px solid transparent;
 }
 
-.dvtApp .atlButton--primary:not(:disabled),
-.dvtFlyout .atlButton--primary:not(:disabled),
-.dvtSettings .atlButton--primary:not(:disabled) {
-  box-shadow: var(--shadow-sm);
-  transition:
-    filter var(--duration-fast) ease-out,
-    transform var(--duration-fast) ease-out;
-}
-
-/* A filled one grows brighter under the pointer, where the kit's grows darker */
+/* A filled one stays brighter while it has the focus, however it got it, as the original's */
 .dvtApp .atlButton--primary:not(:disabled):hover,
 .dvtApp .atlButton--primary:not(:disabled):focus,
 .dvtFlyout .atlButton--primary:not(:disabled):hover,
@@ -1196,7 +1163,7 @@
 .dvtApp .atlButton--empty:not(.dvtHistory__clear):not(:disabled),
 .dvtFlyout .atlButton--empty:not(:disabled),
 .dvtSettings .atlButton--empty:not(:disabled) {
-  color: var(--dvt-link);
+  color: var(--color-accent-button-text);
 }
 
 .dvtFlyout .atlFlyout__header > .atlButton {
