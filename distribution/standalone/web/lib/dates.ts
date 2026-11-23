@@ -258,6 +258,11 @@ function partsOf(date: Date, timeZone?: string): Parts {
   };
 }
 
+/** Minutes east of UTC of a time zone (a name, UTC, or the browser's own when none) at a moment */
+export function timeZoneOffset(time: number, timeZone?: string): number {
+  return partsOf(new Date(time), timeZone).offset;
+}
+
 const pad = (value: number, length = 2) => String(value).padStart(length, '0');
 
 function ordinal(value: number): string {

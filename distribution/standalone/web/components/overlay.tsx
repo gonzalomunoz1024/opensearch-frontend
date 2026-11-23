@@ -30,6 +30,11 @@ export interface PopoverProps {
   children: ReactNode;
   /** Which edge of the button it lines up with; 'center' hangs it under the middle */
   align?: 'left' | 'right' | 'center';
+  /**
+   * Under the button (over it where there is more room), or beside it: to its right where the
+   * panel fits, its top 10 px above the button's, as the component library opens a panel "rightUp"
+   */
+  side?: 'below' | 'right';
   padded?: boolean;
   /** As wide as its button at least: a list under a field */
   matchWidth?: boolean;
@@ -52,6 +57,7 @@ export function Popover({
   onClose,
   children,
   align = 'left',
+  side = 'below',
   padded,
   matchWidth,
   fitWidth,
@@ -74,6 +80,16 @@ export function Popover({
     // Its size as laid out, which the opening animation's scale does not change
     const panelBox = { width: panelElement.offsetWidth, height: panelElement.offsetHeight };
     const margin = buffer;
+    if (side === 'right') {
+      const fitsRight = anchorBox.right + margin + panelBox.width <= window.innerWidth - margin;
+      setStyle({
+        left: fitsRight ? anchorBox.right + margin : Math.max(margin, anchorBox.left - margin - panelBox.width),
+        top: Math.max(margin, Math.min(anchorBox.top - 10, window.innerHeight - panelBox.height - margin)),
+        width,
+        maxHeight: window.innerHeight - 2 * margin,
+      });
+      return;
+    }
     const panelWidth = fitWidth ? anchorBox.width : Math.max(panelBox.width, matchWidth ? anchorBox.width : 0);
     let left =
       align === 'right'
@@ -95,7 +111,7 @@ export function Popover({
     else next.bottom = window.innerHeight - anchorBox.top + offset;
     setStyle(next);
     setPlacement(fitsBelow ? 'bottom' : 'top');
-  }, [align, matchWidth, fitWidth, width, offset, buffer]);
+  }, [align, side, matchWidth, fitWidth, width, offset, buffer]);
 
   useLayoutEffect(() => {
     if (!open) {

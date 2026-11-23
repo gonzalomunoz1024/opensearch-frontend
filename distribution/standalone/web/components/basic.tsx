@@ -13,6 +13,8 @@ import {
 import { href as toHref } from '../router';
 import { Icon, type IconName } from './icon';
 
+export { FieldToken } from './field_token';
+
 export const cx = (...names: Array<string | false | null | undefined>) =>
   names.filter(Boolean).join(' ');
 
@@ -352,30 +354,6 @@ export function Accordion({
       </div>
       {open && <div>{children}</div>}
     </div>
-  );
-}
-
-const TOKEN_LETTERS: Record<string, string> = {
-  string: 't',
-  number: '#',
-  date: 'd',
-  boolean: 'b',
-  ip: 'ip',
-  geo_point: 'g',
-  geo_shape: 'g',
-  _source: '{}',
-  conflict: '!',
-  nested: 'n',
-  object: '{}',
-  unknown: '?',
-};
-
-/** The small mark that says what kind of field a field is */
-export function FieldToken({ type }: { type: string }) {
-  return (
-    <span className={`atlToken atlToken--${type}`} title={type} aria-label={type}>
-      {TOKEN_LETTERS[type] ?? '?'}
-    </span>
   );
 }
 

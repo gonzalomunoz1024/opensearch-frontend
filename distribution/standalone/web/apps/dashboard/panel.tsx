@@ -54,10 +54,18 @@ interface SearchAttributes {
   kibanaSavedObjectMeta?: { searchSourceJSON?: string };
 }
 
+/**
+ * A saved search on a dashboard, as the original's search embeddable: its table pages by 50 rows
+ * with a pager above and below it. The table is drawn anew once each search has finished (and
+ * whenever its columns change), so a new search starts again on the first page; a search that
+ * fails keeps the rows of the last one, or an empty table if there was none.
+ */
 function SearchPanel({
   object,
   input,
   tick,
+  config,
+  onConfig,
   onFilter,
   onData,
   onError,
@@ -65,6 +73,9 @@ function SearchPanel({
   object: SavedObject<SearchAttributes>;
   input: VisInput;
   tick: number;
+  /** What was changed on the panel: its own columns and sort, over the saved search's */
+  config: Record<string, unknown>;
+  onConfig?: (config: Record<string, unknown>) => void;
   onFilter?: (filters: Filter[]) => void;
   onData?: (data: PanelData) => void;
   /** Takes a failed search, and nothing once one succeeds: the panel's "Error" badge */
@@ -75,15 +86,24 @@ function SearchPanel({
     [object]
   );
   const [indexPattern, setIndexPattern] = useState<IndexPattern>();
-  const [rows, setRows] = useState<RawHit[]>();
-  // Unknown until a search succeeds; the original says "No results found" only for none found
-  const [total, setTotal] = useState<number>();
-  const [failed, setFailed] = useState(false);
+  // What the last search that finished found: its rows and how many matched (unknown until one
+  // succeeds), and how many searches have finished, which draws the table anew
+  const [found, setFound] = useState<{ rows: RawHit[]; hits?: number; done: number }>();
   const [error, setError] = useState<string>();
   const reportError = useRef(onError);
   reportError.current = onError;
-  const [sort, setSort] = useState<SortPair[]>(() => normalizeSort(object.attributes.sort));
-  const columns = object.attributes.columns?.length ? object.attributes.columns : ['_source'];
+  const configColumns = Array.isArray(config.columns) ? (config.columns as string[]) : undefined;
+  const columns = useMemo(() => {
+    const chosen = configColumns ?? object.attributes.columns;
+    return chosen?.length ? chosen : ['_source'];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(configColumns), object.attributes.columns]);
+  const sort = useMemo(
+    () => normalizeSort(config.sort ?? object.attributes.sort),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [JSON.stringify(config.sort), object.attributes.sort]
+  );
+  const write = (changes: { columns?: string[]; sort?: SortPair[] }) => onConfig?.({ ...config, ...changes });
 
   useEffect(() => {
     let live = true;
@@ -108,7 +128,7 @@ function SearchPanel({
     // A failed search keeps the rows shown last, and the panel says it failed, as the original
     const fail = (failure: unknown) => {
       const original = searchFailure(failure instanceof Error ? failure : new Error(String(failure)));
-      setFailed(true);
+      setFound((last) => ({ rows: last?.rows ?? [], hits: last?.hits, done: (last?.done ?? 0) + 1 }));
       reportError.current?.({ message: original.message, original });
     };
     let body: Record<string, unknown>;
@@ -130,10 +150,8 @@ function SearchPanel({
     services.search
       .search(indexPattern.title, body, { signal: controller.signal, record })
       .then((response) => {
-        setRows(response.hits.hits as RawHit[]);
-        setTotal(totalOf(response));
+        setFound((last) => ({ rows: response.hits.hits as RawHit[], hits: totalOf(response), done: (last?.done ?? 0) + 1 }));
         setError(undefined);
-        setFailed(false);
         reportError.current?.(undefined);
         onData?.({ requests: [record] });
       })
@@ -154,16 +172,32 @@ function SearchPanel({
       </div>
     );
   }
-  if (!indexPattern || (!rows && !failed)) return null;
-  if (total === 0) return <ChartMessage>No results found</ChartMessage>;
+  // Nothing is drawn until the first search has finished
+  if (!indexPattern || !found) return null;
+  if (found.hits === 0) return <ChartMessage>No results found</ChartMessage>;
   return (
     <div className="dshSearch" data-test-subj="embeddedSavedSearchDocTable">
       <DocTable
-        rows={rows ?? []}
+        key={`${found.done}:${columns.join(',')}`}
+        rows={found.rows}
         indexPattern={indexPattern}
         columns={columns}
         sort={sort}
-        onSort={setSort}
+        paged
+        hits={found.hits}
+        onSort={(next) => write({ sort: next })}
+        onRemoveColumn={(name) =>
+          write({ columns: columns.filter((column) => column !== name), sort: sort.filter(([field]) => field !== name) })
+        }
+        onMoveColumn={(name, by) => {
+          const from = columns.indexOf(name);
+          const to = from + by;
+          if (from === -1 || to < 0 || to >= columns.length) return;
+          const next = [...columns];
+          next.splice(from, 1);
+          next.splice(to, 0, name);
+          write({ columns: next });
+        }}
         onFilter={
           onFilter
             ? (name, value, negate) => {
@@ -177,11 +211,6 @@ function SearchPanel({
         }
         details={(hit) => <DocDetails hit={hit} indexPattern={indexPattern} basePath="/app/discover" />}
       />
-      {rows && total !== undefined && rows.length < total && (
-        <div className="dscFooter">
-          These are the first {rows.length.toLocaleString()} of {total.toLocaleString()} documents.
-        </div>
-      )}
     </div>
   );
 }
@@ -307,6 +336,8 @@ export const DashboardPanel = memo(function DashboardPanel({
         object={object as SavedObject<SearchAttributes>}
         input={input}
         tick={tick}
+        config={panel.embeddableConfig}
+        onConfig={(next) => onConfig(id, next)}
         onFilter={onFilter}
         onData={(data) => onData(id, data)}
         onError={setFailure}
@@ -390,7 +421,7 @@ export const DashboardPanel = memo(function DashboardPanel({
           </Tooltip>
         </div>
       )}
-      <div className="dshPanel__body" data-error={failure ? true : undefined}>
+      <div className={cx('dshPanel__body', panel.type === 'search' && 'dshPanel__body--flush')} data-error={failure ? true : undefined}>
         {body}
       </div>
       {editing && onResizeStart && (
