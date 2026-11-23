@@ -195,8 +195,14 @@ function LanguageSwitch({
   );
 }
 
+/**
+ * The plugin's crumb is a link to "#": the page's own address with an empty fragment, written out
+ * here, as the shell puts the base path in front of what a crumb is a link to
+ */
+const CRUMBS = [{ text: 'Query Workbench', to: '/app/opensearch-query-workbench#' }];
+
 export function QueryWorkbench() {
-  useBreadcrumbs([{ text: 'Query Workbench' }]);
+  useBreadcrumbs(CRUMBS);
   const { hashPath } = useLocation();
   // The address names a data source when the page opens only, as the plugin's routes are read
   const [dataSourceTab] = useState(() => dataSourceOf(hashPath) !== '');
@@ -379,7 +385,8 @@ export function QueryWorkbench() {
               </div>
             </div>
 
-            <main className="qwbMain">
+            {/* EuiPageContent: a panel with the role of the page's main part */}
+            <div className="qwbMain" role="main">
               <div className="qwbTop">
                 <div className="qwbTop__item">
                   <LanguageSwitch
@@ -438,7 +445,7 @@ export function QueryWorkbench() {
                 <div className="qwbSpacer qwbSpacer--l" />
                 {resultsPanel}
               </div>
-            </main>
+            </div>
           </div>
         )}
       </div>
