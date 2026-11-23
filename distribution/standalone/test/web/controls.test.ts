@@ -11,14 +11,23 @@ import { describe, it } from 'node:test';
 import type { Filter, IndexPattern } from '../../web/lib/types';
 import {
   ancestorsOf,
+  asksAsTyped,
   caseInsensitivePattern,
   ceilWithPrecision,
   controlLabel,
   controlSearchBody,
+  controlTitle,
+  fieldGroups,
   filterOf,
   floorWithPrecision,
   hasValue,
+  lineageMap,
+  listsField,
   minMaxAggs,
+  movedControl,
+  newControl,
+  parentCandidates,
+  rangesField,
   rangeError,
   rangeInputWidth,
   rangeValueOf,
@@ -94,6 +103,25 @@ describe('what a control asks OpenSearch', () => {
       termsAgg: { terms: { order: { _count: 'desc' }, field: 'geo.src', include: '.*[uU][sS]\\.[aA].*' } },
     });
     assert.equal(caseInsensitivePattern('a+1'), '[aA]\\+1');
+  });
+
+  it('never asks as one types on a field it knows to be other than a string, as the original', () => {
+    const number = { name: 'bytes', type: 'number', searchable: true, aggregatable: true };
+    const string = { name: 'geo.src', type: 'string', searchable: true, aggregatable: true };
+    const dynamic = list('1', 'bytes', { options: { dynamicOptions: true, size: 5 } });
+    assert.equal(asksAsTyped(dynamic, number), false);
+    assert.equal(asksAsTyped(dynamic, string), true);
+    // a field the index pattern does not have leaves the list as it says
+    assert.equal(asksAsTyped(dynamic, undefined), true);
+    assert.equal(asksAsTyped(list('1', 'geo.src'), string), false);
+    assert.deepEqual(termsAggs(dynamic, number), { termsAgg: { terms: { order: { _count: 'desc' }, size: 5, field: 'bytes' } } });
+  });
+
+  it('asks for five values when the list never said, and for OpenSearch\'s number once its size was emptied', () => {
+    const field = { name: 'geo.src', type: 'string', searchable: true, aggregatable: true };
+    const terms = (control: ControlParam) => (termsAggs(control, field).termsAgg as { terms: Record<string, unknown> }).terms;
+    assert.equal(terms(list('1', 'geo.src', { options: {} })).size, 5);
+    assert.equal('size' in terms(list('1', 'geo.src', { options: { size: null } })), false);
   });
 
   it('asks for one value at least', () => {
@@ -247,5 +275,85 @@ describe('a range typed by hand, as the original checks it', () => {
     assert.equal(rangeInputWidth(0, 19742), 6);
     assert.equal(rangeInputWidth(1, 8), 2.8);
     assert.equal(rangeInputWidth(101, 1200), 5.2);
+  });
+});
+
+describe('the editor of the controls, as the original edits them', () => {
+  it('titles a control by its label, else its field, else its kind and its place', () => {
+    assert.equal(controlTitle(list('1', 'geo.src', { label: 'Source Country' }), 0), 'Source Country');
+    assert.equal(controlTitle(list('1', 'geo.src'), 0), 'geo.src');
+    assert.equal(controlTitle(list('1', ''), 0), 'list: 0');
+    assert.equal(controlTitle(range('1', '', { label: '' }), 2), 'range: 2');
+  });
+
+  it('adds a control with the options of its kind, named by the time it was made', () => {
+    assert.deepEqual(newControl('list', '1700000000000'), {
+      id: '1700000000000',
+      indexPattern: '',
+      fieldName: '',
+      parent: '',
+      label: '',
+      type: 'list',
+      options: { type: 'terms', multiselect: true, dynamicOptions: true, size: 5, order: 'desc' },
+    });
+    assert.deepEqual(newControl('range', '1').options, { decimalPlaces: 0, step: 1 });
+    assert.match(newControl('list').id, /^\d{13}$/);
+  });
+
+  it('moves a control a place, the first up to the end and the last down to the start', () => {
+    const ids = ['a', 'b', 'c'];
+    assert.deepEqual(movedControl(ids, 1, -1), ['b', 'a', 'c']);
+    assert.deepEqual(movedControl(ids, 1, 1), ['a', 'c', 'b']);
+    assert.deepEqual(movedControl(ids, 0, -1), ['b', 'c', 'a']);
+    assert.deepEqual(movedControl(ids, 2, 1), ['c', 'a', 'b']);
+  });
+
+  it('follows each control\'s parents, itself first, until a loop or a parent that is gone', () => {
+    const controls = [list('1', 'a'), list('2', 'b', { parent: '1' }), list('3', 'c', { parent: '2' }), list('4', 'd', { parent: '9' })];
+    const lineage = lineageMap(controls);
+    assert.deepEqual(lineage.get('1'), ['1']);
+    assert.deepEqual(lineage.get('3'), ['3', '2', '1']);
+    assert.deepEqual(lineage.get('4'), ['4', '9']);
+    assert.deepEqual(lineageMap([list('5', 'e', { parent: '6' }), list('6', 'f', { parent: '5' })]).get('5'), ['5', '6']);
+  });
+
+  it('offers as a parent every control with a field, a range too, but those that depend on the one edited', () => {
+    const controls = [
+      list('1', 'geo.src', { label: 'Source Country' }),
+      list('2', 'machine.os.keyword', { label: 'OS', parent: '1' }),
+      range('3', 'bytes', { label: 'Bytes' }),
+      list('4', ''),
+    ];
+    assert.deepEqual(parentCandidates(controls, '1'), [{ value: '3', text: 'Bytes' }]);
+    assert.deepEqual(parentCandidates(controls, '2'), [
+      { value: '1', text: 'Source Country' },
+      { value: '3', text: 'Bytes' },
+    ]);
+    assert.deepEqual(parentCandidates(controls, '4'), [
+      { value: '1', text: 'Source Country' },
+      { value: '2', text: 'OS' },
+      { value: '3', text: 'Bytes' },
+    ]);
+  });
+
+  it('lists the fields of a kind of control by their kind, both in order', () => {
+    const field = (name: string, type: string, aggregatable = true) => ({ name, type, searchable: true, aggregatable });
+    const fields = [
+      field('machine.ram', 'number'),
+      field('geo.src', 'string'),
+      field('_score', 'number', false),
+      field('Agent', 'string'),
+      field('@timestamp', 'date'),
+      field('geo.coordinates', 'geo_point'),
+      field('message', 'string', false),
+      field('bytes', 'number'),
+    ];
+    assert.deepEqual(fieldGroups(fields, listsField), [
+      { type: 'date', names: ['@timestamp'] },
+      { type: 'number', names: ['bytes', 'machine.ram'] },
+      { type: 'string', names: ['Agent', 'geo.src'] },
+    ]);
+    // a range takes every number, one that cannot be aggregated too
+    assert.deepEqual(fieldGroups(fields, rangesField), [{ type: 'number', names: ['_score', 'bytes', 'machine.ram'] }]);
   });
 });

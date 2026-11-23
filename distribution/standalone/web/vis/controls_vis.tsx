@@ -26,6 +26,7 @@ import {
   NOT_INITIALIZED,
   PARTIAL_RESULTS,
   ancestorsOf,
+  asksAsTyped,
   ceilWithPrecision,
   controlLabel,
   controlSearchBody,
@@ -214,8 +215,8 @@ function ListControl({
 }) {
   const id = useId();
   const [loading, setLoading] = useState(false);
-  const dynamic = Boolean(control.options?.dynamicOptions);
   const indexPattern = state?.indexPattern;
+  const dynamic = asksAsTyped(control, fieldNamed(indexPattern, control.fieldName));
   const format = useMemo(
     () => (indexPattern && control.fieldName ? fieldFormatter(indexPattern, control.fieldName, services.formatSettings()) : undefined),
     [indexPattern, control.fieldName]
