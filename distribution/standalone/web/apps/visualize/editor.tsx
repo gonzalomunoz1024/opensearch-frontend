@@ -547,7 +547,7 @@ export function VisEditor({ savedId }: { savedId?: string }) {
           options={({ asNew }) => {
             const offer = returnSwitch(originatingApp, vis.id, asNew);
             return offer.shown ? (
-              <Switch checked={returnToOrigin} onChange={setReturnToOrigin} label={offer.label} testId="returnToOriginModeSwitch" />
+              <Switch compressed checked={returnToOrigin} onChange={setReturnToOrigin} label={offer.label} testId="returnToOriginModeSwitch" />
             ) : null;
           }}
           onSave={(result) =>
