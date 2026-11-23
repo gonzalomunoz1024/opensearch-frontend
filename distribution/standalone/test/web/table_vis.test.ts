@@ -343,6 +343,19 @@ describe('the CSV of the export', () => {
     assert.equal(toCsv(true, rows, columns, ',', false), 'geo.dest: Descending,Count,Average bytes\r\n - ,,\r\n');
   });
 
+  it('writes an empty word as nothing, in the cell, the export and the title of its table', () => {
+    const { columns, rows } = tabify(
+      [count, os, dest],
+      { aggregations: { '5': { buckets: [{ key: '', doc_count: 4, '3': { buckets: [{ key: '', doc_count: 4 }] } }] } } },
+      context
+    );
+    const data = tableVisData({ columns, rows }, {}, context, true);
+    assert.equal(data.tableGroups[0].title, ': machine.os: Descending');
+    const [bucket] = data.tableGroups[0].table.columns;
+    assert.deepEqual(bucket.cell(''), { text: '' });
+    assert.equal(toCsv(true, data.tableGroups[0].table.rows, [bucket], ',', true), '"geo.dest: Descending"\r\n\r\n');
+  });
+
   it('writes a range by its ends and an object as JSON in the raw export', () => {
     assert.equal(rawText({ gte: 0, lt: 1000 }), 'from:0,to:1000');
     assert.equal(rawText({ a: 1 }), '{"a":1}');

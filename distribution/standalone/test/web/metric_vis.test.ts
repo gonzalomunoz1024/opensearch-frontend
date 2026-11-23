@@ -361,4 +361,12 @@ describe('the metrics shown', () => {
       ['win 8 - Count', 'The rest - Count']
     );
   });
+
+  it('names the bucket of an empty word by nothing, as the original writes it', () => {
+    const table = tabify([count, os], { aggregations: { '3': { buckets: [{ key: '', doc_count: 7 }] } } }, context);
+    assert.deepEqual(
+      metricItems(table, config(), context).map((item) => item.label),
+      [' - Count']
+    );
+  });
 });

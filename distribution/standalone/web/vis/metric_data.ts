@@ -9,7 +9,7 @@
 import type { AggContext, Table, TableColumn, TableRow } from '../lib/aggs';
 import { DEFAULT_FORMAT_SETTINGS, createFormatter } from '../lib/field_formats';
 import type { FormattedContent } from './formatted_value';
-import { columnFormatSpec } from './table_data';
+import { columnFormatSpec, formatValue } from './table_data';
 import { heatmapColor } from './vislib/color_maps';
 
 export interface MetricRange {
@@ -155,7 +155,7 @@ function valueFormatter(column: TableColumn, config: MetricConfig, context: AggC
     // No value: the dash between spaces that the original's HTML formats write for nothing
     if (value === null || value === undefined) return { text: ' - ' };
     if (percent) return { text: percent(value).text };
-    const text = column.format(value);
+    const text = formatValue(column, value);
     if (!rich) return { text };
     const formatted = rich(value);
     return { ...formatted, text: formatted.href || formatted.image ? formatted.text : text };
@@ -194,7 +194,7 @@ export function metricItems(table: Table, config: MetricConfig, context: AggCont
       let label = column.name;
       if (bucket) {
         const key = row[bucket.id];
-        label = `${isNotANumber(key) ? '-' : bucket.format(key)} - ${label}`;
+        label = `${isNotANumber(key) ? '-' : formatValue(bucket, key)} - ${label}`;
       }
       items.push({
         label,
