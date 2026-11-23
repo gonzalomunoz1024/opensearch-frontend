@@ -524,19 +524,51 @@ export function Flyout({
   className?: string;
 }) {
   useLayer(true, onClose);
+  const panel = useRef<HTMLElement>(null);
+  // As the original's flyout, which holds the focus: the first thing in it that takes the focus
+  // has it when it opens (its close button), unless something in it took it already (a field's
+  // autoFocus); Tab goes round what it holds; and when it closes, the focus goes back to what had
+  // it before
+  useEffect(() => {
+    const element = panel.current;
+    if (!element) return undefined;
+    const active = document.activeElement;
+    const opener = active instanceof HTMLElement && active !== document.body && !element.contains(active) ? active : null;
+    if (!element.contains(active)) (tabbablesIn(element)[0] ?? element).focus({ preventScroll: true });
+    return () => {
+      const now = document.activeElement;
+      if ((!now || now === document.body) && opener?.isConnected) opener.focus({ preventScroll: true });
+    };
+  }, []);
+  const holdTab = (event: ReactKeyboardEvent<HTMLElement>) => {
+    const element = panel.current;
+    if (event.key !== 'Tab' || event.defaultPrevented || !element) return;
+    // A popover opened from the flyout is drawn outside it and holds the focus itself
+    if (!element.contains(document.activeElement)) return;
+    const target = wrapTab(tabbablesIn(element), document.activeElement as HTMLElement | null, event.shiftKey);
+    if (!target) return;
+    event.preventDefault();
+    target.focus();
+  };
   return (
     <Portal>
       {mask && <div className="atlFlyoutMask" onMouseDown={onClose} />}
       <aside
+        ref={panel}
         className={cx('atlFlyout', wide && 'atlFlyout--wide', className)}
         role="dialog"
+        tabIndex={-1}
+        onKeyDown={holdTab}
         data-test-subj={testId}
       >
         <div className="atlFlyout__header">
           <h2 className="atlTitleM atlTruncate">{title}</h2>
           {!hideClose && <IconButton icon="cross" label="Close this dialog" onClick={onClose} testId="euiFlyoutCloseButton" />}
         </div>
-        <div className="atlFlyout__body">{children}</div>
+        {/* As the original's, the body takes the focus, for the keys to scroll it */}
+        <div className="atlFlyout__body" tabIndex={0}>
+          {children}
+        </div>
         {footer && <div className="atlFlyout__footer">{footer}</div>}
       </aside>
     </Portal>
@@ -544,12 +576,13 @@ export function Flyout({
 }
 
 // The original's icons: a check, an i in a ring, OUI's `help` (a ring buoy) for a warning, and a
-// triangle for what failed
-const TOAST_ICONS: Record<string, IconName> = {
+// triangle for what failed; a plain message has none
+const TOAST_ICONS: Record<Toast['kind'], IconName | undefined> = {
   healthy: 'check',
   info: 'info',
   warning: 'lifebuoy',
   critical: 'warning',
+  plain: undefined,
 };
 
 export function ToastList() {
@@ -562,25 +595,28 @@ export function ToastList() {
       {items.length > 0 && (
         <Portal>
           <div className="atlToasts" role="region" aria-live="polite" data-test-subj="globalToastList">
-            {items.map((toast) => (
-              <div key={toast.id} className={`atlToast atlMaterial atlToast--${toast.kind}`}>
-                {/* As the original's toast: what a screen reader says before it */}
-                <p className="atlScreenReaderOnly">A new notification appears</p>
-                <div className="atlToast__header" aria-label="Notification" data-test-subj="euiToastHeader">
-                  <Icon name={TOAST_ICONS[toast.kind]} />
-                  <div className="atlToast__title">{toast.title}</div>
+            {items.map((toast) => {
+              const icon = TOAST_ICONS[toast.kind];
+              return (
+                <div key={toast.id} className={`atlToast atlMaterial atlToast--${toast.kind}`}>
+                  {/* As the original's toast: what a screen reader says before it */}
+                  <p className="atlScreenReaderOnly">A new notification appears</p>
+                  <div className="atlToast__header" aria-label="Notification" data-test-subj="euiToastHeader">
+                    {icon && <Icon name={icon} />}
+                    <div className="atlToast__title">{toast.title}</div>
+                  </div>
+                  <ToastText toast={toast} onFullError={setFull} />
+                  <IconButton
+                    icon="cross"
+                    label="Dismiss toast"
+                    size="s"
+                    className="atlToast__close"
+                    onClick={() => toasts.dismiss(toast.id)}
+                    testId="toastCloseButton"
+                  />
                 </div>
-                <ToastText toast={toast} onFullError={setFull} />
-                <IconButton
-                  icon="cross"
-                  label="Dismiss toast"
-                  size="s"
-                  className="atlToast__close"
-                  onClick={() => toasts.dismiss(toast.id)}
-                  testId="toastCloseButton"
-                />
-              </div>
-            ))}
+              );
+            })}
           </div>
         </Portal>
       )}

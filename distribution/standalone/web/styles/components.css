@@ -1284,6 +1284,11 @@ select.atlField {
   animation: atlSlide var(--duration-normal) var(--ease-out-quint);
 }
 
+/* The flyout takes the focus itself only when nothing in it can: no ring, as the original's */
+.atlFlyout:focus {
+  outline: none;
+}
+
 .atlFlyoutMask {
   position: fixed;
   inset: 0;
@@ -1347,12 +1352,18 @@ select.atlField {
   animation: atlRise var(--duration-normal) var(--ease-out-quint);
 }
 
+/* 24 px clear of the close button, as the original's */
 .atlToast__header {
   display: flex;
   align-items: flex-start;
   gap: var(--space-2);
   padding-top: 1px;
-  padding-right: var(--space-5);
+  padding-right: var(--space-6);
+}
+
+/* A plain message: its title alone, from the top of the padding */
+.atlToast--plain .atlToast__header {
+  padding-top: 0;
 }
 
 .atlToast__header > .atlIcon {

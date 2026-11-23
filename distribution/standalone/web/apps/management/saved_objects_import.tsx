@@ -121,8 +121,6 @@ export function ImportFlyout({ onClose, onDone }: { onClose: () => void; onDone:
           ),
         () => undefined
       );
-    // The close button has the focus when the flyout opens, as the original's
-    document.querySelector<HTMLElement>('.sobImportFlyout [data-test-subj=euiFlyoutCloseButton]')?.focus();
     return () => {
       live = false;
     };
