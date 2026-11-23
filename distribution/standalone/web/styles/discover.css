@@ -44,32 +44,30 @@
   min-width: 0;
 }
 
+/* The kit's combo box inside the field, as the original's inside its layout: the field's height
+   and colour, no border of its own (the field draws it), its value 8 px from the field's edge and
+   the room for the caret at its end as the original's; the caret 8 px from the button beside it */
 .dscSidebar__sourceGroup .atlCombo {
-  flex-wrap: nowrap;
   height: 100%;
   min-height: 0;
-  padding: 0 10px 0 calc(var(--space-2) - 1px);
+  padding: 3px 32px 0 7px;
   border: 0;
   border-radius: 0;
-  background: transparent;
   box-shadow: none;
 }
 
-/* The value as the original's: on a 22 px line, ending where the original leaves room for typing */
-.dscSidebar__sourceGroup .atlCombo > input {
-  align-self: flex-start;
-  min-width: 0;
-  height: 22px;
-  margin: 3px 25px 0 0;
-  padding: 0;
-  line-height: 22px;
-  text-overflow: ellipsis;
+.dscSidebar__sourceGroup .atlCombo__caret {
+  right: 8px;
 }
 
-.dscSidebar__sourceGroup .atlCombo__caret {
-  width: 12px;
-  height: 12px;
-  color: var(--color-text-primary);
+/* The text typed where the original's is, 9 px after the value (the kit's gap and 5 px), on its
+   22 px line */
+.dscSidebar__sourceGroup .atlCombo > input {
+  align-self: flex-start;
+  height: 22px;
+  margin: 1px 8px 0 5px;
+  padding: 0;
+  line-height: 22px;
 }
 
 .dscSidebar__refresh {
@@ -283,23 +281,8 @@
   height: 24px;
   padding: 0;
   border-radius: 50%;
-  color: var(--color-accent);
   opacity: 0;
   transition: opacity var(--duration-fast);
-}
-
-.dscSidebarField .dscSidebarField__action:hover,
-.dscSidebarField .dscSidebarField__action:focus {
-  background: var(--color-accent-tint);
-}
-
-.dscSidebarField .dscSidebarField__action--remove {
-  color: var(--color-critical-text);
-}
-
-.dscSidebarField .dscSidebarField__action--remove:hover,
-.dscSidebarField .dscSidebarField__action--remove:focus {
-  background: var(--color-critical-tint);
 }
 
 .dscSidebarField:hover .dscSidebarField__action,
@@ -399,7 +382,7 @@
   height: 12px;
   padding: 0 2px;
   border-radius: 50%;
-  color: var(--color-accent);
+  color: var(--color-accent-button-text);
 }
 
 .dscFieldBucket .dscFieldBucket__action .atlIcon {
@@ -412,10 +395,6 @@
   align-items: center;
   gap: var(--space-1);
   padding-top: var(--space-1);
-}
-
-.dscFieldDetails__visualize .atlButton {
-  min-width: 112px;
 }
 
 .dscFieldDetails__warning {
@@ -1434,7 +1413,7 @@
 .dscContextBar__load.atlButton {
   gap: var(--space-2);
   margin-left: var(--space-2);
-  padding: 0 1px;
+  padding: 0;
 }
 
 .dscContextBar__count.atlField {
