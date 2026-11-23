@@ -224,11 +224,47 @@ export class UiSettingsClient {
       this.changed();
     }
   }
-  set(key: string, value: unknown) {
-    return this.setMany({ [key]: value });
+  /**
+   * One setting, as the original's client sets one (its `update`). A value that is already the
+   * one held is not sent again, so a second click while the first is on its way asks the server
+   * nothing. Another value is held here at once, for the page to show, and put back as it was
+   * when the server refuses it.
+   */
+  async set(key: string, value: unknown) {
+    if (this.isOverridden(key)) {
+      throw new Error(`Unable to update "${key}" because its value is overridden by the OpenSearch Dashboards server`);
+    }
+    if (this.userValue(key) === value) return;
+    if (this.prefersBrowser(key)) {
+      await this.setMany({ [key]: value });
+      return;
+    }
+    const had = Object.hasOwn(this.user, key);
+    const before = this.user[key];
+    this.hold(key, value);
+    try {
+      await this.setMany({ [key]: value });
+    } catch (error) {
+      const user = { ...this.user };
+      if (had) user[key] = before;
+      else delete user[key];
+      this.user = user;
+      this.changed();
+      throw error;
+    }
   }
   remove(key: string) {
-    return this.setMany({ [key]: null });
+    return this.set(key, null);
+  }
+
+  /** A value held before the server has it, as the original's `setLocally`: JSON as its text */
+  private hold(key: string, value: unknown) {
+    const user = { ...this.user };
+    if (value === null || value === undefined) delete user[key];
+    else if (this.definitions[key]?.type === 'json' && typeof value !== 'string') user[key] = JSON.stringify(value);
+    else user[key] = value;
+    this.user = user;
+    this.changed();
   }
   async refresh() {
     this.apply(await this.http.get<SettingsAnswer>('/api/opensearch-dashboards/settings'));
