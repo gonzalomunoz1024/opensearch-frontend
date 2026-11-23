@@ -23,6 +23,7 @@ import {
   TRACKED_APPS,
   canDock,
   helpExtensionOf,
+  isEmbedParamInHash,
   isUnderPath,
   navMode,
   recentLinkTitle,
@@ -337,8 +338,12 @@ export function Chrome({ children }: { children: ReactNode }) {
   const recent = useRecentlyAccessed();
   const navId = useId();
   const menuButton = useRef<HTMLButtonElement>(null);
+  // A page embedded in another shows neither the header nor the navigation, as long as it is
+  // loaded: the original reads its address once, when it starts
+  const [embedded] = useState(() => isEmbedParamInHash(window.location.hash));
   // A page that hides the header hides the navigation with it
-  const mode = fullScreen ? 'hidden' : navMode({ locked, open, canDock: wide });
+  const chromeHidden = fullScreen || embedded;
+  const mode = chromeHidden ? 'hidden' : navMode({ locked, open, canDock: wide });
   // Every request counts toward the home link's spinner, from the first a page makes
   useState(() => countRequests(services.http));
   useTrackedAddresses(location);
@@ -365,11 +370,11 @@ export function Chrome({ children }: { children: ReactNode }) {
   return (
     <ActionsContext.Provider value={actions}>
       <div
-        className={cx('shlApp', mode === 'docked' && 'shlApp--docked', fullScreen && 'shlApp--fullScreen')}
+        className={cx('shlApp', mode === 'docked' && 'shlApp--docked', chromeHidden && 'shlApp--chromeHidden')}
         // While the navigation lies over the page, the page is not there for a screen reader
         aria-hidden={mode === 'overlay' ? true : undefined}
       >
-        {fullScreen ? (
+        {chromeHidden ? (
           <LoadingBar />
         ) : (
           <header className="shlHeader" data-test-subj="headerGlobalNav">

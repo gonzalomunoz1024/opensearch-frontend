@@ -46,6 +46,20 @@ export function canDock(width: number): boolean {
   return isAtLeast(width, 'l');
 }
 
+/**
+ * Whether a page is embedded in another one, as the original's chrome service reads it when the
+ * page loads: an `embed` parameter in the query of the address's hash, whatever its value. An
+ * embedded page shows its application without the header and the navigation, for as long as it
+ * stays loaded; the query before the hash does not count.
+ */
+export function isEmbedParamInHash(hash: string): boolean {
+  try {
+    return new URL(hash.slice(1), 'http://localhost').searchParams.has('embed');
+  } catch {
+    return false;
+  }
+}
+
 /** How the navigation is shown: not at all, over the page behind a mask, or beside the page */
 export type NavMode = 'hidden' | 'overlay' | 'docked';
 

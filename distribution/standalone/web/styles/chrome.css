@@ -17,7 +17,8 @@
   padding-left: 320px;
 }
 
-.shlApp--fullScreen {
+/* Without the header, on a full screen dashboard or a page embedded in another */
+.shlApp--chromeHidden {
   padding-top: 0;
 }
 

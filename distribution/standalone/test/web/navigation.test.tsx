@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { isModifiedClick, isUnderPath, navMode } from '../../web/shell/chrome_layout';
+import { isEmbedParamInHash, isModifiedClick, isUnderPath, navMode } from '../../web/shell/chrome_layout';
 import { Navigation, type NavGroupItem, type NavigationProps } from '../../web/shell/navigation';
 
 const count = (text: string, part: string) => text.split(part).length - 1;
@@ -20,6 +20,30 @@ describe('how the navigation is shown', () => {
     assert.equal(navMode({ locked: true, open: true, canDock: false }), 'overlay');
     assert.equal(navMode({ locked: false, open: false, canDock: true }), 'hidden');
     assert.equal(navMode({ locked: true, open: false, canDock: false }), 'hidden');
+  });
+});
+
+describe('a page embedded in another', () => {
+  it('is one whose hash has `embed` in its query, whatever its value and wherever it stands', () => {
+    assert.equal(isEmbedParamInHash('#/view/edf84fe0?embed=true&_g=(filters:!())'), true);
+    assert.equal(isEmbedParamInHash('#/view/edf84fe0?_g=(filters:!())&embed=true'), true);
+    assert.equal(isEmbedParamInHash('#/view/edf84fe0?embed=false'), true);
+    assert.equal(isEmbedParamInHash('#/view/edf84fe0?embed'), true);
+    assert.equal(isEmbedParamInHash('#/edit/a1b2?embed=true&show-top-menu=true'), true);
+  });
+
+  it('is not one without that parameter in the hash', () => {
+    assert.equal(isEmbedParamInHash(''), false);
+    assert.equal(isEmbedParamInHash('#'), false);
+    assert.equal(isEmbedParamInHash('#/view/edf84fe0'), false);
+    assert.equal(isEmbedParamInHash('#/view/edf84fe0?embedded=true&show-top-menu=true'), false);
+    assert.equal(isEmbedParamInHash('#/embed/edf84fe0'), false);
+    // After a second "#", where the address no longer has a query
+    assert.equal(isEmbedParamInHash('#/view/edf84fe0?_g=()#?embed=true'), false);
+  });
+
+  it('is not one when the hash is no address at all, where the original fails to start', () => {
+    assert.equal(isEmbedParamInHash('#//'), false);
   });
 });
 
