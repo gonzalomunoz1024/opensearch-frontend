@@ -20,6 +20,8 @@ import {
   newPanelIndex,
   offersInspector,
   orderAsOriginal,
+  panelTitle,
+  panelTitleHidden,
   panelsDiffer,
   panelsFromUrl,
   panelsToUrl,
@@ -666,6 +668,66 @@ describe('what a panel offers', () => {
     assert.equal(finderName(found('visualization-visbuilder', { title: 'Built' }), types), 'Built (VisBuilder)');
   });
 });
+
+describe("a panel's title", () => {
+  const grid = { x: 0, y: 0, w: 24, h: 15, i: '1' };
+  const stored = (embeddableConfig: Record<string, unknown>, title?: string) => ({
+    version: '7.10.2',
+    gridData: grid,
+    panelIndex: '1',
+    embeddableConfig,
+    ...(title !== undefined ? { title } : {}),
+    panelRefName: 'panel_0',
+  });
+  const read = (panel: unknown) =>
+    dashboardFromSavedObject({
+      id: 'titles',
+      attributes: { title: 'Titles', panelsJSON: JSON.stringify([panel]) },
+      references: [{ name: 'panel_0', type: 'visualization', id: 'vis-1' }],
+    }).panels[0];
+
+  it('takes a title kept among the settings over the one beside them, as the original reads a panel', () => {
+    const custom = read(stored({ title: 'Custom A', vis: { legendOpen: false } }));
+    assert.equal(custom.title, 'Custom A');
+    assert.deepEqual(custom.embeddableConfig, { vis: { legendOpen: false } });
+    assert.equal(read(stored({ title: 'Config B' }, 'Top B')).title, 'Config B');
+    assert.equal(read(stored({ title: '' }, 'Top C')).title, '');
+    assert.equal(read(stored({}, 'Top D')).title, 'Top D');
+    // ...and writes it beside them when it saves the panel again
+    const { attributes } = dashboardToSavedObject({ ...emptyDashboard(), title: 'Titles', panels: [custom] });
+    assert.equal(
+      attributes.panelsJSON,
+      JSON.stringify([
+        { version: '3.9.0', gridData: grid, panelIndex: '1', embeddableConfig: { vis: { legendOpen: false } }, title: 'Custom A', panelRefName: 'panel_0' },
+      ])
+    );
+  });
+
+  it('takes it so from the address too', () => {
+    const [panel] =
+      panelsFromUrl([
+        { embeddableConfig: { title: 'Custom A', hidePanelTitles: false }, gridData: grid, id: 'vis-1', panelIndex: '1', title: 'Top', type: 'visualization', version: '3.9.0' },
+      ]) ?? [];
+    assert.equal(panel.title, 'Custom A');
+    assert.deepEqual(panel.embeddableConfig, { hidePanelTitles: false });
+  });
+
+  it("shows its own title, else its object's, and none when titles are hidden, as the original", () => {
+    const titled = (embeddableConfig: Record<string, unknown>, title?: string) => ({ embeddableConfig, ...(title !== undefined ? { title } : {}) });
+    assert.equal(panelTitle(titled({}), 'Object', false), 'Object');
+    assert.equal(panelTitle(titled({}, 'Own'), 'Object', false), 'Own');
+    assert.equal(panelTitle(titled({ title: 'Among the settings' }, 'Own'), 'Object', false), 'Among the settings');
+    assert.equal(panelTitle(titled({}, ''), 'Object', false), '');
+    // The text goes with the panel's own setting, or else the dashboard's...
+    assert.equal(panelTitle(titled({}, 'Own'), 'Object', true), '');
+    assert.equal(panelTitle(titled({ hidePanelTitles: true }), 'Object', false), '');
+    // ...and the title is hidden when either the dashboard or the panel hides it
+    assert.equal(panelTitleHidden(titled({ hidePanelTitles: false }), true), true);
+    assert.equal(panelTitleHidden(titled({ hidePanelTitles: true }), false), true);
+    assert.equal(panelTitleHidden(titled({}), false), false);
+  });
+});
+
 
 describe('the round trip to an editor', () => {
   const container = { containerName: 'My dashboard', containerId: 'mine' };

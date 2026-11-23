@@ -155,6 +155,17 @@ export function emptyDashboard(): Dashboard {
 
 const gridItem = (panelIndex: string, x: number, y: number, w: number, h: number): GridItem => ({ x, y, w, h, i: panelIndex });
 
+/**
+ * A panel's own title and settings as the original's dashboard reads them and writes them back
+ * (convertSavedDashboardPanelToPanelState, then convertPanelStateToSavedDashboardPanel): a title
+ * among the settings stands over the one beside them, and is written beside them.
+ */
+function ownTitle(settings: Record<string, unknown>, title: unknown): Pick<PanelState, 'embeddableConfig' | 'title'> {
+  if (settings.title === undefined) return { embeddableConfig: settings, ...(title !== undefined ? { title: title as string } : {}) };
+  const { title: own, ...rest } = settings;
+  return { embeddableConfig: rest, title: typeof own === 'string' ? own : own === null ? '' : String(own) };
+}
+
 export function dashboardFromSavedObject(object: {
   id: string;
   attributes: DashboardAttributes;
@@ -190,14 +201,7 @@ export function dashboardFromSavedObject(object: {
             ...(panel.sort !== undefined ? { sort: panel.sort } : {}),
           }
         : settings;
-    panels.push({
-      panelIndex,
-      gridData,
-      type,
-      id,
-      embeddableConfig,
-      ...(panel.title !== undefined ? { title: panel.title } : {}),
-    });
+    panels.push({ panelIndex, gridData, type, id, ...ownTitle(embeddableConfig, panel.title) });
   });
   const source = parseSearchSource(object.attributes.kibanaSavedObjectMeta?.searchSourceJSON, references);
   const storedSource = parse<unknown>(object.attributes.kibanaSavedObjectMeta?.searchSourceJSON, {});
@@ -322,8 +326,7 @@ export function panelsFromUrl(value: unknown): PanelState[] | undefined {
       gridData: gridItem(panelIndex, Number(grid.x ?? 0), Number(grid.y ?? 0), Number(grid.w ?? DEFAULT_PANEL.w), Number(grid.h ?? DEFAULT_PANEL.h)),
       type: entry.type,
       id: entry.id,
-      embeddableConfig: isRecord(entry.embeddableConfig) ? entry.embeddableConfig : {},
-      ...(typeof entry.title === 'string' ? { title: entry.title } : {}),
+      ...ownTitle(isRecord(entry.embeddableConfig) ? entry.embeddableConfig : {}, typeof entry.title === 'string' ? entry.title : undefined),
     });
   }
   return panels;
@@ -686,6 +689,25 @@ export function finderName(
   }
   return `${object.attributes.title ?? ''} (${kind})`;
 }
+
+// --- A panel's title ---------------------------------------------------------------------------------
+
+/**
+ * The title a panel shows, as the original's panels take it (`getPanelTitle`): its own, a title
+ * among its settings first, or else its object's; none when titles are hidden for it, by its own
+ * setting or, when it has none, the dashboard's.
+ */
+export function panelTitle(panel: Pick<PanelState, 'embeddableConfig' | 'title'>, objectTitle: string, dashboardHides: boolean): string {
+  const own = panel.embeddableConfig.hidePanelTitles;
+  if (own === undefined ? dashboardHides : Boolean(own)) return '';
+  const custom: unknown = panel.embeddableConfig.title !== undefined ? panel.embeddableConfig.title : panel.title;
+  const title = custom === undefined ? objectTitle : custom;
+  return typeof title === 'string' ? title : title ? String(title) : '';
+}
+
+/** Whether a panel's title is hidden: the original hides it when the dashboard or the panel itself does */
+export const panelTitleHidden = (panel: Pick<PanelState, 'embeddableConfig'>, dashboardHides: boolean): boolean =>
+  dashboardHides || Boolean(panel.embeddableConfig.hidePanelTitles);
 
 // --- The round trip to an editor -----------------------------------------------------------------
 

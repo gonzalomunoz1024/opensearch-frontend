@@ -37,7 +37,16 @@ import { DocDetails } from '../discover/doc_viewer';
 import { valueFilter } from '../discover/filters';
 import { buildDiscoverRequest } from '../discover/search';
 import { normalizeSort } from '../discover/sort';
-import { editorStateFor, existingFilter, offersInspector, takenAgain, type ContainerInfo, type PanelState } from './model';
+import {
+  editorStateFor,
+  existingFilter,
+  offersInspector,
+  panelTitle,
+  panelTitleHidden,
+  takenAgain,
+  type ContainerInfo,
+  type PanelState,
+} from './model';
 import { EDIT_NAMES, PanelMenu, type PanelAction } from './panel_menu';
 
 export interface LoadedObject {
@@ -372,14 +381,12 @@ export const DashboardPanel = memo(function DashboardPanel({
   const failure = failed && failed.object === object ? failed.failure : undefined;
 
   const objectTitle = (object?.attributes as { title?: string } | undefined)?.title ?? '';
-  const title = labDisabled && vis ? vis.title : (panel.title ?? objectTitle);
+  const title = labDisabled && vis ? vis.title : panelTitle(panel, objectTitle, hideTitle);
   // A visualization's description is told by an icon beside the title, as in the original
   const description = vis && !labDisabled ? vis.description : '';
   // As the original: no title when the dashboard or the panel hides them; while editing, an
   // untitled panel says so
-  // The panel's own setting, when it has one, over the dashboard's, as in the original
-  const own = panel.embeddableConfig.hidePanelTitles;
-  const titleHidden = typeof own === 'boolean' ? own : hideTitle;
+  const titleHidden = panelTitleHidden(panel, hideTitle);
   const showTitle = !titleHidden && ((editing && !labDisabled) || title !== '');
   const showPanelBar = (editing && !labDisabled) || showTitle || description !== '';
   const labelId = useId();
