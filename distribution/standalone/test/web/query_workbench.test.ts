@@ -30,9 +30,12 @@ import {
 import {
   DEFAULT_CAPABILITIES,
   SQL_WORDS,
+  TREE_EMPTY,
+  TREE_FAILED,
   capabilitiesOf,
   cellText,
   coerceVersion,
+  dataSourceOf,
   completionMeta,
   completionPrefix,
   completionRuns,
@@ -44,6 +47,7 @@ import {
   getQueries,
   indentGuides,
   indexNames,
+  indexTreeOf,
   indicesQuery,
   messageText,
   nestedNames,
@@ -58,6 +62,7 @@ import {
   tabName,
   tableOf,
   tokenizeSql,
+  truncateName,
   type Row,
 } from '../../web/apps/query_workbench/model';
 
@@ -233,6 +238,60 @@ describe('an answer as a table', () => {
       name: 'Output',
     });
     assert.deepEqual(firstTab([], []), { id: 'Output', name: 'Output' });
+  });
+});
+
+describe('the index tree and the addresses', () => {
+  const reply = (resp: unknown) => ({ data: { ok: true, resp } });
+
+  it('lists the third column of each row, as text', () => {
+    const rows = [
+      ['docker-cluster', null, '.kibana_1', 'BASE TABLE'],
+      ['docker-cluster', null, 'logs', 'BASE TABLE'],
+      ['docker-cluster', null, 7],
+      ['docker-cluster', null],
+    ];
+    assert.deepEqual(indexTreeOf(reply(JSON.stringify({ datarows: rows }))), {
+      names: ['.kibana_1', 'logs', '7', ''],
+    });
+  });
+
+  it('says there are no indices when the rows are empty, or not a list with a length', () => {
+    assert.deepEqual(indexTreeOf(reply(JSON.stringify({ datarows: [] }))), { message: TREE_EMPTY });
+    assert.deepEqual(indexTreeOf(reply(JSON.stringify({ datarows: '' }))), { message: TREE_EMPTY });
+    assert.deepEqual(indexTreeOf(reply(JSON.stringify({ datarows: 5 }))), { message: TREE_EMPTY });
+  });
+
+  it('says to check the permissions when the answer cannot be read as the plugin reads it', () => {
+    const failed = { message: TREE_FAILED };
+    // An error, whose text is no JSON, or JSON without rows
+    assert.deepEqual(indexTreeOf({ data: { ok: false, resp: 'Forbidden' } }), failed);
+    assert.deepEqual(indexTreeOf(reply('{"error":{"reason":"no"}}')), failed);
+    assert.deepEqual(indexTreeOf(reply(JSON.stringify({ datarows: null }))), failed);
+    assert.deepEqual(indexTreeOf(reply('null')), failed);
+    // No answer at all, or rows the plugin cannot map
+    assert.deepEqual(indexTreeOf(undefined), failed);
+    assert.deepEqual(indexTreeOf({}), failed);
+    assert.deepEqual(indexTreeOf(reply(JSON.stringify({ datarows: 'abc' }))), failed);
+    assert.deepEqual(indexTreeOf(reply(JSON.stringify({ datarows: [null] }))), failed);
+  });
+
+  it('cuts a long name to 50 characters with three dots, as lodash does', () => {
+    const fifty = 'a'.repeat(50);
+    assert.equal(truncateName(fifty), fifty);
+    assert.equal(truncateName(`${fifty}b`), `${'a'.repeat(47)}...`);
+    assert.equal(truncateName('opensearch_dashboards_sample_data_ecommerce'), 'opensearch_dashboards_sample_data_ecommerce');
+  });
+
+  it('reads the data source of the plugin\'s two addresses, and none of any other', () => {
+    assert.equal(dataSourceOf('/'), '');
+    assert.equal(dataSourceOf('/my_glue'), 'my_glue');
+    assert.equal(dataSourceOf('/my_glue/'), 'my_glue');
+    assert.equal(dataSourceOf('/accelerate/my_glue'), 'my_glue');
+    assert.equal(dataSourceOf('/accelerate'), 'accelerate');
+    assert.equal(dataSourceOf('/a%20b'), 'a b');
+    assert.equal(dataSourceOf('/a/b'), '');
+    assert.equal(dataSourceOf('/accelerate/a/b'), '');
   });
 });
 

@@ -1,271 +1,717 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
-/* Query Workbench: the indices at the left, the editor and its results at the right. */
+/*
+ * Query Workbench, in the boxes the plugin's component library draws under the theme: a page
+ * 16 px in, the panel of the tree (400 px and its 16 px margin) beside the page's panel, flex
+ * groups whose gutters are negative margins (so their edges overlap as the original's do), the
+ * editor's panel, and the results' panel with its tabs, its own panel for SQL's tables and the
+ * table of 155 px columns.
+ */
 
 .qwbPage {
+  --qwb-tree-hover: #e8e8e9;
+  --qwb-focus-from: rgb(0 122 255 / 0%);
+
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  padding: var(--space-4);
-}
-
-.qwbPage--full {
-  display: block;
-}
-
-.qwbSide {
   flex: none;
-  width: min(400px, 30vw);
-  min-height: calc(100vh - var(--header-height) - 2 * var(--space-4));
-  max-height: calc(100vh - var(--header-height) - 2 * var(--space-4));
-  padding: var(--space-6) var(--space-4);
+  padding: var(--space-4);
+  background: var(--color-surface);
+}
+
+.themeDark .qwbPage {
+  --qwb-tree-hover: #69696b;
+  --qwb-focus-from: rgb(10 132 255 / 0%);
+}
+
+.qwbPage__body {
+  display: flex;
+  flex: 1 1 100%;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* The component library's spacers */
+.qwbSpacer {
+  flex-shrink: 0;
+}
+
+.qwbSpacer--s {
+  height: 8px;
+}
+
+.qwbSpacer--m {
+  height: 16px;
+}
+
+.qwbSpacer--l {
+  height: 24px;
+}
+
+.qwbSpacer--xl {
+  height: 32px;
+}
+
+.qwbSpacer--xxl {
+  height: 40px;
+}
+
+/* The panels: a hairline, the large round and the theme's shadow */
+.qwbSide,
+.qwbMain,
+.qwbEditorPanel,
+.qwbResults,
+.qwbWrap__panel {
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
   box-shadow: var(--shadow-card);
-  overflow: auto;
+}
+
+/* The buttons of the component library: a border the colour of nothing, the icon 8 px from the
+   words */
+.qwbButton.atlButton {
+  gap: var(--space-2);
+  border: 1px solid transparent;
+}
+
+/* --- The frame ------------------------------------------------------------------------------ */
+
+.qwbFrame {
+  display: flex;
+  flex-grow: 1;
+}
+
+.qwbSide {
+  flex: 0 1 auto;
+  margin-right: 10px;
+  padding: var(--space-4);
+}
+
+/* The original's height: the window less what is above and below it */
+.qwbSide__bar {
+  width: 400px;
+  min-width: 192px;
+  max-width: 400px;
+  height: calc(100vh - 254px);
+  margin-right: var(--space-4);
+}
+
+.qwbSide__title {
+  margin: 0;
+  font-size: var(--font-size-m);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+.qwbSide__column {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 308px);
+  margin: calc(-1 * var(--space-3));
+  overflow: hidden auto;
+}
+
+.qwbSide__item {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  min-width: 1px;
+  margin: var(--space-3);
 }
 
 .qwbMain {
   flex: 1 1 auto;
   min-width: 0;
   padding: var(--space-4);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-card);
 }
 
 .qwbTop {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  gap: var(--space-3);
-  margin-bottom: var(--space-4);
+  margin: calc(-1 * var(--space-3));
+}
+
+.qwbTop__item {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  margin: var(--space-3);
+}
+
+/* An empty flex group, whose margins pull what follows 12 px higher */
+.qwbBody__empty {
+  display: flex;
+  margin: calc(-1 * var(--space-3));
 }
 
 /* --- The indices --------------------------------------------------------------------------- */
 
 .qwbTree {
-  display: flex;
-  flex-direction: column;
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+.qwbTree__list {
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.qwbTree__item {
+.qwbTree__node {
+  max-height: 32px;
+  line-height: 32px;
+}
+
+.qwbTree__node--open {
+  max-height: none;
+}
+
+.qwbTree__button {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  min-height: var(--control-height);
-  padding: 0 var(--space-2);
+  width: 100%;
+  max-width: 100%;
+  height: 32px;
+  padding: 0 0 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  line-height: normal;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.qwbTree__button:hover,
+.qwbTree__button:active,
+.qwbTree__button:focus {
+  background: var(--qwb-tree-hover);
+}
+
+.qwbTree__button:focus {
+  outline: none;
+  animation: qwbFocusRing 0.4s var(--ease-out-quint) forwards;
+}
+
+@keyframes qwbFocusRing {
+  0% {
+    box-shadow: 0 0 0 6px var(--qwb-focus-from);
+  }
+
+  100% {
+    box-shadow: 0 0 0 3px var(--color-focus-ring);
+  }
+}
+
+.qwbTree__icon {
+  margin: -2px var(--space-2) 0 0;
+}
+
+.qwbTree__label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* In the colour of the name, as the original's tree draws its icons */
-.qwbTree__item > .atlIcon {
-  flex: none;
+.qwbTree__label .atlTooltipAnchor {
+  display: inline-block;
 }
 
-.qwbTreeNote {
+.qwbTree__text {
+  display: block;
+  line-height: 21px;
+}
+
+/* Loading, no index, or failed: centred in a column with 4 px gutters */
+.qwbTreeState {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-2);
-  padding-top: var(--space-6);
+  margin: calc(-1 * var(--space-1));
+  font-size: var(--font-size-s);
+  line-height: 21px;
+}
+
+.qwbTreeState__item {
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  margin: var(--space-1);
+}
+
+.qwbTreeState__item--fixed {
+  flex: 0 0 auto;
+}
+
+.qwbTreeState__message {
+  padding: 10px;
+}
+
+.qwbTreeState__text {
+  color: var(--color-text-secondary);
   text-align: center;
 }
 
-/* --- The editor ---------------------------------------------------------------------------- */
-
-.qwbEditor {
-  padding: var(--space-4);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-lg);
+/* The prompt at the address of a data source: an icon over a sentence, both subdued */
+.qwbPrompt {
+  max-width: 36em;
+  margin: auto;
+  padding: var(--space-6);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+  text-align: center;
 }
 
-.qwbEditor__title {
-  margin: 0 0 var(--space-2);
+.qwbPrompt p {
+  margin: 0;
+}
+
+/* --- The switch and the editor's panel ----------------------------------------------------- */
+
+.qwbSwitch {
+  display: inline-block;
+  position: relative;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.qwbSwitch__buttons {
+  display: flex;
+  max-width: 100%;
+  padding: 2px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+}
+
+.qwbSwitch__button {
+  flex: 0 1 auto;
+  min-width: 0;
+  height: 28px;
+  padding: 0 var(--space-3);
+  border-radius: 10px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 28px;
+  text-align: center;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) ease-out,
+    color var(--duration-fast) ease-out;
+}
+
+.qwbSwitch__button + .qwbSwitch__button {
+  margin-left: -1px;
+}
+
+.qwbSwitch__button--selected {
+  position: relative;
+  z-index: 0;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--color-text-primary);
+}
+
+.qwbSwitch__button:focus-within {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
+}
+
+/* As wide as its word in bold, so choosing it does not move the other */
+.qwbSwitch__text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.qwbSwitch__text::after {
+  content: attr(data-text);
+  display: block;
+  height: 0;
+  font-weight: var(--font-weight-semibold);
+  visibility: hidden;
+  overflow: hidden;
+}
+
+.qwbEditorPanel {
+  padding: var(--space-4);
+}
+
+.qwbEditorPanel--ppl {
+  padding: var(--space-6);
+}
+
+.qwbPanelTitle {
+  margin: 0;
+  font-size: var(--font-size-l);
+  font-weight: var(--font-weight-semibold);
+  line-height: 22px;
+  letter-spacing: -0.022em;
 }
 
 .qwbActions {
   display: flex;
   gap: var(--space-4);
-  margin-top: var(--space-6);
 }
 
-.qwbActions .atlButton {
-  min-width: 112px;
+/* Explain: the answer as the component library's code block, with its copy button */
+.qwbExplainModal {
+  width: 800px;
+  max-width: calc(100vw - 16px);
 }
 
 .qwbExplain {
   position: relative;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-secondary);
 }
 
 .qwbExplain__code {
-  max-height: 60vh;
   margin: 0;
-  padding-right: var(--space-8);
-  overflow: auto;
+  padding: var(--space-6);
+  font-family: var(--font-family-code);
+  font-size: var(--font-size-s);
+  line-height: 1.5;
   white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  overflow: auto;
 }
 
-.qwbExplain__copy {
+.qwbExplain .qwbTok--string {
+  color: var(--code-block-string);
+}
+
+.qwbExplain .qwbTok--number {
+  color: var(--code-block-number);
+}
+
+.qwbExplain .qwbTok--keyword {
+  color: var(--code-block-keyword);
+}
+
+.qwbCopy {
   position: absolute;
-  top: var(--space-2);
-  right: var(--space-2);
+  top: var(--space-1);
+  right: var(--space-1);
+}
+
+.qwbCopy__button {
   display: inline-flex;
-  padding: var(--space-1);
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
   border: 0;
-  border-radius: var(--radius-xs);
-  background: none;
-  color: var(--color-text-secondary);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-primary);
   cursor: pointer;
 }
 
-.qwbExplain__copy:hover {
+.qwbCopy__button:hover {
   background: var(--color-hover);
-  color: var(--color-text-primary);
 }
 
 /* --- The results --------------------------------------------------------------------------- */
 
-.qwbResults {
-  margin-top: var(--space-6);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  overflow: hidden;
+.qwbResults__head {
+  padding: 20px 20px 0;
 }
 
-.qwbResults--full {
-  margin-top: 0;
-  min-height: calc(100vh - var(--header-height) - 2 * var(--space-4));
-  box-shadow: var(--shadow-card);
-}
-
-.qwbResults__top {
+.qwbGroup {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  min-height: 52px;
-  padding: var(--space-5) var(--space-5) 0;
+  margin: calc(-1 * var(--space-3));
 }
 
-.qwbResults__top h3 {
+.qwbGroup__item {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  min-width: 0;
+  margin: var(--space-3);
+}
+
+.qwbGroup__item--grow {
+  flex: 1 1 0%;
+}
+
+.qwbResults__title {
   margin: 0;
+  font-size: var(--font-size-l);
+  font-weight: var(--font-weight-semibold);
+  line-height: 22px;
+  letter-spacing: -0.022em;
+}
+
+.qwbExit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.qwbExit:hover {
+  background: var(--color-hover);
 }
 
 .qwbNoResult {
-  padding: 72px var(--space-4);
+  font-size: var(--font-size-s);
+  line-height: 21px;
   text-align: center;
 }
 
-.qwbNoResult h4,
+.qwbNoResult h4 {
+  margin: 0 0 7px;
+  font-size: var(--font-size-m);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
 .qwbNoResult p {
-  margin: 0 0 var(--space-2);
+  margin: 0 0 21px;
+}
+
+/* The tabs: a row 5 px in, a group with 4 px gutters, the theme's pills */
+.qwbTabsRow {
+  display: flex;
+  margin: calc(-1 * var(--space-3));
+  padding: 5px;
+}
+
+.qwbTabsGroup {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+  margin: calc(-1 * var(--space-1));
+}
+
+.qwbTabsGroup__item {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  margin: var(--space-2) var(--space-1) var(--space-1);
 }
 
 .qwbTabs {
-  margin-top: var(--space-3);
-  padding: 0 var(--space-3);
-}
-
-.qwbOutput {
-  border: 0;
-  border-radius: 0;
-}
-
-.qwbTableWrap {
-  padding: var(--space-6);
-}
-
-.qwbTablePanel {
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-}
-
-.qwbTableTop {
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-6);
-  padding: var(--space-5) var(--space-5) var(--space-3);
-}
-
-.qwbTableTop__name {
-  margin: 0 0 var(--space-1);
-  overflow-wrap: anywhere;
-}
-
-.qwbTableTop__count {
-  font-weight: var(--font-weight-regular);
-}
-
-.qwbScroll {
+  gap: var(--space-1);
+  margin: 0 0 6px 7px;
   overflow-x: auto;
 }
 
-.qwbTable {
-  width: 100%;
-  border-collapse: collapse;
+.qwbTab {
+  padding: 6px var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
   font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 21px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color var(--duration-normal) var(--ease-out-quint),
+    background-color var(--duration-normal) var(--ease-out-quint);
 }
 
-.qwbHead {
+.qwbTab:hover:not(.qwbTab--selected),
+.qwbTab:focus {
+  color: var(--color-text-primary);
+}
+
+.qwbTab__content {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.qwbTab--selected {
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  cursor: default;
+}
+
+.qwbTabsArrow {
+  display: flex;
+  align-items: center;
+}
+
+.qwbTabsArrow__button {
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.qwbRule {
+  flex-shrink: 0;
+  height: 1px;
+  margin: 0;
+  border: 0;
+  background: var(--color-border-light);
+  color: var(--color-border-light);
+}
+
+/* SQL's tables sit in a panel of their own, 25 px in */
+.qwbWrap {
+  padding: 25px;
+}
+
+/* The top of a table: its name and count, the search box, the Download menu */
+.qwbTableTop {
+  display: flex;
+  align-items: flex-start;
+  margin: calc(-1 * var(--space-3));
+  padding: 20px 20px 0;
+}
+
+.qwbTableTop__item {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  min-width: 1px;
+  margin: var(--space-3);
+}
+
+.qwbTableTop__item--grow {
+  flex: 1 1 0%;
+}
+
+.qwbTableTop__name {
+  margin: 0;
+  font-size: var(--font-size-m);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+/* The search bar's box is the component library's field of full size */
+.qwbTableTop__search .atlField {
+  height: 40px;
+  padding: 0 var(--space-3) 0 11px;
+}
+
+.qwbTableTop__search .atlFieldGroup {
+  gap: var(--space-3);
+}
+
+/* Two scroll bars as the plugin's: one over the table, one under it, scrolled together */
+.qwbTableScroll__top,
+.qwbTableScroll__body {
+  overflow: auto hidden;
+}
+
+.qwbTableScroll__top > div {
+  padding-top: 1px;
+  font-size: var(--font-size-s);
+  line-height: 14px;
+}
+
+/* The table: fixed columns of 155 px after one of 27 px that opens the rows, wider than the
+   panel when they need */
+.qwbTable {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: var(--font-size-s);
+  line-height: 1.5;
+}
+
+.qwbTable__head {
   width: 155px;
-  min-width: 155px;
-  padding: var(--space-3) var(--space-2);
+  padding: 0;
   background: var(--color-surface-secondary);
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
+  line-height: 20px;
   text-align: left;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.qwbTable__head--expander {
+  width: 27px;
+}
+
+.qwbTable__head--nestedExpander {
+  width: 30px;
+}
+
+.qwbTable__headText {
+  overflow: hidden;
+  line-height: 18px;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.qwbHead--expand {
-  width: 27px;
-  min-width: 27px;
+.qwbTable__content {
+  display: flex;
+  align-items: center;
+  padding: 10px var(--space-3);
+  overflow: hidden;
 }
 
-.qwbCell {
-  padding: var(--space-3) var(--space-2);
+.qwbTable__cell {
+  padding: 0;
   border-top: 1px solid var(--color-border-light);
-  vertical-align: top;
+  color: var(--color-text-primary);
+  vertical-align: middle;
+}
+
+.qwbTable__cell > .qwbTable__content {
+  white-space: normal;
+  word-break: break-word;
   overflow-wrap: anywhere;
 }
 
-.qwbCell--expand {
-  width: 27px;
-  padding-right: 0;
+.qwbTable__row:hover {
+  background: var(--color-surface-secondary);
 }
 
-.qwbRow--open > .qwbCell {
-  border-bottom: 0;
+.qwbTable__row--nav:hover {
+  background: none;
 }
 
-.qwbRow--detail > td {
-  padding: 0 0 var(--space-5) var(--space-6);
+.qwbTable__navCell {
+  padding: 0;
+  border-top: 1px solid var(--color-border-light);
 }
 
-.qwbExpand {
+.qwbExpander {
   display: inline-flex;
+  flex: none;
+  align-items: center;
+  height: 32px;
+  margin-left: -4px;
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: none;
-  color: var(--color-accent);
+  background: transparent;
+  color: var(--color-accent-button-text);
   cursor: pointer;
-}
-
-.qwbExpand:focus-visible,
-.qwbLink:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
 }
 
 .qwbLink {
@@ -274,6 +720,7 @@
   background: none;
   color: var(--color-accent);
   font: inherit;
+  line-height: normal;
   text-align: left;
   cursor: pointer;
 }
@@ -282,52 +729,114 @@
   text-decoration: underline;
 }
 
-/* What a row holds, under its names */
-.qwbNames {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  margin: 0;
-  padding: var(--space-2) 0 0;
-  list-style: none;
+/* An open row's names, as the component library's side navigation lists them */
+.qwbNavWrap {
+  padding: 0 0 20px 19px;
 }
 
-.qwbNames__name {
+.qwbNav {
+  width: 300px;
+  padding: 0 0 20px 9px;
+}
+
+.qwbNav__button {
+  display: block;
+  width: 100%;
+  padding: 2px 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: var(--font-size-s);
+  line-height: 1.5;
+  text-align: left;
+}
+
+.qwbNav__item--root > .qwbNav__button {
+  width: calc(100% + 16px);
+  margin: 0 0 var(--space-2) calc(-1 * var(--space-2));
+  padding: 0 var(--space-2);
+  font-size: var(--font-size-m);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+.qwbNav__item--trunk {
+  color: var(--color-text-primary);
+}
+
+.qwbNav__item--trunk > .qwbNav__button {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  width: calc(100% + 16px);
+  margin-left: calc(-1 * var(--space-2));
+  padding: 2px var(--space-2);
+}
+
+.qwbNav__item--trunk > .qwbNav__items {
+  width: 100%;
+  margin-left: var(--space-2);
+}
+
+.qwbNav__button--selected {
+  color: var(--color-accent);
+  font-weight: var(--font-weight-medium);
+}
+
+.qwbNav__icon {
+  display: inline-flex;
+  margin-right: var(--space-2);
+}
+
+.qwbNav__icon .qwbExpander {
+  margin-left: 0;
+}
+
+.qwbNav__item--branch {
+  position: relative;
   color: var(--color-text-secondary);
 }
 
-.qwbNames__name--open {
-  color: var(--color-accent);
+.qwbNav__item--branch::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  background: var(--color-border-light);
 }
 
-.qwbNested {
-  margin: var(--space-2) 0 0 var(--space-2);
-  border-left: 1px solid var(--color-border-light);
-  overflow-x: auto;
+.qwbNav__item--branch:last-of-type::after {
+  height: 12px;
 }
 
-.qwbTable--nested {
-  width: auto;
+.qwbNav__item--branch > .qwbNav__button {
+  position: relative;
+  padding-right: var(--space-2);
+  padding-left: var(--space-2);
 }
 
-@media (max-width: 900px) {
-  .qwbPage {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .qwbSide {
-    width: auto;
-    min-height: 0;
-    max-height: 240px;
-  }
+.qwbNav__item--branch > .qwbNav__button::after {
+  content: '';
+  position: absolute;
+  top: 12px;
+  left: 0;
+  width: 4px;
+  height: 1px;
+  background: var(--color-border-light);
 }
 
-.qwbResults .atlPagination {
-  padding: var(--space-2) var(--space-3);
+/* The pages right under the table, in a row as tall as their buttons */
+.qwbPager > .atlPagination {
+  min-height: 32px;
+  margin-top: 0;
+}
+
+/* The Output tab: Ace's read-only editor, 500 px tall */
+.qwbCode--output {
+  height: 500px;
 }
 
 /*

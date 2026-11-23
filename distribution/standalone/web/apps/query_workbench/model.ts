@@ -187,6 +187,60 @@ export function indexNames(answer: QueryAnswer): string[] {
   }
 }
 
+// --- The index tree -----------------------------------------------------------------------------
+
+/** What the tree says when the answer lists no index */
+export const TREE_EMPTY = 'Failed to load OpenSearch indices';
+/** What the tree says when the answer cannot be read, or the request failed */
+export const TREE_FAILED = 'Failed to load OpenSearch indices, please check user permissions';
+
+/** The names the tree lists, or why it lists none */
+export type IndexTree = { names: string[] } | { message: string };
+
+/**
+ * The tree of an answer of `/api/sql_console/sqlquery` to `indicesQuery`, read as the plugin
+ * reads it: the text of `data.resp` parsed, its `datarows`, the third column of each. What the
+ * plugin's reading throws on (no answer, an error's text, no rows) is `TREE_FAILED`; rows that
+ * are there but empty are `TREE_EMPTY`.
+ */
+export function indexTreeOf(response: unknown): IndexTree {
+  try {
+    const resp = (response as { data: { resp?: unknown } }).data.resp;
+    const parsed = JSON.parse(String(resp)) as unknown;
+    const rows = parsed === null || parsed === undefined ? undefined : (parsed as Jdbc).datarows;
+    if (rows === undefined || rows === null) return { message: TREE_FAILED };
+    const length = (rows as { length?: unknown }).length;
+    if (!(typeof length === 'number' && length > 0)) return { message: TREE_EMPTY };
+    if (!Array.isArray(rows)) return { message: TREE_FAILED };
+    return {
+      names: rows.map((row: unknown) => {
+        const name = (row as unknown[])[2];
+        return name === null || name === undefined ? '' : String(name);
+      }),
+    };
+  } catch {
+    return { message: TREE_FAILED };
+  }
+}
+
+/** A name cut to 50 characters with "..." at its end, as lodash's `truncate` cuts it */
+export const truncateName = (name: string, length = 50): string =>
+  name.length > length ? `${name.slice(0, length - 3)}...` : name;
+
+/**
+ * The data source an address of the page names: `#/name` and `#/accelerate/name`, as the
+ * plugin's routes read them; empty for any other address.
+ */
+export function dataSourceOf(hashPath: string): string {
+  const match = /^\/(?:accelerate\/)?([^/]+)\/?$/.exec(hashPath);
+  if (!match) return '';
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
+}
+
 // --- The "Output" tab ---------------------------------------------------------------------------
 
 export const capitalize = (name: string): string =>
