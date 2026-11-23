@@ -73,6 +73,20 @@ export function pointsAlong(points: XYPoint[], xValues: Array<number | string>, 
   return stacked ? xValues.map((x) => have.get(x) ?? { x, y: 0 }) : xValues.flatMap((x) => have.get(x) ?? []);
 }
 
+// The kinds that lay out the charts of a split themselves, in vislib's frame: one legend for them
+// all, and a pie's titles beside the rows or under the columns (a gauge names itself under its gauges)
+const VISLIB_SPLITS = new Set(['pie', 'gauge', 'goal']);
+
+/**
+ * Who draws the split of a kind of visualization: 'frame', its own drawing, from the parts, as
+ * vislib lays them out; 'whole', its own drawing, from the whole table, as the data table, which
+ * makes a table of each bucket and reads in the visualization's params whether they are rows or
+ * columns; 'parts', the page, a drawing per part
+ */
+export type SplitDrawing = 'frame' | 'whole' | 'parts';
+
+export const splitDrawing = (type: string): SplitDrawing => (VISLIB_SPLITS.has(type) ? 'frame' : type === 'table' ? 'whole' : 'parts');
+
 /** The tables of a chart split into several: one per value of the `split` column */
 export function splitTables(table: Table): Array<{ label?: string; table: Table; split?: SplitBucket }> {
   return splitParts(table) ?? [{ table }];

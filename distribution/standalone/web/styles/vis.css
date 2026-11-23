@@ -85,6 +85,19 @@
   min-height: 0;
 }
 
+/*
+ * The frame the product draws a TSVB markdown panel and a failed panel in: the visualization's
+ * padding, then a transparent border that leaves the panel's background colour inside it
+ */
+.visTsvbFrame {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  margin: var(--space-2);
+  border: var(--space-2) solid transparent;
+}
+
 /* What a TSVB panel shows when its request failed: an alert, a title and the reason under it */
 .visTsvbError {
   display: flex;
