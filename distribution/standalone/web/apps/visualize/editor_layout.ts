@@ -116,3 +116,13 @@ export function editorAggs(fromUrl: AggConfig[] | undefined, saved: AggConfig[],
   if (!fromUrl) return saved;
   return aggBased ? serializeAggs(fromUrl, env) : fromUrl;
 }
+
+/**
+ * Whether the sidebar holds changes Update has not applied, the original's `isDirty`. What the
+ * sidebar's editors fill in by themselves as they show a state (a split chart in rows, the empty
+ * buckets of the last bucket under a parent pipeline) is no change, as the original's editors make
+ * those before its sidebar listens: the draft counts from the moment someone uses the sidebar,
+ * against what it was then (`clean`, undefined until then).
+ */
+export const hasUnappliedChanges = (draft: string | undefined, clean: string | undefined): boolean =>
+  draft !== undefined && clean !== undefined && draft !== clean;

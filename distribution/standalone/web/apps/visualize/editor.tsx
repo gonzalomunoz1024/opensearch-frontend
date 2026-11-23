@@ -41,7 +41,17 @@ import { serializeAggs } from './agg_params';
 import { editorStateDefaults, initialAppState, paramsWithDefaults, unlinkSavedSearch, type AppVisState, type VisualizeAppState } from './app_state';
 import { DataTab } from './data_tab';
 import { newVis, syncParams, visProblems, withoutDisabledBuckets } from './defaults';
-import { canAutoApply, dragWidths, editorAggs, editorHeading, initialWidths, keyWidths, searchBarParts, type SplitWidths } from './editor_layout';
+import {
+  canAutoApply,
+  dragWidths,
+  editorAggs,
+  editorHeading,
+  hasUnappliedChanges,
+  initialWidths,
+  keyWidths,
+  searchBarParts,
+  type SplitWidths,
+} from './editor_layout';
 import { LeaveConfirmModal } from './leave_confirm';
 import { INDEX_PATTERNS_LINK, found, loadFailure } from './load_failure';
 import { optionTabs } from './options';
@@ -156,6 +166,9 @@ export function VisEditor({ savedId }: { savedId?: string }) {
   });
   const [loaded, setLoaded] = useState<Loaded | undefined>(handed?.loaded);
   const [draft, setDraft] = useState<Draft>();
+  // The draft as it stood when someone first used the sidebar's tab since a state was shown or
+  // applied: what its editors fill in by themselves before then is no change
+  const [cleanKey, setCleanKey] = useState<string>();
   const [tab, setTab] = useState<string | undefined>(handed?.view.tab);
   const [collapsed, setCollapsed] = useState(handed?.view.collapsed ?? false);
   const [tick, setTick] = useState(0);
@@ -267,7 +280,9 @@ export function VisEditor({ savedId }: { savedId?: string }) {
   }, [saved, urlState.vis, aggBased, indexPattern]);
   const applied = useMemo<Draft | undefined>(() => (appliedKey ? (JSON.parse(appliedKey) as Draft) : undefined), [appliedKey]);
   useEffect(() => {
-    if (appliedKey) setDraft(JSON.parse(appliedKey) as Draft);
+    if (!appliedKey) return;
+    setDraft(JSON.parse(appliedKey) as Draft);
+    setCleanKey(undefined);
   }, [appliedKey]);
 
   // Without an index pattern the filter bar offers the fields of the indices a Vega spec names,
@@ -319,7 +334,9 @@ export function VisEditor({ savedId }: { savedId?: string }) {
   const draftKey = draft ? stable(draft) : undefined;
   // The sidebar holds changes Update has not applied: the original's `hasUnappliedChanges` (TSVB
   // applies its own, and tells nothing of those it holds, as the original's)
-  const dirty = draftKey !== undefined && draftKey !== appliedKey;
+  const dirty = hasUnappliedChanges(draftKey, cleanKey);
+  // Someone uses the sidebar's tab: from now on a change of the draft is one to apply
+  const used = () => setCleanKey((clean) => clean ?? draftKey);
 
   // Leaving for another application asks first when a dashboard opened the editor and something
   // is not applied or not saved, in the original's modal; closing the tab asks the browser's way
@@ -371,6 +388,7 @@ export function VisEditor({ savedId }: { savedId?: string }) {
     const next = visStateOf(draft);
     if (!next) return;
     writeApp({ vis: next });
+    setCleanKey(undefined);
     setHasUnsavedChanges(true);
   }, [draft, dirty, hasProblems, writeApp, visStateOf]);
 
@@ -535,6 +553,7 @@ export function VisEditor({ savedId }: { savedId?: string }) {
   const shares = widths ?? initialWidths(saved.type);
   const discard = () => {
     setDraft(applied);
+    setCleanKey(undefined);
     setTried(false);
     // As the original's, which writes the visualization's state again: a date histogram takes the
     // time range it is drawn for
@@ -737,7 +756,14 @@ export function VisEditor({ savedId }: { savedId?: string }) {
                 <Tabs tabs={tabs} selected={selected} onSelect={setTab} />
               </div>
             )}
-            <div className={cx('vzeSide__body', saved.type === 'vega' && 'vzeSide__body--flush')}>
+            <div
+              className={cx('vzeSide__body', saved.type === 'vega' && 'vzeSide__body--flush')}
+              onPointerDownCapture={used}
+              onKeyDownCapture={used}
+              onClickCapture={used}
+              onInputCapture={used}
+              onChangeCapture={used}
+            >
               {selected === 'data' && aggBased ? (
                 <DataTab
                   type={saved.type}

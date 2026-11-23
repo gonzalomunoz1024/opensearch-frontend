@@ -17,7 +17,7 @@ import {
   type VisualizeAppState,
 } from '../../web/apps/visualize/app_state';
 import { newVis } from '../../web/apps/visualize/defaults';
-import { editorAggs, editorHeading } from '../../web/apps/visualize/editor_layout';
+import { editorAggs, editorHeading, hasUnappliedChanges } from '../../web/apps/visualize/editor_layout';
 import { INDEX_PATTERNS_LINK, SavedObjectNotFound, found, loadFailure } from '../../web/apps/visualize/load_failure';
 import {
   editorStateFor,
@@ -195,6 +195,24 @@ describe('the aggregations the editor shows and draws', () => {
   it('are those that were saved when the address has none, and those of the address for a kind drawn from none', () => {
     assert.equal(editorAggs(undefined, SAMPLE_PIE.aggs, true, {}), SAMPLE_PIE.aggs);
     assert.equal(editorAggs(fromDiscover, [], false, {}), fromDiscover);
+  });
+});
+
+describe('the changes Update has not applied', () => {
+  const applied = JSON.stringify({ aggs: [], params: { type: 'pie' } });
+  // What the Data tab fills in by itself as it shows a split chart saved without `row`
+  const filledIn = JSON.stringify({ aggs: [], params: { type: 'pie', row: true } });
+  const changed = JSON.stringify({ aggs: [], params: { type: 'pie', row: false } });
+
+  it('are none while nobody has used the sidebar, whatever its editors filled in by themselves', () => {
+    assert.equal(hasUnappliedChanges(filledIn, undefined), false);
+    assert.equal(hasUnappliedChanges(applied, undefined), false);
+  });
+
+  it('are what changed since someone used it, and none once it is back to what it was then', () => {
+    assert.equal(hasUnappliedChanges(changed, filledIn), true);
+    assert.equal(hasUnappliedChanges(filledIn, filledIn), false);
+    assert.equal(hasUnappliedChanges(undefined, filledIn), false);
   });
 });
 
