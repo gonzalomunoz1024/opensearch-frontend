@@ -262,15 +262,18 @@ export function phraseFilter(field: FilterField, value: unknown, indexId?: strin
   };
 }
 
-/** `format` writes the values the filter's text lists, as the field's format does in the original */
-export function phrasesFilter(field: FilterField, values: unknown[], indexId?: string, format?: ValueText): Filter {
+/**
+ * The values the filter's text lists are written as they are: the original writes them with the
+ * format the field carries, and the fields of its index patterns carry none
+ */
+export function phrasesFilter(field: FilterField, values: unknown[], indexId?: string): Filter {
   return {
     meta: {
       index: indexId,
       ...BASE_META,
       type: 'phrases',
       key: field.name,
-      value: values.map((value) => (format ? format(value) : String(value))).join(', '),
+      value: values.join(', '),
       params: values,
     },
     query: {
@@ -289,17 +292,12 @@ export function phrasesFilter(field: FilterField, values: unknown[], indexId?: s
  * A range on a field (buildRangeFilter). Every end given for a number field is read as a number,
  * one given as nothing too: it is NaN then, which is written null, as the original writes it. Of
  * another field an end left out, empty or null is left out. An infinite end is no end, and a range
- * infinite at both ends is all of the field. `format` writes the ends of a scripted field's range
- * into its script's `value`, as the field's format does in the original; `formattedValue` is what
- * the bucket the range was made from was called.
+ * infinite at both ends is all of the field. The ends of a scripted field's range are written into
+ * its script's `value` as they are, as the original does for a field that carries no format, which
+ * none of an index pattern's does; `formattedValue` is what the bucket the range was made from was
+ * called.
  */
-export function rangeFilter(
-  field: FilterField,
-  params: RangeParams,
-  indexId?: string,
-  format?: ValueText,
-  formattedValue?: string
-): Filter {
+export function rangeFilter(field: FilterField, params: RangeParams, indexId?: string, formattedValue?: string): Filter {
   const given: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(params)) {
     if (field.type === 'number') given[key] = typeof value === 'number' ? value : parseFloat(String(value));
@@ -323,7 +321,7 @@ export function rangeFilter(
   if (field.scripted) {
     const clause = getRangeScript(field, given);
     clause.script.params.value = Object.entries(clause.script.params)
-      .map(([key, value]) => `${RANGE_OPERATORS[key]}${format ? format(value) : String(value)}`)
+      .map(([key, value]) => `${RANGE_OPERATORS[key]}${String(value)}`)
       .join(' ');
     return { meta: { ...meta, field: field.name, params: clause.script.params }, script: clause, $state: { store: 'appState' } };
   }

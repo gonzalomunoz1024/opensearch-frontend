@@ -28,7 +28,7 @@ import {
 } from './context';
 import { DocDetails, DocViewer } from './doc_viewer';
 import { DocTable, toggledColumns } from './doc_table';
-import { valueFilter } from './filters';
+import { filtersOf, valueFilter } from './filters';
 import { allFields, documentFields } from './search';
 
 function usePattern(id: string) {
@@ -271,7 +271,7 @@ export function ContextPage({ indexPatternId, id, basePath }: { indexPatternId: 
   const columns = useMemo(() => (Array.isArray(app.columns) && app.columns.length ? app.columns : ['_source']), [app.columns]);
   const predecessorCount = contextCount(app.predecessorCount, defaultSize);
   const successorCount = contextCount(app.successorCount, defaultSize);
-  const appFilters = useMemo(() => (Array.isArray(app.filters) ? app.filters : []), [app.filters]);
+  const appFilters = useMemo(() => filtersOf(app.filters), [app.filters]);
   const ownFilters = useMemo(() => appFilters.filter((filter) => !isPinned(filter)), [appFilters]);
   const filters = useMemo(() => [...global.filters, ...ownFilters], [global.filters, ownFilters]);
 

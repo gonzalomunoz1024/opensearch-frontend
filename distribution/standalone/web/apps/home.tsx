@@ -14,6 +14,7 @@ import { href, navigate, useLocation } from '../router';
 import { services } from '../services';
 import { useBreadcrumbs } from '../shell/state';
 import '../styles/home.css';
+import { slashHash } from './home_address';
 import {
   INDEX_PATTERN_QUERY,
   isNewInstance,
@@ -28,7 +29,9 @@ import { SampleDataPage } from './sample_data';
  * app directory at `#/feature_directory`
  */
 export function Home() {
-  const { hashPath } = useLocation();
+  const location = useLocation();
+  useEffect(slashHash, [location]);
+  const { hashPath } = location;
   if (hashPath === '/tutorial_directory' || hashPath.startsWith('/tutorial_directory/')) {
     return <SampleDataPage withHomeBreadcrumb />;
   }
@@ -617,6 +620,8 @@ function useNewInstance(): boolean {
  */
 export function Overview() {
   useBreadcrumbs([{ text: 'Overview' }]);
+  const location = useLocation();
+  useEffect(slashHash, [location]);
   useEffect(() => {
     document.title = services.boot.name;
   }, []);

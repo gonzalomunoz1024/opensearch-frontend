@@ -6,13 +6,15 @@
  * and where it goes, and the three switches of a snapshot.
  */
 
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import { Accordion, Button, CallOut, cx } from '../../components/basic';
+import { CodeEditor, type CodeEditorHandle } from '../../components/code_editor';
 import { ComboBox, type ComboOption } from '../../components/combo_box';
-import { Checkbox, NumberField, Select, TextField } from '../../components/form';
+import { Checkbox, FormRow, NumberField, Select, TextField } from '../../components/form';
 import { Icon } from '../../components/icon';
-import { Flyout, MenuButton, Popover, type MenuItem } from '../../components/overlay';
-import { ExternalLink, JsonEditor, ism, toasts } from './common';
+import { Flyout, MenuButton, Modal, Popover, Portal, type MenuItem } from '../../components/overlay';
+import { ExternalLink, ism, toasts } from './common';
 import { loadNames } from './job_parts';
 import {
   CUSTOM_CONFIGURATION_TEXT,
@@ -27,6 +29,7 @@ import {
   parseCron,
   parseDayTime,
   repositoryBody,
+  settingsTokens,
   zoneOffset,
   type CronParts,
   type FrequencyType,
@@ -170,7 +173,10 @@ export function GroupFilter({
           aria-expanded={open}
           onClick={toggle}
         >
-          <span className="ismFilterGroup__name">{name}</span>
+          {/* As the plugin's, wide enough for the name in bold, which it takes once a value is chosen */}
+          <span className="ismFilterGroup__name" data-text={name}>
+            {name}
+          </span>
           {selected.length > 0 && <span className="ismFilterCount">{selected.length}</span>}
           <Icon name="chevronDown" />
         </button>
@@ -243,10 +249,117 @@ export function Field({
           </span>
         )}
       </div>
-      {help && <span className="ismSnapField__help">{help}</span>}
+      {/* As the plugin's label: words go into its small light span, set on lines of the page's
+          font outside any text block; anything else stands as it is */}
+      {typeof help === 'string' && help ? (
+        <div className="ismSnapField__helpLine">
+          <span className="ismSnapField__help">{help}</span>
+        </div>
+      ) : (
+        help
+      )}
       <Spacer size="s" />
       <div className="ismSnapField__body">{children}</div>
       {error && <div className="ismSnapField__error">{error}</div>}
+    </div>
+  );
+}
+
+/**
+ * What a part of a form is for, as the plugin writes it where it says more than a few words:
+ * small grey text in light letters, 5 px above and below it
+ */
+export function HelpText({ children }: { children: ReactNode }) {
+  return (
+    <div className="ismSnapHelp">
+      <p>{children}</p>
+    </div>
+  );
+}
+
+/**
+ * JSON to change, as the plugin's code editor shows it: 250 px high, numbered in a white gutter,
+ * the line of the cursor on a band (the last line until the cursor moves) and coloured by the
+ * rules of the original editor's JSON mode. The Tab key stops on a hint over it: Enter, or a
+ * click, goes into the text, and Escape comes back out of it without closing what it is in.
+ */
+export function SettingsEditor({
+  value,
+  onChange,
+  label,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  label: string;
+}) {
+  const box = useRef<HTMLDivElement>(null);
+  const hint = useRef<HTMLButtonElement>(null);
+  const editor = useRef<CodeEditorHandle>(null);
+  // In the text: the hint is out of the way until the text is left
+  const [editing, setEditing] = useState(false);
+  // The line of the cursor, or null while what is selected runs over several lines
+  const [cursorLine, setCursorLine] = useState<number | null>();
+  const lines = value.split('\n').length;
+  const activeLine =
+    cursorLine === undefined ? lines - 1 : cursorLine === null ? -1 : Math.min(cursorLine, lines - 1);
+
+  useEffect(() => {
+    // The text is reached through the hint, not with the Tab key, as the original's
+    box.current?.querySelector('textarea')?.setAttribute('tabindex', '-1');
+  }, []);
+
+  const lineAt = (offset: number) => {
+    const text = box.current?.querySelector('textarea')?.value ?? value;
+    return text.slice(0, offset).split('\n').length - 1;
+  };
+
+  return (
+    <div
+      ref={box}
+      className="ismSnapEditor"
+      data-test-subj="codeEditorContainer"
+      style={{ '--ism-ace-digits': String(lines).length } as CSSProperties}
+      onFocus={(event) => {
+        // A click goes straight into the text, as in the original, whose hint lies under it
+        if (event.target.tagName === 'TEXTAREA') setEditing(true);
+      }}
+      onBlur={(event) => {
+        if (event.target.tagName === 'TEXTAREA') setEditing(false);
+      }}
+    >
+      <button
+        ref={hint}
+        type="button"
+        className={cx('ismSnapEditor__hint', editing && 'ismSnapEditor__hint--inactive')}
+        onClick={() => {
+          setEditing(true);
+          editor.current?.focus();
+        }}
+        data-test-subj="codeEditorHint"
+      >
+        <p>Press Enter to start editing.</p>
+        <p>{"When you're done, press Escape to stop editing."}</p>
+      </button>
+      <CodeEditor
+        handle={editor}
+        value={value}
+        onChange={onChange}
+        height={250}
+        fontSize={14}
+        tokenize={settingsTokens}
+        markedLines={activeLine >= 0 ? [activeLine, activeLine] : undefined}
+        onCursor={(start, end) => {
+          const first = lineAt(start);
+          setCursorLine(first === lineAt(end) ? first : null);
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== 'Escape') return;
+          event.preventDefault();
+          flushSync(() => setEditing(false));
+          hint.current?.focus();
+        }}
+        ariaLabel={label}
+      />
     </div>
   );
 }
@@ -295,6 +408,161 @@ export function FlyoutFooter({
         {action}
       </Button>
     </div>
+  );
+}
+
+/**
+ * The plugin's dialog that asks before something is deleted: OUI's confirmation modal inside a mask
+ * the plugin adds around it, so the page behind is dimmed and blurred twice. It is as wide as its
+ * words, from 400 up to 768 px, under a large title, with the theme's tall buttons. As OUI's, it
+ * gives the confirm button the focus whenever it is drawn and the button can be pressed (so the
+ * focus leaves the field the moment "delete" is complete); until then the dialog itself has it.
+ */
+export function ConfirmDialog({
+  title,
+  confirmLabel,
+  disabled,
+  onCancel,
+  onConfirm,
+  children,
+}: {
+  title: string;
+  confirmLabel: string;
+  disabled?: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+  children: ReactNode;
+}) {
+  const body = useRef<HTMLDivElement>(null);
+  const opening = useRef(true);
+  // After every drawing, once the dialog has put the focus where it puts it (its first field)
+  useEffect(() => {
+    const dialog = body.current?.closest<HTMLElement>('[role="dialog"]');
+    const confirm = dialog?.querySelector<HTMLButtonElement>(
+      '[data-test-subj="confirmModalConfirmButton"]'
+    );
+    if (confirm && !confirm.disabled) confirm.focus();
+    else if (opening.current) dialog?.focus();
+    opening.current = false;
+  });
+  return (
+    <>
+      {/* The plugin's own mask; the dialog brings the other */}
+      <Portal>
+        <div className="atlScrim" aria-hidden="true" />
+      </Portal>
+      <Modal
+        title={<span data-test-subj="confirmModalTitleText">{title}</span>}
+        onClose={onCancel}
+        className="ismConfirm"
+        footer={
+          <>
+            <Button variant="empty" onClick={onCancel} testId="confirmModalCancelButton">
+              Cancel
+            </Button>
+            <Button
+              variant="dangerFill"
+              disabled={disabled}
+              onClick={onConfirm}
+              testId="confirmModalConfirmButton"
+            >
+              {confirmLabel}
+            </Button>
+          </>
+        }
+      >
+        <div ref={body} className="ismConfirm__body" data-test-subj="confirmModalBodyText">
+          {children}
+        </div>
+      </Modal>
+    </>
+  );
+}
+
+/** The field a deletion waits for, as the plugin's: "delete" typed in it */
+function DeleteWord({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <FormRow help={'To confirm deletion, type "delete".'}>
+      <TextField
+        value={value}
+        onChange={onChange}
+        placeholder="delete"
+        compact
+        testId="deleteTextField"
+        aria-label="delete"
+      />
+    </FormRow>
+  );
+}
+
+/**
+ * Deletes repositories or snapshots, as the plugin's dialog for them: what goes, and what goes with
+ * it; with `confirm`, only once "delete" is typed. It closes as soon as it is confirmed, and the
+ * deletions are told one by one in the corner.
+ */
+export function DeleteDialog({
+  type,
+  ids,
+  warning,
+  confirm,
+  onCancel,
+  onDelete,
+}: {
+  type: 'repository' | 'snapshot';
+  ids: string;
+  warning?: string;
+  confirm?: boolean;
+  onCancel: () => void;
+  onDelete: () => void;
+}) {
+  const [word, setWord] = useState(confirm ? '' : 'delete');
+  return (
+    <ConfirmDialog
+      title={`Delete ${type}`}
+      confirmLabel={`Delete ${type}`}
+      disabled={word !== 'delete'}
+      onCancel={onCancel}
+      onConfirm={() => {
+        onDelete();
+        onCancel();
+      }}
+    >
+      <p>
+        Delete "<strong>{ids}</strong>" permanently? {warning}
+      </p>
+      <Spacer size="s" />
+      {confirm && <DeleteWord value={word} onChange={setWord} />}
+    </ConfirmDialog>
+  );
+}
+
+/**
+ * Deletes snapshot policies, as the plugin's dialog for policies: once "delete" is typed; it stays
+ * open until the page that opened it closes it
+ */
+export function DeletePolicyDialog({
+  policyIds,
+  onCancel,
+  onDelete,
+}: {
+  policyIds: string;
+  onCancel: () => void;
+  onDelete: () => void;
+}) {
+  const [word, setWord] = useState('');
+  return (
+    <ConfirmDialog
+      title="Delete policy"
+      confirmLabel="Delete policy"
+      disabled={word !== 'delete'}
+      onCancel={onCancel}
+      onConfirm={onDelete}
+    >
+      Delete "<strong>{policyIds}</strong>" permanently? Indices will no longer be managed using this
+      policy.
+      <Spacer size="s" />
+      <DeleteWord value={word} onChange={setWord} />
+    </ConfirmDialog>
   );
 }
 
@@ -358,6 +626,7 @@ export function CreateRepositoryFlyout({
       }
     >
       <div className="ismSnapshotForm">
+        {/* As the plugin's, what is wrong stands under a field that keeps its own look */}
         <Field title="Repository name" error={nameError}>
           <TextField
             value={name}
@@ -365,19 +634,19 @@ export function CreateRepositoryFlyout({
               setName(value);
               setNameError('');
             }}
-            invalid={Boolean(nameError)}
             compact
             testId="repoNameInput"
           />
         </Field>
+        <Spacer size="m" />
         <Field
           title="Repository type"
           help={
-            <>
+            <HelpText>
               Select a supported repository type. For additional types, install the latest
               repository plugins and choose Custom configuration.{' '}
               <ExternalLink href={REPOSITORY_DOCS} />
-            </>
+            </HelpText>
           }
         >
           <Select
@@ -388,6 +657,7 @@ export function CreateRepositoryFlyout({
             aria-label="Repository type"
           />
         </Field>
+        <Spacer size="m" />
         {kind === 'fs' ? (
           <>
             <Field title="Location" error={locationError}>
@@ -397,18 +667,22 @@ export function CreateRepositoryFlyout({
                   setLocation(value);
                   setLocationError('');
                 }}
-                invalid={Boolean(locationError)}
                 placeholder="e.g., /mnt/snapshots"
                 compact
               />
             </Field>
+            <Spacer />
             <div className="ismSnapshotForm__accordion">
-              <Accordion title={<h3>Advanced settings</h3>} initiallyOpen={false}>
-                <p className="ismLabeled__help">
+              <Accordion
+                title={<h3 className="atlTitleS">Advanced settings</h3>}
+                initiallyOpen={false}
+              >
+                <Spacer size="s" />
+                <HelpText>
                   Define additional settings for this repository.{' '}
                   <ExternalLink href={FS_REPOSITORY_DOCS} />
-                </p>
-                <JsonEditor value={fsText} onChange={setFsText} height={250} />
+                </HelpText>
+                <SettingsEditor value={fsText} onChange={setFsText} label="Advanced settings" />
               </Accordion>
             </div>
           </>
@@ -421,19 +695,25 @@ export function CreateRepositoryFlyout({
                 the repository configuration below. <ExternalLink href={REPOSITORY_DOCS} />
               </p>
             </CallOut>
+            <Spacer size="s" />
             <Field
               title="Custom configuration"
               help={
-                <>
+                <HelpText>
                   Define a repository by custom type and settings.{' '}
                   <ExternalLink href={S3_REPOSITORY_DOCS}>View sample configurations</ExternalLink>
-                </>
+                </HelpText>
               }
             >
-              <JsonEditor value={customText} onChange={setCustomText} height={250} />
+              <SettingsEditor
+                value={customText}
+                onChange={setCustomText}
+                label="Custom configuration"
+              />
             </Field>
           </>
         )}
+        <Spacer size="m" />
       </div>
     </Flyout>
   );
@@ -678,6 +958,7 @@ export function TimeSelect({
         <TextField
           icon="clock"
           compact
+          className="ismTimeField"
           value={text}
           disabled={disabled}
           aria-label="Start time"
