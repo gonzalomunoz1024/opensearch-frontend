@@ -46,6 +46,7 @@ import {
   type GridItem,
   type PanelState,
 } from '../../web/apps/dashboard/model';
+import { DashboardGrid, NARROW_WINDOW } from '../../web/apps/dashboard/grid';
 import { PanelMenu } from '../../web/apps/dashboard/panel_menu';
 import { PanelTitle } from '../../web/apps/dashboard/panel_title';
 import { existsFilter, phraseFilter, uniqueFilters } from '../../web/lib/query';
@@ -227,6 +228,49 @@ describe('the grid of a dashboard', () => {
     const first = newPanelIndex();
     assert.match(first, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     assert.notEqual(newPanelIndex(), first);
+  });
+});
+
+// As the original's grid lays a dashboard out in a narrow window (_dashboard_grid.scss), measured
+// on its page at 560, 700, 740, 760 and 800 pixels
+describe('a dashboard in a narrow window', () => {
+  const layout: GridItem[] = [
+    { x: 24, y: 0, w: 24, h: 12, i: 'b' },
+    { x: 0, y: 0, w: 24, h: 12, i: 'a' },
+    { x: 0, y: 12, w: 48, h: 5, i: 'c' },
+  ];
+  // The grid drawn in a window that is narrow or not
+  const grid = (editing: boolean, narrowWindow: boolean) => {
+    const holder = globalThis as { window?: unknown };
+    holder.window = { matchMedia: (query: string) => ({ matches: narrowWindow && query === NARROW_WINDOW }) };
+    try {
+      return renderToStaticMarkup(
+        createElement(DashboardGrid, {
+          layout,
+          useMargins: true,
+          editing,
+          onLayoutChange: () => undefined,
+          renderPanel: (item: GridItem) => createElement('i', null, item.i),
+        })
+      );
+    } finally {
+      delete holder.window;
+    }
+  };
+
+  it('stacks the panels below 768 pixels while it is looked at, in reading order, in the wrappers scripts find', () => {
+    assert.equal(NARROW_WINDOW, '(max-width: 767px)');
+    const stacked = grid(false, true);
+    assert.match(stacked, /dshGrid--stacked/);
+    assert.deepEqual(
+      [...stacked.matchAll(/data-test-subj="dashboardPanel"><i>(\w)<\/i>/g)].map((found) => found[1]),
+      ['a', 'b', 'c']
+    );
+  });
+
+  it('keeps the grid while it is edited, and in a wider window', () => {
+    assert.ok(!grid(true, true).includes('dshGrid--stacked'));
+    assert.ok(!grid(false, false).includes('dshGrid--stacked'));
   });
 });
 

@@ -707,6 +707,9 @@ function DashboardPage({ savedId }: { savedId?: string }) {
           icon: 'pencil',
           onClick: () => writeApp({ viewMode: 'edit', panels: panelsToUrl(panelsNow.current) }),
           testId: 'dashboardEditMode',
+          // As the original's (`eui-hideFor--s eui-hideFor--xs`): not in a window narrower than
+          // 768 pixels, where the panels are stacked and the grid cannot be edited
+          hideFor: ['xs', 's'],
         },
       ];
 
@@ -912,6 +915,7 @@ function InlineTopNav({ items }: { items: TopNavItem[] }) {
             disabled={item.disabled}
             title={item.title}
             testId={item.testId ?? `topNav-${item.id}`}
+            className={item.hideFor?.map((size) => `shlTopNav__item--hideFor-${size}`).join(' ') || undefined}
           >
             {item.label}
           </Button>

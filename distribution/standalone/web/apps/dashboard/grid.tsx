@@ -78,7 +78,25 @@ interface Shown {
   sizing: Sizing;
 }
 
-const NARROW = 720;
+/**
+ * A window as narrow as the original stacks a dashboard's panels in, one under the other, while the
+ * dashboard is looked at: its grid's stylesheet does below the "m" breakpoint (`euiBreakpoint('xs',
+ * 's')`), and keeps the grid while the dashboard is edited
+ */
+export const NARROW_WINDOW = '(max-width: 767px)';
+
+function useNarrowWindow(): boolean {
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia(NARROW_WINDOW).matches);
+  useEffect(() => {
+    const query = window.matchMedia(NARROW_WINDOW);
+    const update = () => setNarrow(query.matches);
+    update();
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+  return narrow;
+}
+
 /** How near the window's bottom the corner of a panel being sized starts the page scrolling */
 const WINDOW_BUFFER = 10;
 
@@ -92,7 +110,7 @@ export function DashboardGrid({ layout, useMargins, editing, expanded, onLayoutC
 
   const margin = useMargins ? GRID_MARGIN : 0;
   const columnWidth = Math.max(1, (size.width - margin * (GRID_COLUMNS - 1)) / GRID_COLUMNS);
-  const narrow = size.width > 0 && size.width < NARROW;
+  const narrow = useNarrowWindow() && !editing;
 
   // The grid packs what it is given, and says so once, as the original's grid does when mounted
   const layoutKey = JSON.stringify(layout);
@@ -191,10 +209,11 @@ export function DashboardGrid({ layout, useMargins, editing, expanded, onLayoutC
   }
 
   if (narrow) {
+    // The panels in the wrappers the original's grid puts them in, which scripts find them by
     return (
-      <div ref={ref} className="dshGrid dshGrid--stacked" style={{ gap: margin }}>
+      <div ref={ref} className="dshGrid dshGrid--stacked" style={{ gap: margin }} data-test-subj="dashboardGrid">
         {[...current].sort(byReading).map((item) => (
-          <div key={item.i} style={{ height: item.h * ROW_HEIGHT + (item.h - 1) * margin }}>
+          <div key={item.i} style={{ height: item.h * ROW_HEIGHT + (item.h - 1) * margin }} data-test-subj="dashboardPanel">
             {renderPanel(item, { dragging: false, ...handlers })}
           </div>
         ))}
