@@ -96,12 +96,9 @@ export function navCategories(): NavCategory[] {
           label: 'Snapshot Management',
           path: '/app/opensearch_snapshot_management_dashboards',
         },
-        {
-          id: 'management',
-          label: 'Dashboards Management',
-          path: '/app/management',
-          also: ['/app/objects', '/app/indexPatterns', '/app/settings'],
-        },
+        // Not marked on the short address /app/settings: there the original's application is
+        // "settings", which has no link of its own
+        { id: 'management', label: 'Dashboards Management', path: '/app/management' },
         { id: 'dev_tools', label: 'Dev Tools', path: '/app/dev_tools' },
       ],
     },
@@ -423,10 +420,11 @@ export function Chrome({ children }: { children: ReactNode }) {
             }}
           />
         )}
-        <main className="shlMain" id="app-wrapper">
+        {/* A plain box, as the original's #app-wrapper: an application has its own main landmark */}
+        <div className="shlMain" id="app-wrapper">
           <UserBannerList />
           {children}
-        </main>
+        </div>
       </div>
     </ActionsContext.Provider>
   );
