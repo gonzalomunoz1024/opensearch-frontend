@@ -1,18 +1,379 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
-.homPage {
-  max-width: 1120px;
+/* --- The first page, measured on the original in the Atlas theme ----------------------------- */
+
+.homWrapper {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  background: var(--color-surface);
 }
 
-.homHero {
+.homHeader {
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+/* The panel below reaches over the header's line, so the header leaves room under its title */
+.homHeader__inner {
+  display: flex;
+  gap: var(--space-6);
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-4) calc(var(--space-8) + var(--space-6));
+}
+
+.homHeader__title {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+.homHeader__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+}
+
+/* A link of the header or the footer: the theme's empty button, flush, in its colour of links */
+.homLink {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--control-height);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: none;
+  color: #0371e9;
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.5;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+:root.themeDark .homLink {
+  color: var(--color-accent);
+}
+
+.homLink:hover,
+.homLink:focus-visible {
+  background: var(--color-accent-tint);
+  text-decoration: none;
+}
+
+.homLink__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.homContent {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-4);
+}
+
+.homScreenReaderOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The product's panel stands 24 px over the header's line, as the original's solutions do */
+.homSolutions {
+  margin-top: calc(-2 * var(--space-8) - var(--space-1));
+}
+
+.homSolutions__content {
+  display: flex;
+  justify-content: space-around;
+  min-height: 256px;
+  margin: calc(-1 * var(--space-3));
+}
+
+.homSolutions__item {
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  max-width: calc(50% - var(--space-6));
+  margin: var(--space-3);
+}
+
+.homSolutionPanel {
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  transition:
+    transform var(--duration-fast) var(--ease-out-quint),
+    box-shadow var(--duration-fast) var(--ease-out-quint);
+}
+
+.homSolutionPanel:hover,
+.homSolutionPanel:focus-visible {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+  text-decoration: none;
+}
+
+.homSolutionPanel:hover .homSolutionPanel__title,
+.homSolutionPanel:focus-visible .homSolutionPanel__title {
+  text-decoration: underline;
+}
+
+.homSolutionPanel__inner {
+  display: flex;
+  flex: 1 1 auto;
+  overflow: hidden;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+/* Its left half in the accent, with the product's mark in a white disc, its name and a subtitle */
+.homSolutionPanel__header {
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--space-4);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  text-align: center;
+}
+
+.homSolutionPanel__icon {
   display: flex;
   align-items: center;
-  gap: var(--space-5);
-  padding: var(--space-6) 0 var(--space-4);
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin: 0 auto var(--space-2);
+  border-radius: 50%;
+  background: var(--color-surface);
 }
 
-.homSection {
-  margin: var(--space-6) 0 var(--space-3);
+.homSolutionPanel__subtitle {
+  margin-top: var(--space-1);
+  line-height: 1.5;
+}
+
+.homSolutionPanel__subtitle .atlIcon {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* Its right half: what the product is for, a line each */
+.homSolutionPanel__content {
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  line-height: 1.5;
+}
+
+.homRule {
+  height: 1px;
+  margin: var(--space-8) 0;
+  border: 0;
+  background: var(--color-border-light);
+}
+
+.homData {
+  display: flex;
+  gap: var(--space-6);
+}
+
+.homDataAdd,
+.homDataManage {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+.homData__title {
+  margin-bottom: var(--space-4);
+}
+
+/* A card that leads somewhere: an icon beside its title and description */
+.homSynopsis__card {
+  display: flex;
+  align-items: flex-start;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out-quint);
+}
+
+.homSynopsis__card:hover,
+.homSynopsis__card:focus-within {
+  border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+  box-shadow: var(--shadow-md);
+}
+
+.homSynopsis__card:active {
+  transform: scale(0.99);
+}
+
+.homSynopsis__top {
+  flex: none;
+  min-height: 1px;
+}
+
+.homSynopsis__icon.atlIcon {
+  display: block;
+  width: 24px;
+  height: 24px;
+  margin-right: var(--space-4);
+  color: var(--color-text-primary);
+}
+
+.homSynopsis__content {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.homSynopsis__titleAnchor {
+  color: var(--color-text-primary);
+}
+
+.homSynopsis__card:hover .homSynopsis__titleAnchor {
+  text-decoration: underline;
+}
+
+.homSynopsis__description {
+  margin-top: var(--space-2);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.homFooter {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-6);
+}
+
+/* The footer's links are the theme's smallest buttons, their icons 12 px */
+.homFooter__button {
+  height: var(--space-6);
+}
+
+.homFooter__button .atlIcon {
+  width: 12px;
+  height: 12px;
+}
+
+/* On a narrow screen what stands side by side stands one under the other */
+@media (max-width: 767px) {
+  .homHeader__inner,
+  .homSolutions__content,
+  .homSolutionPanel__inner,
+  .homData,
+  .homFooter {
+    flex-direction: column;
+  }
+
+  .homSolutions__item {
+    max-width: none;
+  }
+}
+
+/* --- The app directory ------------------------------------------------------------------------- */
+
+.homDirectory {
+  display: flex;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-4);
+}
+
+.homDirectory__body {
+  display: flex;
+  flex: 1 1 100%;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* The theme's small tabs: words in a pill, the chosen one filled */
+.homDirectory__tabs {
+  display: flex;
+  gap: var(--space-1);
+  margin: var(--space-4) 0 var(--space-6);
+  overflow-x: auto;
+}
+
+.homDirectory__tab {
+  flex: none;
+  padding: var(--space-1) 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.5;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.homDirectory__tab:hover {
+  color: var(--color-text-primary);
+}
+
+.homDirectory__tab--selected {
+  background: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+}
+
+/* Four a row: a quarter of the row less the gutters, as the original's grid counts it */
+.homDirectory__grid {
+  display: flex;
+  flex-wrap: wrap;
+  margin: calc(-1 * var(--space-3));
+}
+
+.homDirectory__item {
+  display: flex;
+  flex: 0 1 calc(25% - var(--space-6));
+  flex-direction: column;
+  min-width: 1px;
+  margin: var(--space-3);
+}
+
+.homDirectory__item > .homSynopsis__card {
+  flex-grow: 1;
+}
+
+@media (max-width: 767px) {
+  .homDirectory__grid {
+    margin-right: 0;
+    margin-left: 0;
+  }
+
+  .homDirectory__item {
+    flex-basis: 100%;
+    margin-right: 0;
+    margin-left: 0;
+  }
+}
+
+/* --- The overviews ----------------------------------------------------------------------------- */
+
+.homPage {
+  max-width: 1120px;
 }
 
 .homLead {
@@ -55,20 +416,4 @@
   border-radius: var(--radius-md);
   background: var(--color-accent-tint);
   color: var(--color-accent);
-}
-
-.homRecent {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: var(--space-2);
-}
-
-.homRecent__item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-secondary);
-  color: var(--color-text-primary);
 }
