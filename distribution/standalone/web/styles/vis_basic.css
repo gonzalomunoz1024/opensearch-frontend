@@ -244,6 +244,7 @@
   flex: 1 1 0;
   align-items: center;
   justify-content: center;
+  line-height: 1;
   text-align: center;
 }
 
@@ -262,7 +263,7 @@
 }
 
 .visNoResults__text p {
-  margin-bottom: 18px;
+  margin: 0;
 }
 
 .visNoResults__spacer {
