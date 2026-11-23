@@ -583,19 +583,27 @@
   min-width: 100%;
   min-height: 100%;
   vertical-align: top;
+  cursor: text;
 }
 
 .dvtAce--wrap .dvtAce__body {
   display: block;
 }
 
+/* Only the rows in view are drawn, each at its place in the height of the whole text */
 .dvtAce__rows {
-  position: relative;
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
   z-index: 2;
   pointer-events: none;
 }
 
 .dvtAce__row {
+  position: absolute;
+  right: 0;
+  left: 0;
   display: flex;
   min-height: var(--dvtAce-line);
 }
@@ -651,6 +659,15 @@
   cursor: pointer;
 }
 
+.dvtAce__fold--closed {
+  background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAMAAAAGCAYAAAAG5SQMAAAAOUlEQVR42jXKwQkAMAgDwKwqKD4EwQ26sSOkVWjgIIHAzPiCgaqiqnJHZnKICBERHN194O5b9vbLuAVRL+l0YWnZAAAAAElFTkSuQmCCXA==');
+}
+
+.dvtAce__fold--invalid {
+  border-color: #de5555;
+  background-color: #ffb4b4;
+}
+
 .dvtAce__fold--end {
   background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAANElEQVR42m3HwQkAMAhD0YzsRchFKI7sAikeWkrxwScEB0nh5e7KTPWimZki4tYfVbX+MNl4pyZXejUO1QAAAABJRU5ErkJggg==');
 }
@@ -667,46 +684,73 @@
   padding: 0 var(--space-1);
   line-height: var(--dvtAce-line);
   white-space: pre;
-  tab-size: 2;
 }
 
-.dvtAce--wrap .dvtAce__line {
-  white-space: pre-wrap;
-  overflow-wrap: break-word;
+/* A row of the screen: a line, or one of the rows a long line wraps into */
+.dvtAce__screenRow {
+  height: var(--dvtAce-line);
+  white-space: pre;
 }
 
+/* A character two columns wide */
+.dvtAce__wide {
+  display: inline-block;
+  text-align: center;
+}
+
+/* The text a fold stands for, as Ace draws it */
+.dvtAce__foldText {
+  display: inline-block;
+  box-sizing: border-box;
+  height: 11px;
+  margin-top: -2px;
+  border: 1px solid black;
+  border-radius: 2px;
+  background-color: #6b72e6;
+  background-image:
+    url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABEAAAAJCAYAAADU6McMAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAJpJREFUeNpi/P//PwOlgAXGYGRklAVSokD8GmjwY1wasKljQpYACtpCFeADcHVQfQyMQAwzwAZI3wJKvCLkfKBaMSClBlR7BOQikCFGQEErIH0VqkabiGCAqwUadAzZJRxQr/0gwiXIal8zQQPnNVTgJ1TdawL0T5gBIP1MUJNhBv2HKoQHHjqNrA4WO4zY0glyNKLT2KIfIMAAQsdgGiXvgnYAAAAASUVORK5CYII='),
+    url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAA3CAYAAADNNiA5AAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAACJJREFUeNpi+P//fxgTAwPDBxDxD078RSX+YeEyDFMCIMAAI3INmXiwf2YAAAAASUVORK5CYII=');
+  background-repeat: no-repeat, repeat-x;
+  background-position:
+    center center,
+    top left;
+  color: transparent;
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+.dvtAce__foldText:hover {
+  background-image:
+    url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABEAAAAJCAYAAADU6McMAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAJpJREFUeNpi/P//PwOlgAXGYGRklAVSokD8GmjwY1wasKljQpYACtpCFeADcHVQfQyMQAwzwAZI3wJKvCLkfKBaMSClBlR7BOQikCFGQEErIH0VqkabiGCAqwUadAzZJRxQr/0gwiXIal8zQQPnNVTgJ1TdawL0T5gBIP1MUJNhBv2HKoQHHjqNrA4WO4zY0glyNKLT2KIfIMAAQsdgGiXvgnYAAAAASUVORK5CYII='),
+    url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAA3CAYAAADNNiA5AAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAACBJREFUeNpi+P//fz4TAwPDZxDxD5X4i5fLMEwJgAADAEPVDbjNw87ZAAAAAElFTkSuQmCC');
+}
+
+/* What is typed goes to a text area the size of a character, kept at the cursor as Ace keeps its own */
 .dvtAce__input {
   position: absolute;
-  top: 0;
-  left: var(--dvtAce-gutter);
-  z-index: 1;
+  z-index: 0;
   box-sizing: border-box;
-  width: calc(100% - var(--dvtAce-gutter));
-  height: 100%;
   margin: 0;
-  padding: 0 var(--space-1);
+  padding: 0;
   overflow: hidden;
   border: 0;
   outline: none;
   background: transparent;
-  color: transparent;
-  caret-color: transparent;
+  color: inherit;
   font: inherit;
   line-height: var(--dvtAce-line);
   white-space: pre;
-  tab-size: 2;
+  opacity: 0;
   resize: none;
-  cursor: text;
+  pointer-events: none;
 }
 
-.dvtAce--wrap .dvtAce__input {
-  white-space: pre-wrap;
-  overflow-wrap: break-word;
-}
-
-.dvtAce__input::selection {
-  background: transparent;
-  color: transparent;
+/* While a character is being composed, what is typed of it shows */
+.dvtAce__input--composing {
+  z-index: 7;
+  min-width: 2em;
+  background: var(--dvtAce-bg);
+  opacity: 1;
 }
 
 .dvtAce__markers {
@@ -717,14 +761,6 @@
   left: var(--dvtAce-gutter);
   z-index: 0;
   pointer-events: none;
-}
-
-.dvtAce__printMargin {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: var(--dvtAce-margin);
 }
 
 .dvtAce__snippet,
@@ -756,6 +792,16 @@
   border: 1px solid var(--color-border-light);
 }
 
+/* The word selected wherever else it is, and what is searched for */
+.dvtAce__selectedWord {
+  position: absolute;
+  z-index: 4;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border-light);
+  border-radius: 3px;
+  background: var(--dvtAce-bg);
+}
+
 .dvtAce__cursor {
   position: absolute;
   z-index: 3;
@@ -765,6 +811,12 @@
   border-left: 2px solid var(--dvtAce-cursor);
   opacity: 0.2;
   pointer-events: none;
+}
+
+/* Insert pressed: what is typed takes the place of what is there */
+.dvtAce__cursor--overwrite {
+  border-bottom: 1px solid var(--dvtAce-cursor);
+  border-left-width: 0;
 }
 
 .dvtAce--focus .dvtAce__cursor {
@@ -784,6 +836,162 @@
   60% {
     opacity: 1;
   }
+}
+
+/* Ace's search box, with its own colours in both themes */
+.dvtSearch {
+  position: absolute;
+  top: 0;
+  /* Over the request's buttons, which it covers in the original too */
+  z-index: 1001;
+  margin: 0;
+  padding: 4px 6px 0 4px;
+  overflow: hidden;
+  border: 1px solid #cbcbcb;
+  border-top: 0 none;
+  background-color: #ddd;
+  color: #666;
+  white-space: normal;
+}
+
+.dvtSearch--right {
+  right: 0;
+  border-right: 0 none;
+  border-radius: 0 0 0 5px;
+}
+
+.dvtSearch__form {
+  margin: 0 20px 4px 0;
+  overflow: hidden;
+  line-height: 1.9;
+}
+
+.dvtSearch__form--replace {
+  margin-right: 0;
+}
+
+.dvtSearch__form--nomatch {
+  outline: 1px solid red;
+}
+
+.dvtSearch__field {
+  box-sizing: border-box;
+  min-width: 17em;
+  margin: 0;
+  padding: 0 6px;
+  border: 1px solid #cbcbcb;
+  border-right: 0 none;
+  border-radius: 3px 0 0 3px;
+  outline: 0;
+  background-color: white;
+  color: black;
+  font-size: inherit;
+  line-height: inherit;
+  vertical-align: top;
+}
+
+.dvtSearch__button {
+  position: relative;
+  display: inline-block;
+  box-sizing: content-box;
+  margin: 0;
+  padding: 0 6px;
+  border: 1px solid #cbcbcb;
+  border-right: 0 none;
+  border-left: 1px solid #dcdcdc;
+  background: #fff;
+  color: #666;
+  line-height: inherit;
+  cursor: pointer;
+}
+
+.dvtSearch__button:last-child {
+  border-right: 1px solid #cbcbcb;
+  border-radius: 0 3px 3px 0;
+}
+
+.dvtSearch__button:hover {
+  background-color: #eef1f6;
+}
+
+.dvtSearch__button--prev,
+.dvtSearch__button--next {
+  padding: 0 0.7em;
+}
+
+.dvtSearch__button--prev::after,
+.dvtSearch__button--next::after {
+  display: inline-block;
+  width: 0.5em;
+  height: 0.5em;
+  border: solid 2px #888;
+  border-width: 2px 0 0 2px;
+  content: '';
+  transform: rotate(-45deg);
+}
+
+.dvtSearch__button--next::after {
+  border-width: 0 2px 2px 0;
+}
+
+.dvtSearch__close {
+  position: absolute;
+  top: 9px;
+  right: 7px;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 0 none;
+  border-radius: 50%;
+  background: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAA4AAAAcCAYAAABRVo5BAAAAZ0lEQVR42u2SUQrAMAhDvazn8OjZBilCkYVVxiis8H4CT0VrAJb4WHT3C5xU2a2IQZXJjiQIRMdkEoJ5Q2yMqpfDIo+XY4k6h+YXOyKqTIj5REaxloNAd0xiKmAtsTHqW8sR2W5f7gCu5nWFUpVjZwAAAABJRU5ErkJggg==') no-repeat 50% 0;
+  color: #656565;
+  font: 16px/16px Arial;
+  cursor: pointer;
+}
+
+.dvtSearch__close:hover {
+  background-color: #656565;
+  background-position: 50% 100%;
+  color: white;
+}
+
+.dvtSearch__option {
+  box-sizing: border-box;
+  margin-left: 2px;
+  padding: 1px;
+  overflow: hidden;
+  border: 1px solid rgba(100, 100, 100, 0.23);
+  color: black;
+  opacity: 0.7;
+  cursor: pointer;
+  user-select: none;
+}
+
+.dvtSearch__option:hover {
+  background-color: #eee;
+  opacity: 1;
+}
+
+.dvtSearch__option:active {
+  background-color: #ddd;
+}
+
+.dvtSearch__option--checked {
+  border-color: #39f;
+  opacity: 1;
+}
+
+.dvtSearch__options {
+  clear: both;
+  margin-bottom: 3px;
+  text-align: right;
+  user-select: none;
+}
+
+.dvtSearch__counter {
+  float: left;
+  padding: 0 8px;
+  font-family: arial, sans-serif;
 }
 
 /* Ace's keyboard mode: shown only when it has the focus */
@@ -1330,4 +1538,102 @@
   display: flex;
   align-items: center;
   min-height: 24px;
+}
+
+/* The file picker of the Import flyout: a zone a file is dropped on, as the original's */
+.dvtFilePicker {
+  position: relative;
+  height: 104px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+  box-shadow: inset 0 0 0 1px var(--color-border-light);
+  color: var(--color-text-primary);
+}
+
+.dvtFilePicker:focus-within {
+  box-shadow:
+    inset 0 0 0 1px var(--color-accent),
+    0 0 0 2px var(--color-focus-ring);
+}
+
+.dvtFilePicker__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.dvtFilePicker__prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 0 var(--space-6);
+  pointer-events: none;
+  text-align: center;
+}
+
+.dvtFilePicker__prompt > .atlIcon {
+  width: 24px;
+  height: 24px;
+  margin-bottom: var(--space-4);
+}
+
+.dvtFilePicker__text {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: var(--font-size-s);
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dvtFilePicker__text strong {
+  font-weight: var(--font-weight-semibold);
+}
+
+.dvtFilePicker__remove {
+  position: relative;
+  z-index: 1;
+  height: 24px;
+  padding: 0 var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--color-accent);
+  font-size: var(--font-size-s);
+  line-height: 21px;
+  font-weight: var(--font-weight-medium);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.dvtFilePicker__remove:hover {
+  text-decoration: underline;
+}
+
+/* The Import flyout's choice of merging or overwriting: a title of 15 px, each choice a line of 24 px */
+.dvtImportOptions {
+  margin-top: var(--space-1);
+}
+
+.dvtImportOptions__title {
+  display: block;
+  margin-bottom: var(--space-2);
+  font-size: var(--font-size-m);
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.dvtImportOptions .atlRadio {
+  height: 24px;
+  line-height: 24px;
+}
+
+/* The kit's group spaces its choices itself: the original's follow each other */
+.dvtImportOptions .atlRadio + .atlRadio {
+  margin-top: calc(-1 * var(--space-2));
 }
