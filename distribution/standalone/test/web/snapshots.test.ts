@@ -42,6 +42,7 @@ import {
   restoreProgress,
   retainedCount,
   setAt,
+  settingsTokens,
   snapshotCountsWarning,
   snapshotStatusText,
   snapshotStatusTone,
@@ -159,6 +160,48 @@ describe('repositories', () => {
   it('registers nothing when the settings are not JSON', () => {
     assert.equal(repositoryBody('fs', '/x', '{ nope'), undefined);
     assert.equal(repositoryBody('fs', '/x', '3'), undefined);
+  });
+
+  it('colours the settings as the editor does, with a guide for each four spaces of an indent', () => {
+    const lines = settingsTokens(
+      ['{', '    "type": "s3",', '    "settings": {', '        "readonly": false,', '        "x": null', '    }', '}'].join('\n')
+    );
+    assert.deepEqual(lines[0], [{ text: '{' }]);
+    // Four spaces are an indent of one tab: no guide before its last space
+    assert.deepEqual(lines[1], [
+      { text: '    ' },
+      { text: '"type"', kind: 'Key' },
+      { text: ': ' },
+      { text: '"s3"', kind: 'String' },
+      { text: ',' },
+    ]);
+    // Eight are two: one guide, then the four spaces that are left
+    assert.deepEqual(lines[3], [
+      { text: '    ', kind: 'Guide' },
+      { text: '    ' },
+      { text: '"readonly"', kind: 'Key' },
+      { text: ': ' },
+      { text: 'false', kind: 'Boolean' },
+      { text: ',' },
+    ]);
+    // null is not coloured, as in the original's JSON mode
+    assert.deepEqual(lines[4], [
+      { text: '    ', kind: 'Guide' },
+      { text: '    ' },
+      { text: '"x"', kind: 'Key' },
+      { text: ': null' },
+    ]);
+    assert.deepEqual(lines[5], [{ text: '    }' }]);
+    assert.deepEqual(lines[6], [{ text: '}' }]);
+  });
+
+  it('draws the guides of a deep or an odd indent by whole tabs only', () => {
+    assert.deepEqual(settingsTokens('             1'), [
+      [{ text: '    ', kind: 'Guide' }, { text: '    ', kind: 'Guide' }, { text: '    ', kind: 'Guide' }, { text: ' ' }, { text: '1', kind: 'Number' }],
+    ]);
+    assert.deepEqual(settingsTokens('  "a"'), [[{ text: '  ' }, { text: '"a"', kind: 'String' }]]);
+    assert.deepEqual(settingsTokens(''), [[{ text: '' }]]);
+    assert.deepEqual(settingsTokens('        '), [[{ text: '    ', kind: 'Guide' }, { text: '    ' }]]);
   });
 
   it('warns of the snapshots that go with the repositories deleted', () => {

@@ -1934,8 +1934,21 @@
 
 /* --- Snapshot Management ------------------------------------------------------------------------ */
 
-.ismSnapshotFlyout {
+/* A flyout of Snapshot Management, as the plugin's: under the header, 600 px wide, its head, its
+   body and its foot 24 px in from the sides */
+.ismSnapshotFlyout.atlFlyout {
+  top: var(--header-height);
   width: min(600px, 100vw);
+}
+
+.ismSnapshotFlyout .atlFlyout__header,
+.ismSnapshotFlyout .atlFlyout__body {
+  padding: var(--space-6);
+}
+
+.ismSnapshotFlyout .atlFlyout__footer {
+  padding: var(--space-4) var(--space-6);
+  background: var(--color-surface);
 }
 
 .ismFlyoutFooter {
@@ -1943,10 +1956,16 @@
   width: 100%;
 }
 
-/* Cancel, flush as the plugin's: no padding, 8 px more before the button beside it */
+/* Cancel, flush as the plugin's: no padding inside its border, 8 px more before the button beside it */
 .ismFlyoutFooter__cancel {
   padding-inline: 0;
   margin-right: var(--space-2);
+  border: 1px solid transparent;
+}
+
+/* The button that acts is never narrower than the plugin's */
+.ismFlyoutFooter > .atlButton--primary {
+  min-width: 112px;
 }
 
 /* A form of Snapshot Management is laid out as the plugin's: its parts one under the other, with
@@ -2003,6 +2022,184 @@
   font-size: var(--font-size-xs);
   font-weight: 200;
   line-height: 14px;
+}
+
+/* What a part of a form is for, where the plugin says more than a few words: its small subdued
+   text, 5 px above and below a paragraph in light letters */
+.ismSnapHelp {
+  padding: 5px 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}
+
+.ismSnapHelp > p {
+  margin: 0;
+  font-weight: 200;
+}
+
+/* A link that leaves the product, as the plugin's in the pages of Snapshot Management: part of
+   its line, the small arrow 4 px after its words */
+.ismListPanel .ismExternal,
+.ismPolicyPage .ismExternal,
+.ismSnapshotFlyout .ismExternal {
+  display: inline;
+  white-space: normal;
+}
+
+.ismListPanel .ismExternal > .atlIcon,
+.ismPolicyPage .ismExternal > .atlIcon,
+.ismSnapshotFlyout .ismExternal > .atlIcon {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-left: var(--space-1);
+  vertical-align: middle;
+}
+
+/* JSON to change, as the plugin's code editor draws it with the theme's colours: nine tenths of
+   nine tenths of the width (the plugin sizes its editor twice), lines of 18 px with 4 px before
+   the text, a white gutter with a line at its left as wide as its numbers need, and the line of
+   the cursor on a band that crosses the gutter */
+.ismSnapEditor {
+  --ism-ace-gutter-line: #e9e9eb;
+  --ism-ace-guide: #86868b;
+  --ism-ace-key: #037098;
+  --ism-ace-language: #5256e1;
+  --ism-ace-string: #087824;
+  --ism-ace-comment: #41705a;
+  --ism-ace-band: color-mix(in srgb, var(--color-border) 70%, transparent);
+  position: relative;
+  width: 90%;
+}
+
+.ismSnapEditor .atlCodeEditor {
+  /* The gutter: a pixel of line, then the numbers with 20 px before and 13 after them */
+  --ism-ace-gutter: calc(34px + var(--ism-ace-digits, 1) * 1ch);
+  --code-gutter: calc(var(--ism-ace-gutter) + 4px);
+  --ism-ace-gutter-paint: linear-gradient(
+    to right,
+    var(--ism-ace-gutter-line) 0,
+    var(--ism-ace-gutter-line) 1px,
+    var(--color-surface) 1px,
+    var(--color-surface) var(--ism-ace-gutter),
+    var(--color-surface-secondary) var(--ism-ace-gutter)
+  );
+  width: 90%;
+  border: 0;
+  border-radius: 0;
+  background: var(--ism-ace-gutter-paint);
+}
+
+/* The original's gutter ends on a whole pixel */
+@supports (width: round(up, 1px, 1px)) {
+  .ismSnapEditor .atlCodeEditor {
+    --ism-ace-gutter: calc(1px + round(up, 33px + var(--ism-ace-digits, 1) * 1ch, 1px));
+  }
+}
+
+.ismSnapEditor .atlCodeEditor:focus-within {
+  border: 0;
+  box-shadow: none;
+}
+
+.ismSnapEditor .atlCodeEditor__paint {
+  padding: 0;
+}
+
+.ismSnapEditor .atlCodeEditor__line {
+  padding: 0 4px 0 var(--code-gutter);
+  background: transparent;
+}
+
+.ismSnapEditor .atlCodeEditor__line::before {
+  box-sizing: border-box;
+  width: var(--code-gutter);
+  margin: 0 0 0 calc(-1 * var(--code-gutter));
+  padding-right: 17px;
+  background: var(--ism-ace-gutter-paint);
+  color: var(--color-text-secondary);
+}
+
+.ismSnapEditor .atlCodeEditor__line--marked {
+  background: var(--ism-ace-band);
+}
+
+.ismSnapEditor .atlCodeEditor__line--marked::before {
+  background:
+    linear-gradient(var(--ism-ace-band), var(--ism-ace-band)),
+    var(--ism-ace-gutter-paint);
+}
+
+.ismSnapEditor .atlCodeEditor__input {
+  padding: 0 4px 0 var(--code-gutter);
+}
+
+.ismSnapEditor .tokKey,
+.ismSnapEditor .tokNumber {
+  color: var(--ism-ace-key);
+}
+
+.ismSnapEditor .tokString {
+  color: var(--ism-ace-string);
+}
+
+.ismSnapEditor .tokBoolean,
+.ismSnapEditor .tokEscape {
+  color: var(--ism-ace-language);
+}
+
+.ismSnapEditor .tokComment {
+  color: var(--ism-ace-comment);
+}
+
+/* The guide of an indent: a line at the right of each tab of it, the whole height of the line */
+.ismSnapEditor .tokGuide {
+  display: inline-block;
+  height: 1lh;
+  vertical-align: top;
+  background: linear-gradient(
+    to left,
+    var(--ism-ace-guide) 0,
+    var(--ism-ace-guide) 1px,
+    transparent 1px,
+    transparent 100%
+  );
+}
+
+/* The hint the Tab key stops on: unseen under the text, which a click reaches, until it has the
+   focus */
+.ismSnapEditor__hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: color-mix(in srgb, var(--color-surface) 70%, transparent);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-s);
+  line-height: 1.5;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.ismSnapEditor__hint > p {
+  margin: 0;
+}
+
+.ismSnapEditor__hint:focus {
+  z-index: 1;
+  border: 2px solid var(--color-accent);
+  outline: none;
+  opacity: 1;
+}
+
+.ismSnapEditor__hint--inactive {
+  display: none;
 }
 
 .ismSnapField__body > .atlField,
