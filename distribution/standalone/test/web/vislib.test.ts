@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -520,6 +521,17 @@ describe('the tooltip of a chart', () => {
         `move ${move}`
       );
     }
+  });
+
+  it("is dark in the dark theme too, as vislib's atlasdark style sheet has it: the secondary surface, white text", () => {
+    const sheet = readFileSync('web/styles/vislib.css', 'utf8');
+    const tokens = readFileSync('web/styles/tokens.css', 'utf8');
+    const dark = tokens.slice(tokens.indexOf(':root.themeDark {'));
+    const tokenOf = (name: string | undefined) => (name ? new RegExp(`\\s${name}:\\s*([^;]+);`).exec(dark)?.[1] : undefined);
+    const rule = /:root\.themeDark \.visTooltip \{([^}]*)\}/.exec(sheet)?.[1] ?? '';
+    const tokenIn = (property: string) => /var\((--[\w-]+)\)/.exec(new RegExp(`(?:^|[;\\s])${property}:\\s*([^;]+);`).exec(rule)?.[1] ?? '')?.[1];
+    assert.equal(tokenOf(tokenIn('background-color')), '#1c1c1e');
+    assert.equal(tokenOf(tokenIn('color')), '#ffffff');
   });
 
   it('leaves the values their room, or half of it when they are wider, as vislib narrows the labels', () => {
