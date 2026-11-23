@@ -3,7 +3,7 @@
 /* The bar a data page starts with: the query, the time range, and under them the filters. */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Button } from '../components/basic';
+import { Button, cx } from '../components/basic';
 import { Icon } from '../components/icon';
 import type { TimeRange } from '../lib/dates';
 import { hasLuceneSyntax } from '../lib/kuery';
@@ -13,15 +13,16 @@ import {
   type SaveQueryMeta,
   type SavedQuery,
 } from '../lib/saved_query';
+import { fromUser, toUser } from '../lib/query_input';
 import type { Filter, IndexPattern, Query, RefreshInterval } from '../lib/types';
 import { services } from '../services';
 import { errorMessage } from '../services/http';
 import { FilterBar, isPinned } from './filter_bar';
-import { DQL_DOCS, QueryBar, defaultQueryLanguage } from './query_bar';
+import { DQL_DOCS, QueryBar, addRecentSearch, defaultQueryLanguage } from './query_bar';
 import { RefreshPicker } from './refresh_picker';
 import { SaveQueryForm, SavedQueryManagement, saveFailureText, type SavedQueryChange } from './saved_query';
 import { readStored, writeStored } from './state';
-import { TimePicker } from './time_picker';
+import { SuperUpdateButton, TimePicker } from './time_picker';
 
 export interface SearchBarProps {
   indexPatterns: IndexPattern[];
@@ -106,8 +107,10 @@ export function SearchBar({
   savedQueryId,
   onSavedQueryChange,
 }: SearchBarProps) {
-  const committed = typeof query?.query === 'string' ? query.query : JSON.stringify(query?.query ?? '');
+  const committed = toUser(query?.query);
   const [draft, setDraft] = useState(committed);
+  // While the query has the focus the dates make room for it, as in the original
+  const [queryFocused, setQueryFocused] = useState(false);
   const [language, setLanguage] = useState(query?.language ?? 'kuery');
   useEffect(() => setDraft(committed), [committed]);
   useEffect(() => setLanguage(query?.language ?? 'kuery'), [query?.language]);
@@ -115,13 +118,19 @@ export function SearchBar({
   // A query that cannot be read is run all the same, as in the original: the search fails and
   // says why
   const submit = (text: string, withLanguage = language) => {
-    const next = { query: text, language: withLanguage };
+    const next = { query: fromUser(text) as Query['query'], language: withLanguage };
     warnOfLuceneSyntax(next);
     if (text === committed && withLanguage === query?.language) onRefresh();
     else onQuerySubmit?.(next);
   };
 
   const dirty = showQuery && (draft !== committed || language !== (query?.language ?? 'kuery'));
+  // The button keeps what it applies among the searches the bar offers again, as the original's does
+  const update = () => {
+    if (showQuery && query) addRecentSearch(language, fromUser(draft));
+    if (dirty) submit(draft);
+    else onRefresh();
+  };
 
   // --- Saved queries, as the original's search bar keeps them ---
   const [savedQuery, setSavedQuery] = useState<SavedQuery>();
@@ -234,13 +243,16 @@ export function SearchBar({
             indexPatterns={indexPatterns}
             placeholder={placeholder}
             prepend={savedQueries}
+            onFocusChange={setQueryFocused}
           />
         )}
         {!showQuery && <div className="atlGrow" />}
         {showTime && refreshOnly && refreshInterval && onRefreshChange ? (
           <>
-            <RefreshPicker refreshInterval={refreshInterval} onRefreshChange={onRefreshChange} />
-            <TimePickerLess loading={loading} dirty={dirty} onClick={() => (dirty ? submit(draft) : onRefresh())} />
+            <div className={cx('shlSearchBar__dates', queryFocused && 'shlSearchBar__dates--hidden')}>
+              <RefreshPicker refreshInterval={refreshInterval} onRefreshChange={onRefreshChange} />
+            </div>
+            <SuperUpdateButton needsUpdate={dirty} loading={loading} onClick={update} />
           </>
         ) : showTime && time && refreshInterval && onTimeChange && onRefreshChange ? (
           <TimePicker
@@ -251,10 +263,14 @@ export function SearchBar({
             onRefresh={onRefresh}
             loading={loading}
             dirty={dirty}
-            onUpdate={dirty ? () => submit(draft) : undefined}
+            hidden={queryFocused}
+            onUpdate={() => {
+              if (showQuery && query) addRecentSearch(language, fromUser(draft));
+              if (dirty) submit(draft);
+            }}
           />
         ) : (
-          <TimePickerLess loading={loading} dirty={dirty} onClick={() => (dirty ? submit(draft) : onRefresh())} />
+          <SuperUpdateButton needsUpdate={dirty} loading={loading} onClick={update} />
         )}
       </div>
       {showFilters && onFiltersChange && (
@@ -270,20 +286,5 @@ export function SearchBar({
         />
       )}
     </div>
-  );
-}
-
-function TimePickerLess({ loading, dirty, onClick }: { loading?: boolean; dirty?: boolean; onClick: () => void }) {
-  return (
-    <Button
-      variant={dirty ? 'healthyOutline' : 'default'}
-      icon="refresh"
-      loading={loading && !dirty}
-      onClick={onClick}
-      className="shlTime__submit"
-      testId="querySubmitButton"
-    >
-      {dirty ? 'Update' : 'Refresh'}
-    </Button>
   );
 }

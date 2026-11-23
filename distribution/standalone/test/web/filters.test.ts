@@ -294,7 +294,8 @@ describe('the filter a click on a bucket adds', () => {
     const plan = planOtherBucket(aggs, buildAggsDsl(aggs, context), { aggregations: { '2': { buckets: [{ key: 5, doc_count: 3 }] } } }, context);
     if (!plan) throw new Error('nothing is asked');
     const query = (plan.aggs['other-filter'] as { filters: { filters: Record<string, { bool: { filter: unknown[]; must_not: unknown[] } }> } }).filters.filters[''];
-    assert.deepEqual(query.bool.filter, [{ exists: { field: 'hour' } }]);
+    // As _terms_other_bucket_helper.ts of 3.9.0: a scripted field is not asked whether it exists
+    assert.deepEqual(query.bool.filter, []);
     assert.deepEqual(query.bool.must_not, [{ script: getPhraseScript(hour, 5) }]);
   });
 

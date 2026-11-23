@@ -338,6 +338,11 @@ interface Parts {
 
 const zoneFormats = new Map<string, Intl.DateTimeFormat>();
 
+/** Minutes east of UTC in a zone at a moment: the browser's zone when none is named */
+export function utcOffset(date: Date, timeZone?: string): number {
+  return partsOf(date, timeZone).offset;
+}
+
 function partsOf(date: Date, timeZone?: string): Parts {
   if (!timeZone || timeZone === 'Browser') {
     return {

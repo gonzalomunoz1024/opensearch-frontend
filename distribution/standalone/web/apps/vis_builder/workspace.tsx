@@ -60,7 +60,10 @@ export function Workspace({ state, indexPattern, input, tick, onUiState, onFilte
     <section className="vbdWorkspace">
       <div className="vbdCanvas">
         {vis ? (
-          <Visualization vis={vis} input={input} tick={tick} uiState={ui} onUiState={onUiState} onFilter={onFilter} onTimeChange={onTimeChange} />
+          // The original's renderer draws in a box 8 px in from the canvas
+          <div className="vbdCanvas__vis">
+            <Visualization vis={vis} input={input} tick={tick} uiState={ui} onUiState={onUiState} onFilter={onFilter} onTimeChange={onTimeChange} />
+          </div>
         ) : (
           <EmptyCanvas />
         )}
