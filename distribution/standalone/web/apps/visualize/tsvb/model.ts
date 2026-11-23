@@ -439,7 +439,7 @@ export function formatInterval(ms: number): string | null {
 }
 
 /** The narrowest step between the points of a series drawn: the interval the panel was drawn at */
-export function drawnInterval(series: Array<{ data: Array<[number, unknown]> }>): number {
+export function drawnInterval(series: Array<{ data: Array<[number, ...unknown[]]> }>): number {
   return series.reduce((current, item) => {
     if (item.data.length > 1) {
       const step = item.data[1][0] - item.data[0][0];

@@ -19,14 +19,54 @@ let basePath = '';
 let current: AppLocation = { pathname: '/', search: '', hashPath: '/', hashParams: {} };
 let currentKey = '';
 const listeners = new Set<() => void>();
+
+/** Where a page is being left for, as its leave guard is told */
+export interface LeaveTarget {
+  /** The path of this product gone to: `/app/dashboards#/view/<id>` */
+  url: string;
+  /**
+   * Whether it is in another application (`/app/dashboards` from `/app/visualize`): what the
+   * original's `onAppLeave` handlers are asked about, a move within the application is not
+   */
+  leavesApp: boolean;
+}
+
+/**
+ * What asks before the page is left: true goes on, false stays, and a promise answers later, for
+ * a question the page draws itself
+ */
+export type LeaveGuard = (target: LeaveTarget) => boolean | Promise<boolean>;
+
 // What asks before the page is left: an editor with changes that are not saved
-let leaveGuard: (() => boolean) | undefined;
+let leaveGuard: LeaveGuard | undefined;
+// What the browser's own question says when the tab is closed or reloaded; undefined asks nothing
+let unloadQuestion: (() => string | undefined) | undefined;
+
+// Where each application was last since the page loaded, as the original's URL tracker of an
+// application keeps it (in the session's storage, `lastUrl:<basePath>:dashboard` for the
+// dashboards): what opening the application again with no path opens
+const lastAddresses = new Map<string, string>();
+
+/** A path of this product without the base path a proxy may have put in front */
+const withoutBase = (pathname: string): string =>
+  basePath && pathname.startsWith(basePath) ? pathname.slice(basePath.length) : pathname;
+
+/** The application a path of this product is in: `dashboards` for `/app/dashboards` */
+function applicationOf(pathname: string): string {
+  const path = withoutBase(pathname);
+  const match = /^\/app\/([^/]+)/.exec(path);
+  return match ? match[1] : path;
+}
 
 function read() {
   const key = `${window.location.pathname}${window.location.search}${window.location.hash}`;
   if (key === currentKey) return;
   currentKey = key;
   current = parseLocation(basePath, window.location);
+  lastAddresses.set(
+    applicationOf(window.location.pathname),
+    `${withoutBase(window.location.pathname)}${window.location.search}${window.location.hash}`
+  );
 }
 
 function emit() {
@@ -39,6 +79,14 @@ export function startRouter(base: string) {
   read();
   window.addEventListener('popstate', emit);
   window.addEventListener('hashchange', emit);
+  // Closing or reloading the tab asks with the browser's own question when the page wants it, as
+  // the original's application service does for a leave handler that confirms
+  window.addEventListener('beforeunload', (event: BeforeUnloadEvent) => {
+    const question = unloadQuestion?.();
+    if (question === undefined) return;
+    event.preventDefault();
+    event.returnValue = question;
+  });
   // A link to a page of this product, wherever it is drawn (a markdown panel too), moves within
   // the page already loaded
   document.addEventListener('click', (event) => {
@@ -57,8 +105,23 @@ export function startRouter(base: string) {
   });
 }
 
-export function setLeaveGuard(guard: (() => boolean) | undefined) {
+/**
+ * Sets what asks before the page is left for another of this product (none with undefined), and
+ * what the browser's own question says when the tab is closed or reloaded meanwhile
+ */
+export function setLeaveGuard(guard: LeaveGuard | undefined, onUnload?: () => string | undefined) {
   leaveGuard = guard;
+  unloadQuestion = guard ? onUnload : undefined;
+}
+
+/**
+ * Where an application was last since the page loaded, as a path of this product
+ * (`/app/dashboards#/view/<id>?_g=…&_a=…`), undefined when it has not been open: what the
+ * original's `navigateToApp(app)` with no path opens, a dashboard with the changes its address
+ * carries and not saved yet
+ */
+export function lastAddressOf(app: string): string | undefined {
+  return lastAddresses.get(app);
 }
 
 /** The address of a path of this product, with the base path a proxy may have put in front */
@@ -107,17 +170,37 @@ export function navigate(
     emit();
     return;
   }
+  const next = new URL(target, window.location.href);
   const leavesPage =
-    new URL(target, window.location.href).pathname !== window.location.pathname ||
-    new URL(target, window.location.href).hash.split('?')[0] !== window.location.hash.split('?')[0];
-  if (leavesPage && !options.force && leaveGuard && !leaveGuard()) return;
-  if (options.replace) {
-    const state: unknown = options.state === undefined ? window.history.state : options.state;
-    window.history.replaceState(state, '', target);
-  } else {
-    window.history.pushState(options.state ?? null, '', target);
+    next.pathname !== window.location.pathname ||
+    next.hash.split('?')[0] !== window.location.hash.split('?')[0];
+  const go = () => {
+    if (options.replace) {
+      const state: unknown = options.state === undefined ? window.history.state : options.state;
+      window.history.replaceState(state, '', target);
+    } else {
+      window.history.pushState(options.state ?? null, '', target);
+    }
+    emit();
+  };
+  if (leavesPage && !options.force && leaveGuard) {
+    const answer = leaveGuard({
+      url,
+      leavesApp: applicationOf(next.pathname) !== applicationOf(window.location.pathname),
+    });
+    if (answer === false) return;
+    if (answer !== true) {
+      // A question the page draws: the move happens once it is answered yes
+      answer.then(
+        (confirmed) => {
+          if (confirmed) go();
+        },
+        () => undefined
+      );
+      return;
+    }
   }
-  emit();
+  go();
 }
 
 /** Changes the fragment's path and query, and keeps the application */

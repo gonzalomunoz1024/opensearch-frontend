@@ -157,3 +157,45 @@ export function onJobDone(event: JobEvent, listener: Listener): () => void {
 export function jobDone(event: JobEvent) {
   for (const listener of [...(listeners.get(event) ?? [])]) listener();
 }
+
+// --- Asking again as the lists of the plugin do --------------------------------------------------------
+
+/**
+ * A function that runs at once when it has not been called for `wait` milliseconds, and once
+ * more `wait` milliseconds after the last of the calls that came meanwhile, with that call's
+ * arguments: lodash's `debounce(run, wait, { leading: true })`, by which the plugin's lists ask
+ * for their rows.
+ */
+export function leadingDebounce<Args extends unknown[]>(
+  run: (...args: Args) => void,
+  wait: number,
+  clock: Pick<Clock, 'setTimeout' | 'clearTimeout'>
+): { call: (...args: Args) => void; cancel: () => void } {
+  let timer: unknown;
+  let pending: Args | undefined;
+  const expire = () => {
+    timer = undefined;
+    if (pending) {
+      const args = pending;
+      pending = undefined;
+      run(...args);
+    }
+  };
+  return {
+    call: (...args: Args) => {
+      if (timer === undefined) {
+        pending = undefined;
+        run(...args);
+      } else {
+        clock.clearTimeout(timer);
+        pending = args;
+      }
+      timer = clock.setTimeout(expire, wait);
+    },
+    cancel: () => {
+      if (timer !== undefined) clock.clearTimeout(timer);
+      timer = undefined;
+      pending = undefined;
+    },
+  };
+}
