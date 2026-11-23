@@ -8,7 +8,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import type { IncomingMessage } from 'node:http';
 import { extname, join, normalize, sep } from 'node:path';
 import { fontFaceRules } from './fonts';
-import type { Reply } from './http';
+import { badRequest, HttpError, type Reply } from './http';
 
 const TYPES: Record<string, string> = {
   '.js': 'text/javascript; charset=utf-8',
@@ -39,21 +39,34 @@ export function readBuild(distDirectory: string): Build {
   return JSON.parse(readFileSync(join(distDirectory, 'build.json'), 'utf8')) as Build;
 }
 
-/** A file under the public directory, in the compressed form the browser accepts if there is one */
+/**
+ * A file under the public directory, in the compressed form the browser accepts if there is one.
+ * The path is read as the original's static routes read theirs (inert, under /ui and each
+ * plugin's assets): its escapes decoded, so that %2E is a dot and %2F a slash; one that cannot be
+ * decoded is a bad request (400), and one that then leads out of the directory is refused (403).
+ * Nothing else is served (404): no directory, no file of a type the browser side does not use, no
+ * name with a NUL, as there, and no name too long for the file system, where the original answers 500.
+ */
 export function serveStatic(
   publicDirectory: string,
   req: IncomingMessage,
   path: string
 ): Reply | undefined {
-  const file = normalize(join(publicDirectory, path));
-  if (!file.startsWith(publicDirectory + sep)) return undefined;
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(path);
+  } catch {
+    throw badRequest('Bad Request');
+  }
+  const file = normalize(join(publicDirectory, decoded));
+  if (!file.startsWith(join(publicDirectory, sep))) throw new HttpError(403, 'Forbidden');
   const type = TYPES[extname(file)];
   if (!type || !existsSync(file) || !statSync(file).isFile()) return undefined;
 
   const headers: Record<string, string> = {
     'content-type': type,
     // A file under assets/ carries the hash of its content in its name
-    'cache-control': path.startsWith('/assets/')
+    'cache-control': file.startsWith(join(publicDirectory, 'assets', sep))
       ? 'public, max-age=31536000, immutable'
       : 'public, max-age=3600',
   };

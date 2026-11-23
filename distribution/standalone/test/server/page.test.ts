@@ -4,58 +4,11 @@
 
 import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import http from 'node:http';
-import type { AddressInfo } from 'node:net';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { createApp } from '../../server/app';
-import { loadConfig } from '../../server/config';
-import { silentLogger } from '../../server/logger';
 import { cssString, fontFaceRules, fontFiles } from '../../server/fonts';
 import { cspNonce, renderPage, type PageOptions } from '../../server/static';
-import { fakeOpenSearch } from './fake_opensearch';
-
-interface Answer {
-  status: number;
-  headers: http.IncomingHttpHeaders;
-  body: string;
-  bytes: Buffer;
-}
-
-/** The server as it is built, with the given settings, asked for each target in turn */
-async function served(targets: string[], settings: Record<string, string> = {}): Promise<Answer[]> {
-  const opensearch = await fakeOpenSearch();
-  let app: ReturnType<typeof createApp> | undefined;
-  try {
-    const { config } = loadConfig({
-      env: { SERVER_HOST: '127.0.0.1', SERVER_PORT: '0', OPENSEARCH_HOSTS: JSON.stringify([opensearch.url]), ...settings },
-    });
-    app = createApp({ config, logger: silentLogger, distDirectory: resolve(__dirname, '..', '..') });
-    await app.start();
-    const { port } = app.server.address() as AddressInfo;
-    const answers: Answer[] = [];
-    for (const target of targets) {
-      answers.push(
-        await new Promise<Answer>((done, failed) => {
-          const request = http.request({ host: '127.0.0.1', port, path: target, agent: false }, (response) => {
-            const chunks: Buffer[] = [];
-            response.on('data', (chunk: Buffer) => chunks.push(chunk));
-            response.on('end', () => {
-              const bytes = Buffer.concat(chunks);
-              done({ status: response.statusCode ?? 0, headers: response.headers, body: bytes.toString('utf8'), bytes });
-            });
-          });
-          request.on('error', failed);
-          request.end();
-        })
-      );
-    }
-    return answers;
-  } finally {
-    await app?.stop();
-    await opensearch.close();
-  }
-}
+import { served, type Answer } from './served';
 
 /** The nonce of a page's meta element, and those its style elements carry */
 const noncesOf = (html: string) => ({
