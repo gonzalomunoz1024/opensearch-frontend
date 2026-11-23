@@ -534,7 +534,7 @@ export function Flyout({
       >
         <div className="atlFlyout__header">
           <h2 className="atlTitleM atlTruncate">{title}</h2>
-          {!hideClose && <IconButton icon="cross" label="Close" onClick={onClose} testId="flyoutCloseButton" />}
+          {!hideClose && <IconButton icon="cross" label="Close this dialog" onClick={onClose} testId="euiFlyoutCloseButton" />}
         </div>
         <div className="atlFlyout__body">{children}</div>
         {footer && <div className="atlFlyout__footer">{footer}</div>}

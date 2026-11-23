@@ -574,7 +574,7 @@ function Relationships({ object, allowedTypes, onClose }: { object: ManagedObjec
   }, [object.type, object.id, allowedTypes]);
   // The close button has the focus when the flyout opens, as the original's
   useEffect(() => {
-    document.querySelector<HTMLElement>('.sobRelationshipsFlyout [data-test-subj=flyoutCloseButton]')?.focus();
+    document.querySelector<HTMLElement>('.sobRelationshipsFlyout [data-test-subj=euiFlyoutCloseButton]')?.focus();
   }, []);
 
   const columns: Array<Column<ManagedObject>> = [

@@ -122,7 +122,7 @@ export function ImportFlyout({ onClose, onDone }: { onClose: () => void; onDone:
         () => undefined
       );
     // The close button has the focus when the flyout opens, as the original's
-    document.querySelector<HTMLElement>('.sobImportFlyout [data-test-subj=flyoutCloseButton]')?.focus();
+    document.querySelector<HTMLElement>('.sobImportFlyout [data-test-subj=euiFlyoutCloseButton]')?.focus();
     return () => {
       live = false;
     };
@@ -212,7 +212,7 @@ export function ImportFlyout({ onClose, onDone }: { onClose: () => void; onDone:
   // as the Import button once the import is done, the close button has it
   useEffect(() => {
     if (document.activeElement === document.body) {
-      document.querySelector<HTMLElement>('.sobImportFlyout [data-test-subj=flyoutCloseButton]')?.focus();
+      document.querySelector<HTMLElement>('.sobImportFlyout [data-test-subj=euiFlyoutCloseButton]')?.focus();
     }
   }, [status]);
 
