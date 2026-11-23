@@ -14,6 +14,15 @@ import {
   type VislibSeries,
 } from '../../web/vis/vislib/point_series_data';
 import { layoutPointSeries } from '../../web/vis/vislib/point_series_layout';
+import { keptPieLabels } from '../../web/vis/vislib/pie_chart';
+import {
+  buildSlices,
+  convertToPercentage,
+  partition,
+  percentText,
+  pieNames,
+  removeZeroSlices,
+} from '../../web/vis/vislib/pie_data';
 import {
   VislibError,
   scaleValueAxis,
@@ -24,6 +33,7 @@ import {
 } from '../../web/vis/vislib/point_series_model';
 import { bandScale, linearNice, linearTicks, tickCount, utcTicks, zonedTimeTicks } from '../../web/vis/vislib/scales';
 import { dimmingOpacity, zoneOffset } from '../../web/vis/vislib/settings';
+import { arcCentroid, arcPath } from '../../web/vis/vislib/shapes';
 import { placeTooltip } from '../../web/vis/vislib/tooltip';
 
 const HOUR = 3600000;
@@ -406,3 +416,85 @@ describe('the settings the classic charts read', () => {
     assert.equal(zoneOffset('America/New_York')(Date.parse('2026-11-16T00:00:00Z')), -300);
   });
 });
+
+describe('a pie', () => {
+  const os = columnOf('col-0-2', 'machine.os', aggOf('2', 'terms', 'segment'));
+  const osCount = columnOf('col-1-1', 'Count', aggOf('1', 'count', 'metric'));
+  const ext = columnOf('col-2-3', 'extension', aggOf('3', 'terms', 'segment'));
+  const extCount = columnOf('col-3-1', 'Count', aggOf('1', 'count', 'metric'));
+  const table = {
+    columns: [os, osCount, ext, extCount],
+    rows: [
+      { 'col-0-2': 'win', 'col-1-1': 6, 'col-2-3': 'css', 'col-3-1': 4 },
+      { 'col-0-2': 'win', 'col-1-1': 6, 'col-2-3': 'gif', 'col-3-1': 2 },
+      { 'col-0-2': 'osx', 'col-1-1': 2, 'col-2-3': 'css', 'col-3-1': 2 },
+      { 'col-0-2': 'ios', 'col-1-1': 0, 'col-2-3': 'gif', 'col-3-1': 0 },
+    ],
+  };
+
+  it('has a slice per bucket inside the slice of the bucket before it', () => {
+    const root = buildSlices(table);
+    assert.deepEqual(
+      root.children.map((slice) => [slice.name, slice.size, slice.children.map((child) => child.name)]),
+      [
+        ['win', 6, ['css', 'gif']],
+        ['osx', 2, ['css']],
+        ['ios', 0, ['gif']],
+      ]
+    );
+    assert.equal(root.children[0].bucket?.column, os);
+    // The legend names the slices ring by ring, each once
+    assert.deepEqual(pieNames([root]), ['win', 'osx', 'ios', 'css', 'gif']);
+  });
+
+  it('shares the circle by the shares of the whole, the rings by area', () => {
+    const root = removeZeroSlices(buildSlices(table));
+    assert.equal(root.children.length, 2);
+    convertToPercentage(root);
+    const nodes = partition(root);
+    assert.deepEqual(
+      nodes.map((node) => node.name || 'root'),
+      ['root', 'win', 'css', 'gif', 'osx', 'css']
+    );
+    close(root.value, 100);
+    const [, win, winCss, , osx] = nodes;
+    close(win.dx, 0.75);
+    close(osx.x, 0.75);
+    close(winCss.dx, 0.5);
+    assert.equal(win.y, 1 / 3);
+    assert.equal(winCss.depth, 2);
+    assert.equal(winCss.percentOfGroup, 4 / 6);
+  });
+
+  it('writes shares as numeral does, with at most two decimals', () => {
+    assert.equal(percentText(0.2639), '26.39%');
+    assert.equal(percentText(0.247), '24.7%');
+    assert.equal(percentText(0.25), '25%');
+    assert.equal(percentText(1 / 3), '33.33%');
+    assert.equal(percentText(0.123456), '12.35%');
+  });
+
+  it('draws its slices as d3 draws arcs', () => {
+    assert.equal(arcPath(0, 10, 0, 2 * Math.PI), 'M0,10A10,10 0 1,1 0,-10A10,10 0 1,1 0,10Z');
+    assert.equal(arcPath(0, 100, 0, Math.PI / 2), `M${100 * Math.cos(-Math.PI / 2)},-100A100,100 0 0,1 100,0L0,0Z`);
+    const ring = arcPath(50, 100, Math.PI / 2, Math.PI);
+    assert.match(ring, /^M100,0A100,100 0 0,1 [-\d.e]+,100L[-\d.e]+,50A50,50 0 0,0 50,0Z$/);
+    const [x, y] = arcCentroid(50, 100, 0, Math.PI / 2);
+    close(x, 75 * Math.cos(-Math.PI / 4));
+    close(y, 75 * Math.sin(-Math.PI / 4));
+  });
+
+  it('leaves out a name that runs into one kept before it on the same side', () => {
+    assert.deepEqual(
+      keptPieLabels([
+        { left: 100, top: 0, bottom: 20 },
+        { left: 120, top: 10, bottom: 30 },
+        { left: -200, top: 10, bottom: 30 },
+        { left: 100, top: 40, bottom: 60 },
+        undefined,
+      ]),
+      [true, false, true, true, false]
+    );
+  });
+});
+

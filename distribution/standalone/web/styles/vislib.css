@@ -51,6 +51,7 @@
   flex: 1 1 100%;
   min-width: 0;
   min-height: 0;
+  padding: 10px 0;
   overflow: hidden;
 }
 
@@ -178,6 +179,55 @@
   color: var(--color-text-primary);
   font-size: var(--font-size-m);
   font-weight: var(--font-weight-semibold);
+}
+
+/* A pie's room (vislib's pie layout): the chart in a column, five pixels in from its edges */
+
+.visWrapper__column {
+  display: flex;
+  flex: 1 0 0;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.visWrapper__chart {
+  display: flex;
+  flex: 1 0 0;
+  min-width: 0;
+  min-height: 0;
+  margin: 5px;
+  overflow: visible;
+}
+
+.visWrapper__chart > .chart {
+  position: static;
+  flex: 1 1 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: visible;
+}
+
+.visWrapper .slice {
+  stroke: var(--color-surface);
+  stroke-width: 2px;
+}
+
+.visWrapper .slice:hover {
+  opacity: 0.8;
+}
+
+.visWrapper .label-line {
+  fill: none;
+  stroke: color-mix(in srgb, var(--color-text-secondary) 20%, transparent);
+  stroke-width: 2px;
+}
+
+.visWrapper .label-text {
+  fill: var(--color-text-secondary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-regular);
 }
 
 /* The legend */

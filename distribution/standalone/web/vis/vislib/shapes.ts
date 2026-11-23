@@ -1,9 +1,10 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
 /*
- * The lines and areas of the classic charts as d3's third version writes them (d3.svg.line and
- * d3.svg.area): straight, smooth ("cardinal", at d3's tension of 0.7) or in steps, broken where a
- * point is not defined.
+ * The lines, areas and arcs of the classic charts as d3's third version writes them (d3.svg.line,
+ * d3.svg.area and d3.svg.arc): lines straight, smooth ("cardinal", at d3's tension of 0.7) or in
+ * steps, broken where a point is not defined; arcs between two radii and two angles, clockwise
+ * from twelve o'clock, numbers written in full as d3 writes them.
  */
 
 export type Interpolation = 'linear' | 'cardinal' | 'step-after' | 'step-before';
@@ -137,4 +138,60 @@ export function areaPath(points: Array<{ from: Point; to: Point } | undefined>, 
   }
   flush();
   return segments.length ? segments.join('') : null;
+}
+
+// --- Arcs -----------------------------------------------------------------------------------------
+
+const HALF_PI = Math.PI / 2;
+const EPSILON = 1e-6;
+const TAU_EPSILON = 2 * Math.PI - EPSILON;
+
+const circleSegment = (radius: number, clockwise: number) =>
+  `M0,${radius}A${radius},${radius} 0 1,${clockwise} 0,${-radius}A${radius},${radius} 0 1,${clockwise} 0,${radius}`;
+
+/** d3.svg.arc's path: a ring's piece between two radii and two angles (radians from twelve o'clock) */
+export function arcPath(innerRadius: number, outerRadius: number, startAngle: number, endAngle: number): string {
+  let r0 = Math.max(0, innerRadius);
+  let r1 = Math.max(0, outerRadius);
+  const a0 = startAngle - HALF_PI;
+  const a1 = endAngle - HALF_PI;
+  const da = Math.abs(a1 - a0);
+  const cw = a0 > a1 ? 0 : 1;
+  if (r1 < r0) [r0, r1] = [r1, r0];
+  if (da >= TAU_EPSILON) return `${circleSegment(r1, cw)}${r0 ? circleSegment(r0, 1 - cw) : ''}Z`;
+  const path: Array<string | number> = [];
+  let x0 = 0;
+  let y0 = 0;
+  let x2 = 0;
+  let y2 = 0;
+  path.push('M');
+  if (r1) {
+    x0 = r1 * Math.cos(a0);
+    y0 = r1 * Math.sin(a0);
+    const x1 = r1 * Math.cos(a1);
+    const y1 = r1 * Math.sin(a1);
+    const l1 = Math.abs(a1 - a0) <= Math.PI ? 0 : 1;
+    path.push(x0, ',', y0, 'A', r1, ',', r1, ' 0 ', l1, ',', cw, ' ', x1, ',', y1);
+  } else {
+    path.push(x0, ',', y0);
+  }
+  if (r0) {
+    x2 = r0 * Math.cos(a1);
+    y2 = r0 * Math.sin(a1);
+    const x3 = r0 * Math.cos(a0);
+    const y3 = r0 * Math.sin(a0);
+    const l0 = Math.abs(a0 - a1) <= Math.PI ? 0 : 1;
+    path.push('L', x2, ',', y2, 'A', r0, ',', r0, ' 0 ', l0, ',', 1 - cw, ' ', x3, ',', y3);
+  } else {
+    path.push('L', x2, ',', y2);
+  }
+  path.push('Z');
+  return path.join('');
+}
+
+/** d3.svg.arc's centroid: halfway between the radii, at the middle angle */
+export function arcCentroid(innerRadius: number, outerRadius: number, startAngle: number, endAngle: number): [number, number] {
+  const r = (innerRadius + outerRadius) / 2;
+  const a = (startAngle + endAngle) / 2 - HALF_PI;
+  return [Math.cos(a) * r, Math.sin(a) * r];
 }

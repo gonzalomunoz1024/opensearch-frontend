@@ -5,7 +5,7 @@
  * drawn as the classic charts of OpenSearch Dashboards draw them (vislib, in ./vislib).
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { ChartMessage } from '../charts/core';
 import { bucketFilter, dateInterval } from '../lib/aggs';
 import { DEFAULT_FORMAT_SETTINGS, createFormatter } from '../lib/field_formats';
@@ -14,14 +14,12 @@ import type { Filter } from '../lib/types';
 import { services } from '../services';
 import { bucketColumns, type VisRenderProps } from './types';
 import { seriesColors } from './vislib/colors';
-import type { LegendPosition } from './vislib/legend';
 import { PointSeriesChart } from './vislib/point_series_chart';
 import { buildPointSeriesModel, type PointSeriesParams } from './vislib/point_series_model';
 import type { VislibPoint } from './vislib/point_series_data';
 import { dimmingOpacity, zoneOffset } from './vislib/settings';
+import { useVislibLegend } from './vislib/use_legend';
 import '../styles/vislib.css';
-
-const POSITIONS: LegendPosition[] = ['top', 'bottom', 'left', 'right'];
 
 export function XYVis({ vis, data, uiState, onUiState, onFilter, onTimeChange }: VisRenderProps) {
   const params = vis.params as PointSeriesParams;
@@ -76,14 +74,6 @@ export function XYVis({ vis, data, uiState, onUiState, onFilter, onTimeChange }:
   const offsetAt = useMemo(() => zoneOffset(settings.timeZone), [settings.timeZone]);
   const dimming = dimmingOpacity(services.uiSettings?.get('visualization:dimmingOpacity', 0.5));
 
-  const savedOpen = uiState.vis?.legendOpen;
-  const [localOpen, setLocalOpen] = useState(true);
-  const legendOpen = savedOpen ?? (onUiState ? true : localOpen);
-
-  if (table.rows.length === 0) return <ChartMessage>No results found</ChartMessage>;
-
-  const position: LegendPosition = POSITIONS.includes(params.legendPosition as LegendPosition) ? (params.legendPosition as LegendPosition) : 'right';
-
   // The bucket a series stands for: its first group's value, as the original's legend filters on it
   const groupFilter = (label: string): Filter | undefined => {
     const series = model.data.series.find((item) => item.label === label);
@@ -91,32 +81,16 @@ export function XYVis({ vis, data, uiState, onUiState, onFilter, onTimeChange }:
     if (!series || !column) return undefined;
     return bucketFilter(column, series.groupKeys[0], context);
   };
+  const legend = useVislibLegend({
+    addLegend: params.addLegend,
+    legendPosition: params.legendPosition,
+    uiState,
+    onUiState,
+    onFilter,
+    filterOf: groupFilter,
+  });
 
-  const legend = params.addLegend
-    ? {
-        position,
-        open: legendOpen,
-        onToggle: () => {
-          if (onUiState) onUiState({ ...uiState, vis: { ...uiState.vis, legendOpen: !legendOpen } });
-          else setLocalOpen(!legendOpen);
-        },
-        canFilter: onFilter ? (label: string) => Boolean(groupFilter(label)) : undefined,
-        onFilter: onFilter
-          ? (label: string, negate: boolean) => {
-              const filter = groupFilter(label);
-              if (filter) onFilter([{ ...filter, meta: { ...filter.meta, negate: negate ? !filter.meta.negate : filter.meta.negate } }]);
-            }
-          : undefined,
-        onColor: onUiState
-          ? (label: string, color: string) => {
-              const picked = { ...(uiState.vis?.colors ?? {}) };
-              if (picked[label] === color) delete picked[label];
-              else picked[label] = color;
-              onUiState({ ...uiState, vis: { ...uiState.vis, colors: picked } });
-            }
-          : undefined,
-      }
-    : undefined;
+  if (table.rows.length === 0) return <ChartMessage>No results found</ChartMessage>;
 
   // A click on a mark filters on its bucket along the axis and on its series' first group
   const onPointClick = onFilter

@@ -5,7 +5,8 @@
  * the window, 10 pixels right of and below the pointer; it goes to the other side when it would
  * run out of the chart or the window, and keeps the side it took while the pointer stays on the
  * chart, so that it does not jump between neighbouring marks. Its content is a table of a label
- * and a value per row, the label column narrowed so that the values have room.
+ * and a value per row, the label column narrowed so that the values have room; for a pie, the
+ * slice and those it is inside, a row each of field, bucket and measure.
  */
 
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
@@ -16,6 +17,13 @@ export interface TooltipDetail {
   value: string;
 }
 
+/** A row of a pie's tooltip: the field of a ring, the slice's name in it and its measure */
+export interface TooltipBranchRow {
+  field: string;
+  bucket: string;
+  metric: string;
+}
+
 export interface TooltipState {
   /** Where the pointer is, in the window */
   clientX: number;
@@ -23,6 +31,8 @@ export interface TooltipState {
   /** The message of the zones the time range does not fully cover, above the details */
   header?: string;
   details: TooltipDetail[];
+  /** For a pie: the slice pointed at and those it is inside, the outermost first */
+  branch?: TooltipBranchRow[];
 }
 
 type Direction = 'north' | 'south' | 'east' | 'west';
@@ -153,11 +163,15 @@ export function VislibTooltip({
       placement.current
     );
     placement.current = next;
-    // Two columns: the labels leave the values their room, or half of it when they are wider
+    // Two columns: the labels leave the values their room, or half of it when they are wider;
+    // three (a pie's): the field and the bucket share what the measure leaves
     let labelWidth: number | undefined;
     let valueWidth: number | undefined;
-    const valueCell = element.querySelector<HTMLElement>('tr:nth-of-type(1) > td:nth-child(2)');
-    if (valueCell) {
+    const columns = element.querySelectorAll('tbody > tr:nth-of-type(1) > td').length;
+    const valueCell = element.querySelector<HTMLElement>(`tbody > tr:nth-of-type(1) > td:nth-child(${columns === 3 ? 3 : 2})`);
+    if (valueCell && columns === 3) {
+      labelWidth = (size.width - valueCell.getBoundingClientRect().width - TABLE_MARGIN) / 2 - COLUMN_PADDING;
+    } else if (valueCell && columns === 2) {
       const tooltipWidth = size.width;
       const valueSize = valueCell.getBoundingClientRect().width;
       const greater = valueSize > tooltipWidth / 2;
@@ -181,6 +195,37 @@ export function VislibTooltip({
       </p>
     );
   }
+  const labelStyle = style?.labelWidth !== undefined ? { maxWidth: style.labelWidth } : undefined;
+  if (state.branch?.length) {
+    content.push(
+      <table key="branch" className="visTooltip__table">
+        <thead>
+          <tr className="visTooltip__label">
+            <th scope="col">field</th>
+            <th scope="col">value</th>
+            <th scope="col" />
+          </tr>
+        </thead>
+        <tbody>
+          {state.branch.map((row, index) => (
+            <tr key={index} className="visTooltip__value">
+              <td>
+                <div className="visTooltip__labelContainer" style={labelStyle}>
+                  {row.field}
+                </div>
+              </td>
+              <td>
+                <div className="visTooltip__labelContainer" style={labelStyle}>
+                  {row.bucket}
+                </div>
+              </td>
+              <td>{row.metric}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }
   if (state.details.length) {
     content.push(
       <table key="details">
@@ -188,7 +233,7 @@ export function VislibTooltip({
           {state.details.map((detail, index) => (
             <tr key={index}>
               <td className="visTooltip__label">
-                <div className="visTooltip__labelContainer" style={style?.labelWidth !== undefined ? { maxWidth: style.labelWidth } : undefined}>
+                <div className="visTooltip__labelContainer" style={labelStyle}>
                   {detail.label}
                 </div>
               </td>
