@@ -141,6 +141,9 @@ function single(spec: FieldFormatSpec, settings: FormatSettings): (value: unknow
             : settings.percentPattern;
       const pattern = typeof params.pattern === 'string' && params.pattern ? params.pattern : fallback;
       return (value) => {
+        // The ends of an open range, as the original's numeral formats write them
+        if (value === Infinity) return text('+∞');
+        if (value === -Infinity) return text('-∞');
         const number = toNumber(value);
         return text(number === undefined ? stringify(value) : formatNumber(number, pattern));
       };
