@@ -266,6 +266,69 @@ export function PluginRow({
 }
 
 /**
+ * A field as the component library's compressed form row with a plain label: the label at 12 px
+ * 4 px over the field, then what is wrong with it and what it is for
+ */
+export function SmallRow({
+  label,
+  help,
+  error,
+  className,
+  children,
+}: {
+  label?: ReactNode;
+  help?: ReactNode;
+  error?: ReactNode;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className={cx('ismSr', Boolean(error) && 'ismSr--invalid', className)}>
+      {label && <label className="ismSr__label">{label}</label>}
+      <div className="ismPr__field">{children}</div>
+      {error && <div className="ismPr__error">{error}</div>}
+      {help && <div className="ismPr__help">{help}</div>}
+    </div>
+  );
+}
+
+/**
+ * What folds away under a row, as the component library's accordion: an arrow that turns down and
+ * a title (a heading at 15 px, or at 17 px when `large`); closed at first
+ */
+export function Fold({
+  title,
+  large,
+  onOpen,
+  children,
+}: {
+  title: string;
+  large?: boolean;
+  /** Called each time it is opened */
+  onOpen?: () => void;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="ismAcc">
+      <button
+        type="button"
+        className="ismAcc__button"
+        aria-expanded={open}
+        onClick={() => {
+          if (!open) onOpen?.();
+          setOpen(!open);
+        }}
+      >
+        <Icon name="chevronRight" className="ismAcc__arrow" />
+        {large ? <h3 className="ismAcc__title ismAcc__title--l">{title}</h3> : <h4 className="ismAcc__title">{title}</h4>}
+      </button>
+      {open && children}
+    </div>
+  );
+}
+
+/**
  * The plugin's ConfirmationModal: its title, what it asks in a line, Cancel and the action, as wide
  * as what it says up to 1000 px. The action is run and the dialog closed at once, as there.
  */

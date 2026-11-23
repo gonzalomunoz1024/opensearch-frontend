@@ -9,12 +9,22 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Accordion, Button, CallOut, IconButton, Panel } from '../../components/basic';
 import { ComboBox } from '../../components/combo_box';
-import { Checkbox, NumberField, RadioGroup, Select, TextField } from '../../components/form';
+import { Checkbox, NumberField, Select, TextField } from '../../components/form';
 import { Icon } from '../../components/icon';
 import { Popover } from '../../components/overlay';
 import { useBreadcrumbs } from '../../shell/state';
 import { Detail, Details, ExternalLink, JsonEditor, go, ism, toasts } from './common';
-import { ConfigureJob, FieldRow, FormPanel, InfoGrid, Spacer, Wizard, nameOptions, useIndexNames } from './job_parts';
+import {
+  ConfigureJob,
+  FieldRow,
+  Fold,
+  FormPanel,
+  InfoGrid,
+  Radio,
+  SmallRow,
+  Spacer,
+  TitledPanel,
+  Wizard, nameOptions, useIndexNames } from './job_parts';
 import {
   CALENDAR_TIMEUNITS,
   FIXED_TIMEUNITS,
@@ -838,27 +848,29 @@ export function TransformSchedule({
   onChangeInterval: (interval: number | undefined) => void;
 }) {
   return (
-    <FormPanel title="Schedule">
-      <Checkbox
-        checked={values.enabled}
-        onChange={(enabled) => change({ enabled })}
-        label="Job enabled by default"
-        testId={isEdit ? 'jobEnabled' : 'jobEnabledByDefault'}
-      />
+    <TitledPanel title="Schedule" itemTitle>
+      <div className="ismCheckRow ismCheckRow--text">
+        <Checkbox
+          checked={values.enabled}
+          onChange={(enabled) => change({ enabled })}
+          label="Job enabled by default"
+          testId={isEdit ? 'jobEnabled' : 'jobEnabledByDefault'}
+        />
+      </div>
+      <Spacer size="m" />
       {!isEdit && (
-        <FieldRow title="Continuous" minor>
-          <RadioGroup
-            options={[
-              { id: 'no', label: 'No' },
-              { id: 'yes', label: 'Yes' },
-            ]}
-            value={values.continuous ? 'yes' : 'no'}
-            onChange={(id) => change({ continuous: id === 'yes' })}
-          />
-        </FieldRow>
+        <>
+          <SmallRow label="Continuous">
+            <div>
+              <Radio id="no" name="continuousJob" label="No" checked={!values.continuous} onChange={() => change({ continuous: false })} />
+              <Radio id="yes" name="continuousJob" label="Yes" checked={Boolean(values.continuous)} onChange={() => change({ continuous: true })} />
+            </div>
+          </SmallRow>
+          <Spacer size="m" />
+        </>
       )}
-      <FieldRow title="Transform execution interval" small error={intervalError}>
-        <div className="ismPaired">
+      <div className="ismTsInterval">
+        <SmallRow label="Transform execution interval" error={intervalError} className="ismTsInterval__number">
           <NumberField
             compact
             value={values.interval}
@@ -866,6 +878,8 @@ export function TransformSchedule({
             invalid={Boolean(intervalError)}
             aria-label="Transform execution interval"
           />
+        </SmallRow>
+        <div className="ismTsInterval__unit">
           <Select
             compact
             id="selectIntervalTimeunit"
@@ -876,23 +890,22 @@ export function TransformSchedule({
             aria-label="Transform execution interval unit"
           />
         </div>
-      </FieldRow>
-      <hr className="ismRule" />
-      <Accordion title="Advanced" initiallyOpen={false}>
-        <div className="ismAccordionBody">
-          <FieldRow title="Pages per execution" small help={isEdit ? PAGES_HELP_EDIT : PAGES_HELP}>
-            <NumberField
-              compact
-              min={1}
-              placeholder="1000"
-              value={values.pageSize}
-              onChange={(pageSize) => change({ pageSize })}
-              aria-label="Pages per execution"
-            />
-          </FieldRow>
-        </div>
-      </Accordion>
-    </FormPanel>
+      </div>
+      <Spacer size="m" />
+      <Fold title="Advanced" large>
+        <Spacer size="m" />
+        <SmallRow label="Pages per execution" help={isEdit ? PAGES_HELP_EDIT : PAGES_HELP}>
+          <NumberField
+            compact
+            min={1}
+            placeholder="1000"
+            value={values.pageSize}
+            onChange={(pageSize) => change({ pageSize })}
+            aria-label="Pages per execution"
+          />
+        </SmallRow>
+      </Fold>
+    </TitledPanel>
   );
 }
 

@@ -1445,6 +1445,11 @@
   align-items: stretch;
 }
 
+/* The plugin's subdued colour does not reach a heading in small text: it keeps the text's own */
+.ismOptional--heading .ismOptional__text {
+  color: var(--color-text-primary);
+}
+
 .ismOptional__text {
   color: var(--color-text-secondary);
   font-size: var(--font-size-s);
@@ -3857,6 +3862,74 @@
   font-size: 15px;
   line-height: 20px;
   font-weight: var(--font-weight-semibold);
+}
+
+.ismAcc__title--l {
+  font-size: var(--font-size-l);
+  line-height: 22px;
+  letter-spacing: -0.022em;
+}
+
+/* A compressed form row with a plain label */
+.ismSr {
+  display: flex;
+  flex-direction: column;
+  max-width: 400px;
+}
+
+.ismSr__label {
+  margin-bottom: var(--space-1);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 18px;
+}
+
+.ismSr--invalid .ismSr__label {
+  color: var(--color-critical-button-text);
+}
+
+.ismSr .ismPr__field > .atlField {
+  width: 100%;
+}
+
+/* A tick box beside ordinary text: a line of 21 px */
+.ismCheckRow.ismCheckRow--text {
+  height: 21px;
+}
+
+/* How often a transform job runs: a number of 200 px and its unit in what is left of 400 px,
+   24 px apart, the unit level with the number */
+.ismTsInterval {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-6);
+  max-width: 376px;
+}
+
+.ismTsInterval__number {
+  flex: 0 0 200px;
+  width: 200px;
+}
+
+.ismTsInterval__unit {
+  flex: 1 1 0;
+  min-width: 0;
+  margin-top: 22px;
+}
+
+.ismTsInterval__unit .atlField {
+  width: 100%;
+}
+
+/* A name over what it is, where a job's page only shows it */
+.ismPlainRow h3 {
+  margin: 0 0 7px;
+}
+
+.ismPlainRow p {
+  margin: 0;
+  line-height: 21px;
 }
 
 .ismAcc__body {

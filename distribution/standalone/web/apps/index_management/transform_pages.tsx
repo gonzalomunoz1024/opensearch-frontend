@@ -4,7 +4,6 @@
 
 import { useEffect, useState } from 'react';
 import { Button } from '../../components/basic';
-import { Icon } from '../../components/icon';
 import { useLocation } from '../../router';
 import { useBreadcrumbs } from '../../shell/state';
 import { JsonEditor, go, ism, toasts } from './common';
@@ -16,11 +15,12 @@ import {
   previewTransform,
 } from './create_transform';
 import {
-  FormPanel,
+  Fold,
   InfoGrid,
   JobActionsMenu,
   JobDetailsHeader,
   JobDetailsPage,
+  JobEditPage,
   JobJsonModal,
   Spacer,
   TitledPanel,
@@ -42,15 +42,6 @@ const loadTransform = (id: string) => ism.get<TransformDocument>(`transforms/${e
 
 // --- One job ---------------------------------------------------------------------------------------
 
-/** Asks for the look at the result the first time it is opened */
-function PreviewOnOpen({ onOpen }: { onOpen: () => void }) {
-  useEffect(() => {
-    onOpen();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  return null;
-}
-
 export function TransformDetails() {
   const { hashParams } = useLocation();
   const id = hashParams.id;
@@ -60,7 +51,6 @@ export function TransformDetails() {
   const [job, setJob] = useState<TransformDocument>();
   const [documents, setDocuments] = useState<Array<Record<string, unknown>>>([]);
   const [dialog, setDialog] = useState<'json' | 'delete'>();
-  const [open, setOpen] = useState(false);
 
   const load = async (transformId: string) => {
     const answer = await loadTransform(transformId);
@@ -180,20 +170,13 @@ export function TransformDetails() {
         <Spacer size="m" />
         <Definitions items={transform ? settingsItems(transform) : []} />
         <Spacer size="m" />
-        <div className="ismAcc">
-          <button type="button" className="ismAcc__button" aria-expanded={open} onClick={() => setOpen(!open)}>
-            <Icon name="chevronRight" className="ismAcc__arrow" />
-            <h4 className="ismAcc__title">Sample source index and transform result</h4>
-          </button>
-          {open && (
-            <div className="ismAcc__body">
-              <PreviewOnOpen onOpen={() => void preview()} />
-              <Spacer size="m" />
-              <h5 className="ismPreviewTitle">Preview result based on sample data</h5>
-              <PreviewTransform documents={documents} aggList={[]} isReadOnly />
-            </div>
-          )}
-        </div>
+        <Fold title="Sample source index and transform result" onOpen={() => void preview()}>
+          <div className="ismAcc__body">
+            <Spacer size="m" />
+            <h5 className="ismPreviewTitle">Preview result based on sample data</h5>
+            <PreviewTransform documents={documents} aggList={[]} isReadOnly />
+          </div>
+        </Fold>
       </TitledPanel>
 
       {dialog === 'json' && job && <JobJsonModal small title={`View JSON of ${transformId}`} json={job} onClose={close} />}
@@ -272,30 +255,33 @@ export function EditTransform() {
 
   const transform = job?.transform;
   return (
-    <div className="ismPage ismPage--form ismPage--edit">
-      <h1 className="ismPageTitle">Edit transform job</h1>
+    <JobEditPage title="Edit transform job">
       <ConfigureTransform
         isEdit
         transformId={job?._id ?? ''}
         description={edit.description}
         onChangeDescription={(description) => change({ description })}
       />
-      <FormPanel title="Indices">
-        <div className="ismRow">
-          <h3 className="ismRow__title">Source index</h3>
-          <p className="ismPlain">{transform?.source_index}</p>
+      <Spacer />
+      <TitledPanel title="Indices" itemTitle>
+        <div className="ismPlainRow">
+          <h3 className="ismPr__title">Source index</h3>
+          <p>{transform?.source_index}</p>
         </div>
-        <div className="ismRow">
-          <h3 className="ismRow__title">Source index filter</h3>
+        <Spacer size="m" />
+        <div className="ismPlainRow">
+          <h3 className="ismPr__title">Source index filter</h3>
           <div style={{ width: 400 }}>
             <JsonEditor value={transform ? (JSON.stringify(transform.data_selection_query) ?? '') : ''} height={100} readOnly />
           </div>
         </div>
-        <div className="ismRow">
-          <h3 className="ismRow__title">Target index</h3>
-          <p className="ismPlain">{transform?.target_index}</p>
+        <Spacer size="m" />
+        <div className="ismPlainRow">
+          <h3 className="ismPr__title">Target index</h3>
+          <p>{transform?.target_index}</p>
         </div>
-      </FormPanel>
+      </TitledPanel>
+      <Spacer />
       <TransformSchedule
         isEdit
         values={edit}
@@ -306,14 +292,15 @@ export function EditTransform() {
           setIntervalError(interval === undefined ? INTERVAL_REQUIRED : undefined);
         }}
       />
-      <div className="ismButtons">
-        <Button variant="empty" size="s" onClick={() => go(ROUTES.TRANSFORMS)} testId="editTransformCancelButton">
+      <Spacer />
+      <div className="ismJobEdit__buttons">
+        <Button variant="empty" onClick={() => go(ROUTES.TRANSFORMS)} testId="editTransformCancelButton">
           Cancel
         </Button>
-        <Button variant="primary" size="s" loading={busy} onClick={() => void submit()} testId="editTransformSaveButton">
+        <Button variant="primary" loading={busy} onClick={() => void submit()} testId="editTransformSaveButton">
           Save changes
         </Button>
       </div>
-    </div>
+    </JobEditPage>
   );
 }
