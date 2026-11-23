@@ -8,7 +8,7 @@
  * saved here opens there and the other way round.
  */
 
-import { AGG_TITLES, METRIC_TYPES, BUCKET_TYPES, aggLabel, type AggConfig, type AggContext } from '../../lib/aggs';
+import { AGG_TITLES, METRIC_TYPES, BUCKET_TYPES, aggLabel, responseAggs, type AggConfig, type AggContext } from '../../lib/aggs';
 import { parseDateMath, parseInterval } from '../../lib/dates';
 import type { IndexPattern } from '../../lib/types';
 import { visType, type Vis, type VisType } from '../../lib/vis';
@@ -370,6 +370,7 @@ export const FIELD_TYPES: Record<string, string[] | '*'> = {
   terms: ['number', 'boolean', 'date', 'ip', 'string'],
   significant_terms: ['string'],
   geohash_grid: ['geo_point'],
+  geotile_grid: ['geo_point'],
 };
 
 /** Whether an aggregation is on a field at all: a count and the pipelines are not */
@@ -409,10 +410,7 @@ export function defaultAggParams(
 ): Record<string, unknown> {
   const env = { indexPattern, queryLanguage: language };
   const params = paramsForType(type, field, env);
-  if (type === 'terms') {
-    const metric = aggs.find((agg) => isMetricSchema(agg) && orderableMetric(agg));
-    params.orderBy = metric ? metric.id : '_key';
-  }
+  if (type === 'terms') params.orderBy = firstOrderBy(aggs.filter(isMetricSchema), { indexPattern, aggs });
   if (SIBLING_PIPELINES.includes(type)) {
     params.customBucket = { id: `${id}-bucket`, enabled: true, type: 'date_histogram', params: paramsForType('date_histogram', undefined, env) };
     params.customMetric = nestedCount(`${id}-metric`);
@@ -423,11 +421,20 @@ export function defaultAggParams(
 
 const isMetricSchema = (agg: AggConfig) => agg.schema === undefined || agg.schema === 'metric' || agg.schema === 'radius';
 
-/** Whether the buckets of a terms aggregation can be ordered by a metric of the chart */
+/** Whether the buckets of a terms aggregation can be ordered by a metric of the chart: the original's `termsAggFilter` */
 export const orderableMetric = (agg: AggConfig) =>
   agg.enabled !== false &&
   (METRIC_TYPES as readonly string[]).includes(agg.type) &&
-  !['top_hits', 'percentiles', 'percentile_ranks', 'std_dev', 'median', ...SIBLING_PIPELINES, ...PARENT_PIPELINES].includes(agg.type);
+  !['top_hits', 'percentiles', 'std_dev', 'median', ...SIBLING_PIPELINES, ...PARENT_PIPELINES].includes(agg.type);
+
+/**
+ * What a terms aggregation is ordered by when nothing says: the first value of the chart's metrics
+ * that can order it (a percentile rank is one), or the alphabet
+ */
+export function firstOrderBy(metrics: AggConfig[], context: AggContext): string {
+  const metric = metrics.find((agg) => agg.enabled !== false && Boolean(agg.type) && orderableMetric(agg));
+  return (metric && responseAggs(metric, context)[0]?.id) ?? '_key';
+}
 
 /**
  * The parameters of a terms aggregation once someone chooses what it is ordered by: it has a custom
@@ -446,7 +453,7 @@ export const parentPipelineMetric = (agg: AggConfig) => !['top_hits', 'percentil
  * have changed, as the original's `useFallbackMetric`: a metric that is gone, or one that cannot be
  * used, gives way to the fallback. Nothing when the choice stands.
  */
-export function fallbackMetric(chosen: string, metrics: AggConfig[], usable: (agg: AggConfig) => boolean, fallback: string): string | undefined {
+export function fallbackMetric<T extends { id: string }>(chosen: string, metrics: T[], usable: (agg: T) => boolean, fallback: string): string | undefined {
   if (!chosen || chosen === 'custom' || chosen === fallback) return undefined;
   return metrics.some((metric) => metric.id === chosen && usable(metric)) ? undefined : fallback;
 }

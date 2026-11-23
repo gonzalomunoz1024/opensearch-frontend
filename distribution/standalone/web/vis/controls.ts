@@ -15,12 +15,13 @@ type Dsl = Record<string, unknown>;
 export interface ControlOptions {
   multiselect?: boolean;
   dynamicOptions?: boolean;
-  size?: number;
+  /** A number the editor's field was emptied of is null, as a saved object holds it */
+  size?: number | null;
   /** Kept by the editor; the original's lists ask for the most frequent values whatever it says */
   order?: 'asc' | 'desc';
   type?: string;
-  decimalPlaces?: number;
-  step?: number;
+  decimalPlaces?: number | null;
+  step?: number | null;
 }
 
 export interface ControlParam {
@@ -252,12 +253,21 @@ export function caseInsensitivePattern(text: string): string {
 }
 
 /**
+ * Whether a list asks for its choices as one types: as the original's, which never lets a list on
+ * a field it knows to be other than a string do it, whatever the list says
+ */
+export function asksAsTyped(control: ControlParam, field: Field | undefined): boolean {
+  return Boolean(control.options?.dynamicOptions) && (field === undefined || field.type === 'string');
+}
+
+/**
  * The aggregation of a list's choices: the most frequent values, as many as the control asks for
- * (OpenSearch's ten when the list searches as one types), with the typed text in any case.
+ * (five when it does not say; OpenSearch's ten when the list searches as one types, or its size
+ * was emptied), with the typed text in any case.
  */
 export function termsAggs(control: ControlParam, field: Field | undefined, query?: string): Dsl {
   const options = control.options ?? {};
-  const size = options.dynamicOptions ? null : (options.size ?? 5);
+  const size = asksAsTyped(control, field) ? null : options.size === undefined ? 5 : options.size;
   const terms: Dsl = { order: { _count: 'desc' } };
   if (size) terms.size = size < 1 ? 1 : size;
   if (field?.scripted) {
@@ -364,8 +374,100 @@ export function rangeInputWidth(min: number, max: number): number {
   return Math.max(String(min).length, String(max).length) / 1.25 + 2;
 }
 
-/** Where a value sits along a track, as the share of the track a thumb's left edge can travel */
+/**
+ * Where a value sits along a track, as the share of the track a thumb's left edge can travel. A
+ * track whose two bounds are one value holds it at its end, as the original's, whose share of 0/0
+ * is taken for the whole.
+ */
 export function trackShare(value: number, min: number, max: number): number {
-  if (max === min) return 0;
+  if (max === min) return 1;
   return Math.min(1, Math.max(0, (value - min) / (max - min)));
+}
+
+// --- The editor's -----------------------------------------------------------------------------
+
+/** What the editor calls a control: its label, else its field, else its kind and its place ("list: 0") */
+export function controlTitle(control: Pick<ControlParam, 'label' | 'fieldName' | 'type'>, index: number): string {
+  if (control.label) return control.label;
+  if (control.fieldName) return control.fieldName;
+  return `${control.type}: ${index}`;
+}
+
+/** A control nobody has filled in yet, with the original's options for its kind */
+export function newControl(type: ControlParam['type'], id = String(Date.now())): ControlParam {
+  return {
+    id,
+    indexPattern: '',
+    fieldName: '',
+    parent: '',
+    label: '',
+    type,
+    options:
+      type === 'range'
+        ? { decimalPlaces: 0, step: 1 }
+        : { type: 'terms', multiselect: true, dynamicOptions: true, size: 5, order: 'desc' },
+  };
+}
+
+/**
+ * The controls with one moved a place up (`direction` below 0) or down, as the original moves
+ * them: the first moved up goes last, and the last moved down goes first.
+ */
+export function movedControl<T>(controls: T[], index: number, direction: number): T[] {
+  const to = direction >= 0 ? index + 1 : index - 1;
+  if (to < 0) return [...controls.slice(1), controls[0]];
+  if (to >= controls.length) return [controls[controls.length - 1], ...controls.slice(0, controls.length - 1)];
+  const swapped = controls.slice();
+  swapped[to] = controls[index];
+  swapped[index] = controls[to];
+  return swapped;
+}
+
+/** Each control's line of parents, itself first: the original's lineage map, which stops where it comes back */
+export function lineageMap(controls: ControlParam[]): Map<string, string[]> {
+  const byId = new Map(controls.map((control) => [control.id, control]));
+  const map = new Map<string, string[]>();
+  for (const control of controls) {
+    const line = [control.id];
+    let current: ControlParam | undefined = control;
+    while (current && typeof current.parent === 'string' && current.parent !== '' && !line.includes(current.parent)) {
+      line.push(current.parent);
+      current = byId.get(current.parent);
+    }
+    map.set(control.id, line);
+  }
+  return map;
+}
+
+/**
+ * What a control may take as its parent, as the original offers it: every control with an index
+ * pattern and a field, a range too, but those that depend on it, itself among them. Each is called
+ * by its title, its place counted among those offered.
+ */
+export function parentCandidates(controls: ControlParam[], id: string): Array<{ value: string; text: string }> {
+  const lineage = lineageMap(controls);
+  return controls
+    .filter((control) => control.indexPattern && control.fieldName && !(lineage.get(control.id) ?? []).includes(id))
+    .map((control, index) => ({ value: control.id, text: controlTitle(control, index) }));
+}
+
+/** The fields an options list may be made on: those that can be aggregated, of the kinds it can list */
+export const listsField = (field: Field): boolean =>
+  Boolean(field.aggregatable) && ['number', 'boolean', 'date', 'ip', 'string'].includes(field.type);
+
+/** The fields a range slider may be made on: the numbers, whether or not they can be aggregated, as the original */
+export const rangesField = (field: Field): boolean => field.type === 'number';
+
+/** The fields offered for a control, by kind: the kinds in order, the names in order within each */
+export function fieldGroups(fields: Field[], keep: (field: Field) => boolean): Array<{ type: string; names: string[] }> {
+  const byType = new Map<string, string[]>();
+  for (const field of fields) {
+    if (!keep(field)) continue;
+    const names = byType.get(field.type) ?? [];
+    names.push(field.name);
+    byType.set(field.type, names);
+  }
+  return [...byType]
+    .map(([type, names]) => ({ type, names: names.sort() }))
+    .sort((a, b) => (a.type < b.type ? -1 : a.type > b.type ? 1 : 0));
 }

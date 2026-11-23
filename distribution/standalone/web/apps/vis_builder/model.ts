@@ -13,6 +13,7 @@ import { aggLabel, type AggConfig } from '../../lib/aggs';
 import { parseSearchSource, serializeSearchSource, type SearchSource } from '../../lib/search_source';
 import type { Filter, Query } from '../../lib/types';
 import type { UiState, Vis } from '../../lib/vis';
+import { paramNames } from '../visualize/agg_params';
 import { defaultParams } from '../visualize/defaults';
 
 export const VIS_BUILDER_TYPE = 'visualization-visbuilder';
@@ -276,12 +277,7 @@ export function visBuilderToSavedObject(
   const stored: VisualizationState = {
     searchField,
     ...rest,
-    activeVisualization: active
-      ? {
-          name: active.name,
-          aggConfigParams: active.aggConfigParams.map(({ id, enabled, type, params, schema, ...others }) => ({ id, enabled, type, params, schema, ...others })),
-        }
-      : undefined,
+    activeVisualization: active ? { name: active.name, aggConfigParams: active.aggConfigParams.map(orderedAgg) } : undefined,
   };
   const query = search.query && { query: search.query.query, language: search.query.language };
   const { searchSourceJSON, references } = serializeSearchSource({
@@ -303,6 +299,43 @@ export function visBuilderToSavedObject(
     },
     references: [...references.filter(isIndex), ...references.filter((reference) => !isIndex(reference))],
   };
+}
+
+const isAgg = (value: unknown): value is AggConfig => isPlainObject(value) && typeof value.id === 'string' && typeof value.type === 'string';
+
+// Keys the original writes before another that the alphabet puts first: the ends of the bounds of
+// a histogram, the query of a filter
+const WRITTEN_FIRST: Record<string, string> = { max: 'min', language: 'query' };
+
+/** A part of a parameter with its keys in the order the original writes them */
+function orderedPart(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(orderedPart);
+  if (isAgg(value)) return orderedAgg(value);
+  if (!isPlainObject(value)) return value;
+  const out: Plain = {};
+  for (const key of Object.keys(value)) {
+    const first = WRITTEN_FIRST[key];
+    if (first !== undefined && first in value && !(first in out)) out[first] = orderedPart(value[first]);
+    if (!(key in out)) out[key] = orderedPart(value[key]);
+  }
+  return out;
+}
+
+/**
+ * An aggregation with its keys in the order the original writes them, which serializes each one
+ * from its type: `id, enabled, type, params, schema`, the parameters in the order the type has
+ * them, and an aggregation inside a parameter the same way. The address, which the page keeps its
+ * state in, sorts them all.
+ */
+export function orderedAgg(agg: AggConfig): AggConfig {
+  const { id, enabled, type, params, schema, ...others } = agg;
+  let ordered = params;
+  if (params) {
+    ordered = {};
+    for (const name of paramNames(type)) if (name in params) ordered[name] = orderedPart(params[name]);
+    for (const [name, value] of Object.entries(params)) if (!(name in ordered)) ordered[name] = orderedPart(value);
+  }
+  return { id, enabled, type, params: ordered, schema, ...others };
 }
 
 /** Why a state cannot be drawn: a part it needs and lacks, as OpenSearch Dashboards says it */

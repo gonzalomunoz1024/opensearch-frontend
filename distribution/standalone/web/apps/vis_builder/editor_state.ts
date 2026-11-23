@@ -12,7 +12,7 @@ import { flattenHit, type RawHit } from '../../lib/docs';
 import type { Field, IndexPattern } from '../../lib/types';
 import { decodeState } from '../../lib/url';
 import type { UiState } from '../../lib/vis';
-import { FIELD_TYPES, PARENT_PIPELINES, SIBLING_PIPELINES, nextAggId } from '../visualize/defaults';
+import { FIELD_TYPES, PARENT_PIPELINES, SIBLING_PIPELINES, nextAggId, orderableMetric } from '../visualize/defaults';
 import {
   VIS_BUILDER_TYPES,
   visBuilderType,
@@ -40,11 +40,14 @@ export interface AppState {
   visualization: VisualizationState;
 }
 
-/** A new visualization: the first kind with nothing on it yet, on the default index pattern */
-export function newAppState(indexPattern: string | undefined): AppState {
+/**
+ * A new visualization: the first kind with nothing on it yet, on the default index pattern. It
+ * keeps the application it was opened from, a dashboard that asked for a new panel, to go back to.
+ */
+export function newAppState(indexPattern: string | undefined, originatingApp?: string): AppState {
   const type = VIS_BUILDER_TYPES[0];
   return {
-    metadata: { editor: { errors: {}, state: 'clean' }, isMigrated: false },
+    metadata: { editor: { errors: {}, state: 'clean' }, isMigrated: false, ...(originatingApp ? { originatingApp } : {}) },
     style: type.style(),
     ui: {},
     visualization: {
@@ -123,11 +126,49 @@ export const withStatus = (state: AppState, status: EditorStatus): AppState => (
 
 /**
  * The state once a saved visualization is opened: its kind, aggregations and settings replace
- * what the page held, and it is clean
+ * what the page held, and it is clean. A page with no state yet, one just arrived at, keeps the
+ * application it was sent from; one with a state keeps what its address says of that.
  */
-export function openedState(current: AppState | undefined, saved: Pick<SavedVisBuilder, 'state'>): AppState {
-  const metadata: MetadataState = current?.metadata ?? { editor: { errors: {}, state: 'loading' }, isMigrated: false };
+export function openedState(current: AppState | undefined, saved: Pick<SavedVisBuilder, 'state'>, originatingApp?: string): AppState {
+  const metadata: MetadataState = current?.metadata ?? {
+    editor: { errors: {}, state: 'loading' },
+    isMigrated: false,
+    ...(originatingApp ? { originatingApp } : {}),
+  };
   return withStatus({ metadata, style: saved.state.style, ui: saved.state.ui, visualization: saved.state.visualization }, 'clean');
+}
+
+/** The application a page was opened from, when the address names one */
+export const originatingAppOf = (state: AppState): string | undefined =>
+  typeof state.metadata.originatingApp === 'string' && state.metadata.originatingApp !== '' ? state.metadata.originatingApp : undefined;
+
+/**
+ * The address an application was last at before the entry of the history the page is in, among
+ * the addresses of the entries of this tab, as the browser lists them. The original keeps the
+ * address each of its applications was left at in the session's storage; the router here keeps it
+ * since the page loaded, and this finds it again once the page was loaded anew in the editor.
+ */
+export function lastAddressIn(
+  entries: ReadonlyArray<string | null | undefined>,
+  at: number,
+  app: string,
+  origin: string,
+  basePath: string
+): string | undefined {
+  for (let index = Math.min(at, entries.length) - 1; index >= 0; index--) {
+    const raw = entries[index];
+    if (!raw) continue;
+    let url: URL;
+    try {
+      url = new URL(raw);
+    } catch {
+      continue;
+    }
+    if (url.origin !== origin || !url.pathname.startsWith(basePath)) continue;
+    const path = url.pathname.slice(basePath.length);
+    if (path === `/app/${app}`) return `${path}${url.search}${url.hash}`;
+  }
+  return undefined;
 }
 
 /** Whether a part of the page holds something invalid: the panel that edits an aggregation */
@@ -168,6 +209,17 @@ export function withDraft(state: AppState, draft: AggConfig | undefined): AppSta
     ...state,
     visualization: { ...state.visualization, activeVisualization: draft ? { ...rest, draftAgg: draft } : rest },
   };
+}
+
+/**
+ * An aggregation as the panel that edits it opens it. The original's editor gives terms that are
+ * ordered by nothing the first metric they can be ordered by, or the alphabet when there is none
+ * (the sample data's objects are saved without one).
+ */
+export function draftForEditing(aggs: AggConfig[], agg: AggConfig): AggConfig {
+  if (agg.type !== 'terms' || agg.params?.orderBy) return agg;
+  const metric = aggs.find((candidate) => candidate.schema === 'metric' && candidate.enabled !== false && orderableMetric(candidate));
+  return { ...agg, params: { ...agg.params, orderBy: metric ? metric.id : '_key' } };
 }
 
 /** What the panel that edits an aggregation keeps, a moment after each valid change */
