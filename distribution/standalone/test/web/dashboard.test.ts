@@ -384,6 +384,60 @@ describe('a dashboard as it is saved', () => {
   });
 });
 
+// What OpenSearch Dashboards 3.9.0 makes of the same panels when it opens such a dashboard and saves it
+describe('a dashboard saved in an older form', () => {
+  const read = (panels: unknown[]) =>
+    dashboardFromSavedObject({ id: 'old', attributes: { title: 'Old', panelsJSON: JSON.stringify(panels) } }).panels;
+
+  it('brings 6.1 and 6.2 panels from their 12 columns to the 48 of today', () => {
+    const panels = read([
+      { gridData: { x: 0, y: 0, w: 6, h: 3, i: '1' }, panelIndex: 1, type: 'visualization', id: 'vis-1', version: '6.1.0' },
+      {
+        gridData: { x: 6, y: 3, w: 6, h: 3, i: '2' },
+        panelIndex: 2,
+        type: 'visualization',
+        id: 'vis-2',
+        version: '6.2.4',
+        embeddableConfig: { vis: { legendOpen: false } },
+      },
+      { gridData: { x: 24, y: 0, w: 24, h: 15, i: '3' }, panelIndex: 3, type: 'visualization', id: 'vis-3', version: '6.3.0' },
+    ]);
+    assert.deepEqual(
+      panels.map((item) => item.gridData),
+      [
+        { x: 0, y: 0, w: 24, h: 15, i: '1' },
+        { x: 24, y: 15, w: 24, h: 15, i: '2' },
+        { x: 24, y: 0, w: 24, h: 15, i: '3' },
+      ]
+    );
+    assert.deepEqual(panels[1].embeddableConfig, { vis: { legendOpen: false } });
+  });
+
+  it("keeps a saved search's columns and sort, which panels before 6.4 held beside their settings", () => {
+    const panels = read([
+      { col: 1, row: 5, size_x: 12, size_y: 4, panelIndex: 3, type: 'search', id: 'search-1', columns: ['category'], sort: ['order_date', 'asc'] },
+      { gridData: { x: 6, y: 0, w: 6, h: 3, i: '2' }, panelIndex: 2, type: 'search', id: 'search-1', version: '6.1.0', sort: ['order_date', 'asc'] },
+      {
+        gridData: { x: 0, y: 0, w: 24, h: 15, i: '4' },
+        panelIndex: 4,
+        type: 'search',
+        id: 'search-1',
+        version: '6.3.0',
+        embeddableConfig: { some: 1 },
+        columns: ['a'],
+        sort: ['b', 'desc'],
+      },
+      { gridData: { x: 0, y: 0, w: 24, h: 15, i: '5' }, panelIndex: '5', type: 'search', id: 'search-1', version: '7.2.0', columns: ['a'] },
+    ]);
+    assert.deepEqual(panels[0].gridData, { x: 0, y: 20, w: 48, h: 20, i: '3' });
+    assert.deepEqual(panels[0].embeddableConfig, { columns: ['category'], sort: ['order_date', 'asc'] });
+    assert.deepEqual(panels[1].embeddableConfig, { sort: ['order_date', 'asc'] });
+    assert.deepEqual(panels[2].embeddableConfig, { some: 1, columns: ['a'], sort: ['b', 'desc'] });
+    // From 6.4 on they are among the settings already; what is beside them is not read
+    assert.deepEqual(panels[3].embeddableConfig, {});
+  });
+});
+
 describe('a dashboard in the address', () => {
   it('carries its panels as the original does, with their version', () => {
     const url = panelsToUrl([panel('a', 0, 0, { title: 'Own' })]);
