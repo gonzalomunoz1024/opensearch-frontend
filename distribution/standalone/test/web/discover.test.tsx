@@ -14,7 +14,7 @@ import {
 } from '../../web/apps/discover/context';
 import { Pager, filterColumns, isFilterable, sourceEntries, toggledColumns } from '../../web/apps/discover/doc_table';
 import { contextLinkState, docFieldType, docFields } from '../../web/apps/discover/doc_viewer';
-import { valueFilter } from '../../web/apps/discover/filters';
+import { filtersOf, valueFilter } from '../../web/apps/discover/filters';
 import { allFields, sortClause } from '../../web/apps/discover/search';
 import {
   bucketAt,
@@ -489,6 +489,19 @@ describe("Discover's settings as the original reads them", () => {
     assert.equal(valueFilter({ name: 'agent' }, undefined, true, 'logs', false).meta.negate, false);
     // filters:pinnedByDefault puts it among the pinned filters
     assert.deepEqual(valueFilter({ name: 'agent' }, 'curl', false, 'logs', true).$state, { store: 'globalState' });
+  });
+
+  it('takes from an address only the filters there are, as the original does', () => {
+    // An address written by hand: no list, or a list with what is not a filter in it. The original
+    // searches as if those were not there; Discover could not be drawn at all
+    assert.deepEqual(filtersOf({ a: 1 }), []);
+    assert.deepEqual(filtersOf('response:404'), []);
+    assert.deepEqual(filtersOf(undefined), []);
+    const phrase = valueFilter({ name: 'agent' }, 'curl', false, 'logs', false);
+    assert.deepEqual(filtersOf([null, 1, 'x', [phrase], phrase]), [phrase]);
+    // A filter without its meta is given an empty one, as the original's mapFilter gives it
+    assert.deepEqual(filtersOf([{ query: { match_all: {} } }]), [{ query: { match_all: {} }, meta: {} }]);
+    assert.deepEqual(filtersOf([{ meta: null, exists: { field: 'agent' } }]), [{ meta: {}, exists: { field: 'agent' } }]);
   });
 });
 

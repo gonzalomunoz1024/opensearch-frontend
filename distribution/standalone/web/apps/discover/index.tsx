@@ -32,7 +32,7 @@ import { addRecentlyAccessed, currentGlobalParam, useAutoRefresh, useBreadcrumbs
 import { DocDetails } from './doc_viewer';
 import { DocTable, filterColumns, toggledColumns, type SortPair } from './doc_table';
 import { DocPage, ContextPage } from './doc_pages';
-import { valueFilter } from './filters';
+import { filtersOf, valueFilter } from './filters';
 import { Histogram } from './histogram';
 import { bucketSpan, parseBucketInterval, shortestBucket } from './histogram_scale';
 import { aggContext, buildDiscoverRequest, histogramAgg } from './search';
@@ -198,7 +198,7 @@ function DiscoverMain({ basePath, savedId }: { basePath: string; savedId?: strin
     [urlQuery, urlApp, savedSource]
   );
   const appFilters: Filter[] = useMemo(
-    () => urlQuery.filters ?? urlApp.filters ?? savedSource?.filters ?? [],
+    () => filtersOf(urlQuery.filters ?? urlApp.filters ?? savedSource?.filters ?? []),
     [urlQuery, urlApp, savedSource]
   );
   const filters = useMemo(() => [...global.filters, ...appFilters.filter((filter) => !isPinned(filter))], [global.filters, appFilters]);
