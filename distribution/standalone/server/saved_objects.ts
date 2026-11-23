@@ -7,8 +7,9 @@
 
 import { randomUUID } from 'node:crypto';
 import { type SavedObject, type SavedObjectReference } from '../common/saved_objects';
-import { migrateDocument } from './saved_objects_migrations';
+import { migrateDocument, type MigrationDocument } from './saved_objects_migrations';
 import { HttpError, badRequest } from './http';
+import { silentLogger, type Logger } from './logger';
 import { OpenSearchError, type OpenSearchClient } from './opensearch';
 import mappings from './saved_objects_mappings.json';
 import { badRequestError, filterToKueryNode, getSearchDsl, includedFields, type IndexMapping } from './saved_objects_search';
@@ -205,7 +206,9 @@ const namespacesOf = (type: string, source: RawSource) =>
 export class SavedObjectsRepository {
   constructor(
     private readonly client: OpenSearchClient,
-    private readonly index: string
+    private readonly index: string,
+    /** Where a migration that fails says so, as the original's migrator logs it */
+    private readonly log: Logger = silentLogger
   ) {}
 
   /**
@@ -263,7 +266,16 @@ export class SavedObjectsRepository {
   ): Promise<SavedObject & { namespaces?: string[] }> {
     this.assertType(type);
     const id = options.id ?? randomUUID();
-    const source = this.toSource(type, attributes, { ...options, id });
+    // As the original's create hands it to its migrator: an id made here is not known to it yet
+    const source = this.toSource({
+      id: options.id,
+      type,
+      originId: options.originId,
+      attributes,
+      migrationVersion: options.migrationVersion,
+      updated_at: new Date().toISOString(),
+      references: options.references ?? [],
+    });
     const overwrite = Boolean(options.id && options.overwrite);
     const result = await this.call<RawDocument>({
       method: 'PUT',
@@ -459,7 +471,16 @@ export class SavedObjectsRepository {
       }
       const method = object.id && options.overwrite ? 'index' : 'create';
       const id = object.id ?? randomUUID();
-      const source = this.toSource(object.type, object.attributes, { ...object, id }, time);
+      // As the original's bulk create hands it to its migrator
+      const source = this.toSource({
+        id,
+        type: object.type,
+        attributes: object.attributes,
+        migrationVersion: object.migrationVersion,
+        updated_at: time,
+        references: object.references || [],
+        originId: object.originId,
+      });
       return { kind: 'write', object, method, id, source };
     });
     const lines: string[] = [];
@@ -578,28 +599,15 @@ export class SavedObjectsRepository {
   }
 
   /** The document an object is written as, migrated as the original's migrator does */
-  private toSource(
-    type: string,
-    attributes: Record<string, unknown>,
-    options: CreateOptions & { id: string },
-    time = new Date().toISOString()
-  ) {
-    const migrated = migrateDocument({
-      id: options.id,
-      type,
-      attributes,
-      migrationVersion: options.migrationVersion,
-      updated_at: time,
-      references: options.references ?? [],
-      originId: options.originId,
-    });
+  private toSource(document: MigrationDocument): RawSource {
+    const migrated = migrateDocument(document, this.log);
     return {
-      [type]: migrated.attributes,
-      type,
+      [migrated.type]: migrated.attributes,
+      type: migrated.type,
       references: migrated.references ?? [],
       ...(migrated.originId ? { originId: migrated.originId } : {}),
       ...(migrated.migrationVersion ? { migrationVersion: migrated.migrationVersion } : {}),
-      updated_at: time,
+      ...(migrated.updated_at ? { updated_at: migrated.updated_at } : {}),
     } as RawSource;
   }
 
