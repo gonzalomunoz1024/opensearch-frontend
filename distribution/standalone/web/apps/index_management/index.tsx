@@ -35,6 +35,7 @@ import { ROUTES, SNAPSHOT_MANAGEMENT_PATH } from './routes';
 import { ComposableTemplateDetail, TemplateDetail } from './template_pages';
 import { ComposableTemplates, Templates } from './templates';
 import '../../styles/index_management.css';
+import '../../styles/index_management_indexes.css';
 
 export { startJobs } from './job_handlers';
 
@@ -107,6 +108,17 @@ const NO_NAV_UNDER: string[] = [
   ROUTES.CREATE_DATA_STREAM,
   ROUTES.FORCE_MERGE,
   ROUTES.CREATE_COMPOSABLE_TEMPLATE,
+];
+
+// The pages the plugin's frame puts no padding around: each brings its own (25 px above and 50 px
+// beside a policy's editor, 25 px beside Change policy, 5 and 50 px on a snapshot policy's pages)
+const NO_PADDING: string[] = [
+  ROUTES.CHANGE_POLICY,
+  ROUTES.CREATE_POLICY,
+  ROUTES.EDIT_POLICY,
+  ROUTES.SNAPSHOT_POLICY_DETAILS,
+  ROUTES.CREATE_SNAPSHOT_POLICY,
+  ROUTES.EDIT_SNAPSHOT_POLICY,
 ];
 
 interface Page {
@@ -226,7 +238,10 @@ export function IndexManagement() {
           ))}
         </nav>
       )}
-      <div className="ismBody" key={found ? `${found.page.route}/${found.rest}` : hashPath}>
+      <div
+        className={cx('ismBody', found && NO_PADDING.includes(found.page.route) && 'ismBody--bare')}
+        key={found ? `${found.page.route}/${found.rest}` : hashPath}
+      >
         {found ? (
           found.page.render(found.rest)
         ) : (

@@ -97,7 +97,9 @@ export function sidebarTitle(type: string, linked: boolean): 'linked' | 'indexPa
 /** The kinds whose changes can be applied as they are made (`editorConfig.enableAutoApply`) */
 export const canAutoApply = (type: string): boolean => type === 'markdown' || type === 'vega';
 
-/** The heading a screen reader announces for the page */
-export function editorHeading(title: string | undefined, typeTitle: string, saved: boolean): string {
-  return saved ? `${title ?? ''} ${typeTitle} visualization` : `Visualization of type ${typeTitle} embedded into dashboards app`;
+/** The heading a screen reader announces for the page: a new one names the application that opened it */
+export function editorHeading(title: string | undefined, typeTitle: string, saved: boolean, originatingApp?: string): string {
+  return saved
+    ? `${title ?? ''} ${typeTitle} visualization`
+    : `Visualization of type ${typeTitle} embedded into ${originatingApp || 'dashboards'} app`;
 }

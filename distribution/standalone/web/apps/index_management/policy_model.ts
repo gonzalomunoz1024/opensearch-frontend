@@ -6,6 +6,9 @@
  * goes when it is added before or after another.
  */
 
+import type { CodeToken } from '../../components/code_editor';
+import { tokenizeJson } from '../../lib/json_text';
+
 export interface Transition {
   state_name: string;
   conditions?: {
@@ -459,4 +462,54 @@ export function withDrafts(action: Action, drafts: Drafts): Action {
     return { ...action, convert_index_to_remote: settings };
   }
   return action;
+}
+
+// --- JSON as the plugin's code editor colours it ---------------------------------------------------------
+
+/** The spaces of one step of indentation in the plugin's code editor (Ace's tab size) */
+const ACE_TAB_SIZE = 4;
+
+/**
+ * The runs of a JSON text with each brace and bracket a run of its own, of the kind `Paren`, as
+ * Ace's JSON mode makes them (its themes draw them bold), and the indentation of a line cut into
+ * steps of the kind `Indent`, which Ace draws with a guide at their right: as Ace does, every step
+ * but the one before the text, so that the guides run under the start of the outer lines' text.
+ * The other runs are left as they are.
+ */
+export function aceJsonTokens(text: string): CodeToken[][] {
+  return tokenizeJson(text).map((line) => {
+    const tokens = line.flatMap((token) => {
+      if (token.kind || !/[{}[\]]/.test(token.text)) return [token];
+      return token.text
+        .split(/([{}[\]])/)
+        .filter((piece) => piece !== '')
+        .map((piece) => (/^[{}[\]]$/.test(piece) ? { text: piece, kind: 'Paren' } : { text: piece }));
+    });
+    const [first, ...rest] = tokens;
+    if (!first || first.kind || !first.text.startsWith(' ')) return tokens;
+    // Where Ace's renderIndentGuide finds the last space of the indentation
+    const columns = first.text.search(/\s\S| \t|\t |\s$/);
+    const steps = Math.floor(Math.max(0, columns) / ACE_TAB_SIZE);
+    if (steps === 0) return tokens;
+    const after = first.text.slice(steps * ACE_TAB_SIZE);
+    return [
+      ...Array.from({ length: steps }, () => ({ text: ' '.repeat(ACE_TAB_SIZE), kind: 'Indent' })),
+      ...(after ? [{ text: after }] : []),
+      ...rest,
+    ];
+  });
+}
+
+/**
+ * The line, counted from 0, that Ace draws on a band: the line of the cursor, or of a selection
+ * within one line; none while a selection spans lines.
+ */
+export function aceActiveLine(text: string, start: number, end: number): number | undefined {
+  const lineAt = (offset: number) => {
+    let line = 0;
+    for (let at = text.indexOf('\n'); at !== -1 && at < offset; at = text.indexOf('\n', at + 1)) line += 1;
+    return line;
+  };
+  const first = lineAt(Math.min(start, text.length));
+  return first === lineAt(Math.min(end, text.length)) ? first : undefined;
 }
