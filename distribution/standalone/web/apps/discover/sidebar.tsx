@@ -300,10 +300,14 @@ function FieldRow({
       <div className="dscSidebarField" data-test-subj="dscSidebarField">
         <FieldToken type={field.type} scripted={field.scripted} />
         <div className="dscSidebarField__label">
-          <span className="dscSidebarField__name" title={field.name} data-test-subj={`field-${field.name}`}>
-            {wrapOnDot(shortenNames ? shortDots(field.name) : field.name)}
-          </span>
+          {/* Its whole name, in the original's tooltip, once the pointer stays on it */}
+          <Tooltip content={field.name} delay="long">
+            <span className="dscSidebarField__name" data-test-subj={`field-${field.name}`}>
+              {wrapOnDot(shortenNames ? shortDots(field.name) : field.name)}
+            </span>
+          </Tooltip>
         </div>
+        {/* The original's two small empty icon buttons in the primary colour, round */}
         {!isSource && (
           <Popover
             open={open}
@@ -311,11 +315,12 @@ function FieldRow({
             side="right"
             className="dscFieldPopover"
             button={
-              <IconButton
+              <Button
+                variant="empty"
+                size="xs"
                 icon="inspect"
-                className="dscSidebarField__action"
-                label={`View ${field.name} summary`}
-                title=""
+                className="atlButton--round dscSidebarField__action"
+                aria-label={`View ${field.name} summary`}
                 onClick={() => setOpen(!open)}
                 testId={`field-${field.name}-showDetails`}
               />
@@ -333,17 +338,20 @@ function FieldRow({
           </Popover>
         )}
         {!isSource && (
-          <IconButton
-            icon={selected ? 'cross' : 'plusCircle'}
-            className={cx('dscSidebarField__action', selected && 'dscSidebarField__action--remove')}
-            label={selected ? `Remove ${field.name} from table` : `Add ${field.name} to table`}
-            title={selected ? 'Remove field from table' : 'Add field as column'}
-            onClick={(event) => {
-              event.currentTarget.focus();
-              onToggle(field.name);
-            }}
-            testId={`fieldToggle-${field.name}`}
-          />
+          <Tooltip content={selected ? 'Remove field from table' : 'Add field as column'} delay="long">
+            <Button
+              variant={selected ? 'dangerEmpty' : 'empty'}
+              size="xs"
+              icon={selected ? 'cross' : 'plusInCircleFilled'}
+              className={cx('atlButton--round', 'dscSidebarField__action', selected && 'dscSidebarField__action--remove')}
+              aria-label={selected ? `Remove ${field.name} from table` : `Add ${field.name} to table`}
+              onClick={(event) => {
+                event.currentTarget.focus();
+                onToggle(field.name);
+              }}
+              testId={`fieldToggle-${field.name}`}
+            />
+          </Tooltip>
         )}
       </div>
     </div>
@@ -472,6 +480,7 @@ export function Sidebar({
       </div>
       <div className="dscSidebar__search">
         <SearchField
+          compact
           className="dscSidebar__searchInput"
           value={filter.name}
           onChange={(name) => patch({ name })}
