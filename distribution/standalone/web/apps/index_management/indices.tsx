@@ -6,16 +6,15 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, CallOut, IconButton } from '../../components/basic';
+import { Button, CallOut, Health } from '../../components/basic';
 import { ComboBox } from '../../components/combo_box';
 import { Switch, TextField } from '../../components/form';
 import { Modal, copyText, type MenuItem } from '../../components/overlay';
+import { readSearch } from '../../lib/search_syntax';
 import { useBreadcrumbs } from '../../shell/state';
 import {
   ActionsMenu,
   ExternalLink,
-  FilterButton,
-  IndexHealth,
   SearchRow,
   Table,
   go,
@@ -24,7 +23,9 @@ import {
   useListQuery,
   type TableColumn,
 } from './common';
-import { ContentPanel, ContentPanelActions } from './content_panel';
+import { ContentPanel, ContentPanelActions, ListEmpty } from './content_panel';
+import { HEALTH_TONES } from './data_streams';
+import { FilterBox } from './filter_box';
 import { FormRow } from './form_row';
 import { JsonBlock } from './json_block';
 import { ModalButtons, ModalNames, PluginModal, TypeTheWord } from './plugin_modal';
@@ -61,7 +62,7 @@ export function IndexName({ index }: { index: string }) {
   return (
     <>
       <span className="ismIndexName__copy">
-        <IconButton icon="copyClipboard" iconSize="s" label="Copy" size="s" onClick={() => copyText(index)} />
+        <Button variant="ghost" size="xs" icon="copyClipboard" iconSize="s" aria-label="Copy" onClick={() => copyText(index)} />
       </span>
       <a
         href={`#/index-detail/${index}`}
@@ -82,7 +83,12 @@ export function indicesColumns(withDataStream: boolean): Array<TableColumn<Index
       name: 'Health',
       sortable: true,
       truncate: true,
-      render: (row) => <IndexHealth health={row.health} status={row.status} />,
+      // As it comes, shown with a capital; a closed index has its status in its place
+      render: (row) => (
+        <span className="ismCapitalize">
+          <Health tone={row.health ? HEALTH_TONES[row.health] : undefined}>{row.health || row.status}</Health>
+        </span>
+      ),
     },
     {
       field: 'data_stream',
@@ -608,19 +614,28 @@ export function Indices() {
     >
       <SearchRow
         className="ismIndexControls"
+        clearable
         search={query.search}
-        onSearch={(search) => setQuery({ search, from: 0 })}
+        onSearch={(search) => {
+          // A text that cannot be read as a search leaves the last readable one in place, as the plugin's
+          if (readSearch(search) === undefined) return;
+          setQuery({ search, from: 0 });
+        }}
       >
+        {/* The search bar's filter, 8 px from its box */}
         {showDataStreams && (
-          <FilterButton
-            name="Data streams"
-            options={(dataStreams ?? []).map((value) => ({ value }))}
-            selected={clauses.dataStreams}
-            onChange={(values) => setQuery({ search: withDataStreams(query.search, values), from: 0 })}
-            empty="No data streams found"
-          />
+          <div className="ismIndexControls__filter">
+            <FilterBox
+              name="Data streams"
+              options={dataStreams ?? []}
+              selected={clauses.dataStreams}
+              onChange={(values) => setQuery({ search: withDataStreams(query.search, values), from: 0 })}
+              empty="No data streams found"
+            />
+          </div>
         )}
         <Switch
+          compressed
           label="Show data stream indexes"
           checked={showDataStreams}
           onChange={(checked) => setQuery({ showDataStreams: String(checked) })}
@@ -630,6 +645,7 @@ export function Indices() {
       <hr className="ismContentPanel__rule" />
       <Table
         fixed
+        caption
         columns={columns}
         rows={rows}
         total={total}
@@ -639,15 +655,15 @@ export function Indices() {
         selected={selected}
         onSelect={setSelected}
         loading={loading}
+        emptyWhileLoading
         empty={
-          <div className="ismEmpty">
-            <p>{loading ? EMPTY.loading : filtered ? EMPTY.filtered : EMPTY.none}</p>
+          <ListEmpty wide text={loading ? EMPTY.loading : filtered ? EMPTY.filtered : EMPTY.none}>
             {!loading && filtered && (
-              <Button variant="primary" size="s" onClick={() => setQuery({ search: '' })} testId="indexEmptyPromptResetFilters">
+              <Button variant="primary" onClick={() => setQuery({ search: '' })} testId="indexEmptyPromptResetFilters">
                 Reset Filters
               </Button>
             )}
-          </div>
+          </ListEmpty>
         }
       />
     </ContentPanel>

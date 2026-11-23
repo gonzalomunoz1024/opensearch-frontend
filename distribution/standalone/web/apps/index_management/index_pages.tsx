@@ -260,15 +260,27 @@ export const IndexForm = forwardRef<
   return (
     <>
       {withoutPanel ? (
-        <div className="ismDefinition ismDefinition--index">
-          <h3 className="ismDefinition__title">Define index</h3>
+        // The parts one under the other, each under the theme's small title (a span, a heading and a
+        // block, as the plugin has them), 24 px apart
+        <>
+          <span className="ismPanelTitle">Define index</span>
+          <div className="ismSpacer ismSpacer--s" />
           {define}
-          {importButton}
-          <h3 className="ismDefinition__title">Index settings</h3>
+          {importButton && (
+            <>
+              <div className="ismSpacer ismSpacer--l" />
+              {importButton}
+            </>
+          )}
+          <div className="ismSpacer ismSpacer--l" />
+          <h2 className="ismPanelTitle">Index settings</h2>
+          <div className="ismSpacer ismSpacer--s" />
           {settings}
-          <h3 className="ismDefinition__title">Index mapping</h3>
+          <div className="ismSpacer ismSpacer--l" />
+          <div className="ismPanelTitle">Index mapping</div>
+          <div className="ismSpacer ismSpacer--s" />
           {mappings}
-        </div>
+        </>
       ) : (
         <>
           <FormPanel title="Define index">{define}</FormPanel>
@@ -639,6 +651,7 @@ export function IndexDetail({ index }: { index: string }) {
       </Panel>
       <div className="ismSpacer ismSpacer--l" />
       <Tabs
+        size="s"
         tabs={TABS.map((item) => ({ id: item.id, label: item.label }))}
         selected={tab}
         onSelect={(id) => {

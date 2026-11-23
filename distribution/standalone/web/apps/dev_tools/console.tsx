@@ -14,6 +14,7 @@ import { ConfirmModal, Flyout, Modal, Popover, Portal, Tooltip, downloadFile } f
 import { formatDate } from '../../lib/dates';
 import { services } from '../../services';
 import { trackLoading } from '../../shell/loading_count';
+import { buildMatcher, documentationFor, type ApiSpec } from './console_docs';
 import { ConsoleEditor, ConsoleSuggestions, type ConsoleEditorHandle } from './console_editor';
 import {
   autoIndent,
@@ -42,6 +43,7 @@ import {
   type Answer,
   type ClusterNames,
   type ConsoleRequest,
+  type ConsoleText,
   type PastRequest,
   type Suggestions,
 } from './console_model';
@@ -99,13 +101,9 @@ async function send(request: ConsoleRequest, several: boolean, signal: AbortSign
     const response = asked.response;
     const status = response.status;
     const statusText = response.statusText || REASONS[status] || '';
-    let text = asked.text;
-    let contentType = response.headers.get('content-type') ?? 'text/plain';
-    // OpenSearch Dashboards answers a HEAD request with its status as text
-    if (request.method.toUpperCase() === 'HEAD') {
-      text = `${status} - ${REASONS[status] ?? statusText}`;
-      contentType = 'text/plain';
-    }
+    // A HEAD request's answer is the proxy's own text, "200 - true", as the original's proxy writes it
+    const text = asked.text;
+    const contentType = response.headers.get('content-type') ?? 'text/plain';
     const ok = status >= 200 && status < 300;
     const timeMs = Date.now() - started;
     if (!ok) {
@@ -123,7 +121,7 @@ async function send(request: ConsoleRequest, several: boolean, signal: AbortSign
 
 // --- The names of the cluster, for what could be typed next ------------------------------------
 
-interface Names {
+export interface Names {
   indices: Record<string, string[]>;
   templates: string[];
   fields: Record<string, string[]>;
@@ -151,32 +149,60 @@ async function systemGet<T>(path: string): Promise<T> {
   return JSON.parse(text) as T;
 }
 
-function useClusterNames(settings: ConsoleSettings): [ClusterNames, () => void] {
-  const [names, setNames] = useState<Names>({ indices: {}, templates: [], fields: {} });
+/** The queries of an imported file: any "text" that is not empty, a number as its digits, as the original asks no more of it */
+export function importedText(parsed: { text?: unknown } | null | undefined): string | undefined {
+  return parsed?.text ? String(parsed.text) : undefined;
+}
+
+/** The names loaded, without the kinds the settings do not want suggested */
+export function suggestedNames(loaded: Names, wanted: ConsoleSettings['autocomplete']): Names {
+  return {
+    indices: wanted.indices ? loaded.indices : {},
+    fields: wanted.fields ? loaded.fields : {},
+    templates: wanted.templates ? loaded.templates : [],
+  };
+}
+
+function useClusterNames(settings: ConsoleSettings): [ClusterNames, (autocomplete?: ConsoleSettings['autocomplete']) => void] {
+  const [loaded, setNames] = useState<Names>({ indices: {}, templates: [], fields: {} });
   const wanted = settings.autocomplete;
-  const refresh = useCallback(() => {
+  const latest = useRef(wanted);
+  latest.current = wanted;
+  // Asks for the names the settings want, or the ones ticked in the settings dialog when it asks
+  const refresh = useCallback((autocomplete: ConsoleSettings['autocomplete'] = latest.current) => {
     type Aliases = Record<string, { aliases?: Record<string, unknown> }>;
     type Mappings = Record<string, { mappings?: { properties?: unknown } }>;
-    const asked = new Set(autocompleteRequests(wanted).map((request) => request.name));
+    const asked = new Set(autocompleteRequests(autocomplete).map((request) => request.name));
     void Promise.all([
-      asked.has('indices') ? systemGet<Aliases>('_aliases').catch(() => undefined) : Promise.resolve(undefined),
+      // In the original's order: the fields, the indices, the templates
       asked.has('fields') ? systemGet<Mappings>('_mapping').catch(() => undefined) : Promise.resolve(undefined),
+      asked.has('indices') ? systemGet<Aliases>('_aliases').catch(() => undefined) : Promise.resolve(undefined),
       asked.has('templates') ? systemGet<Record<string, unknown>>('_template').catch(() => undefined) : Promise.resolve(undefined),
-    ]).then(([aliases, mappings, templates]) => {
+    ]).then(([mappings, aliases, templates]) => {
       setNames((now) => ({
-        indices: aliases ? Object.fromEntries(Object.entries(aliases).map(([index, value]) => [index, Object.keys(value?.aliases ?? {})])) : asked.has('indices') ? now.indices : {},
-        fields: mappings ? Object.fromEntries(Object.entries(mappings).map(([index, value]) => [index, fieldNames(value?.mappings?.properties)])) : asked.has('fields') ? now.fields : {},
-        templates: templates ? Object.keys(templates) : asked.has('templates') ? now.templates : [],
+        indices: aliases ? Object.fromEntries(Object.entries(aliases).map(([index, value]) => [index, Object.keys(value?.aliases ?? {})])) : now.indices,
+        fields: mappings ? Object.fromEntries(Object.entries(mappings).map(([index, value]) => [index, fieldNames(value?.mappings?.properties)])) : now.fields,
+        templates: templates ? Object.keys(templates) : now.templates,
       }));
     });
-  }, [wanted]);
+  }, []);
 
+  // Asked once when the console opens, and every minute while the settings say so. Saving the
+  // settings asks nothing, as the original asks nothing then without a data source.
   useEffect(() => {
     refresh();
+  }, [refresh]);
+  useEffect(() => {
     if (!settings.polling) return undefined;
-    const timer = window.setInterval(refresh, 60000);
+    const timer = window.setInterval(() => refresh(), 60000);
     return () => window.clearInterval(timer);
   }, [refresh, settings.polling]);
+
+  // What the settings no longer want is not suggested, though it was asked for before
+  const names = useMemo<Names>(
+    () => suggestedNames(loaded, wanted),
+    [loaded, wanted.fields, wanted.indices, wanted.templates]
+  );
 
   const cluster = useMemo<ClusterNames>(() => {
     const indices = Object.keys(names.indices).sort();
@@ -204,34 +230,17 @@ function useClusterNames(settings: ConsoleSettings): [ClusterNames, () => void] 
 
 // --- Where the manual is -----------------------------------------------------------------------
 
-const DOCS = 'https://opensearch.org/docs/latest';
-const DOC_PAGES: Array<[RegExp, string]> = [
-  [/(^|\/)_plugins\/_(sql|ppl)/, '/search-plugins/sql/sql-ppl-api/'],
-  [/(^|\/)_plugins\/_ism/, '/im-plugin/ism/api/'],
-  [/(^|\/)_plugins\/_rollup/, '/im-plugin/index-rollups/rollup-api/'],
-  [/(^|\/)_plugins\/_transform/, '/im-plugin/index-transforms/transforms-apis/'],
-  [/(^|\/)_plugins\/_sm/, '/tuning-your-cluster/availability-and-recovery/snapshots/sm-api/'],
-  [/(^|\/)_msearch/, '/api-reference/multi-search/'],
-  [/(^|\/)_search\/scroll/, '/api-reference/scroll/'],
-  [/(^|\/)_search/, '/api-reference/search/'],
-  [/(^|\/)_count/, '/api-reference/count/'],
-  [/(^|\/)_bulk/, '/api-reference/document-apis/bulk/'],
-  [/(^|\/)_mget/, '/api-reference/document-apis/multi-get/'],
-  [/(^|\/)_reindex/, '/api-reference/document-apis/reindex/'],
-  [/(^|\/)_update_by_query/, '/api-reference/document-apis/update-by-query/'],
-  [/(^|\/)_delete_by_query/, '/api-reference/document-apis/delete-by-query/'],
-  [/(^|\/)_(doc|create|update|source)(\/|$)/, '/api-reference/document-apis/index/'],
-  [/^\/?_cat/, '/api-reference/cat/index/'],
-  [/^\/?_cluster/, '/api-reference/cluster-api/index/'],
-  [/^\/?_nodes/, '/api-reference/nodes-apis/index/'],
-  [/^\/?_snapshot/, '/api-reference/snapshots/index/'],
-  [/^\/?_ingest/, '/api-reference/ingest-apis/index/'],
-  [/^\/?_tasks/, '/api-reference/tasks/'],
-  [/(^|\/)_analyze/, '/api-reference/analyze-apis/'],
-  [/(^|\/)_(mapping|settings|alias|aliases|template|index_template|component_template|data_stream|refresh|flush|forcemerge|open|close|rollover|shrink|split|clone|stats|segments|recovery)/, '/api-reference/index-apis/index/'],
-];
+type Matcher = ReturnType<typeof buildMatcher>;
+let specs: Promise<Matcher | undefined> | undefined;
 
-const docsFor = (url: string) => `${DOCS}${DOC_PAGES.find(([pattern]) => pattern.test(url))?.[1] ?? '/api-reference/'}`;
+/** The spec definitions of the server, asked for once as the original's console asks at its start */
+function loadSpecs(): Promise<Matcher | undefined> {
+  specs ??= services.http
+    .get<ApiSpec>('/api/console/api_server')
+    .then((api) => buildMatcher(api))
+    .catch(() => undefined);
+  return specs;
+}
 
 // --- The panels around the editor --------------------------------------------------------------
 
@@ -508,6 +517,41 @@ function SettingsModal({
   );
 }
 
+/** The file picker of the original (EuiFilePicker): a zone a file is dropped on or chosen through, then named, with a way to take it back */
+function FilePicker({ file, onChange }: { file?: File; onChange: (file?: File) => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  return (
+    <div className={cx('dvtFilePicker', file && 'dvtFilePicker--selected')}>
+      <input
+        ref={input}
+        type="file"
+        name="queryFileImport"
+        accept=".ndjson, .json"
+        className="dvtFilePicker__input"
+        aria-label="Select a file to import"
+        onChange={(event) => onChange(event.target.files?.[0])}
+        data-test-subj="queryFilePicker"
+      />
+      <div className="dvtFilePicker__prompt">
+        <Icon name="importAction" size="l" />
+        <div className="dvtFilePicker__text">{file ? <strong>{file.name}</strong> : 'Import'}</div>
+        {file && (
+          <button
+            type="button"
+            className="dvtFilePicker__remove"
+            onClick={() => {
+              if (input.current) input.current.value = '';
+              onChange(undefined);
+            }}
+          >
+            Remove
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ImportFlyout({ onImported, onClose }: { onImported: (object: TextObject) => void; onClose: () => void }) {
   const [file, setFile] = useState<File>();
   const [parsed, setParsed] = useState<{ text?: unknown }>();
@@ -531,7 +575,8 @@ function ImportFlyout({ onImported, onClose }: { onImported: (object: TextObject
   const run = (overwriteConfirmed: boolean) => {
     setError(undefined);
     const current = storage.loadText();
-    if (typeof parsed?.text !== 'string' || !parsed.text) {
+    const imported = importedText(parsed);
+    if (imported === undefined) {
       setError('The selected file is not valid. Please select a valid JSON file.');
       return;
     }
@@ -541,12 +586,12 @@ function ImportFlyout({ onImported, onClose }: { onImported: (object: TextObject
         return;
       }
       setLoading('Importing queries and overwriting existing ones...');
-      onImported({ ...current, createdAt: Date.now(), updatedAt: Date.now(), text: parsed.text });
+      onImported({ ...current, createdAt: Date.now(), updatedAt: Date.now(), text: imported });
       services.toasts.success('Queries overwritten.');
     } else {
       setLoading('Importing queries and merging with existing ones...');
       const stamp = formatDate(new Date(), services.uiSettings.get('dateFormat', 'MMM D, YYYY @ HH:mm:ss.SSS'), services.timeZone());
-      onImported({ ...current, createdAt: Date.now(), updatedAt: Date.now(), text: `${current.text}\n\n#Imported on ${stamp}\n\n${parsed.text}` });
+      onImported({ ...current, createdAt: Date.now(), updatedAt: Date.now(), text: `${current.text}\n\n#Imported on ${stamp}\n\n${imported}` });
       services.toasts.success('Queries merged.');
     }
     setLoading(undefined);
@@ -580,10 +625,10 @@ function ImportFlyout({ onImported, onClose }: { onImported: (object: TextObject
         ) : (
           <>
             <FormRow label="Select a file to import" full>
-              <input type="file" name="queryFileImport" accept=".ndjson, .json" onChange={(event) => void pick(event.target.files?.[0])} data-test-subj="queryFilePicker" />
+              <FilePicker file={file} onChange={(picked) => void pick(picked)} />
             </FormRow>
-            <div className="atlStack dvtTight">
-              <strong>Import options</strong>
+            <div className="dvtImportOptions">
+              <strong className="dvtImportOptions__title">Import options</strong>
               <RadioGroup<'merge' | 'overwrite'>
                 value={mode}
                 onChange={setMode}
@@ -698,11 +743,14 @@ function HistoryPanel({ settings, onApply, onClose }: { settings: ConsoleSetting
   );
 }
 
-const badgeTone = (code: number) => (code <= 199 ? undefined : code <= 299 ? 'healthy' : code <= 399 ? 'accent' : code <= 499 ? 'warning' : 'critical');
+/** The colour of the status badge; an answer without a status (the server was not reached) is a failure, as in the original */
+export const badgeTone = (code: number | undefined) =>
+  code === undefined ? 'critical' : code <= 199 ? undefined : code <= 299 ? 'healthy' : code <= 399 ? 'accent' : code <= 499 ? 'warning' : 'critical';
 
 function StatusBadges({ running, answer }: { running: boolean; answer?: Answer }) {
   if (running) return <span className="dvtBadge dvtBadge--hollow">Request in progress</span>;
-  if (!answer || answer.statusCode === undefined) return null;
+  // A request that did not reach the server has no status: the badge reads " - " and the time is shown, as the original's
+  if (!answer) return null;
   const code = answer.statusCode;
   const tone = badgeTone(code);
   return (
@@ -745,7 +793,7 @@ export function Console() {
   const [host, setHost] = useState('http://localhost:9200');
   const editor = useRef<ConsoleEditorHandle>(null);
   const panes = useRef<HTMLDivElement>(null);
-  const sending = useRef<AbortController | undefined>(undefined);
+  const sending = useRef(new Set<AbortController>());
   const [names, refreshNames] = useClusterNames(settings);
 
   // What is typed is kept half a second after it is typed, and once more when the page is left
@@ -758,10 +806,15 @@ export function Console() {
   useEffect(
     () => () => {
       storage.saveText({ ...latest.current.object, text: latest.current.text, updatedAt: Date.now() });
-      sending.current?.abort();
+      for (const controller of sending.current) controller.abort();
+      sending.current.clear();
     },
     []
   );
+
+  useEffect(() => {
+    void loadSpecs();
+  }, []);
 
   useEffect(() => {
     services.http
@@ -770,7 +823,12 @@ export function Console() {
       .catch(() => undefined);
   }, []);
 
-  const doc = useMemo(() => readConsole(text), [text]);
+  // Read again from what was read before: the lines that did not change keep their tokens
+  const read = useRef<ConsoleText | undefined>(undefined);
+  const doc = useMemo(() => {
+    read.current = readConsole(text, read.current);
+    return read.current;
+  }, [text]);
   const fromLine = lineOf(text, selection[0]);
   const toLine = lineOf(text, selection[1]);
   const marked = useMemo(() => expandToRequests(doc, fromLine, toLine), [doc, fromLine, toLine]);
@@ -804,16 +862,18 @@ export function Console() {
     editor.current?.replace(from, to, inserted, cursor, cursor);
   };
 
+  // Each send goes out, also while another is on its way, and the one answered last is shown: as
+  // the original, whose "in progress" ends with the first answer and whose output empties at a send
   const sendCurrent = async () => {
-    if (running) return;
     const requests = requestsBetween(doc, fromLine, toLine);
     if (requests.length === 0) {
       services.toasts.plain('No request selected. Select a request by placing the cursor inside it.');
       return;
     }
     const controller = new AbortController();
-    sending.current = controller;
+    sending.current.add(controller);
     setRunning(true);
+    setAnswers([]);
     setMenu(undefined);
     const results: Answer[] = [];
     try {
@@ -833,10 +893,7 @@ export function Console() {
     } catch {
       // the page was left while a request was out
     } finally {
-      if (sending.current === controller) {
-        sending.current = undefined;
-        setRunning(false);
-      }
+      if (sending.current.delete(controller)) setRunning(false);
     }
   };
 
@@ -850,9 +907,14 @@ export function Console() {
     editor.current?.focus();
   };
 
+  // The page of the first request selected, when its endpoint has one; else nothing, as the original
   const openDocs = () => {
-    const request = requestAt(doc, lineOf(text, selection[1]));
-    if (request) window.open(docsFor(request.url), '_blank');
+    const request = requestsBetween(doc, fromLine, toLine)[0];
+    if (!request) return;
+    void loadSpecs().then((matcher) => {
+      const page = matcher && documentationFor(matcher, request.method, request.url);
+      if (page) window.open(page, '_blank');
+    });
   };
 
   const copyAsCurl = () => {
@@ -869,7 +931,9 @@ export function Console() {
   };
 
   const openMenu = (value: string, offset: number) => {
-    const found = suggest(value, offset, names);
+    // Read from what was read before, as the page's own reading is
+    read.current = readConsole(value, read.current);
+    const found = suggest(value, offset, names, read.current);
     setMenu(found ? { ...found, active: 0 } : undefined);
   };
 
@@ -914,7 +978,7 @@ export function Console() {
       openDocs();
     } else if (event.ctrlKey && event.key === ' ') {
       event.preventDefault();
-      openMenu(text, event.currentTarget.selectionStart);
+      openMenu(text, editor.current?.selection()[0] ?? selection[0]);
     } else if (mod && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
       event.preventDefault();
       jump(event.key === 'ArrowUp' ? -1 : 1);
@@ -925,7 +989,7 @@ export function Console() {
     const pasted = event.clipboardData.getData('text/plain');
     if (!looksLikeCurl(pasted)) return;
     event.preventDefault();
-    const { selectionStart, selectionEnd } = event.currentTarget;
+    const [selectionStart, selectionEnd] = editor.current?.selection() ?? selection;
     change(selectionStart, selectionEnd, parseCurl(pasted));
   };
 
@@ -1119,7 +1183,7 @@ export function Console() {
       {panel === 'settings' && (
         <SettingsModal
           settings={settings}
-          onRefresh={() => refreshNames()}
+          onRefresh={(autocomplete) => refreshNames(autocomplete)}
           onClose={() => setPanel(undefined)}
           onSave={(next) => {
             storage.saveSettings(next);

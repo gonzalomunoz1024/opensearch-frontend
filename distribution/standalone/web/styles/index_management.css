@@ -1113,7 +1113,7 @@
 /* A button that is only its icon but drawn as a button, 12 px either side of it */
 .ismRefreshButton.atlButton--icon {
   width: auto;
-  padding: 0 13px;
+  padding: 0 12px;
 }
 
 .ismCallOutText {

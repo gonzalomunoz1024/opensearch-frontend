@@ -93,7 +93,10 @@ code under its licence:
 The editors of the console are drawn after the Ace editor as brace 0.11.1 holds it, so that they
 look as they do there, and are derived from it under its licence: its styles, its pictures of
 the folding marks and of an error in the gutter, the way it draws the selection and the cursor
-(web/apps/dev_tools/console_editor.tsx and web/styles/dev_tools.css), and the way its tokenizer
+(web/apps/dev_tools/console_editor.tsx and web/styles/dev_tools.css), its document and the
+renderer that draws only the rows in view, with its wrapping, folds, key bindings, search box
+and "go to line" (console_session.ts, console_layout.ts, console_commands.ts, console_folds.ts
+and console_search.tsx in web/apps/dev_tools), as Ace 1.2.9 has them, and the way its tokenizer
 applies the rules of a mode (web/apps/dev_tools/console_highlight.ts); BSD 3-Clause License,
 Copyright (c) 2010, Ajax.org B.V. So are the two code editors of TSVB's markdown panel: the way
 the tokenizer applies a mode, the rules of its markdown and less modes and their folding marks
@@ -146,5 +149,11 @@ Their licence texts are beside them, in the folder of each family.
 The pictures the URL format of an index pattern shows in its samples
 (web/static/plugins/indexPatternManagement/assets/icons) are those OpenSearch Dashboards ships for
 it, under the MIT License, Copyright (c) 2014 Steven Skelton (licenses/url-format-icons.txt).
+
+The calendar of the date picker (web/shell/calendar.tsx and web/styles/date_picker.css) is
+written after react-datepicker 2.0.0 as the OpenSearch UI framework carries it, so that it looks
+and behaves as it does there: its month, its lists of months, years and times, and its keys. It is
+derived from that code under the MIT License, Copyright (c) 2018 HackerOne Inc and individual
+contributors (licenses/react-datepicker.txt).
 
 "OpenSearch" is a trademark of its owner. InfraDashboard is not an OpenSearch project.
