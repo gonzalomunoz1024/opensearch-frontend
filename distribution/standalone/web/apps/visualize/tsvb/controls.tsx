@@ -240,13 +240,13 @@ export function Combo({
       disabled={disabled}
       invalid={invalid}
       testId={testId}
-      fullWidth={fullWidth}
     />
   );
   // A list that can be cleared keeps the room of its clear button while nothing is chosen too, as
   // the original's does
   const shown = clearable && !disabled ? <div className="tvbCombo--clearable">{combo}</div> : combo;
-  // A list that takes only the room it needs is as wide as what it shows
+  // A list in an item that takes only the room it needs asks for no more than what it shows, and
+  // fills its item when a label makes that wider, as the original's does
   return fullWidth ? shown : <div className="tvbCombo--fit">{shown}</div>;
 }
 

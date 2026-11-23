@@ -184,11 +184,13 @@
   box-shadow: var(--shadow-card);
 }
 
+/* The theme's small title: its letters set a little closer, as the kit's `atlTitleS` */
 .tvbOptions__title {
   margin: 0;
   font-size: var(--font-size-l);
   font-weight: var(--font-weight-semibold);
   line-height: 22px;
+  letter-spacing: -0.022em;
 }
 
 .tvbTitle--xxs {
@@ -351,7 +353,17 @@
 .tvbYesNo .atlRadio input:checked {
   border-color: var(--color-accent);
   background-color: var(--color-accent);
-  background-image: radial-gradient(circle, var(--color-surface) 2.5px, transparent 3px);
+}
+
+/* Its dot: a disc 6 px across in the middle, as the original's */
+.tvbYesNo .atlRadio input:checked::before {
+  display: block;
+  width: 6px;
+  height: 6px;
+  margin: 4px;
+  border-radius: 50%;
+  background: var(--color-surface);
+  content: '';
 }
 
 .tvbYesNo .atlRadio input:focus {
@@ -367,8 +379,8 @@
   cursor: not-allowed;
 }
 
-.tvbYesNo .atlRadio input:disabled:checked {
-  background-image: radial-gradient(circle, color-mix(in srgb, var(--color-text-tertiary) 70%, black) 2.5px, transparent 3px);
+.tvbYesNo .atlRadio input:disabled:checked::before {
+  background: color-mix(in srgb, var(--color-text-tertiary) 70%, black);
 }
 
 .tvbYesNo--disabled {
@@ -400,6 +412,26 @@
   padding-right: 53px;
 }
 
+/* The original's list draws its arrow 12 px wide in the middle of a button of 16, and clears with a
+   grey disc of 12 px that holds a cross of 6, 6 px before the arrow's button */
+.tvbEditor .atlCombo__caret .atlIcon {
+  width: 12px;
+  height: 12px;
+}
+
+.tvbEditor .atlCombo__clear {
+  right: 29px;
+  width: 12px;
+  height: 12px;
+}
+
+.tvbEditor .atlCombo__clear .atlIcon {
+  width: 6px;
+  height: 6px;
+  stroke: currentcolor;
+  stroke-width: 4;
+}
+
 .tvbQueryBar {
   display: flex;
 }
@@ -423,6 +455,12 @@
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-md);
   box-shadow: inset 0 0 0 1px var(--color-border-light);
+}
+
+/* "Search" while empty, in the colour of the original's placeholders */
+.tvbQueryBar .shlQuery textarea::placeholder {
+  color: var(--color-text-tertiary);
+  opacity: 1;
 }
 
 .tvbQueryBar .shlQuery:not(.atlField--invalid):focus-within {
@@ -453,13 +491,17 @@
   min-height: 25px;
 }
 
+/* Its cross stands in a line of the page's text, as the original's: in the middle of the letters,
+   which is a pixel under the middle of the swatch */
 .tvbColorPicker__clear {
-  display: inline-flex;
+  display: block;
   padding: 0;
   border: 0;
   border-radius: var(--radius-xs);
   background: none;
   color: var(--color-critical);
+  font-size: var(--font-size-s);
+  line-height: 21px;
   cursor: pointer;
 }
 
@@ -474,6 +516,12 @@
   margin: calc(var(--space-1) * -1) calc(var(--space-1) * -1) var(--space-2);
   padding: var(--space-3);
   background: var(--color-surface-secondary);
+}
+
+/* A rule under another keeps that margin, where rows of fields stand 12 px apart: the rules are
+   60 px from one to the next, as the original's */
+.tvbRow + .tvbColorRules__rule {
+  margin-top: calc(var(--space-1) * -1);
 }
 
 /* --- Buttons of a row ------------------------------------------------------------------------------ */
@@ -677,6 +725,7 @@
   font-size: var(--font-size-l);
   font-weight: var(--font-weight-semibold);
   line-height: 22px;
+  letter-spacing: -0.022em;
 }
 
 /* --- Markdown ------------------------------------------------------------------------------ */
