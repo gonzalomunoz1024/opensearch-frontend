@@ -206,6 +206,18 @@ const Line = memo(function Line({ tokens }: { tokens: AceToken[] }) {
   return <div className="dvtAce__line">{parts}</div>;
 });
 
+/**
+ * The selection an editor reports: the one a replacement is about to set, while the browser still
+ * has the cursor at the end of what was typed for it, else the text area's own. A quote typed and
+ * closed leaves the cursor between the two, and the suggestions are asked for from there.
+ */
+export function selectionOf(
+  pending: [number, number] | undefined,
+  area: { selectionStart: number; selectionEnd: number } | null
+): [number, number] {
+  return pending ?? [area?.selectionStart ?? 0, area?.selectionEnd ?? 0];
+}
+
 export function ConsoleEditor({
   value,
   onChange,
@@ -434,6 +446,8 @@ export function ConsoleEditor({
     if (!target || readOnly) return;
     target.focus({ preventScroll: true });
     target.setSelectionRange(from, to);
+    // Known before the text is typed: what hears of the change asks where the cursor is
+    pending.current = [selectStart, selectEnd];
     // Typing, as far as the browser is concerned: it can be undone
     const typed = typeof document.execCommand === 'function' && document.execCommand('insertText', false, text);
     if (!typed || target.value !== `${value.slice(0, from)}${text}${value.slice(to)}`) {
@@ -454,7 +468,7 @@ export function ConsoleEditor({
         area.current?.setSelectionRange(start, end);
         setMoves((count) => count + 1);
       },
-      selection: () => [area.current?.selectionStart ?? 0, area.current?.selectionEnd ?? 0],
+      selection: () => selectionOf(pending.current, area.current),
       replace,
       lineTop: (line) => {
         const top = rowTop(line);

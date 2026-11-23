@@ -9,6 +9,7 @@
  * `/api/console/proxy`), so that scripts and probes written for it keep working.
  */
 
+import { randomUUID } from 'node:crypto';
 import http from 'node:http';
 import { join } from 'node:path';
 import type { Config } from './config';
@@ -240,9 +241,14 @@ export function createApp(options: { config: Config; logger: Logger; distDirecto
       method,
       path: `/${target.replace(/^\/+/, '')}`,
       body: body.length ? body : undefined,
-      headers: body.length
-        ? { 'content-type': String(context.req.headers['content-type'] ?? 'application/json') }
-        : undefined,
+      // An id of its own for each request, as OpenSearch Dashboards sends: OpenSearch warns of a
+      // deprecated API once for each id, and the console shows the warning with every answer
+      headers: {
+        'x-opaque-id': randomUUID(),
+        ...(body.length
+          ? { 'content-type': String(context.req.headers['content-type'] ?? 'application/json') }
+          : {}),
+      },
     });
     const headers: Record<string, string> = {
       'content-type': String(response.headers['content-type'] ?? 'text/plain; charset=utf-8'),
